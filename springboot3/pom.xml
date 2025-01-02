@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>config</module>
+        <module>startup</module>
     </modules>
 </project>
