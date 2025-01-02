@@ -1,0 +1,21 @@
+server:
+  port: 12001
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# 自定义配置文件
+app:
+  name: ateng
+  port: 12345
+  ids:
+    - 1
+    - 2
+    - 3
+  ateng:
+    name: kongyu
+    age: 24
