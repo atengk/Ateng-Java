@@ -1,0 +1,19 @@
+server:
+  port: 13003
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# Kafka配置
+spring:
+  kafka:
+    bootstrap-servers: 192.168.1.10:9094
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        max.request.size: 10485760  # 生产者可以发送的单个请求的最大大小为10MB（10485760字节）

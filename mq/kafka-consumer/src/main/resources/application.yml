@@ -1,0 +1,19 @@
+server:
+  port: 13004
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# Kafka配置
+spring:
+  kafka:
+    bootstrap-servers: 192.168.1.10:9094
+    consumer:
+      group-id: kafka.ateng.local
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
