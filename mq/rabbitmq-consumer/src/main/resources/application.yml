@@ -1,0 +1,18 @@
+server:
+  port: 13002
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# RabbitMQ配置
+spring:
+  rabbitmq:
+    host: 192.168.1.10
+    port: 24572
+    username: admin
+    password: Admin@123
+    virtual-host: /
