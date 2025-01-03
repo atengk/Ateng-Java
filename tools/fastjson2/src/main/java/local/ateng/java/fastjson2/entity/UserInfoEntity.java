@@ -1,10 +1,12 @@
 package local.ateng.java.fastjson2.entity;
 
+import com.alibaba.fastjson2.annotation.JSONField;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 
 /**
@@ -56,4 +58,11 @@ public class UserInfoEntity {
      * 用户所在城市
      */
     private String city;
+
+    /**
+     * 创建时间
+     * 自定义时间格式
+     */
+    @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
+    private LocalDateTime createAt;
 }
