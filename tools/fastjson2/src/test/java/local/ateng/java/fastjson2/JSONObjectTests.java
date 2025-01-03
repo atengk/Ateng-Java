@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 
@@ -101,7 +102,13 @@ public class JSONObjectTests {
     // JSONObject.of创建JSONObject对象
     @Test
     void test06() {
-        JSONObject object = JSONObject.of("id", 1001, "name", "DataWorks", "date", "2017-07-14");
+        JSONObject object = JSONObject.of(
+                "id", 1001,
+                "name", "DataWorks",
+                "date", "2017-07-14",
+                "createAt1", LocalDateTime.now(),
+                "createAt2", new Date()
+        );
         System.out.println(object);
     }
 

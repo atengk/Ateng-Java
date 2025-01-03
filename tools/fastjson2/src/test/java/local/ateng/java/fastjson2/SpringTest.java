@@ -4,8 +4,11 @@ import com.alibaba.fastjson2.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.LocalDateTime;
+import java.util.Date;
+
 /**
- * 描述
+ * 在Spring上使用
  *
  * @author 孔余
  * @email 2385569970@qq.com
@@ -21,4 +24,16 @@ public class SpringTest {
         System.out.println(jsonObject);
     }
 
+    // JSONObject.of创建JSONObject对象
+    @Test
+    void test02() {
+        JSONObject object = JSONObject.of(
+                "id", 1001,
+                "name", "DataWorks",
+                "date", "2017-07-14",
+                "createAt1", LocalDateTime.now(),
+                "createAt2", new Date()
+        );
+        System.out.println(object);
+    }
 }
