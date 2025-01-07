@@ -16,5 +16,6 @@
     <modules>
         <module>config</module>
         <module>startup</module>
+        <module>virtual</module>
     </modules>
 </project>
