@@ -14,6 +14,6 @@
     <packaging>pom</packaging>
     <!-- 项目包含的子模块 -->
     <modules>
-<!--        <module>fastjson2</module>-->
+        <module>x-file-storage</module>
     </modules>
 </project>

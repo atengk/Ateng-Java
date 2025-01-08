@@ -15,6 +15,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * X File Storage 演示
@@ -73,6 +75,16 @@ public class FileDetailController {
                 .setSaveFilename(filename)
                 .setOriginalFilename(filename)
                 .upload();
+    }
+
+    /**
+     * 上传多个文件
+     */
+    @PostMapping("/upload4")
+    public List<FileInfo> uploadMultipleFiles(List<MultipartFile> files) {
+        return files.stream()
+                .map(file -> fileStorageService.of(file).upload())
+                .collect(Collectors.toList());
     }
 
     /**
