@@ -1,0 +1,41 @@
+server:
+  port: 12005
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# 开启虚拟线程
+spring:
+  threads:
+    virtual:
+      enabled: true
+---
+# 监控配置
+spring.boot.admin.client:
+  # 启动客户端
+  enabled: true
+  # 设置 Spring Boot Admin Server 地址
+  url: http://localhost:12004/admin/
+  instance:
+    service-host-type: IP
+  username: admin
+  password: Admin@123
+---
+# Actuator 监控端点的配置项
+management:
+  endpoints: # 配置Actuator端点的管理
+    web:
+      exposure: # 暴露端点
+        include: '*'  # 包含所有端点，可以根据需要更改为具体的端点列表
+  endpoint: # 配置各个端点的行为
+    shutdown: # 关闭端点配置
+      access: unrestricted # 启用shutdown端点，允许通过POST请求关闭应用程序
+    health: # 健康检查端点配置
+      show-details: ALWAYS # 显示完整的健康信息，包括详细的检查项
+  info:
+    env:
+      enabled: true
