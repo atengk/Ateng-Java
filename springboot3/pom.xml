@@ -20,5 +20,6 @@
         <module>admin-server</module>
         <module>admin-client</module>
         <module>exception</module>
+        <module>validator</module>
     </modules>
 </project>
