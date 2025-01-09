@@ -1,0 +1,12 @@
+server:
+  port: 12008
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+  profiles:
+    active: @profiles.active@
+    desc: @profiles.desc@
