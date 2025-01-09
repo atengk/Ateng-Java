@@ -16,5 +16,6 @@
     <modules>
         <module>hutool</module>
         <module>fastjson2</module>
+        <module>stream</module>
     </modules>
 </project>
