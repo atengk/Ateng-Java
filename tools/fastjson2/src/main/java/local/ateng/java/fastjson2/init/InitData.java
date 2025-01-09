@@ -12,7 +12,8 @@ import java.util.Locale;
  * 初始化数据
  *
  * @author 孔余
- * @since 2024-01-18 14:17
+ * @email 2385569970@qq.com
+ * @since 2025-01-09
  */
 @Getter
 public class InitData {

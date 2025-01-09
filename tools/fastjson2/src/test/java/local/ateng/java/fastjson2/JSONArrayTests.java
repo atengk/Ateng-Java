@@ -41,7 +41,7 @@ public class JSONArrayTests {
         System.out.println(userList);
     }
 
-    // 将java对象列表换为字符串转
+    // 将java对象列表转换为字符串
     @Test
     void test03() {
         String str = JSONArray.toJSONString(list);
