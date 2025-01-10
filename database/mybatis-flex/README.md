@@ -85,7 +85,7 @@ MyBatis-Flex 是一个优雅的 MyBatis 增强框架，它非常轻量、同时�
         <!-- https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-starter -->
         <dependency>
             <groupId>com.alibaba</groupId>
-            <artifactId>druid-spring-boot-starter</artifactId>
+            <artifactId>druid-spring-boot-3-starter</artifactId>
             <version>${druid.version}</version>
         </dependency>
     </dependencies>
@@ -560,5 +560,97 @@ public class BasicQueryTests {
                 .listAs(MyUserVo.class);
         System.out.println(JSON.toJSONString(list));
     }
+```
+
+
+
+## 多数据源
+
+参考官网文档：[地址](https://mybatis-flex.com/zh/core/multi-datasource.html#%E5%BC%80%E5%A7%8B%E4%BD%BF%E7%94%A8)
+
+### 编辑配置文件
+
+**编辑 `application.yml` 添加多数据源配置**
+
+原有的spring.datasource可以注释掉了，配置了mybatis-flex.datasource只会加载这个，并且第一个数据源为默认的。
+
+```yaml
+---
+# 数据库的相关配置
+#spring:
+#  datasource:
+#    url: jdbc:mysql://192.168.1.10:35725/kongyu  # MySQL数据库连接URL
+#    #url: jdbc:postgresql://192.168.1.10:32297/kongyu?currentSchema=public&stringtype=unspecified  # PostgreSQL数据库连接URL
+#    username: root  # 数据库用户名
+#    password: Admin@123  # 数据库密码
+#    # driver-class-name: com.mysql.cj.jdbc.Driver  # 数据库驱动类，框架会自动适配
+#    type: com.alibaba.druid.pool.DruidDataSource  # 使用Druid数据源
+#    # Druid连接池配置 https://github.com/alibaba/druid/tree/master/druid-spring-boot-starter
+#    druid:
+#      initial-size: 10  # 初始化连接池大小
+#      min-idle: 10  # 最小空闲连接数
+#      max-active: 1000  # 最大活跃连接数
+#      max-wait: 10000  # 获取连接的最大等待时间，单位毫秒
+#      async-init: true
+# Mybatis Flex的配置 https://mybatis-flex.com/zh/base/configuration.html
+mybatis-flex:
+  global-config:
+    print-banner: false
+  datasource:
+    # 第一个数据源为默认数据源
+    # https://mybatis-flex.com/zh/core/multi-datasource.html
+    mysql:
+      url: jdbc:mysql://192.168.1.10:35725/kongyu
+      username: root
+      password: Admin@123
+      type: com.alibaba.druid.pool.DruidDataSource
+      initial-size: 10
+      min-idle: 10
+      max-active: 1000
+      max-wait: 10000
+      async-init: true
+    doris:
+      type: com.alibaba.druid.pool.DruidDataSource
+      url: jdbc:mysql://192.168.1.12:9030/kongyu
+      username: admin
+      password: Admin@123
+      initial-size: 10
+      min-idle: 10
+      max-active: 100
+      max-wait: 10000
+```
+
+### 使用多数据源
+
+**创建测试类使用第二个指定的数据源**
+
+执行代码后输出的内容就是Doris中表的数据，详细使用参考[官方文档](https://mybatis-flex.com/zh/core/multi-datasource.html)
+
+```java
+package local.ateng.java.mybatis;
+
+import com.mybatisflex.core.datasource.DataSourceKey;
+import com.mybatisflex.core.row.Db;
+import com.mybatisflex.core.row.Row;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.List;
+
+@SpringBootTest
+public class MultiDatasourceTests {
+
+    @Test
+    void test01() {
+        try {
+            DataSourceKey.use("doris");
+            List<Row> rows = Db.selectAll("example_tbl_unique");
+            System.out.println(rows);
+        } finally {
+            DataSourceKey.clear();
+        }
+    }
+
+}
 ```
 
