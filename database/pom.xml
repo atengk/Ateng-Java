@@ -6,22 +6,14 @@
 
     <!-- 项目信息 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>springboot3</artifactId>
+    <artifactId>database</artifactId>
     <version>v1.0</version>
-    <description>springboot3相关</description>
+    <description>数据库相关</description>
 
     <!-- 打包方式为 POM，表示该项目为聚合项目 -->
     <packaging>pom</packaging>
     <!-- 项目包含的子模块 -->
     <modules>
-        <module>config</module>
-        <module>startup</module>
-        <module>virtual</module>
-        <module>admin-server</module>
-        <module>admin-client</module>
-        <module>exception</module>
-        <module>validator</module>
-        <module>banner</module>
-        <module>web-client</module>
+        <module>mybatis-flex</module>
     </modules>
 </project>
