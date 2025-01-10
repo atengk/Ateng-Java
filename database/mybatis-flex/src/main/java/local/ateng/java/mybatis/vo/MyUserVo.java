@@ -1,33 +1,25 @@
-package local.ateng.java.mybatis.entity;
+package local.ateng.java.mybatis.vo;
 
 import com.alibaba.fastjson2.annotation.JSONField;
-import com.fasterxml.jackson.annotation.JsonFormat;
-import com.mybatisflex.annotation.Id;
-import com.mybatisflex.annotation.KeyType;
-import com.mybatisflex.annotation.Table;
-import java.io.Serializable;
-import java.time.LocalDateTime;
-
-import java.io.Serial;
-
+import com.mybatisflex.annotation.RelationOneToMany;
+import local.ateng.java.mybatis.entity.MyOrder;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 
-/**
- * 用户信息表，存储用户的基本信息 实体类。
- *
- * @author 孔余
- * @since 1.0.0
- */
+import java.io.Serial;
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.sql.Date;
+import java.time.LocalDateTime;
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("my_user")
-public class MyUser implements Serializable {
+public class MyUserVo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -35,7 +27,6 @@ public class MyUser implements Serializable {
     /**
      * 用户ID，主键，自增
      */
-    @Id(keyType = KeyType.Auto)
     private Long id;
 
     /**
@@ -74,4 +65,8 @@ public class MyUser implements Serializable {
     @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
     private LocalDateTime createTime;
 
+    /**
+     * 订单表
+     */
+    private List<MyOrder> myOrderList;
 }
