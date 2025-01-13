@@ -17,5 +17,6 @@
         <module>mybatis-flex</module>
         <module>mybatis-plus</module>
         <module>redis-template</module>
+        <module>jdbc-template</module>
     </modules>
 </project>
