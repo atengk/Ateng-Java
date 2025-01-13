@@ -6,10 +6,10 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>mybatis-flex</artifactId>
+    <artifactId>mybatis-plus</artifactId>
     <version>v1.0</version>
-    <name>mybatis-flex</name>
-    <description>MyBatis-Flex 是一个优雅的 MyBatis 增强框架，它非常轻量、同时拥有极高的性能与灵活性</description>
+    <name>mybatis-plus</name>
+    <description>MyBatis-Plus 是一个 MyBatis 的增强工具，在 MyBatis 的基础上只做增强不做改变，为简化开发、提高效率而生。</description>
 
     <!-- 项目属性 -->
     <properties>
@@ -21,7 +21,7 @@
         <lombok.version>1.18.36</lombok.version>
         <fastjson2.version>2.0.53</fastjson2.version>
         <hutool.version>5.8.35</hutool.version>
-        <mybatis-flex.version>1.10.5</mybatis-flex.version>
+        <mybatis-plus.version>3.5.10</mybatis-plus.version>
         <druid.version>1.2.24</druid.version>
     </properties>
 
@@ -89,15 +89,46 @@
             <artifactId>postgresql</artifactId>
         </dependency>-->
 
-        <!-- Mybatis Flex 数据库框架 -->
+        <!-- Mybatis Plus 数据库框架 -->
         <dependency>
-            <groupId>com.mybatis-flex</groupId>
-            <artifactId>mybatis-flex-spring-boot3-starter</artifactId>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
-        <!-- MyBatis-Flex 代码生成器 -->
+        <!-- MyBatis Plus 增加工具包 -->
         <dependency>
-            <groupId>com.mybatis-flex</groupId>
-            <artifactId>mybatis-flex-codegen</artifactId>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+        </dependency>
+        <!-- MyBatis Plus 代码生成器 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-generator</artifactId>
+        </dependency>
+        <!-- 代码生成器的模板引擎 VelocityTemplateEngine -->
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
+            <version>2.4.1</version>
+        </dependency>
+        <!-- 代码生成器的模板引擎 FreemarkerTemplateEngine -->
+        <!--<dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+            <version>2.3.34</version>
+        </dependency>-->
+        <!-- MyBatis Plus SQL分析与打印功能 -->
+        <!-- 有性能损耗，在生产环境中谨慎使用 -->
+        <dependency>
+            <groupId>com.github.gavlyukovskiy</groupId>
+            <artifactId>p6spy-spring-boot-starter</artifactId>
+            <version>1.10.0</version>
+        </dependency>
+
+        <!-- MyBatis Plus 多数据源 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+            <version>4.3.1</version>
         </dependency>
 
         <!-- Druid 数据源: 高性能数据库连接池 -->
@@ -107,6 +138,7 @@
             <artifactId>druid-spring-boot-3-starter</artifactId>
             <version>${druid.version}</version>
         </dependency>
+
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->
@@ -120,11 +152,11 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- MyBatis-Flex 依赖管理 -->
+            <!-- MyBatis Plus 依赖管理 -->
             <dependency>
-                <groupId>com.mybatis-flex</groupId>
-                <artifactId>mybatis-flex-dependencies</artifactId>
-                <version>${mybatis-flex.version}</version>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-bom</artifactId>
+                <version>${mybatis-plus.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

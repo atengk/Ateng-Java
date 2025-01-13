@@ -1,6 +1,7 @@
 package local.ateng.java.mybatis;
 
 import com.alibaba.fastjson2.JSON;
+import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryColumn;
 import com.mybatisflex.core.row.Row;
 import local.ateng.java.mybatis.entity.MyUser;
@@ -137,4 +138,21 @@ public class BasicQueryTests {
         System.out.println(JSON.toJSONString(list));
     }
 
+    @Test
+    void test08() {
+        Page<MyUser> page = new Page<>(2, 10);  // 第2页，每页10条记录
+        // 分页查询
+        Page<MyUser> userPage = myUserService.queryChain()
+                .where(MY_USER.ID.between(88, 888))
+                .page(page);
+        // 获取分页结果
+        List<MyUser> users = userPage.getRecords();  // 分页数据
+        long total = userPage.getTotalRow();  // 总记录数
+        long pages = userPage.getTotalPage();  // 总页数
+        // 输出查询结果
+        System.out.println(userPage);
+        System.out.println("Total: " + total);
+        System.out.println("Pages: " + pages);
+        users.forEach(user -> System.out.println(user));
+    }
 }
