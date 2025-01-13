@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>mybatis-flex</module>
+        <module>redis-template</module>
     </modules>
 </project>
