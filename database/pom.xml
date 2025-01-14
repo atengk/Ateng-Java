@@ -18,5 +18,6 @@
         <module>mybatis-plus</module>
         <module>redis-template</module>
         <module>jdbc-template</module>
+        <module>spring-jpa</module>
     </modules>
 </project>

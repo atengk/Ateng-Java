@@ -32,7 +32,7 @@ FASTJSON v2是FASTJSON项目的重要升级，目标是为下一个十年提供�
         <!-- https://github.com/alibaba/fastjson2/blob/main/docs/spring_support_cn.md -->
         <dependency>
             <groupId>com.alibaba.fastjson2</groupId>
-            <artifactId>fastjson2-extension-spring5</artifactId>
+            <artifactId>fastjson2-extension-spring6</artifactId>
             <version>${fastjson2.version}</version>
         </dependency>
 ```

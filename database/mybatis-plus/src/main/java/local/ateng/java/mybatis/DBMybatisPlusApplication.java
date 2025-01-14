@@ -4,10 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DBMybatisFlexConfigApplication {
+public class DBMybatisPlusApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(DBMybatisFlexConfigApplication.class, args);
+        SpringApplication.run(DBMybatisPlusApplication.class, args);
     }
 
 }

@@ -1,13 +1,13 @@
-package local.ateng.java.redis;
+package local.ateng.java.mybatis;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DBRedisTemplateConfigApplication {
+public class DBMybatisFlexApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(DBRedisTemplateConfigApplication.class, args);
+        SpringApplication.run(DBMybatisFlexApplication.class, args);
     }
 
 }

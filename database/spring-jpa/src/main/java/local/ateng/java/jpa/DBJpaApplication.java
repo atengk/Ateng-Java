@@ -1,13 +1,13 @@
-package local.ateng.java.mybatis;
+package local.ateng.java.jpa;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DBMybatisPlusConfigApplication {
+public class DBJpaApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(DBMybatisPlusConfigApplication.class, args);
+        SpringApplication.run(DBJpaApplication.class, args);
     }
 
 }

@@ -1,13 +1,13 @@
-package local.ateng.java.jdbc;
+package local.ateng.java.redis;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DBJDBCTemplateConfigApplication {
+public class DBRedisTemplateApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(DBJDBCTemplateConfigApplication.class, args);
+        SpringApplication.run(DBRedisTemplateApplication.class, args);
     }
 
 }
