@@ -1,10 +1,12 @@
 package local.ateng.java.mybatis.generator;
 
 import com.baomidou.mybatisplus.generator.FastAutoGenerator;
+import com.baomidou.mybatisplus.generator.config.OutputFile;
 
 import java.io.File;
 import java.net.URISyntaxException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 
@@ -40,6 +42,7 @@ public class MybatisPlusGenerator {
                         .service("service")
                         .serviceImpl("service.impl")
                         .xml("mapper.xml")
+                        .pathInfo(Collections.singletonMap(OutputFile.xml, getModulePath() + "/src/main/resources/mapper")) // 设置 Mapper XML 文件生成路径
                 )
                 .strategyConfig(builder -> builder
                         .addInclude(GenerateTable) // 设置需要生成的表名

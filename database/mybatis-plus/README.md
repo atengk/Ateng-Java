@@ -171,10 +171,12 @@ public class MyBatisPlusConfiguration {
 package local.ateng.java.mybatis.generator;
 
 import com.baomidou.mybatisplus.generator.FastAutoGenerator;
+import com.baomidou.mybatisplus.generator.config.OutputFile;
 
 import java.io.File;
 import java.net.URISyntaxException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 
@@ -210,6 +212,7 @@ public class MybatisPlusGenerator {
                         .service("service")
                         .serviceImpl("service.impl")
                         .xml("mapper.xml")
+                        .pathInfo(Collections.singletonMap(OutputFile.xml, getModulePath() + "/src/main/resources/mapper")) // 设置 Mapper XML 文件生成路径
                 )
                 .strategyConfig(builder -> builder
                         .addInclude(GenerateTable) // 设置需要生成的表名
@@ -509,6 +512,123 @@ public class UserServiceImpl implements UserService {
     @DS("slave_1")
     public List selectByCondition() {
         return jdbcTemplate.queryForList("select * from user where age >10");
+    }
+}
+```
+
+
+
+## 使用Mapper XML
+
+### 创建Mapper
+
+```java
+package local.ateng.java.mybatis.mapper;
+
+import com.alibaba.fastjson2.JSONObject;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import local.ateng.java.mybatis.entity.MyUser;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
+
+
+/**
+ * <p>
+ * 用户信息表，存储用户的基本信息 Mapper 接口
+ * </p>
+ *
+ * @author 孔余
+ * @since 2025-01-13
+ */
+public interface MyUserMapper extends BaseMapper<MyUser> {
+
+    List<MyUser> selectAllUsers();
+
+    MyUser selectUserById(@Param("id") Long id);
+
+    // 根据查询条件获取用户及其订单信息
+    List<JSONObject> selectUsersWithOrders(@Param("orderId") Long orderId);
+
+}
+```
+
+### 创建Mapper.xml
+
+```java
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="local.ateng.java.mybatis.mapper.MyUserMapper">
+
+    <!-- 查询所有用户 -->
+    <select id="selectAllUsers" resultType="local.ateng.java.mybatis.entity.MyUser">
+        SELECT * FROM my_user;
+    </select>
+
+    <!-- 根据ID查询用户 -->
+    <select id="selectUserById" parameterType="java.lang.Long" resultType="local.ateng.java.mybatis.entity.MyUser">
+        SELECT * FROM my_user WHERE id = #{id};
+    </select>
+
+    <!-- 查询所有用户及其对应的订单信息 -->
+    <select id="selectUsersWithOrders" resultType="com.alibaba.fastjson2.JSONObject">
+        SELECT
+            u.id as id,
+            u.name,
+            u.age,
+            u.score,
+            u.birthday,
+            u.province,
+            u.city,
+            u.create_time,
+            o.id as order_id,
+            o.date as order_date,
+            o.total_amount as order_total_amount
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+        WHERE 1=1
+            <if test="orderId != null">AND o.id = #{orderId}</if>
+    </select>
+
+</mapper>
+```
+
+### 测试使用
+
+```java
+package local.ateng.java.mybatis;
+
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.mybatis.entity.MyUser;
+import local.ateng.java.mybatis.mapper.MyUserMapper;
+import lombok.RequiredArgsConstructor;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.List;
+
+@SpringBootTest
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class MapperTests {
+    private final MyUserMapper myUserMapper;
+
+    @Test
+    void test01() {
+        List<MyUser> list = myUserMapper.selectAllUsers();
+        System.out.println(list);
+    }
+
+    @Test
+    void test02() {
+        MyUser myUser = myUserMapper.selectUserById(1L);
+        System.out.println(myUser);
+    }
+
+    @Test
+    void test03() {
+        List<JSONObject> list = myUserMapper.selectUsersWithOrders(1L);
+        System.out.println(list);
     }
 }
 ```
