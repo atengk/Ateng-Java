@@ -6,11 +6,10 @@ import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @SpringBootTest
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
@@ -48,5 +47,33 @@ public class JpaTests {
         myUserService.deleteById(1000L);
     }
 
+    @Test
+    public void test06() {
+        // 批量保存数据
+        ArrayList<MyUser> list = new ArrayList<>();
+        list.add(new MyUser(null, "jpa1", 24, 1.1, LocalDateTime.now(),"重庆","重庆",LocalDateTime.now()));
+        list.add(new MyUser(null, "jpa2", 24, 1.2, LocalDateTime.now(),"重庆","重庆",LocalDateTime.now()));
+        myUserService.saveAll(list);
+    }
+
+    @Test
+    public void test07() {
+        // 清空表
+        myUserService.truncate();
+    }
+
+    @Test
+    public void test08() {
+        // 自定义SQL查询，一个条件参数和返回一个值
+        MyUser myUser = myUserService.findCustomOne(1L);
+        System.out.println(myUser);
+    }
+
+    @Test
+    public void test09() {
+        // 自定义SQL查询，多个条件参数和返回列表
+        List<MyUser> userList = myUserService.findCustomList("jpa%", 18);
+        System.out.println(userList);
+    }
 
 }

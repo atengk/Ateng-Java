@@ -6,6 +6,7 @@ import local.ateng.java.jpa.service.MyUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -19,6 +20,11 @@ public class MyUserServiceImpl implements MyUserService {
     public void save(MyUser myUser) {
         MyUser user = myUserRepository.save(myUser);
         System.out.println(user);
+    }
+
+    @Override
+    public void saveAll(List<MyUser> myUsers) {
+        myUserRepository.saveAll(myUsers);
     }
 
     @Override
@@ -39,5 +45,21 @@ public class MyUserServiceImpl implements MyUserService {
     @Override
     public MyUser findById(Long id) {
         return myUserRepository.findById(id).get();
+    }
+
+    @Override
+    @Transactional
+    public void truncate() {
+        myUserRepository.truncateTable();
+    }
+
+    @Override
+    public MyUser findCustomOne(Long id) {
+        return myUserRepository.findCustomOne(id);
+    }
+
+    @Override
+    public List<MyUser> findCustomList(String name, Integer age) {
+        return myUserRepository.findCustomList(name, age);
     }
 }

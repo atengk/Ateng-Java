@@ -8,6 +8,8 @@ public interface MyUserService {
 
     void save(MyUser myUser);
 
+    void saveAll(List<MyUser> myUsers);
+
     void update(MyUser myUser);
 
     void deleteById(Long id);
@@ -15,5 +17,12 @@ public interface MyUserService {
     List<MyUser> findAll();
 
     MyUser findById(Long id);
+
+    void truncate();
+
+    MyUser findCustomOne(Long id);
+
+    List<MyUser> findCustomList(String name, Integer age);
+
 }
 

@@ -92,19 +92,16 @@ spring:
 package local.ateng.java.jpa.entity;
 
 import com.alibaba.fastjson2.annotation.JSONField;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.Date;
 
 
 @Data
@@ -122,42 +119,58 @@ public class MyUser implements Serializable {
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY) // 使用数据库的自增策略
+    @Column(name = "id", nullable = false)
+    @Comment("用户ID，主键，自增")
     private Long id;
 
     /**
      * 用户名
      */
+    @Column(name = "name", nullable = false, unique = true)
+    @Comment("用户姓名")
     private String name;
 
     /**
      * 用户年龄，允许为空
      */
+    @Column(name = "age")
+    @Comment("用户年龄")
     private Integer age;
 
     /**
-     * 用户分数，默认为0
+     * 用户分数
      */
+    @Column(name = "score", columnDefinition = "DOUBLE DEFAULT 0.0")
+    @Comment("用户分数")
     private Double score;
 
     /**
      * 用户生日，允许为空
      */
+    @Column(name = "birthday")
+    @Comment("用户生日")
     private LocalDateTime birthday;
 
     /**
      * 用户所在省份，允许为空
      */
+    @Column(name = "province")
+    @Comment("用户所在省份")
     private String province;
 
     /**
      * 用户所在城市，允许为空
      */
+    @Column(name = "city")
+    @Comment("用户所在城市")
     private String city;
 
     /**
      * 记录创建时间，默认当前时间
      */
     @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
+    @Column(name = "createTime")
+    @Comment("创建时间")
     private LocalDateTime createTime;
 
 }
@@ -172,10 +185,26 @@ package local.ateng.java.jpa.repository;
 
 import local.ateng.java.jpa.entity.MyUser;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
 
 // UserRepository 扩展 JpaRepository
 public interface MyUserRepository extends JpaRepository<MyUser, Long> {
 
+    @Modifying
+    @Query(value = "TRUNCATE TABLE my_user", nativeQuery = true)
+    void truncateTable();
+
+    @Query("SELECT u FROM my_user u " +
+            "WHERE (:name IS NULL OR :name = '' OR u.name LIKE :name) " +
+            "AND (:age IS NULL OR u.age > :age)")
+    List<MyUser> findCustomList(@Param("name") String name, @Param("age") Integer age);
+
+    @Query("SELECT u FROM my_user u WHERE u.id = :id")
+    MyUser findCustomOne(@Param("id") Long id);
 }
 ```
 
@@ -196,6 +225,8 @@ public interface MyUserService {
 
     void save(MyUser myUser);
 
+    void saveAll(List<MyUser> myUsers);
+
     void update(MyUser myUser);
 
     void deleteById(Long id);
@@ -203,6 +234,13 @@ public interface MyUserService {
     List<MyUser> findAll();
 
     MyUser findById(Long id);
+
+    void truncate();
+
+    MyUser findCustomOne(Long id);
+
+    List<MyUser> findCustomList(String name, Integer age);
+
 }
 ```
 
@@ -217,6 +255,7 @@ import local.ateng.java.jpa.service.MyUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -230,6 +269,11 @@ public class MyUserServiceImpl implements MyUserService {
     public void save(MyUser myUser) {
         MyUser user = myUserRepository.save(myUser);
         System.out.println(user);
+    }
+
+    @Override
+    public void saveAll(List<MyUser> myUsers) {
+        myUserRepository.saveAll(myUsers);
     }
 
     @Override
@@ -250,6 +294,22 @@ public class MyUserServiceImpl implements MyUserService {
     @Override
     public MyUser findById(Long id) {
         return myUserRepository.findById(id).get();
+    }
+
+    @Override
+    @Transactional
+    public void truncate() {
+        myUserRepository.truncateTable();
+    }
+
+    @Override
+    public MyUser findCustomOne(Long id) {
+        return myUserRepository.findCustomOne(id);
+    }
+
+    @Override
+    public List<MyUser> findCustomList(String name, Integer age) {
+        return myUserRepository.findCustomList(name, age);
     }
 }
 ```
@@ -327,6 +387,51 @@ public class JpaTests {
     public void test05() {
         // 删除数据
         myUserService.deleteById(1000L);
+    }
+```
+
+### 批量保存数据
+
+```java
+    @Test
+    public void test06() {
+        // 批量保存数据
+        ArrayList<MyUser> list = new ArrayList<>();
+        list.add(new MyUser(null, "jpa1", 24, 1.1, LocalDateTime.now(),"重庆","重庆",LocalDateTime.now()));
+        list.add(new MyUser(null, "jpa2", 24, 1.2, LocalDateTime.now(),"重庆","重庆",LocalDateTime.now()));
+        myUserService.saveAll(list);
+    }
+```
+
+### 清空表
+
+```java
+    @Test
+    public void test07() {
+        // 清空表
+        myUserService.truncate();
+    }
+```
+
+### 自定义SQL查询1
+
+```java
+    @Test
+    public void test08() {
+        // 自定义SQL查询，一个条件参数和返回一个值
+        MyUser myUser = myUserService.findCustomOne(1L);
+        System.out.println(myUser);
+    }
+```
+
+### 批量保存数据
+
+```java
+    @Test
+    public void test09() {
+        // 自定义SQL查询，多个条件参数和返回列表
+        List<MyUser> userList = myUserService.findCustomList("jpa%", 18);
+        System.out.println(userList);
     }
 ```
 
