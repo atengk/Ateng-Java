@@ -208,31 +208,33 @@ Flink 是一个开源的分布式流处理框架，专注于大规模数据流�
 </project>
 ```
 
-### 配置log4j2.xml
+### 配置log4j2.properties
 
 在**resources**目录下创建log4j2的日志配置文件
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN">
-    <Appenders>
-        <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{ISO8601} [%t] %-5level: %msg%n%throwable"/>
-        </Console>
-    </Appenders>
+```properties
+# 配置日志格式
+appender.console.name = ConsoleAppender
+appender.console.type = CONSOLE
+appender.console.layout.type = PatternLayout
+appender.console.layout.pattern = %d{ISO8601} [%t] %-5level %logger{36} - %msg%n
 
-    <Loggers>
-        <Root level="info">
-            <AppenderRef ref="Console"/>
-        </Root>
-        <Logger name="org.apache.flink" level="WARN" additivity="false">
-            <AppenderRef ref="Console"/>
-        </Logger>
-        <Logger name="org.apache.kafka" level="ERROR" additivity="false">
-            <AppenderRef ref="Console"/>
-        </Logger>
-    </Loggers>
-</Configuration>
+# 定义根日志级别
+rootLogger.level = INFO
+rootLogger.appenderRefs = console
+rootLogger.appenderRef.console.ref = ConsoleAppender
+
+# Kafka
+logger.kafka.name = org.apache.kafka
+logger.kafka.level = ERROR
+logger.kafka.appenderRefs = console
+logger.kafka.appenderRef.console.ref = ConsoleAppender
+
+# Flink
+logger.flink.name = org.apache.flink
+logger.flink.level = WARN
+logger.flink.appenderRefs = console
+logger.flink.appenderRef.console.ref = ConsoleAppender
 ```
 
 ### 使用WordCount
@@ -611,6 +613,7 @@ public class DataGeneratorKafka {
             <groupId>org.apache.doris</groupId>
             <artifactId>flink-doris-connector-1.19</artifactId>
             <version>24.1.0</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 ```
@@ -1760,8 +1763,1316 @@ public class DataSourceMinIO {
 }
 ```
 
+#### Doris
+
+参考：[官方文档](https://doris.apache.org/zh-CN/docs/ecosystem/flink-doris-connector)
+
+```java
+package local.ateng.java.DataStream.source;
+
+import org.apache.doris.flink.cfg.DorisOptions;
+import org.apache.doris.flink.cfg.DorisReadOptions;
+import org.apache.doris.flink.deserialization.SimpleListDeserializationSchema;
+import org.apache.doris.flink.source.DorisSource;
+import org.apache.flink.api.common.RuntimeExecutionMode;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.connector.file.src.FileSource;
+import org.apache.flink.connector.file.src.reader.TextLineInputFormat;
+import org.apache.flink.core.fs.Path;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * 读取Doris
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class DataSourceDoris {
+
+    public static void main(String[] args) throws Exception {
+        // 获取执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置运行模式为批处理模式
+        env.setRuntimeMode(RuntimeExecutionMode.BATCH);
+        // 设置并行度为 1
+        env.setParallelism(1);
+
+        // 创建 Doris 数据源
+        DorisOptions.Builder builder = DorisOptions.builder()
+                .setFenodes("192.168.1.12:9040")
+                .setTableIdentifier("kongyu_flink.my_user") // db.table
+                .setUsername("admin")
+                .setPassword("Admin@123");
+
+        DorisSource<List<?>> dorisSource = DorisSource.<List<?>>builder()
+                .setDorisOptions(builder.build())
+                .setDorisReadOptions(DorisReadOptions.builder().build())
+                .setDeserializer(new SimpleListDeserializationSchema())
+                .build();
+
+        // 从 Source 中读取数据
+        DataStreamSource<List<?>> stream = env.fromSource(dorisSource, WatermarkStrategy.noWatermarks(), "Doris Source");
+
+        // 输出流数据
+        stream.print("output");
+
+        // 执行程序
+        env.execute("Doris Source");
+    }
+
+}
+```
+
 
 
 ### 算子
 
 参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/)
+
+#### Map
+
+DataStream → DataStream
+输入一个元素同时输出一个元素。
+
+```java
+package local.ateng.java.DataStream.operator;
+
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 数据流转换 Map
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/
+ * DataStream → DataStream
+ * 输入一个元素同时输出一个元素
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class OperatorMap {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，设置水印策略为 BoundedOutOfOrderness，最大乱序时间为 3 秒，命名为 "Kafka Source"
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.forBoundedOutOfOrderness(Duration.ofSeconds(3)), "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<UserInfoEntity> operator = streamSource
+                .map(new MapFunction<String, UserInfoEntity>() {
+                    @Override
+                    public UserInfoEntity map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        userInfoEntity.setName(userInfoEntity.getName() + ".local");
+                        return userInfoEntity;
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250115162952405](./assets/image-20250115162952405.png)
+
+#### FlatMap
+
+DataStream → DataStream
+输入一个元素同时产生零个、一个或多个元素。
+
+```java
+package local.ateng.java.DataStream.operator;
+
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 数据流转换 FlatMap
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/
+ * DataStream → DataStream
+ * 输入一个元素同时产生零个、一个或多个元素
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class OperatorFlatMap {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，设置水印策略为 BoundedOutOfOrderness，最大乱序时间为 3 秒，命名为 "Kafka Source"
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.forBoundedOutOfOrderness(Duration.ofSeconds(3)), "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<String> operator = streamSource
+                .flatMap(new FlatMapFunction<String, String>() {
+                    @Override
+                    public void flatMap(String str, Collector<String> collector) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        String name = userInfoEntity.getName();
+                        String city = userInfoEntity.getCity();
+                        collector.collect(StrUtil.format("{}-{}", city, name));
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250115162928599](./assets/image-20250115162928599.png)
+
+
+
+#### Filter
+
+DataStream → DataStream
+
+为每个元素执行一个布尔 function，并保留那些 function 输出值为 true 的元素。
+
+```java
+package local.ateng.java.DataStream.operator;
+
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.FilterFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 数据流转换 Filter
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/
+ * DataStream → DataStream
+ * 为每个元素执行一个布尔 function，并保留那些 function 输出值为 true 的元素
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class OperatorFilter {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，设置水印策略为 BoundedOutOfOrderness，最大乱序时间为 3 秒，命名为 "Kafka Source"
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.forBoundedOutOfOrderness(Duration.ofSeconds(3)), "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<String> operator = streamSource
+                .filter(new FilterFunction<String>() {
+                    @Override
+                    public boolean filter(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str).toJavaObject(UserInfoEntity.class);
+                        Integer age = userInfoEntity.getAge();
+                        if (age == 25) {
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+#### KeyBy Reduce
+
+DataStream → KeyedStream → DataStream
+
+在逻辑上将流划分为不相交的分区。具有相同 key 的记录都分配到同一个分区。在内部， keyBy() 是通过哈希分区实现的。有多种指定 key 的方式。
+
+在相同 key 的数据流上“滚动”执行 reduce。将当前元素与最后一次 reduce 得到的值组合然后输出新值。
+
+```java
+package local.ateng.java.DataStream.operator;
+
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 数据流转换 KeyBy Reduce
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/
+ * DataStream → KeyedStream → DataStream
+ * 在逻辑上将流划分为不相交的分区。具有相同 key 的记录都分配到同一个分区。在内部， keyBy() 是通过哈希分区实现的。有多种指定 key 的方式。
+ * 在相同 key 的数据流上“滚动”执行 reduce。将当前元素与最后一次 reduce 得到的值组合然后输出新值。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class OperatorKeyByReduce {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，设置水印策略为 BoundedOutOfOrderness，最大乱序时间为 3 秒，命名为 "Kafka Source"
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.forBoundedOutOfOrderness(Duration.ofSeconds(3)), "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                .map(new MapFunction<String, JSONObject>() {
+                    @Override
+                    public JSONObject map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return JSONObject.of(
+                                "province", userInfoEntity.getProvince(),
+                                "score", userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<JSONObject, String>() {
+                    @Override
+                    public String getKey(JSONObject jsonObject) throws Exception {
+                        return jsonObject.getString("province");
+                    }
+                })
+                .reduce(new ReduceFunction<JSONObject>() {
+                    @Override
+                    public JSONObject reduce(JSONObject json1, JSONObject json2) throws Exception {
+                        return JSONObject.of(
+                                "province", json1.getString("province"),
+                                "score", json1.getDouble("score") + json2.getDouble("score"));
+                    }
+                });
+
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+
+
+### 滚动窗口
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/)
+
+#### 事件时间WindowAll
+
+DataStream → AllWindowedStream → DataStream
+
+对于 non-keyed stream，原始的 stream 不会被分割为多个逻辑上的 stream， 所以所有的窗口计算会被同一个 task 完成，也就是 parallelism 为 1。
+
+> 这适用于非并行转换的大多数场景。所有记录都将收集到 windowAll 算子对应的一个任务中。
+
+```java
+package local.ateng.java.DataStream.window.tumbling;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.date.LocalDateTimeUtil;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在普通 DataStream 上定义 Window。 Window 根据某些特征（例如，最近 5 秒内到达的数据）对所有流事件进行分组。
+ * DataStream → AllWindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/#windowall
+ * <p>
+ * 这个程序通过 Flink 从 Kafka 中读取消息。
+ * 它使用事件时间滚动窗口（TumblingEventTimeWindows），每 1 分钟对数据进行一次窗口计算。
+ * 对每个窗口中的数据，程序会创建一个 JSON 对象，包含窗口的开始和结束时间、窗口中的数据（第一个、最后一个元素）、数据量以及当前时间。
+ * 最后，处理后的结果被输出到控制台。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class EventTimeWindowsAll {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 定义水印策略：WatermarkStrategy 可以在 Flink 应用程序中的两处使用，第一种是直接在数据源上使用，第二种是直接在非数据源的操作之后使用。
+        // 允许最多 5 秒的事件时间乱序，使用 createTime 字段为事件时间戳（毫秒）
+        WatermarkStrategy<String> watermarkStrategy = WatermarkStrategy.<String>forBoundedOutOfOrderness(Duration.ofSeconds(5))
+                .withTimestampAssigner(
+                        (event, recordTimestamp) -> {
+                            // 解析 JSON 格式的事件，并获取事件时间
+                            UserInfoEntity user = JSONObject.parseObject(event).toJavaObject(UserInfoEntity.class);
+                            long timestamp = LocalDateTimeUtil.toEpochMilli(user.getCreateTime());
+                            return timestamp;
+                        });
+
+        // 从 Kafka 数据源读取数据，设置水印策略
+        DataStreamSource<String> streamSource = env.fromSource(source, watermarkStrategy, "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                // 设置水印策略为事件时间
+                //.assignTimestampsAndWatermarks(watermarkStrategy)
+                // 1分钟滚动窗口
+                .windowAll(TumblingEventTimeWindows.of(Duration.ofMinutes(1)))
+                .apply(new AllWindowFunction<String, JSONObject, TimeWindow>() {
+                    @Override
+                    public void apply(TimeWindow timeWindow, Iterable<String> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        JSONArray jsonArray = JSONArray.of();
+                        for (String string : iterable) {
+                            jsonArray.add(JSONObject.parseObject(string));
+                        }
+                        int size = jsonArray.size();
+                        json.put("data^", jsonArray.get(0));
+                        json.put("data$", jsonArray.get(size - 1));
+                        json.put("size", size);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116075623947](./assets/image-20250116075623947.png)
+
+#### 处理时间WindowAll
+
+DataStream → AllWindowedStream → DataStream
+
+对于 non-keyed stream，原始的 stream 不会被分割为多个逻辑上的 stream， 所以所有的窗口计算会被同一个 task 完成，也就是 parallelism 为 1。
+
+> 这适用于非并行转换的大多数场景。所有记录都将收集到 windowAll 算子对应的一个任务中。
+
+```java
+package local.ateng.java.DataStream.window.tumbling;
+
+import cn.hutool.core.date.DateUtil;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在普通 DataStream 上定义 Window。 Window 根据某些特征（例如，最近 5 秒内到达的数据）对所有流事件进行分组。
+ * DataStream → AllWindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/#windowall
+ * <p>
+ * 这个程序通过 Flink 从 Kafka 中读取消息。
+ * 它使用处理时间滚动窗口（TumblingProcessingTimeWindows），每 1 分钟对数据进行一次窗口计算。
+ * 对每个窗口中的数据，程序会创建一个 JSON 对象，包含窗口的开始和结束时间、窗口中的数据（第一个、最后一个元素）、数据量以及当前时间。
+ * 最后，处理后的结果被输出到控制台。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class ProcessingTimeWindowsAll {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                // 1分钟滚动窗口
+                .windowAll(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .apply(new AllWindowFunction<String, JSONObject, TimeWindow>() {
+                    @Override
+                    public void apply(TimeWindow timeWindow, Iterable<String> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        JSONArray jsonArray = JSONArray.of();
+                        for (String string : iterable) {
+                            jsonArray.add(JSONObject.parseObject(string));
+                        }
+                        int size = jsonArray.size();
+                        json.put("data^", jsonArray.get(0));
+                        json.put("data$", jsonArray.get(size - 1));
+                        json.put("size", size);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116075917578](./assets/image-20250116075917578.png)
+
+#### 事件时间Window
+
+KeyedStream → WindowedStream → DataStream
+
+可以在已经分区的 KeyedStreams 上定义 Window。Window 根据某些特征（例如，最近 5 秒内到达的数据）对每个 key Stream 中的数据进行分组
+
+```java
+package local.ateng.java.DataStream.window.tumbling;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.date.LocalDateTimeUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在已经分区的 KeyedStreams 上定义 Window。Window 根据某些特征（例如，最近 5 秒内到达的数据）对每个 key Stream 中的数据进行分组。
+ * KeyedStream → WindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/#window
+ *
+ * 这个 Flink 程序的主要功能是：
+ * 从 Kafka 读取 JSON 格式的用户数据，每条数据包含 province（省份）和 score（分数）信息。
+ * 将数据按 province 字段进行分组，并基于处理时间（ProcessingTime）使用滚动窗口（每 1 分钟一个窗口）对每个省份的 score 进行聚合。
+ * 每个窗口内，程序计算该省份的总分数，并输出窗口的开始时间、结束时间、总分数以及当前时间。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class EventTimeWindowKeyBy {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 定义水印策略：WatermarkStrategy 可以在 Flink 应用程序中的两处使用，第一种是直接在数据源上使用，第二种是直接在非数据源的操作之后使用。
+        // 允许最多 5 秒的事件时间乱序，使用 createTime 字段为事件时间戳（毫秒）
+        WatermarkStrategy<String> watermarkStrategy = WatermarkStrategy.<String>forBoundedOutOfOrderness(Duration.ofSeconds(5))
+                .withTimestampAssigner(
+                        (event, recordTimestamp) -> {
+                            // 解析 JSON 格式的事件，并获取事件时间
+                            UserInfoEntity user = JSONObject.parseObject(event).toJavaObject(UserInfoEntity.class);
+                            long timestamp = LocalDateTimeUtil.toEpochMilli(user.getCreateTime());
+                            return timestamp;
+                        });
+
+        // 从 Kafka 数据源读取数据，设置水印策略
+        DataStreamSource<String> streamSource = env.fromSource(source, watermarkStrategy, "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                // 设置水印策略为事件时间
+                //.assignTimestampsAndWatermarks(watermarkStrategy)
+                .map(new MapFunction<String, JSONObject>() {
+                    @Override
+                    public JSONObject map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return JSONObject.of(
+                                "province", userInfoEntity.getProvince(),
+                                "score", userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<JSONObject, String>() {
+                    @Override
+                    public String getKey(JSONObject jsonObject) throws Exception {
+                        return jsonObject.getString("province");
+                    }
+                })
+                // 1分钟滚动窗口
+                .window(TumblingEventTimeWindows.of(Duration.ofMinutes(1)))
+                .apply(new WindowFunction<JSONObject, JSONObject, String, TimeWindow>() {
+                    @Override
+                    public void apply(String str, TimeWindow timeWindow, Iterable<JSONObject> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        Double score = 0.0;
+                        Long count = 0L;
+                        for (JSONObject jsonObject : iterable) {
+                            score += jsonObject.getDouble("score");
+                            count ++;
+                        }
+                        json.put("province", str);
+                        json.put("score", score);
+                        json.put("count", count);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116080053941](./assets/image-20250116080053941.png)
+
+#### 处理时间Window
+
+KeyedStream → WindowedStream → DataStream
+
+可以在已经分区的 KeyedStreams 上定义 Window。Window 根据某些特征（例如，最近 5 秒内到达的数据）对每个 key Stream 中的数据进行分组
+
+```java
+package local.ateng.java.DataStream.window.tumbling;
+
+import cn.hutool.core.date.DateUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在已经分区的 KeyedStreams 上定义 Window。Window 根据某些特征（例如，最近 5 秒内到达的数据）对每个 key Stream 中的数据进行分组。
+ * KeyedStream → WindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/#window
+ *
+ * 这个 Flink 程序的主要功能是：
+ * 从 Kafka 读取 JSON 格式的用户数据，每条数据包含 province（省份）和 score（分数）信息。
+ * 将数据按 province 字段进行分组，并基于处理时间（ProcessingTime）使用滚动窗口（每 1 分钟一个窗口）对每个省份的 score 进行聚合。
+ * 每个窗口内，程序计算该省份的总分数，并输出窗口的开始时间、结束时间、总分数以及当前时间。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class ProcessingTimeWindowKeyBy {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                .map(new MapFunction<String, JSONObject>() {
+                    @Override
+                    public JSONObject map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return JSONObject.of(
+                                "province", userInfoEntity.getProvince(),
+                                "score", userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<JSONObject, String>() {
+                    @Override
+                    public String getKey(JSONObject jsonObject) throws Exception {
+                        return jsonObject.getString("province");
+                    }
+                })
+                .window(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .apply(new WindowFunction<JSONObject, JSONObject, String, TimeWindow>() {
+                    @Override
+                    public void apply(String str, TimeWindow timeWindow, Iterable<JSONObject> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        Double score = 0.0;
+                        Long count = 0L;
+                        for (JSONObject jsonObject : iterable) {
+                            score += jsonObject.getDouble("score");
+                            count ++;
+                        }
+                        json.put("province", str);
+                        json.put("score", score);
+                        json.put("count", count);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116080110680](./assets/image-20250116080110680.png)
+
+
+
+### 滑动窗口
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/)
+
+#### 事件时间WindowAll
+
+```java
+package local.ateng.java.DataStream.window.sliding;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.date.LocalDateTimeUtil;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在普通 DataStream 上定义 Window。 Window 根据某些特征（例如，最近 5 秒内到达的数据）对所有流事件进行分组。
+ * DataStream → AllWindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#%e6%bb%91%e5%8a%a8%e7%aa%97%e5%8f%a3sliding-windows
+ *
+ * 这段代码的主要功能是：
+ * 从 Kafka 消息队列读取 JSON 格式的数据，数据包含时间戳（createTime）。
+ * 使用事件时间来处理数据，并对乱序事件提供 5 秒的容忍度。
+ * 使用 基于事件时间的滑动窗口（2 分钟大小，1 分钟滑动一次）对数据进行窗口聚合。
+ * 每个窗口计算时，输出窗口的开始时间、结束时间、窗口内的数据量、首尾数据等信息。
+ * 将计算结果输出到控制台。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class EventTimeWindowsAll {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 定义水印策略：WatermarkStrategy 可以在 Flink 应用程序中的两处使用，第一种是直接在数据源上使用，第二种是直接在非数据源的操作之后使用。
+        // 允许最多 5 秒的事件时间乱序，使用 createTime 字段为事件时间戳（毫秒）
+        WatermarkStrategy<String> watermarkStrategy = WatermarkStrategy.<String>forBoundedOutOfOrderness(Duration.ofSeconds(5))
+                .withTimestampAssigner(
+                        (event, recordTimestamp) -> {
+                            // 解析 JSON 格式的事件，并获取事件时间
+                            UserInfoEntity user = JSONObject.parseObject(event).toJavaObject(UserInfoEntity.class);
+                            long timestamp = LocalDateTimeUtil.toEpochMilli(user.getCreateTime());
+                            return timestamp;
+                        });
+
+        // 从 Kafka 数据源读取数据，设置水印策略
+        DataStreamSource<String> streamSource = env.fromSource(source, watermarkStrategy, "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                // 设置水印策略为事件时间
+                //.assignTimestampsAndWatermarks(watermarkStrategy)
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .windowAll(SlidingEventTimeWindows.of(Duration.ofMinutes(2), Duration.ofMinutes(1)))
+                .apply(new AllWindowFunction<String, JSONObject, TimeWindow>() {
+                    @Override
+                    public void apply(TimeWindow timeWindow, Iterable<String> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        JSONArray jsonArray = JSONArray.of();
+                        for (String string : iterable) {
+                            jsonArray.add(JSONObject.parseObject(string));
+                        }
+                        int size = jsonArray.size();
+                        json.put("data^", jsonArray.get(0));
+                        json.put("data$", jsonArray.get(size - 1));
+                        json.put("size", size);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116161842218](./assets/image-20250116161842218.png)
+
+#### 处理时间WindowAll
+
+```java
+package local.ateng.java.DataStream.window.sliding;
+
+import cn.hutool.core.date.DateUtil;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在普通 DataStream 上定义 Window。 Window 根据某些特征（例如，最近 5 秒内到达的数据）对所有流事件进行分组。
+ * DataStream → AllWindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#%e6%bb%91%e5%8a%a8%e7%aa%97%e5%8f%a3sliding-windows
+ *
+ * 这段代码的主要功能是：
+ * 使用 基于处理时间的滑动窗口（2 分钟大小，1 分钟滑动一次）对数据进行窗口聚合。
+ * 每个窗口计算时，输出窗口的开始时间、结束时间、窗口内的数据量、首尾数据等信息。
+ * 将计算结果输出到控制台。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class ProcessingTimeWindowsAll {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .windowAll(SlidingProcessingTimeWindows.of(Duration.ofMinutes(2), Duration.ofMinutes(1)))
+                .apply(new AllWindowFunction<String, JSONObject, TimeWindow>() {
+                    @Override
+                    public void apply(TimeWindow timeWindow, Iterable<String> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        JSONArray jsonArray = JSONArray.of();
+                        for (String string : iterable) {
+                            jsonArray.add(JSONObject.parseObject(string));
+                        }
+                        int size = jsonArray.size();
+                        json.put("data^", jsonArray.get(0));
+                        json.put("data$", jsonArray.get(size - 1));
+                        json.put("size", size);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116080706492](./assets/image-20250116080706492.png)
+
+#### 事件时间Window
+
+```java
+package local.ateng.java.DataStream.window.sliding;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.date.LocalDateTimeUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在已经分区的 KeyedStreams 上定义 Window。Window 根据某些特征（例如，最近 5 秒内到达的数据）对每个 key Stream 中的数据进行分组。
+ * KeyedStream → WindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/#window
+ * <p>
+ * 这个 Flink 程序的主要功能是：
+ * 从 Kafka 读取 JSON 格式的用户数据，每条数据包含 province（省份）和 score（分数）信息。
+ * 将数据按 province 字段进行分组，并基于处理时间（ProcessingTime）使用滚动窗口（2 分钟大小，1 分钟滑动一次）对每个省份的 score 进行聚合。
+ * 每个窗口内，程序计算该省份的总分数，并输出窗口的开始时间、结束时间、总分数以及当前时间。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class EventTimeWindowKeyBy {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 定义水印策略：WatermarkStrategy 可以在 Flink 应用程序中的两处使用，第一种是直接在数据源上使用，第二种是直接在非数据源的操作之后使用。
+        // 允许最多 5 秒的事件时间乱序，使用 createTime 字段为事件时间戳（毫秒）
+        WatermarkStrategy<String> watermarkStrategy = WatermarkStrategy.<String>forBoundedOutOfOrderness(Duration.ofSeconds(5))
+                .withTimestampAssigner(
+                        (event, recordTimestamp) -> {
+                            // 解析 JSON 格式的事件，并获取事件时间
+                            UserInfoEntity user = JSONObject.parseObject(event).toJavaObject(UserInfoEntity.class);
+                            long timestamp = LocalDateTimeUtil.toEpochMilli(user.getCreateTime());
+                            return timestamp;
+                        });
+
+        // 从 Kafka 数据源读取数据，设置水印策略
+        DataStreamSource<String> streamSource = env.fromSource(source, watermarkStrategy, "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                // 设置水印策略为事件时间
+                //.assignTimestampsAndWatermarks(watermarkStrategy)
+                .map(new MapFunction<String, JSONObject>() {
+                    @Override
+                    public JSONObject map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return JSONObject.of(
+                                "province", userInfoEntity.getProvince(),
+                                "score", userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<JSONObject, String>() {
+                    @Override
+                    public String getKey(JSONObject jsonObject) throws Exception {
+                        return jsonObject.getString("province");
+                    }
+                })
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .window(SlidingEventTimeWindows.of(Duration.ofMinutes(2), Duration.ofMinutes(1)))
+                .apply(new WindowFunction<JSONObject, JSONObject, String, TimeWindow>() {
+                    @Override
+                    public void apply(String str, TimeWindow timeWindow, Iterable<JSONObject> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        Double score = 0.0;
+                        Long count = 0L;
+                        for (JSONObject jsonObject : iterable) {
+                            score += jsonObject.getDouble("score");
+                            count++;
+                        }
+                        json.put("province", str);
+                        json.put("score", score);
+                        json.put("count", count);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116162806572](./assets/image-20250116162806572.png)
+
+#### 处理时间Window
+
+```java
+package local.ateng.java.DataStream.window.sliding;
+
+import cn.hutool.core.date.DateUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在已经分区的 KeyedStreams 上定义 Window。Window 根据某些特征（例如，最近 5 秒内到达的数据）对每个 key Stream 中的数据进行分组。
+ * KeyedStream → WindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/#window
+ * <p>
+ * 这个 Flink 程序的主要功能是：
+ * 从 Kafka 读取 JSON 格式的用户数据，每条数据包含 province（省份）和 score（分数）信息。
+ * 将数据按 province 字段进行分组，并基于处理时间（ProcessingTime）使用滑动窗口（2 分钟大小，1 分钟滑动一次）对每个省份的 score 进行聚合。
+ * 每个窗口内，程序计算该省份的总分数，并输出窗口的开始时间、结束时间、总分数以及当前时间。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class ProcessingTimeWindowKeyBy {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 算子
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                .map(new MapFunction<String, JSONObject>() {
+                    @Override
+                    public JSONObject map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return JSONObject.of(
+                                "province", userInfoEntity.getProvince(),
+                                "score", userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<JSONObject, String>() {
+                    @Override
+                    public String getKey(JSONObject jsonObject) throws Exception {
+                        return jsonObject.getString("province");
+                    }
+                })
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .window(SlidingProcessingTimeWindows.of(Duration.ofMinutes(2), Duration.ofMinutes(1)))
+                .apply(new WindowFunction<JSONObject, JSONObject, String, TimeWindow>() {
+                    @Override
+                    public void apply(String str, TimeWindow timeWindow, Iterable<JSONObject> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        Double score = 0.0;
+                        Long count = 0L;
+                        for (JSONObject jsonObject : iterable) {
+                            score += jsonObject.getDouble("score");
+                            count++;
+                        }
+                        json.put("province", str);
+                        json.put("score", score);
+                        json.put("count", count);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250116162451675](./assets/image-20250116162451675.png)
