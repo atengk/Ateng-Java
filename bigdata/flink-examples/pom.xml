@@ -204,6 +204,14 @@
             <version>24.1.0</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- Apache Flink HBase 连接器库 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-hbase-2.2</artifactId>
+            <version>4.0.0-1.19</version>
+        </dependency>
+
     </dependencies>
 
     <!-- 插件仓库配置 -->
