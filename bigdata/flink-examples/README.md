@@ -90,24 +90,28 @@ Flink 是一个开源的分布式流处理框架，专注于大规模数据流�
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>1.7.36</version>
+            <scope>provided</scope>
         </dependency>
         <!-- Log4j 2.x API -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
             <version>2.19.0</version>
+            <scope>provided</scope>
         </dependency>
         <!-- Log4j 2.x 实现 -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
             <version>2.19.0</version>
+            <scope>provided</scope>
         </dependency>
         <!-- SLF4J 和 Log4j 2.x 绑定 -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
             <version>2.19.0</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Apache Flink 客户端库 -->
@@ -4733,3 +4737,6 @@ public class WindowsAggregateProcessFunction {
 
 ## SQL
 
+
+
+文档：[性能调优](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tuning/)
