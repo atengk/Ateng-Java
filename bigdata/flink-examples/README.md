@@ -4060,3 +4060,675 @@ public class EventTimeWindowsAll {
 }
 ```
 
+
+
+### 窗口函数（Window Functions）
+
+#### ReduceFunction 
+
+ReduceFunction 指定两条输入数据如何合并起来产生一条输出数据，输入和输出数据的类型必须相同。 Flink 使用 ReduceFunction 对窗口中的数据进行增量聚合。
+
+```java
+package local.ateng.java.DataStream.window.function;
+
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * ReduceFunction #
+ * ReduceFunction 指定两条输入数据如何合并起来产生一条输出数据，输入和输出数据的类型必须相同。 Flink 使用 ReduceFunction 对窗口中的数据进行增量聚合。
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#reducefunction
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class WindowsReduceFunction {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<Tuple2<String, Double>> operator = streamSource
+                .map(new MapFunction<String, Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return Tuple2.of(userInfoEntity.getProvince(), userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<Tuple2<String, Double>, String>() {
+                    @Override
+                    public String getKey(Tuple2<String, Double> t) throws Exception {
+                        return t.f0;
+                    }
+                })
+                // 1分钟滚动窗口
+                .window(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .reduce(new ReduceFunction<Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> reduce(Tuple2<String, Double> t1, Tuple2<String, Double> t2) throws Exception {
+                        return Tuple2.of(t1.f0, t1.f1 + t2.f1);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+#### AggregateFunction 
+
+ReduceFunction 是 AggregateFunction 的特殊情况。 AggregateFunction 接收三个类型：输入数据的类型(IN)、累加器的类型（ACC）和输出数据的类型（OUT）。 输入数据的类型是输入流的元素类型，AggregateFunction 接口有如下几个方法： 把每一条元素加进累加器、创建初始累加器、合并两个累加器、从累加器中提取输出（OUT 类型）。与 ReduceFunction 相同，Flink 会在输入数据到达窗口时直接进行增量聚合。
+
+```java
+package local.ateng.java.DataStream.window.function;
+
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.AggregateFunction;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+
+/**
+ * AggregateFunction
+ * ReduceFunction 是 AggregateFunction 的特殊情况。 AggregateFunction 接收三个类型：输入数据的类型(IN)、累加器的类型（ACC）和输出数据的类型（OUT）。 输入数据的类型是输入流的元素类型，AggregateFunction 接口有如下几个方法： 把每一条元素加进累加器、创建初始累加器、合并两个累加器、从累加器中提取输出（OUT 类型）。
+ * 与 ReduceFunction 相同，Flink 会在输入数据到达窗口时直接进行增量聚合。
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#aggregatefunction
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class WindowsAggregateFunction {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<Tuple2<String, Double>> operator = streamSource
+                .map(new MapFunction<String, Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return Tuple2.of(userInfoEntity.getProvince(), userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<Tuple2<String, Double>, String>() {
+                    @Override
+                    public String getKey(Tuple2<String, Double> t) throws Exception {
+                        return t.f0;
+                    }
+                })
+                // 1分钟滚动窗口
+                .window(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .aggregate(new AggregateFunction<Tuple2<String, Double>, Tuple2<String, Double>, Tuple2<String, Double>>() {
+
+                    // 初始化聚合值，返回初始状态
+                    @Override
+                    public Tuple2<String, Double> createAccumulator() {
+                        return Tuple2.of("", 0.0);
+                    }
+
+                    // 增量聚合阶段：根据每个输入值更新聚合值
+                    @Override
+                    public Tuple2<String, Double> add(Tuple2<String, Double> t1, Tuple2<String, Double> t2) {
+                        return Tuple2.of(t1.f0, t1.f1 + t2.f1);
+                    }
+
+                    // 最终聚合阶段：输出聚合结果
+                    @Override
+                    public Tuple2<String, Double> getResult(Tuple2<String, Double> t) {
+                        return t;
+                    }
+
+                    // 合并聚合状态：如果窗口分为多个子窗口，这里合并不同的状态
+                    @Override
+                    public Tuple2<String, Double> merge(Tuple2<String, Double> t1, Tuple2<String, Double> t2) {
+                        return Tuple2.of(t1.f0, t1.f1 + t2.f1);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+#### ProcessWindowFunction
+
+ProcessWindowFunction 有能获取包含窗口内所有元素的 Iterable， 以及用来获取时间和状态信息的 Context 对象，比其他窗口函数更加灵活。 ProcessWindowFunction 的灵活性是以性能和资源消耗为代价的， 因为窗口中的数据无法被增量聚合，而需要在窗口触发前缓存所有数据。
+
+```java
+package local.ateng.java.DataStream.window.function;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple1;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * ProcessWindowFunction #
+ * ProcessWindowFunction 有能获取包含窗口内所有元素的 Iterable， 以及用来获取时间和状态信息的 Context 对象，比其他窗口函数更加灵活。
+ * ProcessWindowFunction 的灵活性是以性能和资源消耗为代价的， 因为窗口中的数据无法被增量聚合，而需要在窗口触发前缓存所有数据。
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#processwindowfunction
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class WindowsProcessFunction {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<Tuple1<String>> operator = streamSource
+                .map(new MapFunction<String, Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return Tuple2.of(userInfoEntity.getProvince(), userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<Tuple2<String, Double>, String>() {
+                    @Override
+                    public String getKey(Tuple2<String, Double> t) throws Exception {
+                        return t.f0;
+                    }
+                })
+                // 1分钟滚动窗口
+                .window(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .process(new ProcessWindowFunction<Tuple2<String, Double>, Tuple1<String>, String, TimeWindow>() {
+                    @Override
+                    public void process(String key, Context context, Iterable<Tuple2<String, Double>> iterable, Collector<Tuple1<String>> collector) throws Exception {
+                        long windowStart = context.window().getStart();  // 窗口的开始时间
+                        long windowEnd = context.window().getEnd();      // 窗口的结束时间
+                        long currentProcessingTime = context.currentProcessingTime();  // 获取当前处理时间
+                        long currentWatermark = context.currentWatermark();  // 获取当前水位线
+                        Double score = 0.0;
+                        for (Tuple2<String, Double> t : iterable) {
+                            score += t.f1;
+                        }
+                        String string = StrUtil.format("windowStart={},windowEnd={},currentProcessingTime={},currentWatermark={},data={}",
+                                DateUtil.date(windowStart), DateUtil.date(windowEnd),
+                                DateUtil.date(currentProcessingTime), DateUtil.date(currentWatermark),
+                                key + ":" + score);
+                        collector.collect(Tuple1.of(string));
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+#### ApplyWindowFunction
+
+在某些可以使用 ProcessWindowFunction 的地方，你也可以使用 WindowFunction。 它是旧版的 ProcessWindowFunction，只能提供更少的环境信息且缺少一些高级的功能，比如 per-window state。 这个接口会在未来被弃用。
+
+```java
+package local.ateng.java.DataStream.window.function;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple1;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * WindowFunction（已过时）
+ * 在某些可以使用 ProcessWindowFunction 的地方，你也可以使用 WindowFunction。
+ * 它是旧版的 ProcessWindowFunction，只能提供更少的环境信息且缺少一些高级的功能，比如 per-window state。 这个接口会在未来被弃用。
+ *
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#windowfunction%e5%b7%b2%e8%bf%87%e6%97%b6
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class WindowsApplyFunction {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<Tuple1<String>> operator = streamSource
+                .map(new MapFunction<String, Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return Tuple2.of(userInfoEntity.getProvince(), userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<Tuple2<String, Double>, String>() {
+                    @Override
+                    public String getKey(Tuple2<String, Double> t) throws Exception {
+                        return t.f0;
+                    }
+                })
+                // 1分钟滚动窗口
+                .window(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .apply(new WindowFunction<Tuple2<String, Double>, Tuple1<String>, String, TimeWindow>() {
+                    @Override
+                    public void apply(String key, TimeWindow timeWindow, Iterable<Tuple2<String, Double>> iterable, Collector<Tuple1<String>> collector) throws Exception {
+                        long windowStart = timeWindow.getStart();  // 窗口的开始时间
+                        long windowEnd = timeWindow.getEnd();      // 窗口的结束时间
+                        Double score = 0.0;
+                        for (Tuple2<String, Double> t : iterable) {
+                            score += t.f1;
+                        }
+                        String string = StrUtil.format("windowStart={},windowEnd={},data={}",
+                                DateUtil.date(windowStart), DateUtil.date(windowEnd),
+                                key + ":" + score);
+                        collector.collect(Tuple1.of(string));
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+#### ReduceProcessFunction 
+
+**增量聚合的 ProcessWindowFunction**
+
+ProcessWindowFunction 可以与 ReduceFunction 或 AggregateFunction 搭配使用， 使其能够在数据到达窗口的时候进行增量聚合。当窗口关闭时，ProcessWindowFunction 将会得到聚合的结果。 这样它就可以增量聚合窗口的元素并且从 ProcessWindowFunction` 中获得窗口的元数据。
+
+```java
+package local.ateng.java.DataStream.window.function;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple1;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 增量聚合的 ProcessWindowFunction
+ * ProcessWindowFunction 可以与 ReduceFunction 或 AggregateFunction 搭配使用， 使其能够在数据到达窗口的时候进行增量聚合。当窗口关闭时，ProcessWindowFunction 将会得到聚合的结果。
+ * 这样它就可以增量聚合窗口的元素并且从 ProcessWindowFunction` 中获得窗口的元数据。
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#%e5%a2%9e%e9%87%8f%e8%81%9a%e5%90%88%e7%9a%84-processwindowfunction
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class WindowsReduceProcessFunction {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<Tuple1<String>> operator = streamSource
+                .map(new MapFunction<String, Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return Tuple2.of(userInfoEntity.getProvince(), userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<Tuple2<String, Double>, String>() {
+                    @Override
+                    public String getKey(Tuple2<String, Double> t) throws Exception {
+                        return t.f0;
+                    }
+                })
+                // 1分钟滚动窗口
+                .window(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .reduce(new ReduceFunction<Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> reduce(Tuple2<String, Double> t1, Tuple2<String, Double> t2) throws Exception {
+                        return Tuple2.of(t1.f0, t1.f1 + t2.f1);
+                    }
+                }, new ProcessWindowFunction<Tuple2<String, Double>, Tuple1<String>, String, TimeWindow>() {
+                    @Override
+                    public void process(String key, Context context, Iterable<Tuple2<String, Double>> iterable, Collector<Tuple1<String>> collector) throws Exception {
+                        long windowStart = context.window().getStart();  // 窗口的开始时间
+                        long windowEnd = context.window().getEnd();      // 窗口的结束时间
+                        long currentProcessingTime = context.currentProcessingTime();  // 获取当前处理时间
+                        long currentWatermark = context.currentWatermark();  // 获取当前水位线
+                        // ReduceFunction 已经聚合的结果通过 ProcessWindowFunction 处理，所有iterable这里只有一个值
+                        Tuple2<String, Double> t = iterable.iterator().next();
+                        String string = StrUtil.format("windowStart={},windowEnd={},currentProcessingTime={},currentWatermark={},data={},size={}",
+                                DateUtil.date(windowStart), DateUtil.date(windowEnd),
+                                DateUtil.date(currentProcessingTime), DateUtil.date(currentWatermark),
+                                key + ":" + t.f0 + ":" + t.f1, iterable.spliterator().estimateSize());
+                        collector.collect(Tuple1.of(string));
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+#### AggregateProcessFunction
+
+**增量聚合的 ProcessWindowFunction**
+
+ProcessWindowFunction 可以与 ReduceFunction 或 AggregateFunction 搭配使用， 使其能够在数据到达窗口的时候进行增量聚合。当窗口关闭时，ProcessWindowFunction 将会得到聚合的结果。 这样它就可以增量聚合窗口的元素并且从 ProcessWindowFunction` 中获得窗口的元数据。
+
+```java
+package local.ateng.java.DataStream.window.function;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.functions.AggregateFunction;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple1;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 增量聚合的 ProcessWindowFunction
+ * ProcessWindowFunction 可以与 ReduceFunction 或 AggregateFunction 搭配使用， 使其能够在数据到达窗口的时候进行增量聚合。当窗口关闭时，ProcessWindowFunction 将会得到聚合的结果。
+ * 这样它就可以增量聚合窗口的元素并且从 ProcessWindowFunction` 中获得窗口的元数据。
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/windows/#%e5%a2%9e%e9%87%8f%e8%81%9a%e5%90%88%e7%9a%84-processwindowfunction
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class WindowsAggregateProcessFunction {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(3);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<Tuple1<String>> operator = streamSource
+                .map(new MapFunction<String, Tuple2<String, Double>>() {
+                    @Override
+                    public Tuple2<String, Double> map(String str) throws Exception {
+                        UserInfoEntity userInfoEntity = JSONObject.parseObject(str, UserInfoEntity.class);
+                        return Tuple2.of(userInfoEntity.getProvince(), userInfoEntity.getScore());
+                    }
+                })
+                .keyBy(new KeySelector<Tuple2<String, Double>, String>() {
+                    @Override
+                    public String getKey(Tuple2<String, Double> t) throws Exception {
+                        return t.f0;
+                    }
+                })
+                // 1分钟滚动窗口
+                .window(TumblingProcessingTimeWindows.of(Duration.ofMinutes(1)))
+                .aggregate(new AggregateFunction<Tuple2<String, Double>, Tuple2<String, Double>, Tuple2<String, Double>>() {
+
+                    // 初始化聚合值，返回初始状态
+                    @Override
+                    public Tuple2<String, Double> createAccumulator() {
+                        return Tuple2.of("", 0.0);
+                    }
+
+                    // 增量聚合阶段：根据每个输入值更新聚合值
+                    @Override
+                    public Tuple2<String, Double> add(Tuple2<String, Double> t1, Tuple2<String, Double> t2) {
+                        return Tuple2.of(t1.f0, t1.f1 + t2.f1);
+                    }
+
+                    // 最终聚合阶段：输出聚合结果
+                    @Override
+                    public Tuple2<String, Double> getResult(Tuple2<String, Double> t) {
+                        return t;
+                    }
+
+                    // 合并聚合状态：如果窗口分为多个子窗口，这里合并不同的状态
+                    @Override
+                    public Tuple2<String, Double> merge(Tuple2<String, Double> t1, Tuple2<String, Double> t2) {
+                        return Tuple2.of(t1.f0, t1.f1 + t2.f1);
+                    }
+                }, new ProcessWindowFunction<Tuple2<String, Double>, Tuple1<String>, String, TimeWindow>() {
+                    @Override
+                    public void process(String key, Context context, Iterable<Tuple2<String, Double>> iterable, Collector<Tuple1<String>> collector) throws Exception {
+                        long windowStart = context.window().getStart();  // 窗口的开始时间
+                        long windowEnd = context.window().getEnd();      // 窗口的结束时间
+                        long currentProcessingTime = context.currentProcessingTime();  // 获取当前处理时间
+                        long currentWatermark = context.currentWatermark();  // 获取当前水位线
+                        // ReduceFunction 已经聚合的结果通过 ProcessWindowFunction 处理，所有iterable这里只有一个值
+                        Tuple2<String, Double> t = iterable.iterator().next();
+                        String string = StrUtil.format("windowStart={},windowEnd={},currentProcessingTime={},currentWatermark={},data={},size={}",
+                                DateUtil.date(windowStart), DateUtil.date(windowEnd),
+                                DateUtil.date(currentProcessingTime), DateUtil.date(currentWatermark),
+                                key + ":" + t.f0 + ":" + t.f1, iterable.spliterator().estimateSize());
+                        collector.collect(Tuple1.of(string));
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+
+
+## Table API
+
+
+
+## SQL
+
