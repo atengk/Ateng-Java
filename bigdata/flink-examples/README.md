@@ -1602,6 +1602,7 @@ enable 'user_info_table'
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-hbase-2.2</artifactId>
             <version>4.0.0-1.19</version>
+            <scope>provided</scope>
         </dependency>
 ```
 
