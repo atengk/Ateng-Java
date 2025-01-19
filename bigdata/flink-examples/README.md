@@ -4733,6 +4733,1523 @@ public class WindowsAggregateProcessFunction {
 
 ## Table API
 
+Table API 是批处理和流处理的统一的关系型 API。Table API 的查询不需要修改代码就可以采用批输入或流输入来运行。Table API 是 SQL 语言的超集，并且是针对 Apache Flink 专门设计的。Table API 集成了 Scala，Java 和 Python 语言的 API。Table API 的查询是使用 Java，Scala 或 Python 语言嵌入的风格定义的，有诸如自动补全和语法校验的 IDE 支持，而不是像普通 SQL 一样使用字符串类型的值来指定查询。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tableapi)
+
+### 添加依赖
+
+```xml
+<!-- Apache Flink Table API & SQL -->
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-table-api-java-bridge</artifactId>
+    <version>${flink.version}</version>
+    <scope>provided</scope>
+</dependency>
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-table-planner-loader</artifactId>
+    <version>${flink.version}</version>
+    <scope>provided</scope>
+</dependency>
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-table-runtime</artifactId>
+    <version>${flink.version}</version>
+    <scope>provided</scope>
+</dependency>
+
+<!-- Flink SQL parquet 格式 -->
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-sql-parquet</artifactId>
+    <version>${flink.version}</version>
+    <scope>provided</scope>
+</dependency>
+<!-- Flink SQL csv 格式 -->
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-sql-csv</artifactId>
+    <version>${flink.version}</version>
+    <scope>provided</scope>
+</dependency>
+<!-- Flink SQL json 格式 -->
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-sql-json</artifactId>
+    <version>${flink.version}</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+### 查询
+
+#### 基础查询
+
+**使用datagen**
+
+```java
+package local.ateng.java.TableAPI.query;
+
+import org.apache.flink.connector.datagen.table.DataGenConnectorOptions;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.*;
+
+public class TableAPIQueryAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 1
+        env.setParallelism(1);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义数据源
+        final TableDescriptor sourceDescriptor = TableDescriptor.forConnector("datagen")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday ", DataTypes.DATE())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("create_time", DataTypes.TIMESTAMP_LTZ())
+                        .build())
+                .option(DataGenConnectorOptions.ROWS_PER_SECOND, 1L)  // 每秒生成1条数据
+                // 配置字段的生成约束
+                .option("fields.id.min", "1")  // id 最小值
+                .option("fields.id.max", "1000")  // id 最大值
+                .option("fields.name.length", "10")  // name 字符串长度 10
+                .option("fields.age.min", "18")  // age 最小值 18
+                .option("fields.age.max", "80")  // age 最大值 80
+                .option("fields.score.min", "50.0")  // score 最小值 50.0
+                .option("fields.score.max", "100.0")  // score 最大值 100.0
+                .option("fields.province.length", "5")  // province 字符串长度 5
+                .option("fields.city.length", "5")  // city 字符串长度 5
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 选择表中的所有列
+        Table result = table.select($("*"));
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("TableAPI使用示例");
+    }
+}
+```
+
+![image-20250118153419445](./assets/image-20250118153419445.png)
+
+**使用kafka**
+
+使用kafka中的数据
+
+```java
+package local.ateng.java.TableAPI.query;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+
+public class TableAPIQueryAllKafka {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP())
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .columnByMetadata("timestamp",  DataTypes.TIMESTAMP())
+                        .columnByMetadata("partition",  DataTypes.INT())
+                        .columnByMetadata("offset",  DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 选择表中的所有列
+        Table result = table.select($("*"));
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Kafka数据源查询");
+    }
+}
+```
+
+因为这里做了逻辑映射，所以这里会有两个字段 `createTime` 和 `createTime`
+
+![image-20250118173508968](./assets/image-20250118173508968.png)
+
+#### 复杂查询
+
+```java
+package local.ateng.java.TableAPI.query;
+
+import org.apache.flink.connector.datagen.table.DataGenConnectorOptions;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.and;
+
+public class TableAPIQueryComplex {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP())
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .columnByMetadata("timestamp",  DataTypes.TIMESTAMP())
+                        .columnByMetadata("partition",  DataTypes.INT())
+                        .columnByMetadata("offset",  DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 使用 GroupBy 聚合查询
+        Table result = table.filter(
+                        and(
+                                $("id").isNotNull(),
+                                $("name").isNotNull(),
+                                $("age").isNotNull()
+                        )
+                )
+                .groupBy($("province"))
+                .select($("province"), $("id").count().as("cnt"));
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("复杂查询");
+    }
+}
+```
+
+![image-20250118162250151](./assets/image-20250118162250151.png)
+
+### 转换为DataStream
+
+Flink提供了一个专用的Streamtable环境，用于与数据流API集成。这些环境通过附加的方法扩展了传统的TableEnvironment，并将使用数据流API StreamExecutionEnvironment作为参数。
+
+```
+DataStream<Row> dataStream = tableEnv.toDataStream(result);
+```
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/data_stream_api/)
+
+```java
+package local.ateng.java.TableAPI.convert;
+
+import local.ateng.java.entity.UserInfoEntity;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableDescriptor;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.types.Row;
+
+import static org.apache.flink.table.api.Expressions.$;
+
+/**
+ * Table 转换成 DataStream
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-19
+ */
+public class KafkaTableToDataStream {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP())
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP())
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 选择表中的所有列
+        Table result = table.select($("*"));
+
+        // Table 转换成 DataStream
+        DataStream<Row> dataStream = tableEnv.toDataStream(result);
+
+        // 将数据打印到控制台
+        dataStream.print("output");
+
+        // 执行任务
+        env.execute("Kafka Table转换成DataStream");
+    }
+}
+```
+
+
+
+### 滚动窗口
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tableapi/#tumble-%e6%bb%9a%e5%8a%a8%e7%aa%97%e5%8f%a3)
+
+滚动窗口将行分配给固定长度的非重叠连续窗口。例如，一个 5 分钟的滚动窗口以 5 分钟的间隔对行进行分组。滚动窗口可以定义在事件时间、处理时间或行数上。
+
+#### 处理时间WindowAll
+
+```java
+package local.ateng.java.TableAPI.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于处理时间的windowAll滚动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class ProcessingTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Tumble.over(lit(1).minutes()).on($("proc_time")).as("w")) // 定义 1 分钟滚动窗口
+                .groupBy($("w")) // 窗口分组实现windowAll
+                .select(
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("处理时间滚动窗口");
+
+    }
+}
+```
+
+![image-20250118191236425](./assets/image-20250118191236425.png)
+
+#### 事件时间WindowAll
+
+```java
+package local.ateng.java.TableAPI.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于事件时间的windowAll滚动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class EventTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .watermark("create_time", "create_time - INTERVAL '5' SECOND") // 配置 watermark，允许最大 5 秒延迟
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Tumble.over(lit(1).minutes()).on($("create_time")).as("w")) // 定义 1 分钟滚动窗口
+                .groupBy($("w")) // 窗口分组实现windowAll
+                .select(
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("事件时间滚动窗口");
+
+    }
+}
+```
+
+![image-20250118190855944](./assets/image-20250118190855944.png)
+
+#### 处理时间WindowGroupBy
+
+```java
+package local.ateng.java.TableAPI.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于处理时间的window分组滚动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class ProcessingTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Tumble.over(lit(1).minutes()).on($("proc_time")).as("w")) // 定义 1 分钟滚动窗口
+                .groupBy($("province"), $("w")) // 按省份和窗口分组
+                .select(
+                        $("province"), // 选择省份
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("处理时间滚动窗口");
+
+    }
+}
+```
+
+![image-20250118191317146](./assets/image-20250118191317146.png)
+
+#### 事件时间WindowGroupBy
+
+```java
+package local.ateng.java.TableAPI.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于事件时间的window分组滚动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class EventTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))  // 事件时间字段
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .watermark("create_time", "create_time - INTERVAL '5' SECOND") // 配置 watermark，允许最大 5 秒延迟
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Tumble.over(lit(1).minutes()).on($("create_time")).as("w")) // 定义 1 分钟滚动窗口
+                .groupBy($("province"), $("w")) // 按省份和窗口分组
+                .select(
+                        $("province"), // 选择省份
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("事件时间滚动窗口");
+
+    }
+}
+```
+
+![image-20250118191625728](./assets/image-20250118191625728.png)
+
+### 滑动窗口
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tableapi/#slide-%e6%bb%91%e5%8a%a8%e7%aa%97%e5%8f%a3)
+
+滑动窗口具有固定大小并按指定的滑动间隔滑动。如果滑动间隔小于窗口大小，则滑动窗口重叠。因此，行可能分配给多个窗口。例如，15 分钟大小和 5 分钟滑动间隔的滑动窗口将每一行分配给 3 个不同的 15 分钟大小的窗口，以 5 分钟的间隔进行一次计算。滑动窗口可以定义在事件时间、处理时间或行数上。
+
+#### 处理时间WindowAll
+
+```java
+package local.ateng.java.TableAPI.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于处理时间的windowAll滑动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class ProcessingTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .window(Slide.over(lit(2).minutes()).every(lit(1).minutes()).on($("proc_time")).as("w"))
+                .groupBy($("w")) // 窗口分组实现windowAll
+                .select(
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("处理时间滑动窗口");
+
+    }
+}
+```
+
+![image-20250118192837551](./assets/image-20250118192837551.png)
+
+#### 事件时间WindowAll
+
+```java
+package local.ateng.java.TableAPI.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于事件时间的windowAll滑动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class EventTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .watermark("create_time", "create_time - INTERVAL '5' SECOND") // 配置 watermark，允许最大 5 秒延迟
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .window(Slide.over(lit(2).minutes()).every(lit(1).minutes()).on($("create_time")).as("w"))
+                .groupBy($("w")) // 窗口分组实现windowAll
+                .select(
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("事件时间滑动窗口");
+
+    }
+}
+```
+
+![image-20250119095938906](./assets/image-20250119095938906.png)
+
+#### 处理时间WindowGroupBy
+
+```java
+package local.ateng.java.TableAPI.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于处理时间的window分组滑动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class ProcessingTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .window(Slide.over(lit(2).minutes()).every(lit(1).minutes()).on($("proc_time")).as("w"))
+                .groupBy($("province"), $("w")) // 按省份和窗口分组
+                .select(
+                        $("province"), // 选择省份
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("处理时间滑动窗口");
+
+    }
+}
+```
+
+![image-20250119100321313](./assets/image-20250119100321313.png)
+
+#### 事件时间WindowGroupBy
+
+```java
+package local.ateng.java.TableAPI.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于事件时间的window分组滑动窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class EventTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))  // 事件时间字段
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .watermark("create_time", "create_time - INTERVAL '5' SECOND") // 配置 watermark，允许最大 5 秒延迟
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+                .window(Slide.over(lit(2).minutes()).every(lit(1).minutes()).on($("create_time")).as("w"))
+                .groupBy($("province"), $("w")) // 按省份和窗口分组
+                .select(
+                        $("province"), // 选择省份
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("事件时间滑动窗口");
+
+    }
+}
+```
+
+![image-20250119100502991](./assets/image-20250119100502991.png)
+
+
+
+### 会话窗口
+
+会话窗口没有固定的大小，其边界是由不活动的间隔定义的，例如，如果在定义的间隔期内没有事件出现，则会话窗口将关闭。例如，定义 30 分钟间隔的会话窗口，当观察到一行在 30 分钟内不活动（否则该行将被添加到现有窗口中）且 30 分钟内没有添加新行，窗口会关闭。会话窗口支持事件时间和处理时间。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tableapi/#session-%e4%bc%9a%e8%af%9d%e7%aa%97%e5%8f%a3)
+
+#### 处理时间WindowAll
+
+```java
+package local.ateng.java.TableAPI.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.*;
+
+/**
+ * 基于处理时间的windowAll会话窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class ProcessingTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 会话窗口：2分钟窗口数据
+                // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+                .window(Session.withGap(lit(2).minutes()).on($("proc_time")).as("w"))
+                .groupBy($("w")) // 窗口分组实现windowAll
+                .select(
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("处理时间会话窗口");
+
+    }
+}
+```
+
+![image-20250119101717048](./assets/image-20250119101717048.png)
+
+#### 事件时间WindowAll
+
+```java
+package local.ateng.java.TableAPI.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于事件时间的windowAll会话窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class EventTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .watermark("create_time", "create_time - INTERVAL '5' SECOND") // 配置 watermark，允许最大 5 秒延迟
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 会话窗口：2分钟窗口数据
+                // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+                .window(Session.withGap(lit(2).minutes()).on($("create_time")).as("w"))
+                .groupBy($("w")) // 窗口分组实现windowAll
+                .select(
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("事件时间会话窗口");
+
+    }
+}
+```
+
+#### 处理时间WindowGroupBy
+
+```java
+package local.ateng.java.TableAPI.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于处理时间的window分组会话窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class ProcessingTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 会话窗口：2分钟窗口数据
+                // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+                .window(Session.withGap(lit(2).minutes()).on($("proc_time")).as("w"))
+                .groupBy($("province"), $("w")) // 按省份和窗口分组
+                .select(
+                        $("province"), // 选择省份
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("处理时间会话窗口");
+
+    }
+}
+```
+
+![image-20250119102722861](./assets/image-20250119102722861.png)
+
+#### 事件时间WindowGroupBy
+
+```java
+package local.ateng.java.TableAPI.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+/**
+ * 基于事件时间的window分组会话窗口
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-18
+ */
+public class EventTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))  // 事件时间字段
+                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
+                        .columnByExpression("create_time", "createTime")
+                        .watermark("create_time", "create_time - INTERVAL '5' SECOND") // 配置 watermark，允许最大 5 秒延迟
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                // 会话窗口：2分钟窗口数据
+                // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+                .window(Session.withGap(lit(2).minutes()).on($("create_time")).as("w"))
+                .groupBy($("province"), $("w")) // 按省份和窗口分组
+                .select(
+                        $("province"), // 选择省份
+                        $("w").start().as("window_start"), // 窗口开始时间
+                        $("w").end().as("window_end"), // 窗口结束时间
+                        $("score").avg().as("avg_score"), // 平均分
+                        $("age").max().as("max_age"), // 最大年龄
+                        $("id").count().as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("事件时间会话窗口");
+
+    }
+}
+```
+
+![image-20250119103517521](./assets/image-20250119103517521.png)
+
+
+
+### 全局窗口
+
+#### 处理时间WindowAll
+
+```java
+
+```
+
+
+
+#### 事件时间WindowAll
+
+```java
+
+```
+
+
+
+#### 处理时间WindowGroupBy
+
+```java
+
+```
+
+
+
+#### 事件时间WindowGroupBy
+
+```java
+
+```
+
+
+
 
 
 ## SQL
