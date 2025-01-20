@@ -6774,6 +6774,235 @@ public class Kafka {
 }
 ```
 
+#### Kafka Upsert
+
+Upsert Kafka 连接器支持以 upsert 方式从 Kafka topic 中读取数据并将数据写入 Kafka topic。
+
+作为 source，upsert-kafka 连接器生产 changelog 流，其中每条数据记录代表一个更新或删除事件。更准确地说，数据记录中的 value 被解释为同一 key 的最后一个 value 的 UPDATE，如果有这个 key（如果不存在相应的 key，则该更新被视为 INSERT）。用表来类比，changelog 流中的数据记录被解释为 UPSERT，也称为 INSERT/UPDATE，因为任何具有相同 key 的现有行都被覆盖。另外，value 为空的消息将会被视作为 DELETE 消息。
+
+作为 sink，upsert-kafka 连接器可以消费 changelog 流。它会将 INSERT/UPDATE_AFTER 数据作为正常的 Kafka 消息写入，并将 DELETE 数据以 value 为空的 Kafka 消息写入（表示对应 key 的消息被删除）。Flink 将根据主键列的值对数据进行分区，从而保证主键上的消息有序，因此同一主键上的更新/删除消息将落在同一分区中。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/upsert-kafka/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入Kafka
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class KafkaUpsert {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka_upsert (\n" +
+                "  province STRING,\n" +
+                "  id_count BIGINT,\n" +
+                "  score_sum DOUBLE,\n" +
+                "  PRIMARY KEY (province) NOT ENFORCED\n" +
+                ") WITH (\n" +
+                "  'connector' = 'upsert-kafka',\n" +
+                "  'topic' = 'ateng_flink_upsert',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'key.format' = 'json',\n" +
+                "  'value.format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "insert into my_user_kafka_upsert\n" +
+                "select province,count(id) as id_count,sum(score) as score_sum\n" +
+                "from my_user\n" +
+                "group by province;";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        String querySql= "select * from my_user_kafka_upsert";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Kafka Upsert使用示例");
+
+    }
+}
+```
+
+![image-20250120200755944](./assets/image-20250120200755944.png)
+
+**Upsert to MySQL**
+
+DDL语句执行到MySQL
+
+创建表
+
+```sql
+DROP TABLE IF EXISTS `my_user_mysql_kafka`;
+CREATE TABLE IF NOT EXISTS `my_user_mysql_kafka`
+(
+    `province`    varchar(50) NOT NULL COMMENT '省份' primary key,
+    `id_count`    bigint NOT NULL COMMENT '数量',
+    `score_sum`   double NOT NULL COMMENT '分数',
+    `create_time` datetime(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    `update_time` datetime(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间'
+);
+```
+
+编辑Flink SQL
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据新增或更新到MySQL
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class KafkaUpsertMySQL {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建Kafka Upsert表
+        String createKafkaSql = "CREATE TABLE my_user_kafka_upsert (\n" +
+                "  province STRING,\n" +
+                "  id_count BIGINT,\n" +
+                "  score_sum DOUBLE,\n" +
+                "  PRIMARY KEY (province) NOT ENFORCED\n" +
+                ") WITH (\n" +
+                "  'connector' = 'upsert-kafka',\n" +
+                "  'topic' = 'ateng_flink_upsert',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'key.format' = 'json',\n" +
+                "  'value.format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createKafkaSql);
+
+        // 创建表
+        // 这里id和create_time字段都是数据库自动生成，所以这里不需要这两个字段
+        String createSql = "CREATE TABLE my_user_mysql_kafka(\n" +
+                "  province STRING,\n" +
+                "  id_count BIGINT,\n" +
+                "  score_sum DOUBLE,\n" +
+                "  PRIMARY KEY (province) NOT ENFORCED\n" +
+                ") WITH (\n" +
+                "    'connector'='jdbc',\n" +
+                "    'url' = 'jdbc:mysql://192.168.1.10:35725/kongyu_flink',\n" +
+                "    'driver' = 'com.mysql.cj.jdbc.Driver',\n" +
+                "    'username' = 'root',\n" +
+                "    'password' = 'Admin@123',\n" +
+                "    'connection.max-retry-timeout' = '60s',\n" +
+                "    'table-name' = 'my_user_mysql_kafka',\n" +
+                "    'sink.buffer-flush.max-rows' = '500',\n" +
+                "    'sink.buffer-flush.interval' = '5s',\n" +
+                "    'sink.max-retries' = '3',\n" +
+                "    'sink.parallelism' = '1'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "INSERT INTO my_user_mysql_kafka (province,id_count,score_sum)\n" +
+                "SELECT province,id_count,score_sum \n" +
+                "FROM my_user_kafka_upsert;\n";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        String querySql= "select * from my_user_kafka_upsert";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Kafka Upsert使用示例");
+
+    }
+}
+```
+
+![image-20250120201005186](./assets/image-20250120201005186.png)
+
 #### HDFS
 
 参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/filesystem/)

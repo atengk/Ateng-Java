@@ -6,7 +6,6 @@ import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
 import org.apache.flink.connector.datagen.source.DataGeneratorSource;
-import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.DataTypes;
@@ -24,7 +23,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
  * @email 2385569970@qq.com
  * @since 2025-01-20
  */
-public class Kafka {
+public class KafkaUpsert {
     public static void main(String[] args) throws Exception {
         // 创建流式执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -60,36 +59,29 @@ public class Kafka {
                         .build());
 
         // 创建表
-        String createSql = "CREATE TABLE my_user_kafka( \n" +
-                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
-                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
-                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
-                "  id BIGINT NOT NULL,\n" +
-                "  name STRING,\n" +
-                "  age INT,\n" +
-                "  score DOUBLE,\n" +
-                "  birthday TIMESTAMP(3),\n" +
+        String createSql = "CREATE TABLE my_user_kafka_upsert (\n" +
                 "  province STRING,\n" +
-                "  city STRING,\n" +
-                "  createTime TIMESTAMP(3)\n" +
-                ")\n" +
-                "WITH (\n" +
-                "  'connector' = 'kafka',\n" +
+                "  id_count BIGINT,\n" +
+                "  score_sum DOUBLE,\n" +
+                "  PRIMARY KEY (province) NOT ENFORCED\n" +
+                ") WITH (\n" +
+                "  'connector' = 'upsert-kafka',\n" +
+                "  'topic' = 'ateng_flink_upsert',\n" +
                 "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
-                "  'properties.group.id' = 'ateng_sql',\n" +
-                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
-                "  'scan.startup.mode' = 'latest-offset',\n" +
-                "  'topic' = 'ateng_flink_json',\n" +
-                "  'format' = 'json'\n" +
+                "  'key.format' = 'json',\n" +
+                "  'value.format' = 'json'\n" +
                 ");";
         tableEnv.executeSql(createSql);
 
         // 写入数据到目标表
-        String insertSql = "insert into my_user_kafka select * from my_user;";
+        String insertSql = "insert into my_user_kafka_upsert\n" +
+                "select province,count(id) as id_count,sum(score) as score_sum\n" +
+                "from my_user\n" +
+                "group by province;";
         tableEnv.executeSql(insertSql);
 
         // 查询数据
-        String querySql= "select * from my_user_kafka";
+        String querySql= "select * from my_user_kafka_upsert";
         Table result = tableEnv.sqlQuery(querySql);
 
         // 执行操作
@@ -99,7 +91,7 @@ public class Kafka {
         tableResult.print();
 
         // 执行任务
-        env.execute("Kafka使用示例");
+        env.execute("Kafka Upsert使用示例");
 
     }
 }
