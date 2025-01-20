@@ -318,6 +318,24 @@ DataStream 在用法上类似于常规的 Java 集合，但在某些关键方面
 
 - [官网地址](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/overview/)
 
+### 检查点模式
+
+#### 精准一次
+
+**`EXACTLY_ONCE`**：在此模式下，Flink 确保每条数据被 **精确处理一次**，即使在任务失败并恢复时，数据也不会重复处理或丢失。通过二阶段提交（两阶段提交协议）保证了事务一致性，状态保存和提交都必须成功。这种模式适用于对数据一致性和可靠性要求极高的场景，如金融交易、支付系统等。虽然提供了强一致性保障，但代价较高，性能相对较低。
+
+```java
+env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+```
+
+#### 至少一次
+
+**`AT_LEAST_ONCE`**：此模式保证每条数据 **至少被处理一次**，即使在任务失败恢复时，也可能会发生数据重复处理。Flink 只要成功保存状态并提交检查点就认为成功，不要求完全一致性。因此，它适合吞吐量较高的应用，允许有少量的重复数据。典型应用包括日志处理、数据流分析等，性能较 `EXACTLY_ONCE` 好，但不保证强一致性。
+
+```java
+env.enableCheckpointing(5 * 1000, CheckpointingMode.AT_LEAST_ONCE);
+```
+
 
 
 ### 数据生成
@@ -1154,7 +1172,7 @@ public class DataGeneratorMongoDB {
 - 不支持 OpenSearch2.x
 - 不支持 ElasticSearch8.x
 
-参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/datastream/mongodb/)
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/datastream/opensearch/)
 
 **添加依赖**
 
@@ -6410,6 +6428,1841 @@ public class EventTimeWindowGroupBy {
 
 ## SQL
 
+Flink SQL 是 Apache Flink 提供的 SQL 查询引擎，它使得用户能够通过 SQL 查询语言对流数据进行处理和分析。Flink SQL 既支持批处理（批数据）也支持流处理（实时数据）。
+
+参考官方文档：
+
+- [概览](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/overview/)
+- [性能调优](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tuning/)
+
+### 检查点模式
+
+#### 精准一次
+
+**`EXACTLY_ONCE`**：在此模式下，Flink 确保每条数据被 **精确处理一次**，即使在任务失败并恢复时，数据也不会重复处理或丢失。通过二阶段提交（两阶段提交协议）保证了事务一致性，状态保存和提交都必须成功。这种模式适用于对数据一致性和可靠性要求极高的场景，如金融交易、支付系统等。虽然提供了强一致性保障，但代价较高，性能相对较低。
+
+```java
+env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+```
+
+#### 至少一次
+
+**`AT_LEAST_ONCE`**：此模式保证每条数据 **至少被处理一次**，即使在任务失败恢复时，也可能会发生数据重复处理。Flink 只要成功保存状态并提交检查点就认为成功，不要求完全一致性。因此，它适合吞吐量较高的应用，允许有少量的重复数据。典型应用包括日志处理、数据流分析等，性能较 `EXACTLY_ONCE` 好，但不保证强一致性。
+
+```java
+env.enableCheckpointing(5 * 1000, CheckpointingMode.AT_LEAST_ONCE);
+```
 
 
-文档：[性能调优](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tuning/)
+
+### 创建实体类和生成函数
+
+其实和DataStream里面的实体类和生成函数差不多，就是实体类的Date字段解析会出问题，所以就换成了LocalDateTime。
+
+#### 实体类
+
+```java
+package local.ateng.java.SQL.entity;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
+/**
+ * 用户信息实体类
+ * 用于表示系统中的用户信息。
+ *
+ * @author 孔余
+ * @since 2024-01-10 15:51
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class UserInfoEntity implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 用户ID
+     */
+    private Long id;
+
+    /**
+     * 用户姓名
+     */
+    private String name;
+
+    /**
+     * 用户年龄
+     * 注意：这里使用Integer类型，表示年龄是一个整数值。
+     */
+    private Integer age;
+
+    /**
+     * 分数
+     */
+    private Double score;
+
+    /**
+     * 用户生日
+     */
+    private LocalDateTime birthday;
+
+    /**
+     * 用户所在省份
+     */
+    private String province;
+
+    /**
+     * 用户所在城市
+     */
+    private String city;
+
+    /**
+     * 创建时间
+     */
+    private LocalDateTime createTime;
+}
+```
+
+#### 生成函数
+
+```java
+package local.ateng.java.SQL.function;
+
+import com.github.javafaker.Faker;
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import org.apache.flink.api.connector.source.SourceReaderContext;
+import org.apache.flink.connector.datagen.source.GeneratorFunction;
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Locale;
+
+/**
+ * 生成器函数
+ *
+ * @author 孔余
+ * @since 2024-02-29 17:07
+ */
+public class MyGeneratorFunction implements GeneratorFunction {
+    // 创建一个Java Faker实例，指定Locale为中文
+    private Faker faker;
+
+    // 初始化随机数数据生成器
+    @Override
+    public void open(SourceReaderContext readerContext) throws Exception {
+        faker = new Faker(new Locale("zh-CN"));
+    }
+
+    @Override
+    public UserInfoEntity map(Object value) throws Exception {
+        // 使用 随机数数据生成器 来创建实例
+        UserInfoEntity user = UserInfoEntity.builder()
+                .id(System.currentTimeMillis())
+                .name(faker.name().fullName())
+                .birthday(faker.date().birthday().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime())
+                .age(faker.number().numberBetween(0, 100))
+                .province(faker.address().state())
+                .city(faker.address().cityName())
+                .score(faker.number().randomDouble(3, 1, 100))
+                .createTime(LocalDateTime.now())
+                .build();
+        return user;
+    }
+
+}
+```
+
+
+
+### 数据源的使用
+
+#### DataGenerator
+
+将DataGenerator生成的数据查询出来，用于后续数据测试使用。
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class DataGenerator {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 查询数据
+        String querySql = "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Data Generator使用示例");
+
+    }
+}
+```
+
+![image-20250120150239999](./assets/image-20250120150239999.png)
+
+
+
+#### Kafka
+
+Kafka 连接器提供从 Kafka topic 中消费和写入数据的能力。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/kafka/)
+
+创建一个数据生成源转换成Table，然后使用SQL insert to到目标表，最后再查询目标表的数据。
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+public class Kafka {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3)\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "insert into my_user_kafka select * from my_user;";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        String querySql= "select * from my_user_kafka";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Kafka使用示例");
+
+    }
+}
+```
+
+#### HDFS
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/filesystem/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入HDFS
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class HDFS {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 2 分钟，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_file(\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3)\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'filesystem',\n" +
+                "  'path' = 'hdfs://server01:8020/flink/database/my_user_file',\n" +
+                "  'format' = 'csv'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "insert into my_user_file select * from my_user;";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_file").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("HDFS使用示例");
+
+    }
+}
+```
+
+![image-20250120153731996](./assets/image-20250120153731996.png)
+
+**配置HDFS**
+
+Windows操作系统配置Hadoop
+
+- 参考：[地址](https://github.com/cdarlint/winutils/tree/master)
+
+操作系统设置环境变量
+
+```
+HADOOP_GROUP_NAME=ateng
+HADOOP_USER_NAME=admin
+```
+
+创建目录并设置权限
+
+```
+hadoop fs -mkdir -p flink/database/my_user_file
+hadoop fs -chown admin:ateng flink/database/my_user_file
+```
+
+查看文件
+
+```
+hadoop fs -ls /flink/database/my_user_file
+```
+
+![image-20250120154030492](./assets/image-20250120154030492.png)
+
+
+
+#### Hive
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/filesystem/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入HDFS
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class Hive {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 2 分钟，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_hive(\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3)\n" +
+                ") WITH (\n" +
+                "  'connector' = 'filesystem',\n" +
+                "  'path' = 'hdfs://server01:8020/hive/warehouse/my_user_hive',\n" +
+                "  'format' = 'parquet'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "insert into my_user_hive select * from my_user;";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_hive").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("HDFS使用示例");
+
+    }
+}
+```
+
+![image-20250120154721142](./assets/image-20250120154721142.png)
+
+**配置HDFS**
+
+Windows操作系统配置Hadoop
+
+- 参考：[地址](https://github.com/cdarlint/winutils/tree/master)
+
+操作系统设置环境变量
+
+```
+HADOOP_GROUP_NAME=ateng
+HADOOP_USER_NAME=admin
+```
+
+创建目录并设置权限
+
+```
+hadoop fs -mkdir -p /hive/warehouse/my_user_hive
+hadoop fs -chown admin:ateng /hive/warehouse/my_user_hive
+```
+
+查看文件
+
+```
+hadoop fs -ls /hive/warehouse/my_user_hive
+```
+
+![image-20250120154935753](./assets/image-20250120154935753.png)
+
+进入Hive创建表
+
+```java
+$ beeline -u jdbc:hive2://server01:10000 -n admin
+CREATE EXTERNAL TABLE my_user_hive (
+  id BIGINT,
+  name STRING,
+  age INT,
+  score DOUBLE,
+  birthday TIMESTAMP,
+  province STRING,
+  city STRING,
+  create_time TIMESTAMP
+)
+STORED AS PARQUET
+LOCATION 'hdfs://server01:8020/hive/warehouse/my_user_hive';
+```
+
+查看数据
+
+```sql
+select * from my_user_hive;
+select age,count(*) from my_user_hive group by age;
+```
+
+#### Hive（分区表）
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/filesystem/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入HDFS
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class HivePart {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 2 分钟，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_hive_part(\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  t_date STRING,\n" +
+                "  t_hour STRING\n" +
+                ") PARTITIONED BY (t_date, t_hour) WITH (\n" +
+                "  'connector' = 'filesystem',\n" +
+                "  'path' = 'hdfs://server01:8020/hive/warehouse/my_user_hive_part',\n" +
+                "  'format' = 'parquet',\n" +
+                "  'sink.partition-commit.policy.kind'='success-file'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "insert into my_user_hive_part\n" +
+                "select\n" +
+                "  id,\n" +
+                "  name,\n" +
+                "  age,\n" +
+                "  score,\n" +
+                "  birthday,\n" +
+                "  province,\n" +
+                "  city,\n" +
+                "  createTime,\n" +
+                "  DATE_FORMAT(createTime, 'yyyy-MM-dd') AS t_date,\n" +
+                "  DATE_FORMAT(createTime, 'HH') AS t_hour\n" +
+                "from my_user;";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_hive_part").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("HDFS使用示例");
+
+    }
+}
+```
+
+![image-20250120155803307](./assets/image-20250120155803307.png)
+
+**配置HDFS**
+
+Windows操作系统配置Hadoop
+
+- 参考：[地址](https://github.com/cdarlint/winutils/tree/master)
+
+操作系统设置环境变量
+
+```
+HADOOP_GROUP_NAME=ateng
+HADOOP_USER_NAME=admin
+```
+
+创建目录并设置权限
+
+```
+hadoop fs -mkdir -p /hive/warehouse/my_user_hive_part
+hadoop fs -chown admin:ateng /hive/warehouse/my_user_hive_part
+```
+
+查看文件
+
+```
+hadoop fs -ls /hive/warehouse/my_user_hive_part
+hadoop fs -ls /hive/warehouse/my_user_hive_part/t_date=2025-01-20/t_hour=15
+```
+
+![image-20250120160251863](./assets/image-20250120160251863.png)
+
+进入Hive创建表
+
+```java
+$ beeline -u jdbc:hive2://server01:10000 -n admin
+CREATE EXTERNAL TABLE my_user_hive_part (
+  id BIGINT,
+  name STRING,
+  age INT,
+  score DOUBLE,
+  birthday TIMESTAMP,
+  province STRING,
+  city STRING,
+  create_time TIMESTAMP
+)
+PARTITIONED BY (t_date STRING, t_hour STRING)
+STORED AS PARQUET
+LOCATION 'hdfs://bigdata01:8020/hive/warehouse/my_user_hive_part';
+```
+
+查看数据
+
+```sql
+MSCK REPAIR TABLE my_user_hive_part; --- 加载分区
+select * from my_user_hive_part;
+select age,count(*) from my_user_hive_part group by age;
+```
+
+
+
+#### MinIO
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/filesystem/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.core.fs.FileSystem;
+import org.apache.flink.core.plugin.PluginManager;
+import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入MinIO
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class MinIO {
+    public static void main(String[] args) throws Exception {
+        // 初始化 s3 插件
+        Configuration pluginConfiguration = new Configuration();
+        pluginConfiguration.setString("s3.endpoint", "http://192.168.1.13:9000");
+        pluginConfiguration.setString("s3.access-key", "admin");
+        pluginConfiguration.setString("s3.secret-key", "Lingo@local_minio_9000");
+        pluginConfiguration.setString("s3.path.style.access", "true");
+        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(pluginConfiguration);
+        FileSystem.initialize(pluginConfiguration, pluginManager);
+
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 2 分钟，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表，format可选择parquet和json。使用csv格式，不然流式写入会报错Stream closed. 原因不祥。
+        String createSql = "CREATE TABLE my_user_file_minio (\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3)\n" +
+                ") WITH (\n" +
+                "    'connector' = 'filesystem',\n" +
+                "    'path' = 's3a://test/flink/my_user_file_minio',\n" +
+                "    'format' = 'parquet'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "insert into my_user_file_minio select * from my_user;";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_file_minio").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("MinIO使用示例");
+
+    }
+}
+```
+
+![image-20250120161213224](./assets/image-20250120161213224.png)
+
+
+
+#### MinIO（分区表）
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/filesystem/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.core.fs.FileSystem;
+import org.apache.flink.core.plugin.PluginManager;
+import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入MinIO（分区表）
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class MinIOPart {
+    public static void main(String[] args) throws Exception {
+        // 初始化 s3 插件
+        Configuration pluginConfiguration = new Configuration();
+        pluginConfiguration.setString("s3.endpoint", "http://192.168.1.13:9000");
+        pluginConfiguration.setString("s3.access-key", "admin");
+        pluginConfiguration.setString("s3.secret-key", "Lingo@local_minio_9000");
+        pluginConfiguration.setString("s3.path.style.access", "true");
+        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(pluginConfiguration);
+        FileSystem.initialize(pluginConfiguration, pluginManager);
+
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 2 分钟，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表，format可选择parquet和json。使用csv格式，不然流式写入会报错Stream closed. 原因不祥。
+        String createSql = "CREATE TABLE my_user_file_minio_part (\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  t_date STRING,\n" +
+                "  t_hour STRING\n" +
+                ") PARTITIONED BY (t_date, t_hour) WITH (\n" +
+                "    'connector' = 'filesystem',\n" +
+                "    'path' = 's3://test/flink/my_user_file_minio_part',\n" +
+                "    'format' = 'parquet',\n" +
+                "    'sink.partition-commit.policy.kind'='success-file'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "insert into my_user_file_minio_part\n" +
+                "select\n" +
+                "  id,\n" +
+                "  name,\n" +
+                "  age,\n" +
+                "  score,\n" +
+                "  birthday,\n" +
+                "  province,\n" +
+                "  city,\n" +
+                "  createTime,\n" +
+                "  DATE_FORMAT(createTime, 'yyyy-MM-dd') AS t_date,\n" +
+                "  DATE_FORMAT(createTime, 'HH') AS t_hour\n" +
+                "from my_user;\n";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_file_minio").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("MinIO使用示例");
+
+    }
+}
+```
+
+![image-20250120163809293](./assets/image-20250120163809293.png)
+
+
+
+#### MySQL
+
+JDBC 连接器允许使用 JDBC 驱动向任意类型的关系型数据库读取或者写入数据。本文档描述了针对关系型数据库如何通过建立 JDBC 连接器来执行 SQL 查询。
+
+如果在 DDL 中定义了主键，JDBC sink 将以 upsert 模式与外部系统交换 UPDATE/DELETE 消息；否则，它将以 append 模式与外部系统交换消息且不支持消费 UPDATE/DELETE 消息。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/jdbc/)
+
+**创建表**
+
+```sql
+DROP TABLE IF EXISTS `my_user_mysql`;
+CREATE TABLE IF NOT EXISTS `my_user_mysql` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '自增ID' primary key,
+  `name` varchar(255) NOT NULL COMMENT '用户姓名',
+  `age` int COMMENT '用户年龄',
+  `score` double COMMENT '分数',
+  `birthday` datetime(3) COMMENT '用户生日',
+  `province` varchar(255) COMMENT '用户所在省份',
+  `city` varchar(255) COMMENT '用户所在城市',
+  `create_time` datetime(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  KEY `idx_name` (`name`),
+  KEY `idx_province_city` (`province`, `city`),
+  KEY `idx_create_time` (`create_time`)
+) COMMENT='用户表';
+```
+
+**编辑FlinkSQL**
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.core.fs.FileSystem;
+import org.apache.flink.core.plugin.PluginManager;
+import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入MySQL
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class MySQL {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 10 秒钟，检查点模式为 精准一次
+        env.enableCheckpointing(10 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        // 这里id和create_time字段都是数据库自动生成，所以这里不需要这两个字段
+        String createSql = "CREATE TABLE my_user_mysql(\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING\n" +
+                ") WITH (\n" +
+                "    'connector'='jdbc',\n" +
+                "    'url' = 'jdbc:mysql://192.168.1.10:35725/kongyu_flink',\n" +
+                "    'driver' = 'com.mysql.cj.jdbc.Driver',\n" +
+                "    'username' = 'root',\n" +
+                "    'password' = 'Admin@123',\n" +
+                "    'connection.max-retry-timeout' = '60s',\n" +
+                "    'table-name' = 'my_user_mysql',\n" +
+                "    'sink.buffer-flush.max-rows' = '500',\n" +
+                "    'sink.buffer-flush.interval' = '5s',\n" +
+                "    'sink.max-retries' = '3',\n" +
+                "    'sink.parallelism' = '1'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "INSERT INTO my_user_mysql (name, age, score, birthday, province, city)\n" +
+                "SELECT name, age, score, birthday, province, city\n" +
+                "FROM my_user;\n";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_mysql").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("MySQL使用示例");
+
+    }
+}
+```
+
+![image-20250120170248977](./assets/image-20250120170248977.png)
+
+
+
+#### PostgreSQL
+
+JDBC 连接器允许使用 JDBC 驱动向任意类型的关系型数据库读取或者写入数据。本文档描述了针对关系型数据库如何通过建立 JDBC 连接器来执行 SQL 查询。
+
+如果在 DDL 中定义了主键，JDBC sink 将以 upsert 模式与外部系统交换 UPDATE/DELETE 消息；否则，它将以 append 模式与外部系统交换消息且不支持消费 UPDATE/DELETE 消息。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/jdbc/)
+
+**创建表**
+
+```sql
+DROP TABLE IF EXISTS my_user_postgresql;
+CREATE TABLE IF NOT EXISTS my_user_postgresql (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  age INT,
+  score DOUBLE PRECISION,
+  birthday TIMESTAMP(3),
+  province VARCHAR(255),
+  city VARCHAR(255),
+  create_time TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3)
+);
+COMMENT ON COLUMN my_user_postgresql.id IS '自增ID';
+COMMENT ON COLUMN my_user_postgresql.name IS '用户姓名';
+COMMENT ON COLUMN my_user_postgresql.age IS '用户年龄';
+COMMENT ON COLUMN my_user_postgresql.score IS '分数';
+COMMENT ON COLUMN my_user_postgresql.birthday IS '用户生日';
+COMMENT ON COLUMN my_user_postgresql.province IS '用户所在省份';
+COMMENT ON COLUMN my_user_postgresql.city IS '用户所在城市';
+COMMENT ON COLUMN my_user_postgresql.create_time IS '创建时间';
+CREATE INDEX idx_name ON my_user_postgresql(name);
+CREATE INDEX idx_province ON my_user_postgresql(province);
+CREATE INDEX idx_create_time ON my_user_postgresql(create_time);
+```
+
+**编辑FlinkSQL**
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入PostgreSQL
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class PostgreSQL {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 10 秒钟，检查点模式为 精准一次
+        env.enableCheckpointing(10 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        // 这里id和create_time字段都是数据库自动生成，所以这里不需要这两个字段
+        String createSql = "CREATE TABLE my_user_postgresql(\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING\n" +
+                ") WITH (\n" +
+                "    'connector'='jdbc',\n" +
+                "    'url' = 'jdbc:postgresql://192.168.1.10:32297/kongyu_flink?currentSchema=public&stringtype=unspecified',\n" +
+                "    'username' = 'postgres',\n" +
+                "    'password' = 'Lingo@local_postgresql_5432',\n" +
+                "    'connection.max-retry-timeout' = '60s',\n" +
+                "    'table-name' = 'my_user_postgresql',\n" +
+                "    'sink.buffer-flush.max-rows' = '500',\n" +
+                "    'sink.buffer-flush.interval' = '5s',\n" +
+                "    'sink.max-retries' = '3',\n" +
+                "    'sink.parallelism' = '1'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "INSERT INTO my_user_postgresql (name, age, score, birthday, province, city)\n" +
+                "SELECT name, age, score, birthday, province, city\n" +
+                "FROM my_user;\n";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_postgresql").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("PostgreSQL使用示例");
+
+    }
+}
+```
+
+![image-20250120171430982](./assets/image-20250120171430982.png)
+
+
+
+#### Doris
+
+JDBC 连接器允许使用 JDBC 驱动向任意类型的关系型数据库读取或者写入数据。本文档描述了针对关系型数据库如何通过建立 JDBC 连接器来执行 SQL 查询。
+
+如果在 DDL 中定义了主键，JDBC sink 将以 upsert 模式与外部系统交换 UPDATE/DELETE 消息；否则，它将以 append 模式与外部系统交换消息且不支持消费 UPDATE/DELETE 消息。
+
+参考：[官方文档](https://doris.apache.org/zh-CN/docs/ecosystem/flink-doris-connector/)
+
+**创建表**
+
+```sql
+drop table if exists my_user_doris;
+create table if not exists my_user_doris
+(
+    id          bigint      not null auto_increment comment '主键',
+    create_time datetime(3) not null default current_timestamp(3) comment '数据创建时间',
+    name        varchar(20) not null comment '姓名',
+    age         int comment '年龄',
+    score       double comment '分数',
+    birthday    date comment '生日',
+    province    varchar(50) comment '所在省份',
+    city        varchar(50) comment '所在城市'
+)
+UNIQUE KEY(id)
+COMMENT "用户表"
+DISTRIBUTED BY HASH(id) BUCKETS AUTO
+PROPERTIES (
+    "replication_allocation" = "tag.location.default: 1"
+);
+show create table my_user_doris;
+```
+
+**编辑FlinkSQL**
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入Doris
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class Doris {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 10 秒钟，检查点模式为 精准一次
+        env.enableCheckpointing(10 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        // 这里id和create_time字段都是数据库自动生成，所以这里不需要这两个字段
+        String createSql = "CREATE TABLE my_user_doris(\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'doris',\n" +
+                "  'fenodes' = '192.168.1.12:9040', -- FE_IP:HTTP_PORT\n" +
+                "  'table.identifier' = 'kongyu_flink.my_user_doris',\n" +
+                "  'username' = 'admin',\n" +
+                "  'password' = 'Admin@123',\n" +
+                "  'sink.label-prefix' = 'doris_label'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "INSERT INTO my_user_doris (name, age, score, birthday, province, city)\n" +
+                "SELECT name, age, score, birthday, province, city\n" +
+                "FROM my_user;\n";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_doris").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Doris使用示例");
+
+    }
+}
+```
+
+![image-20250120173246289](./assets/image-20250120173246289.png)
+
+
+
+#### MongoDB
+
+MongoDB 连接器提供了从 MongoDB 中读取和写入数据的能力。 本文档介绍如何设置 MongoDB 连接器以对 MongoDB 运行 SQL 查询。
+
+连接器可以在 upsert 模式下运行，使用在 DDL 上定义的主键与外部系统交换 UPDATE/DELETE 消息。
+
+如果 DDL 上没有定义主键，则连接器只能以 append 模式与外部系统交换 INSERT 消息且不支持消费 UPDATE/DELETE 消息。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/mongodb/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入MongoDB
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class MongoDB {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 10 秒钟，检查点模式为 精准一次
+        env.enableCheckpointing(10 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_mongo(\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  create_time TIMESTAMP(3)\n" +
+                ")\n" +
+                "WITH (\n" +
+                "   'connector' = 'mongodb',\n" +
+                "   'uri' = 'mongodb://root:Admin%40123@192.168.1.10:33627',\n" +
+                "   'database' = 'kongyu_flink',\n" +
+                "   'collection' = 'my_user_mongo'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "INSERT INTO my_user_mongo (id, name, age, score, birthday, province, city, create_time)\n" +
+                "SELECT id, name, age, score, birthday, province, city, createTime\n" +
+                "FROM my_user;\n";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_mongo").execute().print(); //批查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("MongoDB使用示例");
+
+    }
+}
+```
+
+![image-20250120174059114](./assets/image-20250120174059114.png)
+
+
+
+#### OpenSearch
+
+注意以下事项：
+
+- 支持 **OpenSearch1.x** ，1.3.19 版本验证通过
+- 支持 **ElasticSearch7.x** ，7.17.26 版本验证通过
+
+- 不支持 OpenSearch2.x
+- 不支持 ElasticSearch8.x
+
+ 参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/opensearch/)
+
+```java
+package local.ateng.java.SQL.SourceAndSink;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 通过DataGeneratorSource生成数据
+ * 使用tableEnv.createTemporaryView创建视图表供后续使用
+ * 将数据写入OpenSearch
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class OpenSearch {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 10 秒钟，检查点模式为 精准一次
+        env.enableCheckpointing(10 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(3),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 创建表
+        // 如果是HTTPS使用以下参数： WITH ( 'connector' = 'opensearch', 'hosts' = 'https://192.168.1.10:44771', 'index' = 'my_user_es_{create_time|yyyy-MM-dd}', 'username' = 'admin', 'password' = 'Admin@123', 'allow-insecure' = 'true' );
+        String createSql = "CREATE TABLE my_user_os(\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  create_time TIMESTAMP(3)\n" +
+                ")\n" +
+                "WITH (\n" +
+                "    'connector' = 'opensearch',\n" +
+                "    'hosts' = 'http://192.168.1.10:15155',\n" +
+                "    'index' = 'my_user_os_{create_time|yyyyMMdd}'\n" +
+                ");\n";
+        tableEnv.executeSql(createSql);
+
+        // 写入数据到目标表
+        String insertSql = "INSERT INTO my_user_os (id, name, age, score, birthday, province, city, create_time)\n" +
+                "SELECT id, name, age, score, birthday, province, city, createTime\n" +
+                "FROM my_user;\n";
+        tableEnv.executeSql(insertSql);
+
+        // 查询数据
+        //tableEnv.sqlQuery("select * from my_user_os").execute().print(); //不支持查询
+        String querySql= "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("OpenSearch使用示例");
+
+    }
+}
+```
+
+**查看索引**
+
+创建索引，可以选择手动创建索引，Flink自动创建的索引可能其设置不满足相关需求
+
+```
+curl -X PUT "http://localhost:9200/my_user_os_20250120" -H 'Content-Type: application/json' -d '{
+  "settings": {
+    "mapping.total_fields.limit": "1000000",
+    "max_result_window": "1000000",
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  }
+}'
+```
+
+查看所有索引
+
+```
+curl http://localhost:9200/_cat/indices?v
+```
+
+查看索引的统计信息
+
+```
+curl "http://localhost:9200/my_user_os_20250120/_stats/docs?pretty"
+```
+
+查看索引映射（mappings）和设置
+
+```
+curl http://localhost:9200/my_user_os_20250120/_mapping?pretty
+curl http://localhost:9200/my_user_os_20250120/_settings?pretty
+```
+
+查看数据
+
+```
+curl -X GET "http://localhost:9200/my_user_os_20250120/_search?pretty" -H 'Content-Type: application/json' -d'
+{
+  "query": {
+    "match_all": {}
+  },
+  "size": 10
+}'
+```
+
+![image-20250120175525224](./assets/image-20250120175525224.png)
+
+删除索引
+
+```
+curl -X DELETE "http://localhost:9200/my_user_os_20250120"
+```
+
+
+
+
+
