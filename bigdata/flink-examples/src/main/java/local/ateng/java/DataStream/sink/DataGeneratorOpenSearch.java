@@ -64,7 +64,7 @@ public class DataGeneratorOpenSearch {
         stream.sinkTo(sink);
 
         // 执行 Flink 作业
-        env.execute();
+        env.execute("生成模拟数据并写入OpenSearch");
     }
 
     private static IndexRequest createIndexRequest(UserInfoEntity element) {

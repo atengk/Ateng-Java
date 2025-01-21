@@ -89,6 +89,6 @@ public class DataGeneratorHBase {
         stream.addSink(hbaseSink);
 
         // 执行程序
-        env.execute();
+        env.execute("生成模拟数据并写入HBase");
     }
 }

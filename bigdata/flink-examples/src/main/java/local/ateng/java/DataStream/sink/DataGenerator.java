@@ -40,6 +40,6 @@ public class DataGenerator {
         stream.print();
 
         // 执行 Flink 作业
-        env.execute();
+        env.execute("生成模拟数据");
     }
 }

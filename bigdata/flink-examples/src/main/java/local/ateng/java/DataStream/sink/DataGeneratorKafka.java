@@ -61,6 +61,6 @@ public class DataGeneratorKafka {
         stream.sinkTo(sink);
 
         // 执行程序
-        env.execute();
+        env.execute("生成模拟数据并写入Kafka");
     }
 }

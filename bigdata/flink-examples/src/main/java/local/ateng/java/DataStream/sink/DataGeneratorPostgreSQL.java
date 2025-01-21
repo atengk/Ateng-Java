@@ -82,6 +82,6 @@ public class DataGeneratorPostgreSQL {
         stream.addSink(jdbcSink);
 
         // 执行 Flink 作业
-        env.execute();
+        env.execute("生成模拟数据并写入PostgreSQL");
     }
 }
