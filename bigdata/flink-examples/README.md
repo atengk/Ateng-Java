@@ -306,6 +306,114 @@ Flink程序就输入以下内容：
 
 
 
+## 打包运行
+
+通过Maven将代码打包成Jar，如下图所示
+
+![image-20250121155914776](./assets/image-20250121155914776.png)
+
+注意以下问题
+
+- pom.xml中的依赖作用域都是设置的scope，用到相关服务时，要保证集群以添加相关依赖。
+
+
+
+### Flink Standalone
+
+部署集群参考：[安装Flink集群](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/cluster/)
+
+将Jar包运行在Flink Standalone集群上，这里以运行Sink数据到Kafka为示例。
+
+**提交任务到集群**
+
+不填写其他参数默认就是使用 `$FLINK_HOME/conf/config.yaml` 配置文件中的参数。
+
+```bash
+flink run -d \
+    -c local.ateng.java.DataStream.sink.DataGeneratorKafka \
+    flink-examples-v1.0.jar
+```
+
+自定义参数
+
+> 如果代码内部设置了parallelism，以代码内部的为准。
+
+```bash
+flink run -d \
+    -m bigdata01:8082 \
+    -p 3 \
+    -c local.ateng.java.DataStream.sink.DataGeneratorKafka \
+    flink-examples-v1.0.jar
+```
+
+![image-20250121160413001](./assets/image-20250121160413001.png)
+
+**参数配置**
+
+- `-m <jobmanager>`：指定 JobManager 的地址，通常以 `host:port` 形式给出。例如：`-m localhost:8081`。
+
+- `-p <parallelism>`：设置全局并行度。例如：`-p 4` 表示每个操作符并行度为 4。
+- `-s <savepointPath>`：从某个 savepoint 恢复程序的状态。用于恢复上次程序执行时的状态。
+- `-d`：后台运行 Flink 作业。
+- `-c`: 指定主类。
+
+
+
+### YARN
+
+部署集群参考：[安装配置Flink On YARN](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/yarn/)
+
+将Jar包运行在YARN集群上，这里以运行Sink数据到Kafka为示例。
+
+**提交任务到集群**
+
+不填写其他参数默认就是使用 `$FLINK_HOME/conf/config.yaml` 配置文件中的参数。
+
+```bash
+flink run-application -t yarn-application \
+    -c local.ateng.java.DataStream.sink.DataGeneratorKafka \
+    flink-examples-v1.0.jar
+```
+
+自定义参数
+
+> 如果代码内部设置了parallelism，以代码内部的为准。
+
+```bash
+flink run-application -t yarn-application \
+    -Dparallelism.default=3 \
+    -Dtaskmanager.numberOfTaskSlots=3 \
+    -Djobmanager.memory.process.size=1GB \
+    -Dtaskmanager.memory.process.size=2GB \
+    -Dyarn.application.name="制造模拟数据输出到Kafka中" \
+    -c local.ateng.java.DataStream.sink.DataGeneratorKafka \
+    flink-examples-v1.0.jar
+```
+
+![image-20250121163626289](./assets/image-20250121163626289.png)
+
+![image-20250121163649656](./assets/image-20250121163649656.png)
+
+**参数配置**
+
+- `-t yarn-application`：指定 Flink 作业运行在 **YARN Application** 模式下
+- `-Dparallelism.default`：设置作业的默认并行度
+- `-Dtaskmanager.numberOfTaskSlots`：设置每个 TaskManager 的 slot 数量
+- `-Djobmanager.memory.process.size`：为 JobManager 设置内存大小
+- `-Dtaskmanager.memory.process.size`：为 TaskManager 设置内存大小
+- `-Dyarn.application.name`：设置 Flink 作业在 YARN 上的应用程序名称
+- `-c `：指定作业的主类
+
+
+
+### Kubernetes
+
+使用 `flink-kubernetes-operator` 运行任务，详情参考：[Flink Operator](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/kubernetes-operator/)
+
+注意依赖问题，要么把相关服务的依赖，例如 flink-connector-kafka 的作用域设置为compile（默认）。
+
+
+
 ## DataStream
 
 Flink 中的 DataStream 程序是对数据流（例如过滤、更新状态、定义窗口、聚合）进行转换的常规程序。数据流的起始是从各种源（例如消息队列、套接字流、文件）创建的。结果通过 sink 返回，例如可以将数据写入文件或标准输出（例如命令行终端）。Flink 程序可以在各种上下文中运行，可以独立运行，也可以嵌入到其它程序中。任务执行可以运行在本地 JVM 中，也可以运行在多台机器的集群上。
