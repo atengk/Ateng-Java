@@ -11462,3 +11462,146 @@ public class OverPartRange {
 
 
 
+## Flink CDC
+
+Flink CDC是实时数据和批量数据的分布式数据集成工具。Flink CDC通过YAML描述数据的移动和转换，带来了数据集成的简单和优雅。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.2/zh/)
+
+建议还是使用官网的[Pipeline Connectors](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.2/zh/docs/connectors/pipeline-connectors/overview/)
+
+### MySQL
+
+#### DataStream
+
+```sql
+package local.ateng.java.cdc;
+
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.cdc.connectors.mysql.source.MySqlSource;
+import org.apache.flink.cdc.connectors.mysql.table.StartupOptions;
+import org.apache.flink.cdc.debezium.JsonDebeziumDeserializationSchema;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+
+/**
+ * MySQL CDC 连接器 #
+ * MySQL CDC 连接器允许从 MySQL 数据库读取快照数据和增量数据。本文描述了如何设置 MySQL CDC 连接器来对 MySQL 数据库运行 SQL 查询。
+ * https://nightlies.apache.org/flink/flink-cdc-docs-release-3.2/zh/docs/connectors/flink-sources/mysql-cdc/#datastream-source
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-21
+ */
+public class DataStreamMySQLCDC {
+
+    public static void main(String[] args) throws Exception {
+        // 获取执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+
+        // 创建 MySQL 数据源
+        MySqlSource<String> mySqlSource = MySqlSource.<String>builder()
+                .hostname("192.168.1.10")
+                .port(35725)
+                .scanNewlyAddedTableEnabled(true) // 启用扫描新添加的表功能
+                .databaseList("kongyu_flink") // 设置捕获的数据库， 如果需要同步整个数据库，请将 tableList 设置为 ".*".
+                .tableList("kongyu_flink.my_user_mysql") // 设置捕获的表
+                .username("root")
+                .password("Admin@123")
+                .startupOptions(StartupOptions.latest()) // 从最晚位点启动
+                .deserializer(new JsonDebeziumDeserializationSchema()) // 将 SourceRecord 转换为 JSON 字符串
+                .build();
+
+        // 从 source 中读取数据
+        DataStreamSource<String> dataStream = env.fromSource(mySqlSource, WatermarkStrategy.noWatermarks(), "MySQL Source");
+
+        // 打印计算结果
+        dataStream.print("output");
+
+        // 执行流处理作业
+        env.execute("Flink CDC MySQL 使用示例");
+
+    }
+
+}
+```
+
+#### SQL
+
+```sql
+package local.ateng.java.cdc;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * MySQL CDC 连接器 #
+ * MySQL CDC 连接器允许从 MySQL 数据库读取快照数据和增量数据。本文描述了如何设置 MySQL CDC 连接器来对 MySQL 数据库运行 SQL 查询。
+ * https://nightlies.apache.org/flink/flink-cdc-docs-release-3.2/zh/docs/connectors/flink-sources/mysql-cdc/#datastream-source
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-21
+ */
+public class SQLMySQL {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user (\n" +
+                "    db_name STRING METADATA FROM 'database_name' VIRTUAL,\n" +
+                "    table_name STRING METADATA  FROM 'table_name' VIRTUAL,\n" +
+                "    operation_ts TIMESTAMP_LTZ(3) METADATA FROM 'op_ts' VIRTUAL,\n" +
+                "    id BIGINT,\n" +
+                "    name STRING,\n" +
+                "    age INT,\n" +
+                "    score DOUBLE,\n" +
+                "    birthday TIMESTAMP(3),\n" +
+                "    province STRING,\n" +
+                "    city STRING,\n" +
+                "    create_time TIMESTAMP(3),\n" +
+                "    PRIMARY KEY(id) NOT ENFORCED\n" +
+                ") WITH (\n" +
+                "    'connector' = 'mysql-cdc',\n" +
+                "    'scan.startup.mode' = 'latest-offset', -- 从最晚位点启动\n" +
+                "    'hostname' = '192.168.1.10',\n" +
+                "    'port' = '35725',\n" +
+                "    'username' = 'root',\n" +
+                "    'password' = 'Admin@123',\n" +
+                "    'database-name' = 'kongyu_flink',\n" +
+                "    'table-name' = 'my_user_mysql'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        String querySql = "select * from my_user";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Flink CDC MySQL 使用示例");
+
+    }
+
+}
+```
+
+
+

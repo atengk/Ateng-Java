@@ -32,6 +32,7 @@
         <flink-jdbc.version>3.2.0-1.19</flink-jdbc.version>
         <flink-mongodb.version>1.2.0-1.19</flink-mongodb.version>
         <flink-opensearch.version>1.2.0-1.19</flink-opensearch.version>
+        <flink-cdc.version>3.2.1</flink-cdc.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -258,6 +259,15 @@
             <version>${flink.version}</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- MySQL CDC 连接器 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-mysql-cdc</artifactId>
+            <version>${flink-cdc.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
     </dependencies>
 
     <!-- 插件仓库配置 -->
