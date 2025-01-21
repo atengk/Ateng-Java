@@ -1,19 +1,19 @@
-package local.ateng.java.TableAPI.window.global;
+package local.ateng.java.TableAPI.window.over;
 
-import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.*;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 
-import static org.apache.flink.table.api.Expressions.*;
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
 
 
-public class EventTimeWindowAll {
+public class OverPartRange {
     public static void main(String[] args) throws Exception {
         // 创建流式执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
-        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
         // 设置并行度为 1
         env.setParallelism(1);
 
@@ -31,9 +31,7 @@ public class EventTimeWindowAll {
                         .column("province", DataTypes.STRING())
                         .column("city", DataTypes.STRING())
                         .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
-                        // 映射 Kafka 中的 createTime 到逻辑字段 create_time
-                        .columnByExpression("create_time", "createTime")
-                        .watermark("create_time", "create_time - INTERVAL '5' SECOND") // 配置 watermark，允许最大 5 秒延迟
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
                         .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
                         .columnByMetadata("partition", DataTypes.INT())
                         .columnByMetadata("offset", DataTypes.BIGINT())
@@ -54,13 +52,12 @@ public class EventTimeWindowAll {
 
         // 定义窗口操作
         Table windowedTable = table
-                .window(Over.partitionBy($("province")).orderBy($("create_time")).preceding(lit(1).minutes()).as("w"))  // 定义 Over 窗口
+                .window(Over.partitionBy($("province")).orderBy($("proc_time")).preceding(lit(2).minutes()).as("w"))  // 定义 Over 窗口
                 .select(
                         $("province"),
                         $("score").avg().over($("w")).as("avg_score"), // 平均分
                         $("age").max().over($("w")).as("max_age"), // 最大年龄
-                        $("id").count().over($("w")).as("user_count"), // 用户数量
-                        $("create_time")
+                        $("id").count().over($("w")).as("user_count") // 用户数量
                 );
 
         // 执行操作
@@ -70,7 +67,7 @@ public class EventTimeWindowAll {
         tableResult.print();
 
         // 执行任务
-        env.execute("事件时间窗口");
+        env.execute("Over分区聚合（时间范围间隔）");
 
     }
 }

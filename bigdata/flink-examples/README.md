@@ -2948,7 +2948,102 @@ public class ProcessingTimeWindowKeyBy {
 
 ![image-20250116080110680](./assets/image-20250116080110680.png)
 
+#### 窗口偏移offset
 
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/queries/window-tvf/#%E7%AA%97%E5%8F%A3%E5%81%8F%E7%A7%BB)
+
+![image-20250121085449523](./assets/image-20250121085449523.png)
+
+```java
+package local.ateng.java.DataStream.window.tumbling;
+
+import cn.hutool.core.date.DateUtil;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+
+import java.time.Duration;
+
+/**
+ * 可以在普通 DataStream 上定义 Window。 Window 根据某些特征（例如，最近 5 秒内到达的数据）对所有流事件进行分组。
+ * DataStream → AllWindowedStream → DataStream
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/datastream/operators/overview/#windowall
+ * <p>
+ * 这个程序通过 Flink 从 Kafka 中读取消息。
+ * 它使用处理时间滚动窗口（TumblingProcessingTimeWindows），每 1 分钟对数据进行一次窗口计算。
+ * 对每个窗口中的数据，程序会创建一个 JSON 对象，包含窗口的开始和结束时间、窗口中的数据（第一个、最后一个元素）、数据量以及当前时间。
+ * 最后，处理后的结果被输出到控制台。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-15
+ */
+public class ProcessingTimeWindowsAllOffset {
+
+    public static void main(String[] args) throws Exception {
+        // 环境准备
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(3 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        env.setParallelism(1);
+        KafkaSource<String> source = KafkaSource.<String>builder()
+                .setBootstrapServers("192.168.1.10:9094")
+                .setTopics("ateng_flink_json")
+                .setGroupId("ateng")
+                .setProperty("commit.offsets.on.checkpoint", "true")
+                .setProperty("enable.auto.commit", "true")
+                .setProperty("auto.commit.interval.ms", "1000")
+                .setProperty("partition.discovery.interval.ms", "10000")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setValueOnlyDeserializer(new SimpleStringSchema())
+                .build();
+
+        // 从 Kafka 数据源读取数据，不设置水印策略（处理时间窗口不存在数据乱序问题）
+        DataStreamSource<String> streamSource = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+
+        // 窗口
+        SingleOutputStreamOperator<JSONObject> operator = streamSource
+                // 1分钟滚动窗口
+                .windowAll(TumblingProcessingTimeWindows.of(Duration.ofMinutes(5), Duration.ofMinutes(1)))
+                .apply(new AllWindowFunction<String, JSONObject, TimeWindow>() {
+                    @Override
+                    public void apply(TimeWindow timeWindow, Iterable<String> iterable, Collector<JSONObject> collector) throws Exception {
+                        long start = timeWindow.getStart();
+                        long end = timeWindow.getEnd();
+                        JSONObject json = JSONObject.of("start", DateUtil.format(DateUtil.date(start), "yyyy-MM-dd HH:mm:ss.SSS"), "end", DateUtil.format(DateUtil.date(end), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        JSONArray jsonArray = JSONArray.of();
+                        for (String string : iterable) {
+                            jsonArray.add(JSONObject.parseObject(string));
+                        }
+                        int size = jsonArray.size();
+                        json.put("data^", jsonArray.get(0));
+                        json.put("data$", jsonArray.get(size - 1));
+                        json.put("size", size);
+                        json.put("dateTime", DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+                        collector.collect(json);
+                    }
+                });
+        operator.print("sink");
+
+        // 执行流处理作业
+        env.execute("Kafka Stream");
+    }
+
+}
+```
+
+![image-20250121085326997](./assets/image-20250121085326997.png)
 
 ### 滑动窗口 (Sliding Window)
 
@@ -6386,43 +6481,353 @@ public class EventTimeWindowGroupBy {
 }
 ```
 
-![image-20250119103517521](./assets/image-20250119103517521.png)
 
 
 
-### 全局窗口
 
-#### 处理时间WindowAll
+### Over窗口
 
-```java
+Over window 聚合来自标准的 SQL（`OVER` 子句），可以在 `SELECT` 查询子句中定义。与在“GROUP BY”子句中指定的 group window 不同， over window 不会折叠行。相反，over window 聚合为每个输入行在其相邻行的范围内计算聚合。
 
-```
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/tableapi/#over-windows)
 
+#### Over聚合（行间隔）
 
+`ROWS` 间隔基于计数。它定义了聚合操作包含的精确行数。下面的 `ROWS` 间隔定义了当前行 + 之前的 100 行（也就是101行）都会被聚合。
 
-#### 事件时间WindowAll
-
-```java
-
-```
-
-
-
-#### 处理时间WindowGroupBy
+代码如下
 
 ```java
+package local.ateng.java.TableAPI.window.over;
 
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.rowInterval;
+
+
+public class OverRows {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Over.orderBy($("proc_time")).preceding(rowInterval(100L)).as("w"))  // 定义 Over 窗口
+                .select(
+                        $("score").avg().over($("w")).as("avg_score"), // 平均分
+                        $("age").max().over($("w")).as("max_age"), // 最大年龄
+                        $("id").count().over($("w")).as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over聚合（行间隔）");
+
+    }
+}
 ```
 
+![image-20250121155012292](./assets/image-20250121155012292.png)
 
+#### Over聚合（时间范围间隔）
 
-#### 事件时间WindowGroupBy
+`RANGE` 间隔是定义在排序列值上的，在 Flink 里，排序列总是一个时间属性。下面的 `RANG` 间隔定义了聚合会在比当前行的时间属性小 2 分钟的所有行上进行。
+
+代码如下
 
 ```java
+package local.ateng.java.TableAPI.window.over;
 
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+
+public class OverRange {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Over.orderBy($("proc_time")).preceding(lit(2).minutes()).as("w"))  // 定义 Over 窗口
+                .select(
+                        $("score").avg().over($("w")).as("avg_score"), // 平均分
+                        $("age").max().over($("w")).as("max_age"), // 最大年龄
+                        $("id").count().over($("w")).as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over聚合（时间范围间隔）");
+
+    }
+}
 ```
 
+![image-20250121154435838](./assets/image-20250121154435838.png)
 
+#### Over分区聚合（行间隔）
+
+`ROWS` 间隔基于计数。它定义了聚合操作包含的精确行数。下面的 `ROWS` 间隔定义了当前行 + 之前的 100 行（也就是101行）都会被聚合。
+
+`PARTITION BY` 子句代表着每行数据只在其所属的数据分区进行聚合。
+
+代码如下
+
+```java
+package local.ateng.java.TableAPI.window.over;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.rowInterval;
+
+
+public class OverPartRows {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Over.partitionBy($("province")).orderBy($("proc_time")).preceding(rowInterval(100L)).as("w"))  // 定义 Over 窗口
+                .select(
+                        $("province"),
+                        $("score").avg().over($("w")).as("avg_score"), // 平均分
+                        $("age").max().over($("w")).as("max_age"), // 最大年龄
+                        $("id").count().over($("w")).as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over分区聚合（行间隔）");
+
+    }
+}
+```
+
+![image-20250121155240094](./assets/image-20250121155240094.png)
+
+#### Over分区聚合（时间范围间隔）
+
+`RANGE` 间隔是定义在排序列值上的，在 Flink 里，排序列总是一个时间属性。下面的 `RANG` 间隔定义了聚合会在比当前行的时间属性小 2 分钟的所有行上进行。
+
+`PARTITION BY` 子句代表着每行数据只在其所属的数据分区进行聚合。
+
+代码如下
+
+```java
+package local.ateng.java.TableAPI.window.over;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.*;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
+
+
+public class OverPartRange {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 1
+        env.setParallelism(1);
+
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 使用 TableDescriptor 定义 Kafka 数据源
+        TableDescriptor sourceDescriptor = TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP())
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3)) // 事件时间字段
+                        .columnByExpression("proc_time", "PROCTIME()") // 处理时间字段
+                        .columnByMetadata("timestamp", DataTypes.TIMESTAMP(3))  // Kafka 的时间戳
+                        .columnByMetadata("partition", DataTypes.INT())
+                        .columnByMetadata("offset", DataTypes.BIGINT())
+                        .build())
+                .option("topic", "ateng_flink_json")  // Kafka topic 名称
+                .option("properties.group.id", "ateng_flink_table_api")  // 消费者组 名称
+                .option("properties.bootstrap.servers", "192.168.1.10:9094")  // Kafka 地址
+                .option("format", "json")  // 数据格式，假设 Kafka 中的数据是 JSON 格式
+                // 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'
+                .option("scan.startup.mode", "latest-offset")  // 从最早的偏移量开始消费
+                .build();
+
+        // 创建一个临时表 'my_user'，这个表通过 data generator 连接器读取数据
+        tableEnv.createTemporaryTable("my_user", sourceDescriptor);
+
+        // 使用 Table API 读取表
+        Table table = tableEnv.from("my_user");
+
+        // 定义窗口操作
+        Table windowedTable = table
+                .window(Over.partitionBy($("province")).orderBy($("proc_time")).preceding(lit(2).minutes()).as("w"))  // 定义 Over 窗口
+                .select(
+                        $("province"),
+                        $("score").avg().over($("w")).as("avg_score"), // 平均分
+                        $("age").max().over($("w")).as("max_age"), // 最大年龄
+                        $("id").count().over($("w")).as("user_count") // 用户数量
+                );
+
+        // 执行操作
+        TableResult tableResult = windowedTable.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over分区聚合（时间范围间隔）");
+
+    }
+}
+```
+
+![image-20250121154634083](./assets/image-20250121154634083.png)
 
 
 
@@ -8492,6 +8897,2460 @@ curl -X DELETE "http://localhost:9200/my_user_os_20250120"
 ```
 
 
+
+### 滚动窗口
+
+`TUMBLE` 函数通过时间属性字段为每行数据分配一个窗口。 在流计算模式，时间属性字段必须被指定为 [事件或处理时间属性](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/concepts/time_attributes/)。 在批计算模式，窗口表函数的时间属性字段必须是 `TIMESTAMP` 或 `TIMESTAMP_LTZ` 的类型。 `TUMBLE` 的返回值包括原始表的所有列和附加的三个用于指定窗口的列，分别是：“window_start”，“window_end”，“window_time”。函数运行后，原有的时间属性 “timecol” 将转换为一个常规的 timestamp 列。
+
+`TUMBLE` 函数有三个必传参数，一个可选参数：
+
+```sql
+TUMBLE(TABLE data, DESCRIPTOR(timecol), size [, offset ])
+```
+
+- `data` ：拥有时间属性列的表。
+- `timecol` ：列描述符，决定数据的哪个时间属性列应该映射到窗口。
+- `size` ：窗口的大小（时长）。
+- `offset` ：窗口的偏移量 [非必填]。
+
+参考文档：
+
+- [WATERMARK](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/create/#watermark)
+
+- [滚动窗口](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/queries/window-tvf/#%e6%bb%9a%e5%8a%a8%e7%aa%97%e5%8f%a3tumble)
+
+#### 处理时间WindowAll
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  TUMBLE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '1' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.tumbling;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的滚动窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 1分钟滚动窗口
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  TUMBLE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '1' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的滚动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121101656055](./assets/image-20250121101656055.png)
+
+#### 事件时间WindowsAll
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  TUMBLE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '1' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的滚动窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 1分钟滚动窗口
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  TUMBLE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '1' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的滚动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121101710820](./assets/image-20250121101710820.png)
+
+#### 处理时间WindowGroupBy
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  TUMBLE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '1' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的滚动窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 1分钟滚动窗口
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  TUMBLE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '1' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的滚动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121101536771](./assets/image-20250121101536771.png)
+
+#### 事件时间WindowGroupBy
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  TUMBLE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '1' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的滚动窗口使用示例
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 1分钟滚动窗口
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  TUMBLE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '1' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的滚动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121101638537](./assets/image-20250121101638537.png)
+
+#### 窗口偏移Offset
+
+![image-20250121101940969](./assets/image-20250121101940969.png)
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/queries/window-tvf/#%E7%AA%97%E5%8F%A3%E5%81%8F%E7%A7%BB)
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  TUMBLE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '2' MINUTE,
+    INTERVAL '1' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.tumbling;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的滚动窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowAllOffset {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 1分钟滚动窗口
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  TUMBLE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '2' MINUTE,\n" +
+                "    INTERVAL '1' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的滚动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121102326438](./assets/image-20250121102326438.png)
+
+
+
+### 滑动窗口
+
+`HOP` 函数通过时间属性字段为每一行数据分配了一个窗口。 在流计算模式，这个时间属性字段必须被指定为 [事件或处理时间属性](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/concepts/time_attributes/)。 在批计算模式，这个窗口表函数的时间属性字段必须是 `TIMESTAMP` 或 `TIMESTAMP_LTZ` 的类型。 `HOP` 的返回值包括原始表的所有列和附加的三个用于指定窗口的列，分别是：“window_start”，“window_end”，“window_time”。函数运行后，原有的时间属性 “timecol” 将转换为一个常规的 timestamp 列。
+
+`HOP` 有四个必填参数和一个可选参数：
+
+```sql
+HOP(TABLE data, DESCRIPTOR(timecol), slide, size [, offset ])
+```
+
+- `data`：拥有时间属性列的表。
+- `timecol`：列描述符，决定数据的哪个时间属性列应该映射到窗口。
+- `slide`：窗口的滑动步长。
+- `size`：窗口的大小(时长)。
+- `offset`：窗口的偏移量 [非必填]。
+
+参考文档：
+
+- [WATERMARK](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/create/#watermark)
+
+- [滑动窗口](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/queries/window-tvf/#%E6%BB%91%E5%8A%A8%E7%AA%97%E5%8F%A3hop)
+
+#### 处理时间WindowAll
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  HOP(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '1' MINUTE,
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的滑动窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  HOP(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '1' MINUTE,\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的滑动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121103020320](./assets/image-20250121103020320.png)
+
+#### 事件时间WindowsAll
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  HOP(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '1' MINUTE,
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的滑动窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  HOP(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '1' MINUTE,\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的滑动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121102954313](./assets/image-20250121102954313.png)
+
+#### 处理时间WindowGroupBy
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  HOP(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '1' MINUTE,
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的滑动窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  HOP(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '1' MINUTE,\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的滑动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121102841343](./assets/image-20250121102841343.png)
+
+#### 事件时间WindowGroupBy
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  HOP(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '1' MINUTE,
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.sliding;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的滑动窗口使用示例
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 滑动窗口：2分钟窗口数据，1分钟刷新一次数据（整个数据区间就是前2分钟）
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  HOP(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '1' MINUTE,\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的滑动窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121102911400](./assets/image-20250121102911400.png)
+
+
+
+### 会话窗口
+
+`SESSION`　函数通过时间属性字段为每一行数据分配了一个窗口。 在流计算模式，这个时间属性字段必须被指定为 [事件或处理时间属性](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/concepts/time_attributes/)。 `SESSION` 的返回值包括原始表的所有列和附加的三个用于指定窗口的列，分别是：“window_start”，“window_end”，“window_time”。函数运行后，原有的时间属性 “timecol” 将转换为一个常规的 timestamp 列。
+
+`SESSION` 有三个必填参数和一个可选参数：
+
+```sql
+SESSION(TABLE data [PARTITION BY(keycols, ...)], DESCRIPTOR(timecol), gap)
+```
+
+- `data`：拥有时间属性列的表。
+- `keycols`：列描述符，决定会话窗口应该使用哪些列来分区数据。
+- `timecol`：列描述符，决定数据的哪个时间属性列应该映射到窗口。
+- `gap`：两个事件被认为属于同一个会话窗口的最大时间间隔。
+
+参考文档：
+
+- [WATERMARK](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/create/#watermark)
+
+- [会话窗口](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/queries/window-tvf/#%E4%BC%9A%E8%AF%9D%E7%AA%97%E5%8F%A3session)
+
+#### 处理时间WindowAll
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  SESSION(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的会话窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 会话窗口：2分钟窗口数据
+        // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  SESSION(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的会话窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121104634809](./assets/image-20250121104634809.png)
+
+#### 事件时间WindowsAll
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  SESSION(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的会话窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 会话窗口：2分钟窗口数据
+        // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  SESSION(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的会话窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121104727639](./assets/image-20250121104727639.png)
+
+#### 处理时间WindowGroupBy
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  SESSION(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的会话窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 会话窗口：2分钟窗口数据
+        // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  SESSION(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的会话窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121103940939](./assets/image-20250121103940939.png)
+
+#### 事件时间WindowGroupBy
+
+关键SQL
+
+```sql
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  SESSION(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '2' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.session;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的会话窗口使用示例
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 会话窗口：2分钟窗口数据
+        // 表示会话窗口的间隔为 2 分钟。也就是说，窗口会根据事件之间的时间间隔划分。如果两个事件之间的时间差超过了 2 分钟，那么当前的会话窗口就结束，接下来的事件会形成新的窗口。
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  SESSION(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '2' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的会话窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121104053457](./assets/image-20250121104053457.png)
+
+
+
+### 累计窗口
+
+`CUMULATE`　函数通过时间属性字段为每一行数据分配了一个窗口。 在流计算模式，这个时间属性字段必须被指定为 [事件或处理时间属性](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/concepts/time_attributes/)。 在批计算模式，这个窗口表函数的时间属性字段必须是 `TIMESTAMP` 或 `TIMESTAMP_LTZ` 的类型。 `CUMULATE` 的返回值包括原始表的所有列和附加的三个用于指定窗口的列，分别是：“window_start”，“window_end”，“window_time”。函数运行后，原有的时间属性 “timecol” 将转换为一个常规的 timestamp 列。
+
+`CUMULATE` 有四个必填参数和一个可选参数：
+
+```sql
+CUMULATE(TABLE data, DESCRIPTOR(timecol), step, size)
+```
+
+- `data`：拥有时间属性列的表。
+- `timecol`：列描述符，决定数据的哪个时间属性列应该映射到窗口。
+- `step`：指定连续的累积窗口之间增加的窗口大小。
+- `size`：指定累积窗口的最大宽度的窗口时间。`size`必须是`step`的整数倍。
+- `offset`：窗口的偏移量 [非必填]。
+
+参考文档：
+
+- [WATERMARK](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/create/#watermark)
+
+- [累计窗口](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/queries/window-tvf/#%E7%B4%AF%E7%A7%AF%E7%AA%97%E5%8F%A3cumulate)
+
+#### 处理时间WindowAll
+
+关键SQL
+
+```java
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  CUMULATE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '2' MINUTE,
+    INTERVAL '10' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```
+package local.ateng.java.SQL.window.cumulate;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的累计窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 累计窗口：每2分钟累计计算一次，最大累计10分钟
+        // 可以输出的窗口：[00:00, 00:02),[00:00, 00:04),[00:00, 00:06),[00:00, 00:08),[00:00, 00:10),[00:10, 00:12)...
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  CUMULATE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '2' MINUTE,\n" +
+                "    INTERVAL '10' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的累计窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121111324193](./assets/image-20250121111324193.png)
+
+#### 事件时间WindowsAll
+
+关键SQL
+
+```java
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  CUMULATE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '2' MINUTE,
+    INTERVAL '10' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.cumulate;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的累计窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowAll {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 累计窗口：每2分钟累计计算一次，最大累计10分钟
+        // 可以输出的窗口：[00:00, 00:02),[00:00, 00:04),[00:00, 00:06),[00:00, 00:08),[00:00, 00:10),[00:10, 00:12)...
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  CUMULATE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '2' MINUTE,\n" +
+                "    INTERVAL '10' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的累计窗口使用示例");
+
+    }
+}
+```
+
+![image-20250121113408287](./assets/image-20250121113408287.png)
+
+#### 处理时间WindowGroupBy
+
+关键SQL
+
+```java
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  CUMULATE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(procTime),
+    INTERVAL '2' MINUTE,
+    INTERVAL '10' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.cumulate;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于处理时间的累计窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class ProcessingTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 累计窗口：每2分钟累计计算一次，最大累计10分钟
+        // 可以输出的窗口：[00:00, 00:02),[00:00, 00:04),[00:00, 00:06),[00:00, 00:08),[00:00, 00:10),[00:10, 00:12)...
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  CUMULATE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(procTime),\n" +
+                "    INTERVAL '2' MINUTE,\n" +
+                "    INTERVAL '10' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于处理时间的累计窗口使用示例");
+
+    }
+}
+```
+
+
+
+#### 事件时间WindowGroupBy
+
+关键SQL
+
+```java
+SELECT
+  window_start,
+  window_end,
+  window_time,
+  province,
+  avg(score) as avg_score,
+  max(age) as age_max,
+  count(id) as id_count
+FROM TABLE(
+  CUMULATE(
+    TABLE my_user_kafka,
+    DESCRIPTOR(createTime),
+    INTERVAL '2' MINUTE,
+    INTERVAL '10' MINUTE
+  )
+)
+GROUP BY window_start, window_end, window_time, province;
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.cumulate;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * FlinkSQL基于事件时间的累计窗口使用示例
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-20
+ */
+public class EventTimeWindowGroupBy {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  -- 配置 watermark，允许最大 5 秒延迟\n" +
+                "  WATERMARK FOR createTime AS createTime - INTERVAL '5' SECOND\n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // 累计窗口：每2分钟累计计算一次，最大累计10分钟
+        // 可以输出的窗口：[00:00, 00:02),[00:00, 00:04),[00:00, 00:06),[00:00, 00:08),[00:00, 00:10),[00:10, 00:12)...
+        String querySql = "SELECT\n" +
+                "  window_start,\n" +
+                "  window_end,\n" +
+                "  window_time,\n" +
+                "  province,\n" +
+                "  avg(score) as avg_score,\n" +
+                "  max(age) as age_max,\n" +
+                "  count(id) as id_count\n" +
+                "FROM TABLE(\n" +
+                "  CUMULATE(\n" +
+                "    TABLE my_user_kafka,\n" +
+                "    DESCRIPTOR(createTime),\n" +
+                "    INTERVAL '2' MINUTE,\n" +
+                "    INTERVAL '10' MINUTE\n" +
+                "  )\n" +
+                ")\n" +
+                "GROUP BY window_start, window_end, window_time, province;";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("FlinkSQL基于事件时间的累计窗口使用示例");
+
+    }
+}
+```
+
+
+
+### Over聚合窗口
+
+`OVER` 聚合通过排序后的范围数据为每行输入计算出聚合值。和 `GROUP BY` 聚合不同， `OVER` 聚合不会把结果通过分组减少到一行，它会为每行输入增加一个聚合值。
+
+`OVER` 窗口的语法
+
+```sql
+SELECT
+  agg_func(agg_col) OVER (
+    [PARTITION BY col1[, col2, ...]]
+    ORDER BY time_col
+    range_definition),
+  ...
+FROM ...
+```
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/sql/queries/over-agg/)
+
+#### Over聚合（行间隔）
+
+`ROWS` 间隔基于计数。它定义了聚合操作包含的精确行数。下面的 `ROWS` 间隔定义了当前行 + 之前的 100 行（也就是101行）都会被聚合。
+
+关键SQL
+
+```sql
+SELECT
+  avg(score) OVER w as avg_score,
+  max(age) OVER w as age_max,
+  count(id) OVER w as id_count
+FROM my_user_kafka
+WINDOW w AS (
+  ORDER BY procTime
+  ROWS BETWEEN 100 PRECEDING AND CURRENT ROW)
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.over;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * Over聚合（行间隔）
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-21
+ */
+public class OverRows {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // Over聚合（行间隔）
+        // ROWS 间隔基于计数。它定义了聚合操作包含的精确行数。下面的 ROWS 间隔定义了当前行 + 之前的 100 行（也就是101行）都会被聚合。
+        String querySql = "SELECT\n" +
+                "  avg(score) OVER w as avg_score,\n" +
+                "  max(age) OVER w as age_max,\n" +
+                "  count(id) OVER w as id_count\n" +
+                "FROM my_user_kafka\n" +
+                "WINDOW w AS (\n" +
+                "  ORDER BY procTime\n" +
+                "  ROWS BETWEEN 100 PRECEDING AND CURRENT ROW)";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over聚合（行间隔）");
+
+    }
+}
+```
+
+![image-20250121152847396](./assets/image-20250121152847396.png)
+
+#### Over聚合（时间范围间隔）
+
+`RANGE` 间隔是定义在排序列值上的，在 Flink 里，排序列总是一个时间属性。下面的 `RANG` 间隔定义了聚合会在比当前行的时间属性小 2 分钟的所有行上进行。
+
+关键SQL
+
+```sql
+SELECT
+  avg(score) OVER w as avg_score,
+  max(age) OVER w as age_max,
+  count(id) OVER w as id_count
+FROM my_user_kafka
+WINDOW w AS (
+  ORDER BY procTime
+  RANGE BETWEEN INTERVAL '2' MINUTE PRECEDING AND CURRENT ROW)
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.over;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * Over聚合（时间范围间隔）
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-21
+ */
+public class OverRange {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // Over聚合（时间范围间隔）
+        // RANGE 间隔是定义在排序列值上的，在 Flink 里，排序列总是一个时间属性。下面的 RANG 间隔定义了聚合会在比当前行的时间属性小 2 分钟的所有行上进行。
+        String querySql = "SELECT\n" +
+                "  avg(score) OVER w as avg_score,\n" +
+                "  max(age) OVER w as age_max,\n" +
+                "  count(id) OVER w as id_count\n" +
+                "FROM my_user_kafka\n" +
+                "WINDOW w AS (\n" +
+                "  ORDER BY procTime\n" +
+                "  RANGE BETWEEN INTERVAL '2' MINUTE PRECEDING AND CURRENT ROW)";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over聚合（时间范围间隔）");
+
+    }
+}
+```
+
+![image-20250121153258775](./assets/image-20250121153258775.png)
+
+#### Over分区聚合（行间隔）
+
+`ROWS` 间隔基于计数。它定义了聚合操作包含的精确行数。下面的 `ROWS` 间隔定义了当前行 + 之前的 100 行（也就是101行）都会被聚合。
+
+`PARTITION BY` 子句代表着每行数据只在其所属的数据分区进行聚合。
+
+关键SQL
+
+```sql
+SELECT
+  province,
+  avg(score) OVER w as avg_score,
+  max(age) OVER w as age_max,
+  count(id) OVER w as id_count
+FROM my_user_kafka
+WINDOW w AS (
+  PARTITION BY province
+  ORDER BY procTime
+  ROWS BETWEEN 100 PRECEDING AND CURRENT ROW)
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.over;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * Over分区聚合（行间隔）
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-21
+ */
+public class OverPartRows {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // Over分区聚合（行间隔）
+        // ROWS 间隔基于计数。它定义了聚合操作包含的精确行数。下面的 ROWS 间隔定义了当前行 + 之前的 100 行（也就是101行）都会被聚合。
+        String querySql = "SELECT\n" +
+                "  province,\n" +
+                "  avg(score) OVER w as avg_score,\n" +
+                "  max(age) OVER w as age_max,\n" +
+                "  count(id) OVER w as id_count\n" +
+                "FROM my_user_kafka\n" +
+                "WINDOW w AS (\n" +
+                "  PARTITION BY province\n" +
+                "  ORDER BY procTime\n" +
+                "  ROWS BETWEEN 100 PRECEDING AND CURRENT ROW)";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over分区聚合（行间隔）");
+
+    }
+}
+```
+
+![image-20250121153521956](./assets/image-20250121153521956.png)
+
+#### Over分区聚合（时间范围间隔）
+
+`RANGE` 间隔是定义在排序列值上的，在 Flink 里，排序列总是一个时间属性。下面的 `RANG` 间隔定义了聚合会在比当前行的时间属性小 2 分钟的所有行上进行。
+
+`PARTITION BY` 子句代表着每行数据只在其所属的数据分区进行聚合。
+
+关键SQL
+
+```sql
+SELECT
+  province,
+  avg(score) OVER w as avg_score,
+  max(age) OVER w as age_max,
+  count(id) OVER w as id_count
+FROM my_user_kafka
+WINDOW w AS (
+  PARTITION BY province
+  ORDER BY procTime
+  RANGE BETWEEN INTERVAL '2' MINUTE PRECEDING AND CURRENT ROW)
+```
+
+代码如下
+
+```java
+package local.ateng.java.SQL.window.over;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * Over分区聚合（时间范围间隔）
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-21
+ */
+public class OverPartRange {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 创建表
+        String createSql = "CREATE TABLE my_user_kafka( \n" +
+                "  my_event_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,\n" +
+                "  my_partition BIGINT METADATA FROM 'partition' VIRTUAL,\n" +
+                "  my_offset BIGINT METADATA FROM 'offset' VIRTUAL,\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  createTime TIMESTAMP(3),\n" +
+                "  procTime AS PROCTIME() \n" +
+                ")\n" +
+                "WITH (\n" +
+                "  'connector' = 'kafka',\n" +
+                "  'properties.bootstrap.servers' = '192.168.1.10:9094',\n" +
+                "  'properties.group.id' = 'ateng_sql',\n" +
+                "  -- 'earliest-offset', 'latest-offset', 'group-offsets', 'timestamp' and 'specific-offsets'\n" +
+                "  'scan.startup.mode' = 'latest-offset',\n" +
+                "  'topic' = 'ateng_flink_json',\n" +
+                "  'format' = 'json'\n" +
+                ");";
+        tableEnv.executeSql(createSql);
+
+        // 查询数据
+        // Over分区聚合（时间范围间隔）
+        // RANGE 间隔是定义在排序列值上的，在 Flink 里，排序列总是一个时间属性。下面的 RANG 间隔定义了聚合会在比当前行的时间属性小 2 分钟的所有行上进行。
+        String querySql = "SELECT\n" +
+                "  province,\n" +
+                "  avg(score) OVER w as avg_score,\n" +
+                "  max(age) OVER w as age_max,\n" +
+                "  count(id) OVER w as id_count\n" +
+                "FROM my_user_kafka\n" +
+                "WINDOW w AS (\n" +
+                "  PARTITION BY province\n" +
+                "  ORDER BY procTime\n" +
+                "  RANGE BETWEEN INTERVAL '2' MINUTE PRECEDING AND CURRENT ROW)";
+        Table result = tableEnv.sqlQuery(querySql);
+
+        // 执行操作
+        TableResult tableResult = result.execute();
+
+        // 打印结果
+        tableResult.print();
+
+        // 执行任务
+        env.execute("Over分区聚合（时间范围间隔）");
+
+    }
+}
+```
+
+![image-20250121153904465](./assets/image-20250121153904465.png)
 
 
 

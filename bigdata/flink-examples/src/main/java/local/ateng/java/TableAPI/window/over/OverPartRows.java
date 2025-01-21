@@ -1,19 +1,19 @@
-package local.ateng.java.TableAPI.window.global;
+package local.ateng.java.TableAPI.window.over;
 
-import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.*;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 
-import static org.apache.flink.table.api.Expressions.*;
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.rowInterval;
 
 
-public class ProcessingTimeWindowAll {
+public class OverPartRows {
     public static void main(String[] args) throws Exception {
         // 创建流式执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
-        env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        //env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
         // 设置并行度为 1
         env.setParallelism(1);
 
@@ -52,7 +52,7 @@ public class ProcessingTimeWindowAll {
 
         // 定义窗口操作
         Table windowedTable = table
-                .window(Over.partitionBy($("province")).orderBy($("proc_time")).preceding(lit(1).minutes()).as("w"))  // 定义 Over 窗口
+                .window(Over.partitionBy($("province")).orderBy($("proc_time")).preceding(rowInterval(100L)).as("w"))  // 定义 Over 窗口
                 .select(
                         $("province"),
                         $("score").avg().over($("w")).as("avg_score"), // 平均分
@@ -67,7 +67,7 @@ public class ProcessingTimeWindowAll {
         tableResult.print();
 
         // 执行任务
-        env.execute("处理时间窗口");
+        env.execute("Over分区聚合（行间隔）");
 
     }
 }
