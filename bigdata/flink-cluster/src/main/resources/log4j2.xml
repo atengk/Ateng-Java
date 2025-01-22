@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{ISO8601} [%t] %-5level %logger{36} - %msg%n" />
+        </Console>
+    </Appenders>
+    <Loggers>
+        <!-- 设置 org.apache.kafka 包日志级别为 WARN -->
+        <Logger name="org.apache.kafka" level="warn" additivity="false">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <!-- 设置 org.apache.flink 包日志级别为 WARN -->
+        <Logger name="org.apache.flink" level="warn" additivity="false">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <!-- 根日志级别设置为 INFO -->
+        <Root level="info">
+            <AppenderRef ref="Console" />
+        </Root>
+    </Loggers>
+</Configuration>

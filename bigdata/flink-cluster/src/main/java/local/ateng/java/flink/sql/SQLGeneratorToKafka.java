@@ -1,5 +1,6 @@
 package local.ateng.java.flink.sql;
 
+import cn.hutool.extra.spring.SpringUtil;
 import local.ateng.java.flink.entity.UserInfoEntity;
 import local.ateng.java.flink.function.MyGeneratorFunction;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
@@ -27,14 +28,13 @@ import org.springframework.stereotype.Component;
 public class SQLGeneratorToKafka {
 
     public void run() throws Exception {
-        // 创建流式执行环境
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 获取执行环境
+        StreamExecutionEnvironment env = SpringUtil.getBean("flinkEnv", StreamExecutionEnvironment.class);
+        StreamTableEnvironment tableEnv = SpringUtil.getBean("flinkTableEnv", StreamTableEnvironment.class);
         // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
         env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
         // 设置并行度为 3
         env.setParallelism(3);
-        // 创建流式表环境
-        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
         // 设置 JobName
         tableEnv.getConfig().set("pipeline.name", "生成模拟数据并写入Kafka");
 

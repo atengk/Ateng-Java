@@ -1,5 +1,6 @@
 package local.ateng.java.flink.stream;
 
+import cn.hutool.extra.spring.SpringUtil;
 import com.alibaba.fastjson2.JSONObject;
 import local.ateng.java.flink.entity.UserInfoEntity;
 import local.ateng.java.flink.function.MyGeneratorFunction;
@@ -14,6 +15,7 @@ import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,8 +29,8 @@ import org.springframework.stereotype.Component;
 public class DataStreamGeneratorToKafka {
 
     public void run() throws Exception {
-        // 创建流式执行环境
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 获取执行环境
+        StreamExecutionEnvironment env = SpringUtil.getBean("flinkEnv", StreamExecutionEnvironment.class);
         // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
         env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
         // 设置并行度为 3

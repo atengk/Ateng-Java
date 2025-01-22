@@ -7,10 +7,3 @@ spring:
     web-application-type: none
   application:
     name: ${project.artifactId}
----
-# 日志配置
-logging:
-  level:
-    root: info
-    org.apache.flink: warn
-    org.apache.kafka: warn

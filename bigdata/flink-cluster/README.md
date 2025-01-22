@@ -47,6 +47,7 @@
         <hutool.version>5.8.35</hutool.version>
         <hadoop.version>3.3.6</hadoop.version>
         <flink.version>1.19.1</flink.version>
+        <kafka.version>3.8.1</kafka.version>
         <flink-kafka.version>3.3.0-1.19</flink-kafka.version>
         <mysql.version>8.0.33</mysql.version>
         <postgresql.version>42.7.1</postgresql.version>
@@ -133,14 +134,14 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-base</artifactId>
             <version>${flink.version}</version>
-            <!--<scope>provided</scope>-->
+            <scope>provided</scope>
         </dependency>
         <!-- Apache Flink Kafka 连接器库 -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
             <version>${flink-kafka.version}</version>
-            <!--<scope>provided</scope>-->
+            <scope>provided</scope>
         </dependency>
 
         <!-- Apache Flink Table API & SQL -->
@@ -168,21 +169,21 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-sql-parquet</artifactId>
             <version>${flink.version}</version>
-            <!--<scope>provided</scope>-->
+            <scope>provided</scope>
         </dependency>
         <!-- Flink SQL csv 格式 -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-sql-csv</artifactId>
             <version>${flink.version}</version>
-            <!--<scope>provided</scope>-->
+            <scope>provided</scope>
         </dependency>
         <!-- Flink SQL json 格式 -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-sql-json</artifactId>
             <version>${flink.version}</version>
-            <!--<scope>provided</scope>-->
+            <scope>provided</scope>
         </dependency>
 
     </dependencies>
@@ -250,11 +251,11 @@
                                 <exclude>META-INF/*.MF</exclude>
                                 <exclude>META-INF/*.DSA</exclude>
                                 <exclude>META-INF/*.RSA</exclude>
+                                <exclude>**/Log4j2Plugins.dat</exclude>
                                 <!--<exclude>META-INF/*.txt</exclude>
                                 <exclude>META-INF/NOTICE</exclude>
                                 <exclude>META-INF/LICENSE</exclude>
                                 <exclude>META-INF/services/java.sql.Driver</exclude>
-                                <exclude>**/Log4j2Plugins.dat</exclude>
                                 -->
                                 <!-- 排除resources下的xml配置文件 -->
                                 <!--<exclude>log*.xml</exclude>-->
@@ -284,6 +285,10 @@
                         </goals>
                         <configuration>
                             <transformers>
+                                <!-- 合并 Log4j2Plugins.dat 文件 -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>Log4j2Plugins.dat</resource>
+                                </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                                     <resource>META-INF/additional-spring-configuration-metadata.json</resource>
                                 </transformer>
@@ -358,13 +363,6 @@ spring:
     web-application-type: none
   application:
     name: ${project.artifactId}
----
-# 日志配置
-logging:
-  level:
-    root: info
-    org.apache.flink: warn
-    org.apache.kafka: warn
 ```
 
 ## 创建Runner
@@ -548,11 +546,55 @@ public class MyGeneratorFunction implements GeneratorFunction {
 }
 ```
 
+### 创建环境
+
+```java
+package local.ateng.java.flink.config;
+
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * Flink Env
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-22
+ */
+@Configuration
+public class MyFlinkConfig {
+    /**
+     * 执行环境
+     *
+     * @return flinkEnv
+     */
+    @Bean
+    public StreamExecutionEnvironment flinkEnv() {
+        return StreamExecutionEnvironment.getExecutionEnvironment();
+    }
+
+    /**
+     * 流式表环境
+     *
+     * @param env
+     * @return flinkTableEnv
+     */
+    @Bean
+    public StreamTableEnvironment flinkTableEnv(StreamExecutionEnvironment env) {
+        return StreamTableEnvironment.create(env);
+    }
+
+}
+```
+
 ### 创建DataStream任务
 
 ```java
 package local.ateng.java.flink.stream;
 
+import cn.hutool.extra.spring.SpringUtil;
 import com.alibaba.fastjson2.JSONObject;
 import local.ateng.java.flink.entity.UserInfoEntity;
 import local.ateng.java.flink.function.MyGeneratorFunction;
@@ -567,6 +609,7 @@ import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.springframework.stereotype.Component;
 
 /**
@@ -580,8 +623,8 @@ import org.springframework.stereotype.Component;
 public class DataStreamGeneratorToKafka {
 
     public void run() throws Exception {
-        // 创建流式执行环境
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 获取执行环境
+        StreamExecutionEnvironment env = SpringUtil.getBean("flinkEnv", StreamExecutionEnvironment.class);
         // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
         env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
         // 设置并行度为 3
@@ -611,8 +654,6 @@ public class DataStreamGeneratorToKafka {
                 .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE) // 传输保障级别
                 .build();
 
-        // 将数据打印到控制台
-        stream.print("sink kafka");
         // 将数据发送到 Kafka
         stream.sinkTo(sink);
 
@@ -623,13 +664,12 @@ public class DataStreamGeneratorToKafka {
 }
 ```
 
-
-
 ### 创建SQL任务
 
 ```
 package local.ateng.java.flink.sql;
 
+import cn.hutool.extra.spring.SpringUtil;
 import local.ateng.java.flink.entity.UserInfoEntity;
 import local.ateng.java.flink.function.MyGeneratorFunction;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
@@ -657,14 +697,15 @@ import org.springframework.stereotype.Component;
 public class SQLGeneratorToKafka {
 
     public void run() throws Exception {
-        // 创建流式执行环境
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 获取执行环境
+        StreamExecutionEnvironment env = SpringUtil.getBean("flinkEnv", StreamExecutionEnvironment.class);
+        StreamTableEnvironment tableEnv = SpringUtil.getBean("flinkTableEnv", StreamTableEnvironment.class);
         // 启用检查点，设置检查点间隔为 5 秒，检查点模式为 精准一次
         env.enableCheckpointing(5 * 1000, CheckpointingMode.EXACTLY_ONCE);
         // 设置并行度为 3
         env.setParallelism(3);
-        // 创建流式表环境
-        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+        // 设置 JobName
+        tableEnv.getConfig().set("pipeline.name", "生成模拟数据并写入Kafka");
 
         // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
         DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
@@ -721,18 +762,6 @@ public class SQLGeneratorToKafka {
         String insertSql = "insert into my_user_kafka select * from my_user;";
         tableEnv.executeSql(insertSql);
 
-        // 查询数据
-        String querySql = "select * from my_user_kafka";
-        Table result = tableEnv.sqlQuery(querySql);
-
-        // 执行操作
-        TableResult tableResult = result.execute();
-
-        // 打印结果
-        tableResult.print();
-
-        // 执行任务
-        env.execute("Kafka使用示例");
     }
 }
 ```
@@ -741,7 +770,7 @@ public class SQLGeneratorToKafka {
 
 ## 运行任务
 
-### 本地运行
+### IDEA运行
 
 配置参数，运行指定的类和方法
 
@@ -753,15 +782,11 @@ public class SQLGeneratorToKafka {
 
 
 
-### 打包运行
+### 打包Jar
 
 通过Maven将代码打包成Jar，如下图所示
 
 ![image-20250122163135549](./assets/image-20250122163135549.png)
-
-注意以下问题
-
-- pom.xml中依赖的作用域scope，用到相关服务时，要保证集群以添加相关依赖。
 
 ### Flink Standalone
 
@@ -850,8 +875,55 @@ flink run-application -t yarn-application \
 - `-Dyarn.application.name`：设置 Flink 作业在 YARN 上的应用程序名称
 - `-c `：指定作业的主类
 
+### Java
+
+将Flink相关的依赖的作用域都设置为compile（默认），最后打包
+
+```bash
+java -jar \
+    -server -Xms128m -Xmx1024m \
+    flink-cluster-v1.0.jar \
+    --class=local.ateng.java.flink.sql.SQLGeneratorToKafka \
+    --method=run
+```
+
+![image-20250122224112796](./assets/image-20250122224112796.png)
+
 ### Kubernetes
 
 使用 `flink-kubernetes-operator` 运行任务，详情参考：[Flink Operator](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/kubernetes-operator/)
 
-注意依赖问题，要么把相关服务的依赖，例如 flink-connector-kafka 的作用域设置为compile（默认）。
+将Flink相关的依赖的作用域都设置为compile（默认）
+
+**最小化的yaml**
+
+```yaml
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: flink-spring
+  namespace: flink-job
+spec:
+  image: registry.lingo.local/service/flink:1.19-java8
+  flinkVersion: v1_19
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "3"
+  serviceAccount: flink
+  jobManager:
+    replicas: 1
+    resource:
+      memory: "1g"
+      cpu: 1
+  taskManager:
+    resource:
+      memory: "2g"
+      cpu: 1
+  job:
+    jarURI: http://192.168.1.12:9000/test/flink/flink-cluster-v1.0.jar
+    args:
+      - --class=local.ateng.java.flink.sql.SQLGeneratorToKafka
+      - --method=run
+    parallelism: 3
+```
+
+![image-20250122223811646](./assets/image-20250122223811646.png)
