@@ -1,0 +1,26 @@
+server:
+  port: 16001
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# 日志配置
+logging:
+  level:
+    root: info
+    org.apache.flink: warn
+    org.apache.kafka: warn
+---
+# 线程池配置
+#spring:
+#  task:
+#    execution:
+#      thread-name-prefix: task-executor-
+#      pool:
+#        core-size: 5
+#        max-size: 10
+#        queue-capacity: 25

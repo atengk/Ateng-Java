@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- 项目模型版本 -->
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 项目坐标 -->
+    <groupId>local.ateng.java</groupId>
+    <artifactId>flink-standalone</artifactId>
+    <version>v1.0</version>
+    <name>flink-standalone</name>
+    <description>
+        一个简化的 Flink 程序运行框架，支持通过 `java -jar` 命令独立运行 Flink 作业。
+        该项目提供了最小化配置和轻量级启动方式，便于开发者快速部署和测试 Flink 应用程序。
+        适用于需要快速集成和本地测试的场景。
+    </description>
+
+
+    <!-- 项目属性 -->
+    <properties>
+        <!-- 默认主程序 -->
+        <start-class>local.ateng.java.flink.BigdataFlinkStandaloneApplication</start-class>
+        <java.version>8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spring-boot.version>2.7.18</spring-boot.version>
+        <maven-compiler.version>3.12.1</maven-compiler.version>
+        <maven-shade.version>3.5.1</maven-shade.version>
+        <lombok.version>1.18.36</lombok.version>
+        <fastjson2.version>2.0.53</fastjson2.version>
+        <hutool.version>5.8.35</hutool.version>
+        <hadoop.version>3.3.6</hadoop.version>
+        <flink.version>1.19.1</flink.version>
+        <flink-kafka.version>3.3.0-1.19</flink-kafka.version>
+        <mysql.version>8.0.33</mysql.version>
+        <postgresql.version>42.7.1</postgresql.version>
+    </properties>
+
+    <!-- 项目依赖 -->
+    <dependencies>
+        <!-- Spring Boot Web Starter: 包含用于构建Web应用程序的Spring Boot依赖项 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Starter Test: 包含用于测试Spring Boot应用程序的依赖项 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Lombok: 简化Java代码编写的依赖项 -->
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- 高性能的JSON库 -->
+        <!-- https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn#0-fastjson-20%E4%BB%8B%E7%BB%8D -->
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+            <version>${fastjson2.version}</version>
+        </dependency>
+        <!-- 在 Spring 中集成 Fastjson2 -->
+        <!-- https://github.com/alibaba/fastjson2/blob/main/docs/spring_support_cn.md -->
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2-extension-spring6</artifactId>
+            <version>${fastjson2.version}</version>
+        </dependency>
+
+        <!-- Hutool: Java工具库，提供了许多实用的工具方法 -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>${hutool.version}</version>
+        </dependency>
+
+        <!-- JavaFaker: 用于生成虚假数据的Java库 -->
+        <dependency>
+            <groupId>com.github.javafaker</groupId>
+            <artifactId>javafaker</artifactId>
+            <version>1.0.2</version>
+        </dependency>
+
+        <!-- Apache Flink 客户端库 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-clients</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
+        <!-- Apache Flink 连接器基础库库 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-base</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+        <!-- Apache Flink Kafka 连接器库 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-kafka</artifactId>
+            <version>${flink-kafka.version}</version>
+        </dependency>
+
+        <!-- Apache Flink Table API & SQL -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-api-java-bridge</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-planner-loader</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-table-runtime</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
+        <!-- Flink SQL parquet 格式 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-sql-parquet</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+        <!-- Flink SQL csv 格式 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-sql-csv</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+        <!-- Flink SQL json 格式 -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-sql-json</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+    </dependencies>
+
+    <!-- Spring Boot 依赖管理 -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- SpringBoot 依赖管理 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- 插件仓库配置 -->
+    <repositories>
+        <!-- Central Repository -->
+        <repository>
+            <id>central</id>
+            <name>阿里云中央仓库</name>
+            <url>https://maven.aliyun.com/repository/central</url>
+            <!--<name>Maven官方中央仓库</name>
+            <url>https://repo.maven.apache.org/maven2/</url>-->
+        </repository>
+    </repositories>
+
+    <!-- 构建配置 -->
+    <build>
+        <finalName>${project.name}-${project.version}</finalName>
+        <plugins>
+            <!-- Maven 编译插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler.version}</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                </configuration>
+            </plugin>
+
+            <!-- Spring Boot Maven 插件 -->
+            <!--<plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <executions>
+                    <execution>
+                        <id>repackage</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>-->
+
+            <!-- Maven Shade 打包插件 -->
+            <!-- https://maven.apache.org/plugins/maven-shade-plugin/shade-mojo.html -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${maven-shade.version}</version>
+                <configuration>
+                    <!-- 禁用生成 dependency-reduced-pom.xml 文件 -->
+                    <createDependencyReducedPom>false</createDependencyReducedPom>
+                    <!-- 附加shaded工件时使用的分类器的名称 -->
+                    <shadedClassifierName>shaded</shadedClassifierName>
+                    <filters>
+                        <!-- 不复制 META-INF 下的签名文件 -->
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>module-info.class</exclude>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.MF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                                <!--<exclude>META-INF/*.txt</exclude>
+                                <exclude>META-INF/NOTICE</exclude>
+                                <exclude>META-INF/LICENSE</exclude>
+                                <exclude>META-INF/services/java.sql.Driver</exclude>
+                                <exclude>**/Log4j2Plugins.dat</exclude>-->
+                                <!-- 排除resources下的xml配置文件 -->
+                                <!--<exclude>*.xml</exclude>-->
+                            </excludes>
+                        </filter>
+                    </filters>
+                    <artifactSet>
+                        <!-- 排除依赖项 -->
+                        <excludes>
+                            <!--<exclude>org.apache.logging.log4j:*</exclude>
+                            <exclude>org.slf4j:*</exclude>-->
+                        </excludes>
+                    </artifactSet>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-maven-plugin</artifactId>
+                        <version>${spring-boot.version}</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/additional-spring-configuration-metadata.json</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring-configuration-metadata.json</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.handlers</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.schemas</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.tooling</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>
+                                        META-INF/spring/org.springframework.boot.actuate.autoconfigure.web.ManagementContextConfiguration.imports
+                                    </resource>
+                                </transformer>
+                                <transformer implementation="org.springframework.boot.maven.PropertiesMergingResourceTransformer">
+                                    <resource>META-INF/spring.factories</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <!-- 指定默认主程序 -->
+                                    <mainClass>${start-class}</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+        <resources>
+            <!-- 第一个资源配置块 -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+            </resource>
+            <!-- 第二个资源配置块 -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>application*</include>
+                    <include>bootstrap*.yml</include>
+                    <include>common*</include>
+                    <include>banner*</include>
+                </includes>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+    </build>
+
+</project>
