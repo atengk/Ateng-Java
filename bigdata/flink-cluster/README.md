@@ -365,6 +365,37 @@ spring:
     name: ${project.artifactId}
 ```
 
+### 创建日志配置文件
+
+在 `resources` 目录下创建 `log4j2.xml ` 日志配置文件
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{ISO8601} [%t] %-5level %logger{36} - %msg%n" />
+        </Console>
+    </Appenders>
+    <Loggers>
+        <!-- 设置 org.apache.kafka 包日志级别为 WARN -->
+        <Logger name="org.apache.kafka" level="warn" additivity="false">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <!-- 设置 org.apache.flink 包日志级别为 WARN -->
+        <Logger name="org.apache.flink" level="warn" additivity="false">
+            <AppenderRef ref="Console" />
+        </Logger>
+        <!-- 根日志级别设置为 INFO -->
+        <Root level="info">
+            <AppenderRef ref="Console" />
+        </Root>
+    </Loggers>
+</Configuration>
+```
+
+
+
 ## 创建Runner
 
 通过该Runner运行指定的类和方法
@@ -423,7 +454,7 @@ public class MyFlinkJobRunner implements ApplicationRunner {
 
 
 
-## 运行Flink任务
+## 编辑Flink代码
 
 ### 创建实体类
 
