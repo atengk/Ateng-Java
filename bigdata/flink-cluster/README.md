@@ -893,7 +893,24 @@ java -jar \
 
 使用 `flink-kubernetes-operator` 运行任务，详情参考：[Flink Operator](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/kubernetes-operator/)
 
-将Flink相关的依赖的作用域都设置为compile（默认）
+将任务需要的依赖作用域设置为compile，例如我这里是需要用到Kafka Connector，pom.xml的依赖配置如下
+
+```xml
+<!-- Apache Flink 连接器基础库库 -->
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-connector-base</artifactId>
+    <version>${flink.version}</version>
+    <scope>compile</scope>
+</dependency>
+<!-- Apache Flink Kafka 连接器库 -->
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-connector-kafka</artifactId>
+    <version>${flink-kafka.version}</version>
+    <scope>compile</scope>
+</dependency>
+```
 
 **最小化的yaml**
 
@@ -902,12 +919,13 @@ apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
   name: flink-spring
-  namespace: flink-job
+  namespace: ateng-flink
 spec:
   image: registry.lingo.local/service/flink:1.19-java8
   flinkVersion: v1_19
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "3"
+    user.artifacts.raw-http-enabled: "true"
   serviceAccount: flink
   jobManager:
     replicas: 1
