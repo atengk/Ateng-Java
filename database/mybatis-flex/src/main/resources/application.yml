@@ -50,3 +50,13 @@ mybatis-flex:
       min-idle: 10
       max-active: 100
       max-wait: 10000
+    doris-arrow-flight:
+      type: com.alibaba.druid.pool.DruidDataSource
+      driver-class-name: org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
+      url: jdbc:arrow-flight-sql://192.168.1.18:9031?useServerPrepStmts=false&cachePrepStmts=true&useSSL=false&useEncryption=false
+      username: admin
+      password: Admin@123
+      initial-size: 10
+      min-idle: 10
+      max-active: 100
+      max-wait: 10000

@@ -676,3 +676,63 @@ public class MultiDatasourceTests {
 }
 ```
 
+### Arrow Flight SQL
+
+使用Doris的Arrow Flight SQL协议链接
+
+**添加依赖**
+
+```xml
+<!-- Arrow Flight SQL 协议的开源 JDBC 驱动兼容标准的 JDBC API -->
+<dependency>
+    <groupId>org.apache.arrow</groupId>
+    <artifactId>flight-sql-jdbc-core</artifactId>
+    <version>${arrow.version}</version>
+</dependency>
+<dependency>
+    <groupId>org.apache.httpcomponents.client5</groupId>
+    <artifactId>httpclient5</artifactId>
+    <version>5.4.1</version>
+</dependency>
+<dependency>
+    <groupId>org.apache.httpcomponents.core5</groupId>
+    <artifactId>httpcore5</artifactId>
+    <version>5.3.2</version>
+</dependency>
+```
+
+**编辑配置文件**
+
+```yaml
+mybatis-flex:
+  datasource:
+    # ...
+    doris-arrow-flight:
+      type: com.alibaba.druid.pool.DruidDataSource
+      driver-class-name: org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
+      url: jdbc:arrow-flight-sql://192.168.1.18:9031?useServerPrepStmts=false&cachePrepStmts=true&useSSL=false&useEncryption=false
+      username: admin
+      password: Admin@123
+      initial-size: 10
+      min-idle: 10
+      max-active: 100
+      max-wait: 10000
+```
+
+**创建测试代码**
+
+```java
+@Test
+void test02() {
+    // 测试Doris的Arrow Flight SQL协议
+    try {
+        DataSourceKey.use("doris-arrow-flight");
+        List<Row> list = Db.selectListBySql("select * from kongyu.user_info");
+        System.out.println(list);
+    } finally {
+        DataSourceKey.clear();
+    }
+}
+```
+
+![image-20250124113618952](./assets/image-20250124113618952.png)
