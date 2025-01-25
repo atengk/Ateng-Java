@@ -332,6 +332,10 @@ logging:
     org.apache.kafka: warn
 ```
 
+### 拷贝Hive配置文件
+
+将Hive的配置文件 `hive-site.xml` 拷贝到 `resources` 目录下。
+
 ### 配置异步任务
 
 #### 开启异步和调度
