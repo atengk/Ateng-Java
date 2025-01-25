@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 设置Hive的元数据存储为MySQL -->
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:mysql://192.168.1.10:35725/ateng_hive3</value>
+        <description>连接到MySQL数据库</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>com.mysql.cj.jdbc.Driver</value>
+        <description>MySQL数据库驱动。</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>root</value>
+        <description>MySQL数据库用户名。</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>Admin@123</value>
+        <description>MySQL数据库密码。</description>
+    </property>
+
+    <!-- 设置Hive的元数据存储目录 -->
+    <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>/hive/warehouse</value>
+        <description>Hive数据仓库存储目录，存储在HDFS中</description>
+    </property>
+
+    <!-- Hive Metastore的Thrift服务端口号 -->
+    <property>
+        <name>hive.server2.thrift.port</name>
+        <value>9083</value>
+    </property>
+
+    <!-- Hive Metastore的Thrift连接URI -->
+    <property>
+        <name>hive.metastore.uris</name>
+        <value>thrift://server01:9083</value>
+    </property>
+
+    <!-- HiveServer2的Thrift服务端口号 -->
+    <property>
+        <name>hive.server2.thrift.port</name>
+        <value>10000</value>
+    </property>
+
+    <!-- HiveServer2的Web服务端口号 -->
+    <property>
+        <name>hive.server2.webui.port</name>
+        <value>10002</value>
+    </property>
+
+    <!-- 禁用 Hive Server2 中的 doAs（用户冒充）功能 -->
+    <property>
+        <name>hive.server2.enable.doAs</name>
+        <value>false</value>
+    </property>
+
+    <!-- 禁用 Hive 统计信息自动收集 -->
+    <property>
+        <name>hive.stats.autogather</name>
+        <value>false</value>
+    </property>
+</configuration>
