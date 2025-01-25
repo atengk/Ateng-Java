@@ -11462,6 +11462,783 @@ public class OverPartRange {
 
 
 
+### Catalog
+
+Catalog 提供了元数据信息，例如数据库、表、分区、视图以及数据库或其他外部系统中存储的函数和信息。
+
+数据处理最关键的方面之一是管理元数据。 元数据可以是临时的，例如临时表、或者通过 TableEnvironment 注册的 UDF。 元数据也可以是持久化的，例如 Hive Metastore 中的元数据。Catalog 提供了一个统一的API，用于管理元数据，并使其可以从 Table API 和 SQL 查询语句中来访问。
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/dev/table/catalogs)
+
+#### Hive
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/hive/overview)
+
+注意配置hadoop环境，参考写入HDFS的章节
+
+**添加依赖**
+
+```xml
+<properties>
+    <hive.version>3.1.3</hive.version>
+</properties>
+<dependencies>
+    <!-- Hive Catalog -->
+    <dependency>
+        <groupId>org.apache.flink</groupId>
+        <artifactId>flink-connector-hive_2.12</artifactId>
+        <version>${flink.version}</version>
+        <scope>provided</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-exec</artifactId>
+        <version>${hive.version}</version>
+        <scope>provided</scope>
+    </dependency>
+</dependencies>
+```
+
+创建Catalog的SQL
+
+具体配置参考：[连接到Hive](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/hive/overview/#%e8%bf%9e%e6%8e%a5%e5%88%b0hive)
+
+```sql
+-- 创建Catalog
+CREATE CATALOG hive_catalog WITH (
+    'type' = 'hive',
+    'default-database' = 'my_database',
+    'hive-conf-dir' = 'hdfs://server01:8020/hive/conf'
+);
+-- 切换Catalog
+USE CATALOG hive_catalog;
+-- 创建数据库
+```
+
+上传Hive的配置到HDFS中
+
+```
+hadoop fs -put /usr/local/software/hive/conf /hive
+```
+
+在hive中创建表
+
+```
+$ beeline -u jdbc:hive2://server01:10000 -n admin
+CREATE TABLE my_database.my_user_hive_flink (
+  id BIGINT,
+  name STRING,
+  age INT,
+  score DOUBLE,
+  birthday TIMESTAMP,
+  province STRING,
+  city STRING,
+  create_time TIMESTAMP
+)
+PARTITIONED BY (t_date STRING, t_hour STRING)
+STORED AS PARQUET
+TBLPROPERTIES (
+  'sink.partition-commit.policy.kind'='metastore,success-file'
+);
+```
+
+编辑代码，查看表
+
+```java
+package local.ateng.java.SQL.catalog;
+
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 创建HiveCatalog
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/hive/overview/
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-25
+ */
+public class Hive {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 120 秒，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+        // 设置 JobName
+        tableEnv.getConfig().set("pipeline.name", "创建HiveCatalog");
+
+        // 创建HiveCatalog
+        tableEnv.executeSql("CREATE CATALOG hive_catalog WITH (\n" +
+                "    'type' = 'hive',\n" +
+                "    'default-database' = 'my_database',\n" +
+                "    'hive-conf-dir' = 'hdfs://server01:8020/hive/conf'\n" +
+                ");");
+        tableEnv.executeSql("USE CATALOG hive_catalog;");
+
+        // 执行SQL操作
+        tableEnv.executeSql("SHOW TABLES").print();
+    }
+}
+```
+
+![image-20250125142928644](./assets/image-20250125142928644.png)
+
+写入数据到Hive的SQL
+
+```sql
+insert into hive_catalog.my_database.my_user_hive_flink
+select
+  id,
+  name,
+  age,
+  score,
+  birthday,
+  province,
+  city,
+  createTime,
+  DATE_FORMAT(createTime, 'yyyy-MM-dd') AS t_date,
+  DATE_FORMAT(createTime, 'HH') AS t_hour
+from
+default_catalog.default_database.my_user;
+```
+
+编辑代码，写入模拟数据
+
+```java
+package local.ateng.java.SQL.catalog;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 创建HiveCatalog并写入模拟数据
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/hive/overview/
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-25
+ */
+public class HiveSink {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 120 秒，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+        // 设置 JobName
+        tableEnv.getConfig().set("pipeline.name", "创建HiveCatalog并写入模拟数据");
+
+        // 创建HiveCatalog
+        tableEnv.executeSql("CREATE CATALOG hive_catalog WITH (\n" +
+                "    'type' = 'hive',\n" +
+                "    'default-database' = 'my_database',\n" +
+                "    'hive-conf-dir' = 'hdfs://server01:8020/hive/conf'\n" +
+                ");");
+        tableEnv.executeSql("USE CATALOG hive_catalog;");
+
+        // 查询表
+        tableEnv.executeSql("SHOW TABLES").print();
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 3 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(100),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("default_catalog.default_database.my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 写入数据到Hive中
+        String querySql = "insert into hive_catalog.my_database.my_user_hive_flink\n" +
+                "select\n" +
+                "  id,\n" +
+                "  name,\n" +
+                "  age,\n" +
+                "  score,\n" +
+                "  birthday,\n" +
+                "  province,\n" +
+                "  city,\n" +
+                "  createTime,\n" +
+                "  DATE_FORMAT(createTime, 'yyyy-MM-dd') AS t_date,\n" +
+                "  DATE_FORMAT(createTime, 'HH') AS t_hour\n" +
+                "from\n" +
+                "default_catalog.default_database.my_user;";
+        tableEnv.executeSql(querySql);
+
+        // 查询数据
+        tableEnv.sqlQuery("select * from default_catalog.default_database.my_user").execute().print();
+
+    }
+}
+```
+
+在Hive中查看数据
+
+```
+select * from my_user_hive_flink limit 10;
+select count(*) from my_user_hive_flink;
+```
+
+![image-20250125144038884](./assets/image-20250125144038884.png)
+
+
+
+#### JDBC（MySQL）
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/jdbc/#jdbc-catalog)
+
+注意配置MySQL依赖，参考写入MySQL的章节
+
+MySQL创建表
+
+```sql
+DROP TABLE IF EXISTS `my_user_flink_catalog`;
+CREATE TABLE IF NOT EXISTS `my_user_flink_catalog` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '自增ID' primary key,
+  `name` varchar(255) NOT NULL COMMENT '用户姓名',
+  `age` int COMMENT '用户年龄',
+  `score` double COMMENT '分数',
+  `birthday` datetime(3) COMMENT '用户生日',
+  `province` varchar(255) COMMENT '用户所在省份',
+  `city` varchar(255) COMMENT '用户所在城市',
+  `create_time` datetime(3) DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  KEY `idx_name` (`name`),
+  KEY `idx_province_city` (`province`, `city`),
+  KEY `idx_create_time` (`create_time`)
+) COMMENT='用户表';
+```
+
+创建Catalog SQL
+
+```sql
+CREATE CATALOG mysql_catalog WITH (
+    'type' = 'jdbc',
+    'base-url' = 'jdbc:mysql://192.168.1.10:35725',
+    'username' = 'root',
+    'password' = 'Admin@123',
+    'default-database' = 'kongyu_flink'
+);
+```
+
+写入数据SQL
+
+```sql
+insert into my_user_flink_catalog
+select
+  id,
+  name,
+  age,
+  score,
+  birthday,
+  province,
+  city,
+  createTime
+from
+default_catalog.default_database.my_user;
+```
+
+编辑代码
+
+```java
+package local.ateng.java.SQL.catalog;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 创建JDBC(MySQL)Catalog并写入模拟数据
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/hive/overview/
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-25
+ */
+public class MySQL {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 120 秒，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+        // 设置 JobName
+        tableEnv.getConfig().set("pipeline.name", "创建JDBC(MySQL)Catalog并写入模拟数据");
+
+        // 创建JDBC(MySQL)Catalog
+        tableEnv.executeSql("CREATE CATALOG mysql_catalog WITH (\n" +
+                "    'type' = 'jdbc',\n" +
+                "    'base-url' = 'jdbc:mysql://192.168.1.10:35725',\n" +
+                "    'username' = 'root',\n" +
+                "    'password' = 'Admin@123',\n" +
+                "    'default-database' = 'kongyu_flink'\n" +
+                ");");
+        tableEnv.executeSql("USE CATALOG mysql_catalog;");
+
+        // 查询表
+        tableEnv.executeSql("SHOW TABLES").print();
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 10 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(10),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("default_catalog.default_database.my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 写入数据到JDBC(MySQL)中
+        String querySql = "insert into my_user_flink_catalog\n" +
+                "select\n" +
+                "  id,\n" +
+                "  name,\n" +
+                "  age,\n" +
+                "  score,\n" +
+                "  birthday,\n" +
+                "  province,\n" +
+                "  city,\n" +
+                "  createTime\n" +
+                "from\n" +
+                "default_catalog.default_database.my_user;";
+        tableEnv.executeSql(querySql);
+
+        // 查询数据
+        tableEnv.sqlQuery("select * from default_catalog.default_database.my_user").execute().print();
+
+    }
+}
+```
+
+![image-20250125150159064](./assets/image-20250125150159064.png)
+
+#### JDBC（PostgreSQL）
+
+参考：[官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/jdbc/#jdbc-catalog)
+
+注意配置PostgreSQL依赖，参考写入PostgreSQL的章节
+
+PostgreSQL创建表
+
+```sql
+-- 创建表
+CREATE TABLE my_user_flink_catalog (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(255) DEFAULT NULL,
+  age INT DEFAULT NULL,
+  score DOUBLE PRECISION DEFAULT NULL,
+  birthday TIMESTAMP(3) DEFAULT NULL,
+  province VARCHAR(255) DEFAULT NULL,
+  city VARCHAR(255) DEFAULT NULL,
+  create_time TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3)
+); 
+-- 表级注释
+COMMENT ON TABLE my_user_postgresql IS '用户表';
+-- 列级注释
+COMMENT ON COLUMN my_user_postgresql.id IS '自增ID';
+COMMENT ON COLUMN my_user_postgresql.name IS '用户姓名';
+COMMENT ON COLUMN my_user_postgresql.age IS '用户年龄';
+COMMENT ON COLUMN my_user_postgresql.score IS '分数';
+COMMENT ON COLUMN my_user_postgresql.birthday IS '用户生日';
+COMMENT ON COLUMN my_user_postgresql.province IS '用户所在省份';
+COMMENT ON COLUMN my_user_postgresql.city IS '用户所在城市';
+COMMENT ON COLUMN my_user_postgresql.create_time IS '创建时间';
+```
+
+创建Catalog SQL
+
+```sql
+CREATE CATALOG postgresql_catalog WITH (
+    'type' = 'jdbc',
+    'base-url' = 'jdbc:postgresql://192.168.1.10:32297',
+    'username' = 'postgres',
+    'password' = 'Lingo@local_postgresql_5432',
+    'default-database' = 'kongyu_flink'
+);
+```
+
+写入数据SQL
+
+```sql
+insert into `public.my_user_flink_catalog`
+select
+  id,
+  name,
+  age,
+  score,
+  birthday,
+  province,
+  city,
+  createTime
+from
+default_catalog.default_database.my_user;
+```
+
+编辑代码
+
+```java
+package local.ateng.java.SQL.catalog;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 创建JDBC(PostgreSQL)Catalog并写入模拟数据
+ * https://nightlies.apache.org/flink/flink-docs-release-1.19/zh/docs/connectors/table/hive/overview/
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-25
+ */
+public class PostgreSQL {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 120 秒，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+        // 设置 JobName
+        tableEnv.getConfig().set("pipeline.name", "创建JDBC(PostgreSQL)Catalog并写入模拟数据");
+
+        // 创建JDBC(PostgreSQL)Catalog
+        tableEnv.executeSql("CREATE CATALOG postgresql_catalog WITH (\n" +
+                "    'type' = 'jdbc',\n" +
+                "    'base-url' = 'jdbc:postgresql://192.168.1.10:32297',\n" +
+                "    'username' = 'postgres',\n" +
+                "    'password' = 'Lingo@local_postgresql_5432',\n" +
+                "    'default-database' = 'kongyu_flink'\n" +
+                ");");
+        tableEnv.executeSql("USE CATALOG postgresql_catalog;");
+
+        // 查询表
+        // 实际的TableName前面有一个Schema，默认是public.table
+        tableEnv.executeSql("SHOW TABLES").print();
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 10 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(10),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("default_catalog.default_database.my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 写入数据到JDBC(PostgreSQL)中
+        String querySql = "insert into `public.my_user_flink_catalog`\n" +
+                "select\n" +
+                "  id,\n" +
+                "  name,\n" +
+                "  age,\n" +
+                "  score,\n" +
+                "  birthday,\n" +
+                "  province,\n" +
+                "  city,\n" +
+                "  createTime\n" +
+                "from\n" +
+                "default_catalog.default_database.my_user;";
+        tableEnv.executeSql(querySql);
+
+        // 查询数据
+        tableEnv.sqlQuery("select * from default_catalog.default_database.my_user").execute().print();
+
+    }
+}
+```
+
+![image-20250125151447949](./assets/image-20250125151447949.png)
+
+#### Iceberg
+
+参考：[使用Iceberg文档](https://kongyu666.github.io/ops/#/work/bigdata/06-iceberg/?id=spark)
+
+添加依赖
+
+```xml
+<!--Flink 集成 Iceberg-->
+<dependency>
+    <groupId>org.apache.iceberg</groupId>
+    <artifactId>iceberg-flink-runtime-1.19</artifactId>
+    <version>1.6.1</version>
+    <scope>provided</scope>
+</dependency>
+<dependency>
+    <groupId>org.apache.iceberg</groupId>
+    <artifactId>iceberg-aws-bundle</artifactId>
+    <version>1.6.1</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+配置MinIO环境变量
+
+```bash
+AWS_ACCESS_KEY_ID=admin
+AWS_SECRET_ACCESS_KEY=Lingo@local_minio_9000
+AWS_REGION=us-east-1
+```
+
+创建Catalog SQL
+
+```sql
+CREATE CATALOG iceberg_catalog
+WITH (
+    'type'='iceberg',
+    'catalog-impl'='org.apache.iceberg.jdbc.JdbcCatalog',
+    'io-impl'='org.apache.iceberg.aws.s3.S3FileIO',
+    'uri'='jdbc:postgresql://192.168.1.10:32297/iceberg?user=postgres&password=Lingo@local_postgresql_5432',
+    'warehouse'='s3://iceberg-bucket/warehouse',
+    's3.endpoint'='http://192.168.1.13:9000'
+);
+```
+
+创建表
+
+```sql
+CREATE DATABASE flink;
+USE flink;
+CREATE TABLE IF NOT EXISTS flink.my_user (
+  id BIGINT NOT NULL,
+  name STRING,
+  age INT,
+  score DOUBLE,
+  birthday TIMESTAMP(3),
+  province STRING,
+  city STRING,
+  create_time TIMESTAMP_LTZ(3)
+) WITH (
+  'write.format.default' = 'parquet'
+);
+```
+
+写入数据SQL
+
+```
+insert into my_user
+select
+  id,
+  name,
+  age,
+  score,
+  birthday,
+  province,
+  city,
+  createTime
+from
+default_catalog.default_database.my_user;
+```
+
+编辑代码
+
+```java
+package local.ateng.java.SQL.catalog;
+
+import local.ateng.java.SQL.entity.UserInfoEntity;
+import local.ateng.java.SQL.function.MyGeneratorFunction;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.connector.source.util.ratelimit.RateLimiterStrategy;
+import org.apache.flink.connector.datagen.source.DataGeneratorSource;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+
+/**
+ * 创建IcebergCatalog并写入模拟数据
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-01-25
+ */
+public class Iceberg {
+    public static void main(String[] args) throws Exception {
+        // 创建流式执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // 启用检查点，设置检查点间隔为 120 秒，检查点模式为 精准一次
+        env.enableCheckpointing(120 * 1000, CheckpointingMode.EXACTLY_ONCE);
+        // 设置并行度为 3
+        env.setParallelism(3);
+        // 创建流式表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+        // 设置 JobName
+        tableEnv.getConfig().set("pipeline.name", "创建IcebergCatalog并写入模拟数据");
+
+        // 创建IcebergCatalog
+        tableEnv.executeSql("CREATE CATALOG iceberg_catalog\n" +
+                "WITH (\n" +
+                "    'type'='iceberg',\n" +
+                "    'catalog-impl'='org.apache.iceberg.jdbc.JdbcCatalog',\n" +
+                "    'io-impl'='org.apache.iceberg.aws.s3.S3FileIO',\n" +
+                "    'uri'='jdbc:postgresql://192.168.1.10:32297/iceberg?user=postgres&password=Lingo@local_postgresql_5432',\n" +
+                "    'warehouse'='s3://iceberg-bucket/warehouse',\n" +
+                "    's3.endpoint'='http://192.168.1.13:9000'\n" +
+                ");");
+        tableEnv.executeSql("USE CATALOG iceberg_catalog;");
+
+        // 创建数据库和表
+        tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS flink;");
+        tableEnv.executeSql("USE flink;");
+        tableEnv.executeSql("CREATE TABLE IF NOT EXISTS flink.my_user (\n" +
+                "  id BIGINT NOT NULL,\n" +
+                "  name STRING,\n" +
+                "  age INT,\n" +
+                "  score DOUBLE,\n" +
+                "  birthday TIMESTAMP(3),\n" +
+                "  province STRING,\n" +
+                "  city STRING,\n" +
+                "  create_time TIMESTAMP_LTZ(3)\n" +
+                ") WITH (\n" +
+                "  'write.format.default' = 'parquet'\n" +
+                ");");
+
+        // 查询表
+        tableEnv.executeSql("SHOW TABLES").print();
+
+        // 创建数据生成器源，生成器函数为 MyGeneratorFunction，生成 Long.MAX_VALUE 条数据，速率限制为 1000 条/秒
+        DataGeneratorSource<UserInfoEntity> source = new DataGeneratorSource<>(
+                new MyGeneratorFunction(),
+                Long.MAX_VALUE,
+                RateLimiterStrategy.perSecond(1000),
+                TypeInformation.of(UserInfoEntity.class)
+        );
+        // 将数据生成器源添加到流中
+        DataStreamSource<UserInfoEntity> stream =
+                env.fromSource(source,
+                        WatermarkStrategy.noWatermarks(),
+                        "Generator Source");
+
+        // 将 DataStream 注册为动态表
+        tableEnv.createTemporaryView("default_catalog.default_database.my_user", stream,
+                Schema.newBuilder()
+                        .column("id", DataTypes.BIGINT())
+                        .column("name", DataTypes.STRING())
+                        .column("age", DataTypes.INT())
+                        .column("score", DataTypes.DOUBLE())
+                        .column("birthday", DataTypes.TIMESTAMP(3))
+                        .column("province", DataTypes.STRING())
+                        .column("city", DataTypes.STRING())
+                        .column("createTime", DataTypes.TIMESTAMP(3))
+                        .build());
+
+        // 写入数据到Iceberg表中
+        String querySql = "insert into my_user\n" +
+                "select\n" +
+                "  id,\n" +
+                "  name,\n" +
+                "  age,\n" +
+                "  score,\n" +
+                "  birthday,\n" +
+                "  province,\n" +
+                "  city,\n" +
+                "  createTime\n" +
+                "from\n" +
+                "default_catalog.default_database.my_user;";
+        tableEnv.executeSql(querySql);
+
+        // 查询数据
+        tableEnv.sqlQuery("select * from default_catalog.default_database.my_user").execute().print();
+
+    }
+}
+```
+
+![image-20250125153431776](./assets/image-20250125153431776.png)
+
 ## Flink CDC
 
 Flink CDC是实时数据和批量数据的分布式数据集成工具。Flink CDC通过YAML描述数据的移动和转换，带来了数据集成的简单和优雅。

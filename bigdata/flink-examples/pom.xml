@@ -33,6 +33,7 @@
         <flink-mongodb.version>1.2.0-1.19</flink-mongodb.version>
         <flink-opensearch.version>1.2.0-1.19</flink-opensearch.version>
         <flink-cdc.version>3.2.1</flink-cdc.version>
+        <hive.version>3.1.3</hive.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -265,6 +266,34 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-mysql-cdc</artifactId>
             <version>${flink-cdc.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Hive Catalog -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-hive_2.12</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-exec</artifactId>
+            <version>${hive.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--Flink 集成 Iceberg-->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-flink-runtime-1.19</artifactId>
+            <version>1.6.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-aws-bundle</artifactId>
+            <version>1.6.1</version>
             <scope>provided</scope>
         </dependency>
 
