@@ -11517,6 +11517,8 @@ USE CATALOG hive_catalog;
 
 上传Hive的配置到HDFS中
 
+> 或者将 `hive-site.xml` 配置文件放在 `resources` 目录下，org.apache.hadoop.hive.conf.HiveConf会自动发现Hive的配置文件
+
 ```
 hadoop fs -put /usr/local/software/hive/conf /hive
 ```
