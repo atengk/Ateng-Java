@@ -762,7 +762,9 @@ pom.xml中通过**maven-shade-plugin**插件将SpringBoot和Flink相关的依赖
 ### 运行应用
 
 ```bash
-java -jar flink-standalone-v1.0.jar
+java -jar \
+    -server -Xms128m -Xmx1024m \
+    flink-standalone-v1.0.jar
 ```
 
 ![image-20250122080355497](./assets/image-20250122080355497.png)

@@ -30,7 +30,6 @@
         <hadoop.version>3.3.6</hadoop.version>
         <mysql.version>8.0.33</mysql.version>
         <postgresql.version>42.7.1</postgresql.version>
-        <postgresql.version>42.7.1</postgresql.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -167,11 +166,13 @@
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-spark-runtime-3.5_2.12</artifactId>
             <version>1.6.1</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-aws-bundle</artifactId>
             <version>1.6.1</version>
+            <scope>provided</scope>
         </dependency>
 
     </dependencies>

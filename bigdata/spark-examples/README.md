@@ -2687,11 +2687,13 @@ AWS_REGION=us-east-1
     <groupId>org.apache.iceberg</groupId>
     <artifactId>iceberg-spark-runtime-3.5_2.12</artifactId>
     <version>1.6.1</version>
+    <scope>provided</scope>
 </dependency>
 <dependency>
     <groupId>org.apache.iceberg</groupId>
     <artifactId>iceberg-aws-bundle</artifactId>
     <version>1.6.1</version>
+    <scope>provided</scope>
 </dependency>
 ```
 

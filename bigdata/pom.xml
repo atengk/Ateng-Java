@@ -17,5 +17,7 @@
         <module>flink-examples</module>
         <module>flink-standalone</module>
         <module>flink-cluster</module>
+        <module>spark-examples</module>
+        <module>spark-standalone</module>
     </modules>
 </project>
