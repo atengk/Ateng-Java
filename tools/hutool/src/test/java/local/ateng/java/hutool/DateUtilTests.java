@@ -41,6 +41,10 @@ public class DateUtilTests {
         String dateTimeStr = DateUtil.now();
         System.out.println(dateTimeStr);
 
+        // 获取当前时间字符串(精确到毫秒)
+        String formattedTime = DateUtil.format(DateUtil.date(), "yyyy-MM-dd HH:mm:ss.SSS");
+        System.out.println(formattedTime);
+
         //当前日期字符串，格式：yyyy-MM-dd 2024-02-22
         String today = DateUtil.today();
         System.out.println(today);
