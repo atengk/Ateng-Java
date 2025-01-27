@@ -29,7 +29,7 @@ public class ObjConsumer {
         long timestamp = record.timestamp();
         String dataStr = record.value();
         User user = JSONObject.parseObject(dataStr).toJavaObject(User.class);
-        log.info("发送[obj]消息到Kafka, topic: {}, timestamp: {}, key: {}, data: {}", topic, timestamp, key, user);
+        log.info("接受[obj]消息, topic: {}, timestamp: {}, key: {}, data: {}", topic, timestamp, key, user);
     }
 
 }
