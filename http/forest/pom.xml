@@ -6,10 +6,10 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>rest-template</artifactId>
+    <artifactId>forest</artifactId>
     <version>v1.0</version>
-    <name>rest-template</name>
-    <description>RestTemplate是一个用于发送HTTP请求并获取响应的客户端工具</description>
+    <name>forest</name>
+    <description>Forest 声明式与编程式双修，让天下没有难以发送的 HTTP 请求</description>
 
     <!-- 项目属性 -->
     <properties>
@@ -20,6 +20,7 @@
         <maven-compiler.version>3.12.1</maven-compiler.version>
         <lombok.version>1.18.36</lombok.version>
         <fastjson2.version>2.0.53</fastjson2.version>
+        <forest.version>1.6.3</forest.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -54,10 +55,17 @@
             <version>${fastjson2.version}</version>
         </dependency>
 
-        <!-- Apache HttpComponents客户端 -->
+        <!-- Forest: 声明式与编程式双修，让天下没有难以发送的 HTTP 请求 -->
         <dependency>
-            <groupId>org.apache.httpcomponents.client5</groupId>
-            <artifactId>httpclient5</artifactId>
+            <groupId>com.dtflys.forest</groupId>
+            <artifactId>forest-spring-boot3-starter</artifactId>
+            <version>${forest.version}</version>
+        </dependency>
+        <!-- XML框架依赖 -->
+        <dependency>
+            <groupId>com.dtflys.forest</groupId>
+            <artifactId>forest-jakarta-xml</artifactId>
+            <version>${forest.version}</version>
         </dependency>
 
     </dependencies>

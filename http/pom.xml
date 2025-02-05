@@ -16,5 +16,6 @@
     <modules>
         <module>web-client</module>
         <module>rest-template</module>
+        <module>forest</module>
     </modules>
 </project>
