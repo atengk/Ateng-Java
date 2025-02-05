@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 示例</title>
+</head>
+<body>
+<h2>WebSocket 示例</h2>
+<button onclick="connect()">连接WebSocket</button>
+<button onclick="sendMessage()">发送消息</button>
+<button onclick="closeWebSocket()">关闭连接</button>
+<div id="output"></div>
+
+<script>
+    let socket;
+
+    function connect() {
+        var token = "Admin@123";
+        var userId = "10001";
+        socket = new WebSocket("ws://localhost:18001/ws"+"?token=" + token+"&userId=" + userId);
+
+        socket.onopen = function() {
+            log("WebSocket 连接已建立");
+        };
+
+        socket.onmessage = function(event) {
+            log("收到消息：" + event.data);
+        };
+
+        socket.onclose = function() {
+            log("WebSocket 连接已关闭");
+        };
+    }
+
+    function sendMessage() {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send("你好，服务器！");
+            log("发送消息：你好，服务器！");
+        } else {
+            log("WebSocket 未连接");
+        }
+    }
+
+    function closeWebSocket() {
+        if (socket) {
+            socket.close();
+        }
+    }
+
+    function log(message) {
+        document.getElementById("output").innerHTML += message + "<br>";
+    }
+</script>
+</body>
+</html>
