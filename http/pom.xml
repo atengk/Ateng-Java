@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>web-client</module>
+        <module>rest-template</module>
     </modules>
 </project>
