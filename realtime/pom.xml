@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>websocket</module>
+        <module>stomp</module>
     </modules>
 </project>

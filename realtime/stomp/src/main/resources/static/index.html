@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STOMP WebSocket 测试</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        input, button { margin-bottom: 10px; }
+        .message-list { margin-top: 20px; }
+        .message-list div { margin: 5px 0; }
+    </style>
+</head>
+<body>
+<h1>STOMP WebSocket 测试</h1>
+
+<h3>发送消息到所有用户：</h3>
+<input type="text" id="messageToAll" placeholder="输入消息发送给所有用户" />
+<button onclick="sendToAll()">发送给所有用户</button>
+
+<h3>发送消息到特定用户（测试特定用户消息）：</h3>
+<input type="text" id="messageToUser" placeholder="输入消息发送给特定用户" />
+<input type="text" id="userId" placeholder="请输入您的用户ID" />
+<button onclick="sendToUser()">发送给特定用户</button>
+
+<div class="message-list">
+    <h3>接收到的消息：</h3>
+    <div id="publicMessages"></div>
+    <div id="userMessages"></div>
+</div>
+
+<script>
+    var socket;
+    var stompClient;
+
+    // 默认的 userId（你可以根据需求调整）
+    let userId = '10001';
+
+    // 定义连接时发送的 headers
+    var headers = {
+        "Authorization": "Bearer 1234567890",
+        "userId": userId,
+        "username": "阿腾"
+    };
+
+    // 用于订阅公共消息和特定用户消息
+    function connect() {
+        // 连接成功后执行
+        stompClient.connect(headers, function (frame) {
+            console.log('已连接: ' + frame);
+
+            // 订阅公共消息
+            stompClient.subscribe('/topic/public', function (messageOutput) {
+                showMessage("publicMessages", messageOutput.body);
+            });
+
+            // 订阅特定用户的消息
+            stompClient.subscribe('/user/' + userId + '/queue/user', function (messageOutput) {
+                showMessage("userMessages", messageOutput.body);
+            });
+        });
+    }
+
+    // 显示接收到的消息
+    function showMessage(elementId, message) {
+        const messageDiv = document.createElement("div");
+        messageDiv.textContent = message;
+        document.getElementById(elementId).appendChild(messageDiv);
+    }
+
+    // 发送消息到所有用户
+    function sendToAll() {
+        const message = document.getElementById("messageToAll").value;
+        stompClient.send("/app/public", {}, message);
+        document.getElementById("messageToAll").value = '';  // 清空输入框
+    }
+
+    // 发送消息到特定用户
+    function sendToUser() {
+        const message = document.getElementById("messageToUser").value;
+        userId = document.getElementById("userId").value;
+        if (!userId) {
+            alert("请输入您的用户ID");
+            return;
+        }
+        // 发送到特定用户：/app/user/{userId}
+        stompClient.send("/app/user/" + userId, {}, message);
+        document.getElementById("messageToUser").value = '';  // 清空输入框
+    }
+
+    // 页面加载时连接 WebSocket
+    window.onload = function() {
+        // 如果 stompClient 还没有初始化，则初始化它
+        if (!stompClient) {
+            socket = new SockJS('http://localhost:18002/ws' + '?token=Admin@123');
+            stompClient = Stomp.over(socket);
+        }
+
+        // 确保在连接前已经初始化了 stompClient
+        if (stompClient) {
+            connect();  // 调用 connect() 方法建立连接
+        } else {
+            console.error("stompClient is not initialized.");
+        }
+    };
+
+    // 页面卸载时断开 WebSocket 连接
+    window.onbeforeunload = function () {
+        if (stompClient) {
+            stompClient.disconnect(function () {
+                console.log('WebSocket连接已断开');
+            });
+        }
+    };
+</script>
+</body>
+</html>
