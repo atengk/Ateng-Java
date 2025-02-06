@@ -17,5 +17,6 @@
         <module>websocket</module>
         <module>stomp</module>
         <module>sse</module>
+        <module>netty</module>
     </modules>
 </project>

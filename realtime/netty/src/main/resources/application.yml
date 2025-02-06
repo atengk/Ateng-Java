@@ -1,0 +1,18 @@
+server:
+  port: 18004
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+netty:
+  # Netty 服务端 端口号
+  server:
+    port: 18005
+  # Netty 客户端 地址和端口号
+  client:
+    host: 192.168.1.12
+    port: 8888
