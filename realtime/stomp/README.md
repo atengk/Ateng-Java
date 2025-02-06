@@ -617,3 +617,161 @@ public void registerStompEndpoints(StompEndpointRegistry registry) {
 
 ![image-20250206110422281](./assets/image-20250206110422281.png)
 
+
+
+## RabbitMQ STOMP
+
+### 安装RabbitMQ
+
+参考链接：[地址](https://kongyu666.github.io/ops/#/work/kubernetes/service/rabbitmq/v4.0.2/)
+
+### 队列模式
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RabbitMQ Web STOMP Example</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+<h1>RabbitMQ Web STOMP Example</h1>
+<div>
+  <label for="userId">User ID:</label>
+  <input type="text" id="userId" />
+  <label for="name">Message:</label>
+  <input type="text" id="message" />
+  <button onclick="sendMessage()">Send</button>
+</div>
+<div id="messages"></div>
+<script>
+  var stompClient = null;
+
+  function connect() {
+    var ws = new WebSocket('ws://192.168.1.10:35171/ws');
+    stompClient = Stomp.over(ws);
+    var login = 'admin';
+    var passcode = 'Admin@123';
+    var headers = {
+      login: login,
+      passcode: passcode,
+      // 必须加这个，否则会被rabbitmq服务器断开连接
+      "heart-beat": "0,0"
+    };
+    stompClient.connect(headers, function (frame) {
+      console.log('Connected: ' + frame);
+      // 格式: /queue/{队列名}
+      stompClient.subscribe('/queue/my_rabbitmq_stomp.hello', function (message) {
+        showMessage(message.body);
+      });
+    }, function (error) {
+      console.log("STOMP protocol error " + error);
+    });
+  }
+
+  function disconnect() {
+    if (stompClient !== null) {
+      stompClient.disconnect();
+    }
+    console.log("Disconnected");
+  }
+
+  function sendMessage() {
+    var userId = document.getElementById('userId').value;
+    var messageContent = document.getElementById('message').value;
+    var message = {
+      userId: userId,
+      content: messageContent
+    };
+    stompClient.send("/queue/my_rabbitmq_stomp.hello", {}, JSON.stringify(message));
+  }
+
+  function showMessage(message) {
+    var p = document.createElement('p');
+    p.textContent = message;
+    document.getElementById('messages').appendChild(p);
+  }
+
+  connect();
+</script>
+</body>
+</html>
+```
+
+### 交换机模式
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RabbitMQ Web STOMP Example</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+<h1>RabbitMQ Web STOMP Example</h1>
+<div>
+  <label for="userId">User ID:</label>
+  <input type="text" id="userId" />
+  <label for="name">Message:</label>
+  <input type="text" id="message" />
+  <button onclick="sendMessage()">Send</button>
+</div>
+<div id="messages"></div>
+<script>
+  var stompClient = null;
+
+  function connect() {
+    var ws = new WebSocket('ws://192.168.1.10:35171/ws');
+    stompClient = Stomp.over(ws);
+    var login = 'admin';
+    var passcode = 'Admin@123';
+    var vhost = '/';
+    var headers = {
+      login: login,
+      passcode: passcode,
+      // 必须加这个，否则会被rabbitmq服务器断开连接
+      "heart-beat": "0,0",
+      "client-id": "my-client-id"
+    };
+    stompClient.connect(headers, function (frame) {
+      console.log('Connected: ' + frame);
+      // 格式: /exchange/{交换机名}/{路由键}
+      stompClient.subscribe('/exchange/stomp/myRoutingKey', function (message) {
+        showMessage(message.body);
+      });
+    }, function (error) {
+      console.log("STOMP protocol error " + error);
+    });
+  }
+
+  function disconnect() {
+    if (stompClient !== null) {
+      stompClient.disconnect();
+    }
+    console.log("Disconnected");
+  }
+
+  function sendMessage() {
+    var userId = document.getElementById('userId').value;
+    var messageContent = document.getElementById('message').value;
+    var message = {
+      userId: userId,
+      content: messageContent
+    };
+    stompClient.send("/exchange/stomp/myRoutingKey", {}, JSON.stringify(message));
+  }
+
+  function showMessage(message) {
+    var p = document.createElement('p');
+    p.textContent = message;
+    document.getElementById('messages').appendChild(p);
+  }
+
+  connect();
+</script>
+</body>
+</html>
+```
+
