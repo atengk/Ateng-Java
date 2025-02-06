@@ -16,5 +16,6 @@
     <modules>
         <module>websocket</module>
         <module>stomp</module>
+        <module>sse</module>
     </modules>
 </project>

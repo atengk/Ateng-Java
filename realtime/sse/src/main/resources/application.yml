@@ -1,0 +1,10 @@
+server:
+  port: 18003
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
