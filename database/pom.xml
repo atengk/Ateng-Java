@@ -20,5 +20,6 @@
         <module>jdbc-template</module>
         <module>spring-jpa</module>
         <module>easy-es</module>
+        <module>mongo-plus</module>
     </modules>
 </project>

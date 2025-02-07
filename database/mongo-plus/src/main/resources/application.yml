@@ -1,0 +1,35 @@
+server:
+  port: 15007
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# MongoPlus 的相关配置
+mongo-plus:
+  data:
+    mongodb:
+      host: 192.168.1.10   #ip
+      port: 33627   #端口
+      database: ateng    #数据库名
+      username: root    #用户名，没有可不填（若账号中出现@,!等等符号，不需要再进行转码！！！）
+      password: Admin@123    #密码，同上（若密码中出现@,!等等符号，不需要再进行转码！！！）
+      authenticationDatabase: admin     #验证数据库
+      connectTimeoutMS: 50000   #在超时之前等待连接打开的最长时间（以毫秒为单位）
+  # 日志配置
+  log: true
+  format: true
+  pretty: true
+  configuration:
+    # 字段配置
+    field:
+      camelToUnderline: true
+      ignoringNull: false
+    # 集合配置
+    collection:
+      mappingStrategy: CAMEL_TO_UNDERLINE
+      block-attack-inner: true
+    banner: false
