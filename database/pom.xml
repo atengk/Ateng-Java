@@ -19,5 +19,6 @@
         <module>redis-template</module>
         <module>jdbc-template</module>
         <module>spring-jpa</module>
+        <module>easy-es</module>
     </modules>
 </project>

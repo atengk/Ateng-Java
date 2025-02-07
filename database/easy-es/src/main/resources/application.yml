@@ -1,0 +1,25 @@
+server:
+  port: 15006
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# Easy-Es 的相关配置
+easy-es:
+  enable: true
+  address: dev.es.lingo.local:80
+  username: elastic
+  password: Admin@123
+  schema: "http"
+  banner: false
+  global-config:
+    process_index_mode: manual #smoothly:平滑模式, not_smoothly:非平滑模式, manual:手动模式(默认)
+    async-process-index-blocking: true # 异步处理索引是否阻塞主线程 默认阻塞
+    distributed: false # 项目是否分布式环境部署,默认为true, 如果是单机运行可填false,将不加分布式锁,效率更高.
+    reindexTimeOutHours: 72 # 重建索引超时时间 单位小时,默认72H 根据迁移索引数据量大小灵活指定
+    db-config:
+      map-underscore-to-camel-case: true # 是否开启下划线转驼峰 默认为false
