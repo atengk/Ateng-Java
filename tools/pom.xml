@@ -17,5 +17,6 @@
         <module>hutool</module>
         <module>fastjson2</module>
         <module>stream</module>
+        <module>mapstruct-plus</module>
     </modules>
 </project>
