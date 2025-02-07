@@ -1,0 +1,20 @@
+server:
+  port: 15008
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# MongoPlus 的相关配置
+spring:
+  data:
+    mongodb:
+      host: 192.168.1.10 # 数据库的ip地址
+      authentication-database: admin # 登录用户所在的数据库
+      port: 33627 # 端口号
+      username: root # 用户账号
+      password: Admin@123 # 用户密码
+      database: ateng # 指定使用的数据库
