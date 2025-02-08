@@ -18,5 +18,6 @@
         <module>fastjson2</module>
         <module>stream</module>
         <module>mapstruct-plus</module>
+        <module>fast-excel</module>
     </modules>
 </project>
