@@ -1,24 +1,19 @@
 package local.ateng.java.excel;
 
-import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.idev.excel.ExcelWriter;
 import cn.idev.excel.FastExcel;
+import cn.idev.excel.support.ExcelTypeEnum;
 import cn.idev.excel.write.metadata.WriteSheet;
 import local.ateng.java.excel.entity.MyImage;
 import local.ateng.java.excel.entity.MyUser;
 import local.ateng.java.excel.handler.CustomCellStyleWriteHandler;
 import local.ateng.java.excel.init.InitData;
+import local.ateng.java.excel.listener.MyUserListener;
+import local.ateng.java.excel.listener.MyUserMapListener;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ClassPathResource;
 
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class FastExcelTests {
@@ -110,6 +105,115 @@ public class FastExcelTests {
                 .head(head)
                 .sheet("模板")
                 .doWrite(data);
+    }
+
+    /**
+     * 导出为CSV文件
+     */
+    @Test
+    public void writeExcel6() {
+        String fileName = "D:/demo.csv";
+        FastExcel
+                .write(fileName, MyUser.class)
+                .excelType(ExcelTypeEnum.CSV)
+                .sheet()
+                .doWrite(InitData.getDataList());
+    }
+
+    /**
+     * 导出为CSV文件，自定义表头
+     */
+    @Test
+    public void writeExcel7() {
+        // 生成表头，最终要转换为这种格式：[[header1], [header2], [header3]...]
+        List<String> headerList = Arrays.asList("名称", "手机号码", "分数", "所在省份", "创建时间");
+        List<List<String>> head = headerList.stream()
+                .map(s -> Collections.singletonList(s))
+                .collect(Collectors.toList());
+        System.out.println(head);
+        // 导出数据
+        String fileName = "D:/demo.csv";
+        List<List<String>> data = InitData.getDataList().stream()
+                .map(obj -> Arrays.asList(
+                        obj.getName(),
+                        obj.getPhoneNumber(),
+                        String.valueOf(obj.getScore()),
+                        obj.getProvince(),
+                        String.valueOf(obj.getCreateTime())
+                ))
+                .collect(Collectors.toList());
+        FastExcel
+                .write(fileName)
+                .excelType(ExcelTypeEnum.CSV)
+                .head(head)
+                .sheet()
+                .doWrite(data);
+    }
+
+    /**
+     * 追加写入 CSV（支持大数据量）
+     */
+    @Test
+    public void writeExcel8() {
+        String fileName = "D:/demo.csv";
+        try (ExcelWriter excelWriter = FastExcel
+                .write(fileName, MyUser.class)
+                .excelType(ExcelTypeEnum.CSV)
+                .build()) {
+            WriteSheet writeSheet = FastExcel.writerSheet().build();
+            // 第一批数据
+            excelWriter.write(InitData.getDataList(), writeSheet);
+            // 第二批数据
+            excelWriter.write(InitData.getDataList(), writeSheet);
+        }
+    }
+
+    /**
+     * 导入Excel文件，读取为实体类
+     */
+    @Test
+    public void readExcel() {
+        String fileName = "D:/demo.xlsx";
+        List<MyUser> list = FastExcel.read(fileName).head(MyUser.class).sheet().doReadSync();
+        System.out.println(list);
+    }
+
+    /**
+     * 导入Excel文件，读取为Map
+     */
+    @Test
+    public void readExcel2() {
+        String fileName = "D:/demo.xlsx";
+        List<Map<Integer, String>> list = FastExcel.read(fileName).sheet().doReadSync();
+        System.out.println(list);
+    }
+
+    /**
+     * 导入Excel文件，设置监听器
+     */
+    @Test
+    public void readExcel3() {
+        String fileName = "D:/demo.xlsx";
+        List<MyUser> list = FastExcel
+                .read(fileName, MyUser.class, new MyUserListener())
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+    }
+
+    /**
+     * 导入Excel文件，设置监听器并写入为Map
+     */
+    @Test
+    public void readExcel4() {
+        String fileName = "D:/demo.xlsx";
+        FastExcel
+                .read(fileName, new MyUserMapListener())
+                .sheet()
+                .doRead();
+        List<MyUser> userList = new ArrayList<>(MyUserMapListener.userList);
+        MyUserMapListener.userList.clear();
+        System.out.println(userList);
     }
 
 }

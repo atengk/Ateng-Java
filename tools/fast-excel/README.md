@@ -672,7 +672,90 @@ public class MyImage {
 
 
 
+### 导出为CSV文件
+
+```java
+    /**
+     * 导出为CSV文件
+     */
+    @Test
+    public void writeExcel6() {
+        String fileName = "D:/demo.csv";
+        FastExcel
+                .write(fileName, MyUser.class)
+                .excelType(ExcelTypeEnum.CSV)
+                .sheet()
+                .doWrite(InitData.getDataList());
+    }
+```
+
+![image-20250208150932309](./assets/image-20250208150932309.png)
+
+### 导出为CSV文件，自定义表头
+
+```java
+    /**
+     * 导出为CSV文件，自定义表头
+     */
+    @Test
+    public void writeExcel7() {
+        // 生成表头，最终要转换为这种格式：[[header1], [header2], [header3]...]
+        List<String> headerList = Arrays.asList("名称", "手机号码", "分数", "所在省份", "创建时间");
+        List<List<String>> head = headerList.stream()
+                .map(s -> Collections.singletonList(s))
+                .collect(Collectors.toList());
+        System.out.println(head);
+        // 导出数据
+        String fileName = "D:/demo.csv";
+        List<List<String>> data = InitData.getDataList().stream()
+                .map(obj -> Arrays.asList(
+                        obj.getName(),
+                        obj.getPhoneNumber(),
+                        String.valueOf(obj.getScore()),
+                        obj.getProvince(),
+                        String.valueOf(obj.getCreateTime())
+                ))
+                .collect(Collectors.toList());
+        FastExcel
+                .write(fileName)
+                .excelType(ExcelTypeEnum.CSV)
+                .head(head)
+                .sheet()
+                .doWrite(data);
+    }
+```
+
+![image-20250208150837049](./assets/image-20250208150837049.png)
+
+### 追加写入 CSV（支持大数据量）
+
+```java
+    /**
+     * 追加写入 CSV（支持大数据量）
+     */
+    @Test
+    public void writeExcel8() {
+        String fileName = "D:/demo.csv";
+        try (ExcelWriter excelWriter = FastExcel
+                .write(fileName, MyUser.class)
+                .excelType(ExcelTypeEnum.CSV)
+                .build()) {
+            WriteSheet writeSheet = FastExcel.writerSheet().build();
+            // 第一批数据
+            excelWriter.write(InitData.getDataList(), writeSheet);
+            // 第二批数据
+            excelWriter.write(InitData.getDataList(), writeSheet);
+        }
+    }
+```
+
+![image-20250208150755213](./assets/image-20250208150755213.png)
+
+
+
 ## 填充文件
+
+参考：[官方文档](https://idev.cn/fastexcel/zh-CN/docs/fill/fill)
 
 ### 创建测试类
 
@@ -849,5 +932,323 @@ public class FastExcelWithTemplateTests {
             drawingPatriarch.createPicture(clientAnchor, picture);
         }
     }
+```
+
+
+
+## 导入文件
+
+### 导入Excel文件，读取为实体类
+
+```java
+    /**
+     * 导入Excel文件，读取为实体类
+     */
+    @Test
+    public void readExcel() {
+        String fileName = "D:/demo.xlsx";
+        List<MyUser> list = FastExcel.read(fileName).head(MyUser.class).sheet().doReadSync();
+        System.out.println(list);
+    }
+```
+
+![image-20250210094628618](./assets/image-20250210094628618.png)
+
+### 导入Excel文件，读取为Map
+
+```java
+    /**
+     * 导入Excel文件，读取为Map
+     */
+    @Test
+    public void readExcel2() {
+        String fileName = "D:/demo.xlsx";
+        List<Map<Integer, String>> list = FastExcel.read(fileName).sheet().doReadSync();
+        System.out.println(list);
+    }
+```
+
+![image-20250210094717781](./assets/image-20250210094717781.png)
+
+### 导入Excel文件，设置监听器
+
+如果数据出现异常，立即抛出错误行数列数，并停止导入
+
+#### 创建监听器
+
+```java
+package local.ateng.java.excel.listener;
+
+import cn.hutool.core.util.StrUtil;
+import cn.idev.excel.context.AnalysisContext;
+import cn.idev.excel.event.AnalysisEventListener;
+import cn.idev.excel.exception.ExcelDataConvertException;
+import local.ateng.java.excel.entity.MyUser;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class MyUserListener extends AnalysisEventListener<MyUser> {
+    @Override
+    public void onException(Exception exception, AnalysisContext context) {
+        log.error("解析失败: {}", exception.getMessage());
+        if (exception instanceof ExcelDataConvertException) {
+            ExcelDataConvertException ex = (ExcelDataConvertException) exception;
+            String str = StrUtil.format("第 {} 行, 第 {} 列解析异常", ex.getRowIndex(), ex.getColumnIndex());
+            log.error(str);
+            throw new RuntimeException(str);
+        }
+    }
+
+    @Override
+    public void invoke(MyUser data, AnalysisContext context) {
+    }
+
+    @Override
+    public void doAfterAllAnalysed(AnalysisContext context) {
+    }
+
+}
+```
+
+#### 使用监听器
+
+```java
+    /**
+     * 导入Excel文件，设置监听器
+     */
+    @Test
+    public void readExcel3() {
+        String fileName = "D:/demo.xlsx";
+        List<MyUser> list = FastExcel
+                .read(fileName, MyUser.class, new MyUserListener())
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+    }
+```
+
+![image-20250210094902383](./assets/image-20250210094902383.png)
+
+### 导入Excel文件，设置监听器并写入为Map
+
+手动检验每一行数据，忽略出现异常的数据
+
+#### 创建监听器
+
+```java
+package local.ateng.java.excel.listener;
+
+import cn.hutool.core.util.NumberUtil;
+import cn.idev.excel.context.AnalysisContext;
+import cn.idev.excel.event.AnalysisEventListener;
+import local.ateng.java.excel.entity.MyUser;
+import lombok.extern.slf4j.Slf4j;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Slf4j
+public class MyUserMapListener extends AnalysisEventListener<Map<Integer, String>> {
+    public final static List<MyUser> userList = new CopyOnWriteArrayList<>();
+
+    @Override
+    public void invoke(Map<Integer, String> dataMap, AnalysisContext context) {
+        // 获取数据
+        // {0=1525743431821710000, 1=任文昊, 2=49, 3=17734837677, 4=聪健.叶@yahoo.com, 5=33.23, 6=0.06%, 7=2025年02月08日, 8=河北省, 9=惠州, 10=2025-02-08 15:11:50}
+        //System.out.println(dataMap);
+        String idValue = dataMap.get(0);
+        String nameValue = dataMap.get(1);
+        String ageValue = dataMap.get(2);
+        String phoneValue = dataMap.get(3);
+        String emailValue = dataMap.get(4);
+        String scoreValue = dataMap.get(5);
+        String ratioValue = dataMap.get(6);
+        String birthdayValue = dataMap.get(7);
+        String provinceValue = dataMap.get(8);
+        String cityValue = dataMap.get(9);
+        String createTimeValue = dataMap.get(10);
+        // 校验数据
+        try {
+            Long id = Long.valueOf(idValue);
+            Integer age = Integer.valueOf(ageValue);
+            BigDecimal score = new BigDecimal(scoreValue).setScale(2, BigDecimal.ROUND_HALF_UP);
+            Double ratio = Double.valueOf(NumberUtil.parseDouble(ratioValue) / 100);
+            LocalDate birthday = LocalDate.parse(birthdayValue, DateTimeFormatter.ofPattern("yyyy年MM月dd日"));
+            LocalDateTime createTime = LocalDateTime.parse(createTimeValue, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            MyUser myUser = MyUser.builder()
+                    .id(id)
+                    .name(nameValue)
+                    .age(age)
+                    .phoneNumber(phoneValue)
+                    .email(emailValue)
+                    .score(score)
+                    .ratio(ratio)
+                    .birthday(birthday)
+                    .province(provinceValue)
+                    .city(cityValue)
+                    .createTime(createTime)
+                    .build();
+            userList.add(myUser);
+        } catch (NumberFormatException e) {
+            // 获取当前行号（从0开始）
+            int rowNum = context.readRowHolder().getRowIndex();
+            // 获取当前行的列数
+            log.error("第{}行错误数据: {}", rowNum, dataMap);
+        }
+
+    }
+
+    @Override
+    public void doAfterAllAnalysed(AnalysisContext context) {
+        log.info("数据加载完毕：{}", userList.size());
+    }
+
+}
+```
+
+#### 使用监听器
+
+```java
+    /**
+     * 导入Excel文件，设置监听器并写入为Map
+     */
+    @Test
+    public void readExcel4() {
+        String fileName = "D:/demo.xlsx";
+        FastExcel
+                .read(fileName, new MyUserMapListener())
+                .sheet()
+                .doRead();
+        List<MyUser> userList = new ArrayList<>(MyUserMapListener.userList);
+        MyUserMapListener.userList.clear();
+        System.out.println(userList);
+    }
+```
+
+![image-20250210095407989](./assets/image-20250210095407989.png)
+
+
+
+## SpringBoot使用
+
+### 导出
+
+在SpringBoot通过接口导出文件，其实就是将文件路径改为 `response.getOutputStream()` ，然后设置HTTP相关的参数。
+
+```java
+package local.ateng.java.excel.controller;
+
+import cn.idev.excel.FastExcel;
+import cn.idev.excel.support.ExcelTypeEnum;
+import jakarta.servlet.http.HttpServletResponse;
+import local.ateng.java.excel.entity.MyUser;
+import local.ateng.java.excel.handler.CustomCellStyleWriteHandler;
+import local.ateng.java.excel.init.InitData;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.net.URLEncoder;
+
+@RestController
+@RequestMapping("/export")
+public class ExportController {
+
+    /**
+     * 导出 Excel 文件的接口
+     * 访问路径: GET /export/simple
+     *
+     * @param response HTTP 响应对象，用于返回 Excel 文件流
+     * @throws IOException 可能的 IO 异常
+     */
+    @GetMapping("/simple")
+    public void simple(HttpServletResponse response) throws IOException {
+        // 设置响应的内容类型为 Excel 文件
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        // 设置字符编码，防止文件名乱码
+        response.setCharacterEncoding("utf-8");
+
+        // 生成导出文件的名称，避免重复，使用时间戳
+        String name = "用户文件";
+        String filename = URLEncoder.encode(name, "UTF-8") // 进行 URL 编码，防止中文乱码
+                .replaceAll("\\+", "%20")  // 处理 "+" 号替换为空格
+                + System.currentTimeMillis()  // 添加时间戳，防止文件重名
+                + ExcelTypeEnum.XLSX.getValue();  // 获取 Excel 文件的扩展名（.xlsx）
+
+        // 设置 HTTP 响应头，通知浏览器以附件方式下载
+        response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + filename);
+
+        // 使用 FastExcel 进行 Excel 导出
+        FastExcel
+                .write(response.getOutputStream(), MyUser.class)  // 指定数据模型类 MyUser
+                .registerWriteHandler(CustomCellStyleWriteHandler.cellStyleStrategy())  // 注册自定义样式处理器
+                .sheet(name)  // 设置 Excel 工作表名称
+                .doWrite(InitData.getDataList());  // 写入数据
+    }
+
+}
+```
+
+### 导入
+
+- simple：导入文件，遇到错误数据立即抛出错误并终止导入
+- ignore：忽略错误的数据
+
+```java
+package local.ateng.java.excel.controller;
+
+import cn.idev.excel.FastExcel;
+import cn.idev.excel.support.ExcelTypeEnum;
+import jakarta.servlet.http.HttpServletResponse;
+import local.ateng.java.excel.entity.MyUser;
+import local.ateng.java.excel.handler.CustomCellStyleWriteHandler;
+import local.ateng.java.excel.init.InitData;
+import local.ateng.java.excel.listener.MyUserListener;
+import local.ateng.java.excel.listener.MyUserMapListener;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.List;
+
+@RestController
+@RequestMapping("/import")
+public class ImportController {
+
+
+    @PostMapping("/simple")
+    public ResponseEntity<String> simple(@RequestParam("file") MultipartFile file) throws IOException {
+        List<MyUser> list = FastExcel
+                .read(file.getInputStream(), MyUser.class, new MyUserListener())
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+        return ResponseEntity.ok("文件上传并处理成功！");
+    }
+
+    @PostMapping("/ignore")
+    public ResponseEntity<String> ignore(@RequestParam("file") MultipartFile file) throws IOException {
+        String fileName = "D:/demo.xlsx";
+        FastExcel
+                .read(fileName, new MyUserMapListener())
+                .sheet()
+                .doRead();
+        List<MyUser> userList = new ArrayList<>(MyUserMapListener.userList);
+        MyUserMapListener.userList.clear();
+        System.out.println(userList);
+        return ResponseEntity.ok("文件上传并处理成功！" + userList.size());
+    }
+
+}
 ```
 
