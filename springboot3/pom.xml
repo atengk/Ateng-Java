@@ -22,5 +22,6 @@
         <module>exception</module>
         <module>validator</module>
         <module>banner</module>
+        <module>http-interface</module>
     </modules>
 </project>

@@ -1,0 +1,25 @@
+server:
+  port: 12009
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# 配置文件上传大小限制
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+      resolve-lazily: true # 开启 multipart 懒加载
+---
+# HTTPS 配置
+server:
+  ssl:
+    key-store: classpath:ateng-server.p12
+    key-store-password: Admin@123
+    key-store-type: PKCS12
+    key-alias: ateng-server
