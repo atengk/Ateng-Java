@@ -1,0 +1,36 @@
+server:
+  port: 19003
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+logging:
+  level:
+    root: info
+    tech.powerjob: warn
+---
+# 执行器（powerjob-worker）配置
+powerjob:
+  worker:
+    # akka 工作端口，可选，默认 27777
+    port: 32122
+    # 接入应用名称，用于分组隔离，推荐填写 本 Java 项目名称
+    app-name: power-job
+    # 调度服务器地址，IP:Port 或 域名，多值逗号分隔
+    server-address: 192.168.1.10:32121
+    # 通讯协议，4.3.0 开始支持 HTTP 和 AKKA 两种协议，官方推荐使用 HTTP 协议（注意 server 和 worker 都要开放相应端口）
+    protocol: http
+    # 持久化方式，可选，默认 disk
+    store-strategy: disk
+    # 任务返回结果信息的最大长度，超过这个长度的信息会被截断，默认值 8192
+    max-result-length: 4096
+    # 单个任务追加的工作流上下文最大长度，超过这个长度的会被直接丢弃，默认值 8192
+    max-appended-wf-context-length: 4096
+    # 同时运行的轻量级任务数量上限
+    max-lightweight-task-num: 1024
+    # 同时运行的重量级任务数量上限
+    max-heavy-task-num: 64
