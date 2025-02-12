@@ -1,0 +1,30 @@
+server:
+  port: 19001
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# Snail Job
+snail-job:
+  # 任务调度服务器信息
+  server:
+    # 服务器IP地址（或域名）；集群时建议通过 nginx 做负载均衡
+    host: 192.168.1.10
+    # 服务器通讯端口（不是后台管理页面服务端口）
+    port: 32682
+  # 通知类型
+  rpc-type: grpc
+  # 命名空间 【上面配置的空间的唯一标识】
+  namespace: GP0-VgEUdoxTUzPnH9wqZU2rea2U4BVn
+  # 接入组名【上面配置的组名称】注意: 若通过注解配置了这里的配置不生效
+  group: dev
+  # 接入组 token 【上面配置的token信息】
+  token: SJ_Wyz3dmsdbDOkDujOTSSoBjGQP1BMsVnj
+  # 客户端绑定IP，必须服务器可以访问到；默认自动推断，在服务器无法调度客户端时需要手动配置
+  #host: 127.0.0.1
+  # 客户端通讯端口，默认 1789，设置客户端client为-1时，支持随机端口号
+  port: -1

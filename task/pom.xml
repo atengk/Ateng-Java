@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
          <module>scheduled</module>
+         <module>snail-job</module>
     </modules>
 </project>
