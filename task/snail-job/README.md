@@ -2,7 +2,10 @@
 
 🚀 灵活，可靠和快速的分布式任务重试和分布式任务调度平台
 
-参考：[官方文档](https://snailjob.opensnail.com/)
+参考文档：
+
+- [官方文档](https://snailjob.opensnail.com/)
+- [安装文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/snail-job/v1.3.0/)
 
 
 
@@ -533,7 +536,77 @@ public class RetryController {
 调用接口执行任务，然后就会自动创建一个 `重试场景`，最后将该任务调度节点执行。
 
 ```
-curl http://127.0.0.1:19001/retry/retryExecutor
+curl http://127.0.0.1:19002/retry/retryExecutor
 ```
 
 ![image-20250212101754320](./assets/image-20250212101754320.png)
+
+
+
+## OpenAPI
+
+参考：[官方文档](https://snailjob.opensnail.com/docs/guide/openapi/openapi_overview.html)
+
+### 创建任务
+
+编辑代码
+
+```java
+    /**
+     * 新增集群模式的任务
+     *
+     * @param jobName 任务名称
+     * @return 任务id
+     */
+    @GetMapping("/addClusterJob")
+    public Long addClusterJob(String jobName) {
+        return SnailJobOpenApi.addClusterJob()
+                .setRouteKey(AllocationAlgorithmEnum.RANDOM)
+                .setJobName(jobName)
+                .setExecutorInfo("testJobExecutor")
+                .setExecutorTimeout(30)
+                .setDescription("add")
+                .setBlockStrategy(BlockStrategyEnum.DISCARD)
+                .setMaxRetryTimes(1)
+                .setTriggerType(TriggerTypeEnum.SCHEDULED_TIME)
+                .setTriggerInterval(String.valueOf(60))
+                .addArgsStr("测试数据", 123)
+                .addArgsStr("addArg", "args")
+                .setRetryInterval(3)
+                .execute();
+    }
+```
+
+调用接口
+
+```
+C:\Users\admin>curl http://127.0.0.1:19002/openapi/addClusterJob?jobName=openapiJob
+2
+```
+
+
+
+### 查询任务
+
+编辑代码
+
+```java
+    /**
+     * 查看任务详情
+     *
+     * @param jobId
+     * @return 任务详情
+     */
+    @GetMapping("/queryJob")
+    public JobResponseVO queryJob(Long jobId){
+        return SnailJobOpenApi.getJobDetail(jobId).execute();
+    }
+```
+
+调用接口
+
+```
+C:\Users\admin>curl http://127.0.0.1:19002/openapi/queryJob?jobId=2
+{"id":2,"groupName":"dev","jobName":"openapiJob","argsStr":"{\"测试数据\":123,\"addArg\":\"args\"}","extAttrs":"","nextTriggerAt":"2025-02-12T15:11:57","jobStatus":1,"routeKey":2,"executorType":1,"executorInfo":"testJobExecutor","triggerType":2,"triggerInterval":"60","blockStrategy":1,"executorTimeout":30,"maxRetryTimes":1,"retryInterval":3,"taskType":1,"parallelNum":1,"description":"add","createDt":"2025-02-12T15:08:57","updateDt":"2025-02-12T15:10:51"}
+```
+
