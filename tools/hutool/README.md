@@ -1,7 +1,5 @@
 # Hutool
 
-https://doc.hutool.cn/pages/index
-
 📚简介
 Hutool是一个小而全的Java工具类库，通过静态方法封装，降低相关API的学习成本，提高工作效率，使Java拥有函数式语言般的优雅，让Java语言也可以“甜甜的”。
 
@@ -13,8 +11,10 @@ Hutool是项目中“util”包友好的替代，它节省了开发人员对项�
 
 Hutool = Hu + tool，是原公司项目底层代码剥离后的开源库，“Hu”是公司名称的表示，tool表示工具。Hutool谐音“糊涂”，一方面简洁易懂，一方面寓意“难得糊涂”。
 
+参考：[官方文档](https://doc.hutool.cn/pages/index)
+
 
 
 ## 使用Hutool
 
-见 `test` 模块下的测试代码
+见 `test` 包下的测试代码
