@@ -23,5 +23,6 @@
         <module>validator</module>
         <module>banner</module>
         <module>http-interface</module>
+        <module>log</module>
     </modules>
 </project>

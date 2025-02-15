@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+	<!-- Logback Appender for Logstash -->
+	<appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+
+		<!-- Logstash接收日志的IP和端口 -->
+		<destination>192.168.1.10:20678</destination>
+
+		<!-- 编码器，用于将日志格式化为JSON -->
+		<encoder class="net.logstash.logback.encoder.LogstashEncoder">
+			<!-- 配置日志输出的字段 -->
+			<fieldNames>
+				<timestamp>timestamp</timestamp>
+				<level>log_level</level>
+				<logger>logger_name</logger>
+				<message>log_message</message>
+				<thread>thread_name</thread>
+				<exception>exception</exception>
+			</fieldNames>
+			<customFields>{"app_name": "${APPLICATION_NAME}"}</customFields>  <!-- 可以自定义额外字段 -->
+		</encoder>
+
+	</appender>
+
+</configuration>

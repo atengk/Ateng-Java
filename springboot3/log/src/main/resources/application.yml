@@ -1,0 +1,25 @@
+server:
+  port: 12010
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+  profiles:
+    active: test
+---
+# 日志配置
+#logging:
+#  level:
+#    root: INFO
+#    com.example: DEBUG
+#  file:
+#    name: ./logs/${spring.application.name}.log
+#  logback:
+#    rollingpolicy:
+#      total-size-cap: 10GB
+#      max-file-size: 100MB
+#      max-history: 7
+#      clean-history-on-start: false
