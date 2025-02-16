@@ -431,3 +431,143 @@ spring:
 </configuration>
 ```
 
+## 使用MDC实现TRACE_ID
+
+使用MDC（Mapped Diagnostic Context）来实现TRACE_ID的功能通常是为了在日志中追踪请求的链路。MDC是一个与线程绑定的日志上下文，可以用于在日志中插入一些特定的信息，比如请求ID（如TRACE_ID），便于分布式系统中追踪单个请求的生命周期。
+
+### 创建Filter
+
+```java
+package local.ateng.java.log.filter;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.UUID;
+
+/**
+ * 使用MDC生成TRACE_ID
+ * 在每个请求的开始处（例如，Filter中），你可以使用MDC.put方法生成并设置TRACE_ID。通常TRACE_ID可以从请求头中获取，或者如果没有可以自己生成一个。
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-02-16
+ */
+public class TraceIdFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        // 从请求头中获取TRACE_ID，如果没有则生成一个
+        String traceId = request.getHeader("TRACE_ID");
+        if (traceId == null) {
+            traceId = UUID.randomUUID().toString();
+        }
+
+        // 将TRACE_ID放入MDC
+        MDC.put("traceId", traceId);
+
+        try {
+            // 继续处理请求
+            filterChain.doFilter(request, response);
+        } finally {
+            // 请求结束后清理MDC，避免内存泄漏
+            MDC.remove("traceId");
+        }
+    }
+}
+```
+
+### 创建Config
+
+```java
+package local.ateng.java.log.config;
+
+import local.ateng.java.log.filter.TraceIdFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public FilterRegistrationBean<TraceIdFilter> traceIdFilter() {
+        FilterRegistrationBean<TraceIdFilter> registrationBean = new FilterRegistrationBean<>();
+        registrationBean.setFilter(new TraceIdFilter());
+        registrationBean.addUrlPatterns("/api/*"); // 仅针对某些请求
+        return registrationBean;
+    }
+}
+```
+
+### 创建接口
+
+```java
+package local.ateng.java.log.controller;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api")
+@Slf4j
+public class ApiController {
+
+    @GetMapping("/demo")
+    public String demo() {
+        log.info("hello!");
+        return "ok";
+    }
+
+}
+```
+
+### 创建TRACE_ID日志配置文件
+
+在 `resources` 目录下创建文件 `logback/traceId-console-appender.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<included>
+	<property name="CONSOLE_LOG_PATTERN" value="%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}}){faint} - %X{traceId:-00000000-0000-0000-0000-000000000000} -  %clr(${LOG_LEVEL_PATTERN:-%5p}){} %clr(${PID:-}){magenta} %clr(--- %esb(){APPLICATION_NAME}%esb{APPLICATION_GROUP}[%15.15t] ${LOG_CORRELATION_PATTERN:-}){faint}%clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+	<property name="FILE_LOG_PATTERN" value="%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}} - %X{traceId:-00000000-0000-0000-0000-000000000000} -  ${LOG_LEVEL_PATTERN:-%5p} ${PID:-} --- %esb(){APPLICATION_NAME}%esb{APPLICATION_GROUP}[%t] ${LOG_CORRELATION_PATTERN:-}%-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+	<appender name="TRACE_ID_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+		<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+			<level>${CONSOLE_LOG_THRESHOLD}</level>
+		</filter>
+		<encoder>
+			<pattern>${CONSOLE_LOG_PATTERN}</pattern>
+			<charset>${CONSOLE_LOG_CHARSET}</charset>
+		</encoder>
+	</appender>
+</included>
+```
+
+### 配置 `logback-spring.xml` 文件
+
+修改文件 `logback-spring.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="logback/defaults.xml"/>
+    <include resource="logback/traceId-console-appender.xml"/>
+    <root level="INFO">
+        <appender-ref ref="TRACE_ID_CONSOLE"/>
+    </root>
+</configuration>
+```
+
+### 验证TRACE_ID
+
+1. 访问接口：curl http://127.0.0.1:12010/api/demo
+2. 查看日志的TRACE_ID
+
+![image-20250216101656837](./assets/image-20250216101656837.png)
