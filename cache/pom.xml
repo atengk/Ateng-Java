@@ -6,20 +6,15 @@
 
     <!-- 项目信息 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>database</artifactId>
+    <artifactId>cache</artifactId>
     <version>v1.0</version>
-    <description>数据库相关</description>
+    <description>缓存相关</description>
 
     <!-- 打包方式为 POM，表示该项目为聚合项目 -->
     <packaging>pom</packaging>
     <!-- 项目包含的子模块 -->
     <modules>
-        <module>mybatis-flex</module>
-        <module>mybatis-plus</module>
-        <module>jdbc-template</module>
-        <module>spring-jpa</module>
-        <module>easy-es</module>
-        <module>mongo-plus</module>
-        <module>mongo-template</module>
+        <module>redis-template</module>
+        <module>redisson</module>
     </modules>
 </project>
