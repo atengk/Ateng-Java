@@ -23,3 +23,10 @@ spring:
 #      max-file-size: 100MB
 #      max-history: 7
 #      clean-history-on-start: false
+---
+# Actuator 监控端点的配置项
+management:
+  endpoints:
+    web:
+      exposure:
+        include: loggers

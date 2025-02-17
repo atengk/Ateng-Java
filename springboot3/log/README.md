@@ -368,6 +368,42 @@ spring:
     active: dev
 ```
 
+### 动态日志级别调整
+
+#### 添加依赖
+
+```xml
+<!-- Actuator 依赖 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+#### 修改配置文件
+
+在 application.yml 中启用日志级别端点
+
+```yaml
+---
+# Actuator 监控端点的配置项
+management:
+  endpoints:
+    web:
+      exposure:
+        include: loggers
+```
+
+#### 动态调整日志级别
+
+通过以下 HTTP 请求，可以动态调整日志级别：
+
+```shell
+curl -X POST http://localhost:12010/actuator/loggers/local.ateng.java \
+-H "Content-Type: application/json" \
+-d '{"configuredLevel":"DEBUG"}'
+```
+
 
 
 ## 输出到Logstash
