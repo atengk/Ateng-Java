@@ -1169,3 +1169,148 @@ public class RedisZSetTests {
     }
 ```
 
+## 发布与订阅
+
+### 创建Listener
+
+```java
+package local.ateng.java.redis.listener;
+
+import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
+import org.springframework.stereotype.Component;
+
+/**
+ * RedisMessageListener 类用于监听来自 Redis 频道的消息。
+ * 它实现了 Spring Data Redis 提供的 MessageListener 接口，
+ * 并且作为一个 Spring Bean 被自动注册，可以用于接收发布/订阅（Pub/Sub）模式下的消息。
+ * <p>
+ * 该类将会监听一个指定的 Redis 频道，并处理接收到的消息。
+ */
+@Component  // 注解表明这是一个 Spring 管理的组件，将自动被注册为 Bean
+public class RedisMessageListener implements MessageListener {
+
+    /**
+     * 当 Redis 频道接收到消息时，调用此方法。
+     * 该方法由 Spring Data Redis 自动触发，当 Redis 发布消息到指定频道时会被调用。
+     *
+     * @param message Redis 消息对象，包含了消息的具体内容
+     * @param pattern 可选的消息模式，通常为空，但如果使用了模式匹配订阅（如 PSUBSCRIBE），此参数表示匹配的模式
+     */
+    @Override
+    public void onMessage(Message message, byte[] pattern) {
+        // 获取消息的内容，将其从字节数组转换为字符串
+        String msg = new String(message.getBody());
+
+        // 打印接收到的消息内容
+        // 这里可以根据需求做进一步的消息处理，如日志记录、存储等
+        System.out.println("Received message: " + msg);
+    }
+}
+```
+
+### 创建Config
+
+```java
+package local.ateng.java.redis.config;
+
+import local.ateng.java.redis.listener.RedisMessageListener;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.MessageListener;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.data.redis.listener.Topic;
+import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
+
+/**
+ * RedisConfig 类是一个 Spring 配置类，用于配置 Redis 的消息监听器容器。
+ * 该配置类定义了 Redis 消息的订阅和处理机制，允许应用监听指定的 Redis 频道，接收并处理消息。
+ */
+@Configuration  // 注解标识此类是一个配置类，Spring 将在启动时加载该配置
+public class RedisConfig {
+
+    /**
+     * 创建一个 RedisMessageListenerContainer，用于监听 Redis 频道中的消息。
+     * 它会管理消息监听器的生命周期，确保可以接收来自 Redis 发布/订阅模式的消息。
+     *
+     * @param factory         Redis 连接工厂，用于创建 Redis 连接
+     * @param messageListener 消息监听器，接收到消息时会执行处理逻辑
+     * @param topic           订阅的 Redis 频道
+     * @return RedisMessageListenerContainer 实例
+     */
+    @Bean
+    public RedisMessageListenerContainer redisMessageListenerContainer(RedisConnectionFactory factory,
+                                                                       MessageListener messageListener,
+                                                                       Topic topic) {
+        // 创建一个 Redis 消息监听容器
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+
+        // 设置 Redis 连接工厂，确保 Redis 连接的正确配置
+        container.setConnectionFactory(factory);
+
+        // 添加消息监听器和订阅的 Redis 频道
+        container.addMessageListener(messageListener, topic);
+
+        // 返回 Redis 消息监听容器
+        return container;
+    }
+
+    /**
+     * 创建一个 Topic 对象，用于指定订阅的 Redis 频道。
+     * 此处使用的是 PatternTopic，表示订阅一个具体的频道名称。
+     *
+     * @return Topic 对象，表示一个 Redis 频道
+     */
+    @Bean
+    public Topic topic() {
+        // 返回一个新的 PatternTopic，表示订阅名为 "myChannel" 的 Redis 频道
+        return new org.springframework.data.redis.listener.PatternTopic("myChannel");
+    }
+
+    /**
+     * 创建一个消息监听器，用于接收来自 Redis 频道的消息。
+     * 该监听器将处理接收到的消息，并触发相应的回调方法。
+     *
+     * @return MessageListener 实例，处理来自 Redis 的消息
+     */
+    @Bean
+    public MessageListener messageListener() {
+        // 使用 MessageListenerAdapter 封装 RedisMessageListener，确保消息传递和处理逻辑的适配
+        return new MessageListenerAdapter(new RedisMessageListener());
+    }
+
+}
+```
+
+### 发送消息
+
+创建接口发送消息测试。
+
+这里使用了StringRedisTemplate而不是RedisTemplate，是因为做了Fastjson2序列化会导致序列化机制不一致，消息会变得不可读。
+
+```java
+package local.ateng.java.redis.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/redis")
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class RedisController {
+    private final StringRedisTemplate stringRedisTemplate;
+
+    @GetMapping("/send")
+    public String sendMessage() {
+        stringRedisTemplate.convertAndSend("myChannel", "Hello from Redis!");
+        return "Message Sent!";
+    }
+}
+```
+
+![image-20250217112843688](./assets/image-20250217112843688.png)
