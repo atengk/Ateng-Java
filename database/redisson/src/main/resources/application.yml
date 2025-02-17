@@ -1,0 +1,57 @@
+server:
+  port: 15009
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# Redisson 的相关配置
+redisson:
+  config: |
+    singleServerConfig:
+      address: redis://192.168.1.10:42784
+      password: Admin@123
+      database: 41
+      clientName: redisson-client
+      connectionPoolSize: 64      # 最大连接数
+      connectionMinimumIdleSize: 24 # 最小空闲连接
+      idleConnectionTimeout: 10000 # 空闲连接超时时间（ms）
+      connectTimeout: 5000        # 连接超时时间
+      timeout: 3000               # 命令等待超时
+      retryAttempts: 3            # 命令重试次数
+      retryInterval: 1500         # 命令重试间隔（ms）
+    threads: 16                   # 处理Redis事件的线程数
+    nettyThreads: 32              # Netty线程数
+    codec: !<org.redisson.codec.JsonJacksonCodec> {} # 推荐JSON序列化
+#redisson:
+#  config: |
+#    clusterServersConfig:
+#      nodeAddresses:
+#        - "redis://192.168.1.41:6379"
+#        - "redis://192.168.1.42:6379"
+#        - "redis://192.168.1.43:6379"
+#        - "redis://192.168.1.44:6379"
+#        - "redis://192.168.1.45:6379"
+#        - "redis://192.168.1.46:6379"
+#      password: "Admin@123"       # 集群密码（如果集群有密码）
+#      scanInterval: 2000          # 集群状态扫描间隔（ms）
+#      readMode: "SLAVE"           # 读取模式（MASTER/SLAVE/MASTER_SLAVE）
+#      subscriptionMode: "SLAVE"  # 订阅模式（MASTER/SLAVE/MASTER_SLAVE）
+#      loadBalancer: !<org.redisson.connection.balancer.RoundRobinLoadBalancer> {} # 负载均衡策略
+#      masterConnectionPoolSize: 64      # 主节点连接池大小
+#      slaveConnectionPoolSize: 64       # 从节点连接池大小
+#      masterConnectionMinimumIdleSize: 24 # 主节点最小空闲连接
+#      slaveConnectionMinimumIdleSize: 24  # 从节点最小空闲连接
+#      idleConnectionTimeout: 10000      # 空闲连接超时时间（ms）
+#      connectTimeout: 5000              # 连接超时时间
+#      timeout: 3000                     # 命令等待超时
+#      retryAttempts: 3                  # 命令重试次数
+#      retryInterval: 1500               # 命令重试间隔（ms）
+#      failedSlaveReconnectionInterval: 3000 # 从节点重连间隔（ms）
+#      failedSlaveCheckInterval: 60000   # 从节点健康检查间隔（ms）
+#    threads: 16                         # 处理Redis事件的线程数
+#    nettyThreads: 32                    # Netty线程数
+#    codec: !<org.redisson.codec.JsonJacksonCodec> {} # 推荐JSON序列化
