@@ -17,5 +17,6 @@
         <module>redis-template</module>
         <module>redisson</module>
         <module>jetcache</module>
+        <module>caffeine</module>
     </modules>
 </project>
