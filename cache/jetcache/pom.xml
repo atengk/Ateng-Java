@@ -6,13 +6,11 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>redisson</artifactId>
+    <artifactId>jetcache</artifactId>
     <version>v1.0</version>
-    <name>redisson</name>
-    <description>
-        Redisson 是一个基于 Redis 的 Java 客户端，提供了丰富的分布式数据结构和服务，如分布式锁、集合、队列、Map 等。
-        它简化了与 Redis 的交互，并且支持高可用性、分布式事务、监控等特性，非常适合构建高性能和高可扩展性的应用。
-    </description>
+    <name>jetcache</name>
+    <description>JetCache是一个Java缓存框架。</description>
+    <url>https://github.com/alibaba/jetcache</url>
 
     <!-- 项目属性 -->
     <properties>
@@ -24,6 +22,8 @@
         <lombok.version>1.18.36</lombok.version>
         <fastjson2.version>2.0.53</fastjson2.version>
         <hutool.version>5.8.35</hutool.version>
+        <jetcache.version>2.7.7</jetcache.version>
+        <redisson.version>3.44.0</redisson.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -72,11 +72,23 @@
             <version>1.0.2</version>
         </dependency>
 
+        <!-- JetCache 依赖 -->
+        <dependency>
+            <groupId>com.alicp.jetcache</groupId>
+            <artifactId>jetcache-starter-redisson</artifactId>
+            <version>${jetcache.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.redisson</groupId>
+                    <artifactId>redisson-spring-boot-starter</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <!-- Redisson 依赖 -->
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson-spring-boot-starter</artifactId>
-            <version>3.44.0</version>
+            <version>${redisson.version}</version>
         </dependency>
 
     </dependencies>
