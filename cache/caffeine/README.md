@@ -124,3 +124,131 @@ public class UserServiceTest {
 ```
 
 ![image-20250218153526611](./assets/image-20250218153526611.png)
+
+## 集成SpringCache
+
+### 添加依赖
+
+```xml
+<!-- SpringBoot缓存 依赖 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-cache</artifactId>
+</dependency>
+```
+
+### 配置缓存管理器
+
+添加以下代码，配置 Caffeine 缓存管理器
+
+```java
+@Configuration
+@EnableCaching  // 启用缓存
+public class CacheConfig {
+
+    /**
+     * 配置 Caffeine 缓存管理器
+     * @return CacheManager
+     */
+    @Bean
+    public CacheManager caffeineCacheManager() {
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
+        // 配置Caffeine缓存
+        cacheManager.setCaffeine(Caffeine.newBuilder()
+                .expireAfterWrite(5, TimeUnit.MINUTES)  // 5分钟后缓存失效
+                .maximumSize(10_000)  // 最大缓存条目数
+                .recordStats());    // 记录缓存统计信息
+        return cacheManager;
+    }
+
+}
+```
+
+### 使用方法注解缓存
+
+#### 创建服务
+
+```java
+package local.ateng.java.caffeine.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+
+@Service
+@Slf4j
+public class RemoteService {
+
+    @Cacheable(value = "my:cache", key = "#id")
+    public String getDataById(int id) {
+        // 模拟从数据库或其他数据源获取数据
+        String data = "Data for id " + id;
+        log.info(data);
+        return data;
+    }
+
+    @CachePut(value = "my:cache", key = "#id")
+    public String updateData(int id, String newData) {
+        // 模拟更新数据源
+        String data = "newData " + newData + " for id " + id;
+        log.info(data);
+        return data;
+    }
+
+    @CacheEvict(value = "my:cache", key = "#id")
+    public void deleteData(int id) {
+        // 模拟删除数据源
+        String data = "Data for id " + id;
+        log.info(data);
+    }
+
+}
+```
+
+#### 创建接口
+
+```java
+package local.ateng.java.caffeine.controller;
+
+import local.ateng.java.caffeine.service.RemoteService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/remote")
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class RemoteController {
+
+    private final RemoteService remoteService;
+
+    @GetMapping("/data/{id}")
+    public String getData(@PathVariable int id) {
+        return remoteService.getDataById(id);
+    }
+
+    @GetMapping("/update/{id}/{newData}")
+    public String updateData(@PathVariable int id, @PathVariable String newData) {
+        return remoteService.updateData(id, newData);
+    }
+
+    @GetMapping("/delete/{id}")
+    public void deleteData(@PathVariable int id) {
+        remoteService.deleteData(id);
+    }
+
+}
+```
+
+#### 使用缓存
+
+1. 先调用 get 获取数据并写入缓存：
+2. 调用 update 更新缓存数据和重置过期时间
+3. 调用 delete 删除缓存
+
+![image-20250218160536000](./assets/image-20250218160536000.png)

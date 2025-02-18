@@ -6,11 +6,11 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>caffeine</artifactId>
+    <artifactId>spring-cache</artifactId>
     <version>v1.0</version>
-    <name>caffeine</name>
-    <description>Caffeine 是一个高性能的 Java 缓存库，设计目标是提供快速、低延迟的缓存操作。</description>
-    <url>https://github.com/ben-manes/caffeine</url>
+    <name>spring-cache</name>
+    <description>Spring Cache 是 Spring 提供的一个缓存抽象层，用于简化缓存操作。</description>
+    <url>https://spring.io/projects/spring-cache</url>
 
     <!-- 项目属性 -->
     <properties>
@@ -70,16 +70,16 @@
             <version>1.0.2</version>
         </dependency>
 
-        <!-- Caffeine 依赖 -->
-        <dependency>
-            <groupId>com.github.ben-manes.caffeine</groupId>
-            <artifactId>caffeine</artifactId>
-        </dependency>
-
-        <!-- SpringBoot缓存 依赖 -->
+        <!-- Spring Boot Redis 数据库集成，支持多种 Redis 数据结构和操作 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-cache</artifactId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Lettuce 客户端连接池实现，基于 Apache Commons Pool2 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
         </dependency>
 
     </dependencies>
