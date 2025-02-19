@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- 项目模型版本 -->
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 项目坐标 -->
+    <groupId>local.ateng.java</groupId>
+    <artifactId>lock4j</artifactId>
+    <version>v1.0</version>
+    <name>lock4j</name>
+    <description>
+        基于Spring AOP 的声明式和编程式分布式锁，支持RedisTemplate、Redisson、Zookeeper
+    </description>
+    <url>https://github.com/baomidou/lock4j</url>
+
+    <!-- 项目属性 -->
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spring-boot.version>3.4.1</spring-boot.version>
+        <maven-compiler.version>3.12.1</maven-compiler.version>
+        <lombok.version>1.18.36</lombok.version>
+    </properties>
+
+    <!-- 项目依赖 -->
+    <dependencies>
+        <!-- Spring Boot Web Starter: 包含用于构建Web应用程序的Spring Boot依赖项 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot Starter Test: 包含用于测试Spring Boot应用程序的依赖项 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Lombok: 简化Java代码编写的依赖项 -->
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Lock4j 依赖，redisTemplate作为分布式锁底层 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>lock4j-redis-template-spring-boot-starter</artifactId>
+            <version>2.2.7</version>
+        </dependency>
+
+        <!-- Spring Boot Redis 数据库集成，支持多种 Redis 数据结构和操作 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Lettuce 客户端连接池实现，基于 Apache Commons Pool2 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+
+    </dependencies>
+
+    <!-- Spring Boot 依赖管理 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- 插件仓库配置 -->
+    <repositories>
+        <!-- Central Repository -->
+        <repository>
+            <id>central</id>
+            <name>阿里云中央仓库</name>
+            <url>https://maven.aliyun.com/repository/central</url>
+            <!--<name>Maven官方中央仓库</name>
+            <url>https://repo.maven.apache.org/maven2/</url>-->
+        </repository>
+    </repositories>
+
+    <!-- 构建配置 -->
+    <build>
+        <finalName>${project.name}-${project.version}</finalName>
+        <plugins>
+            <!-- Maven 编译插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler.version}</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                    <!-- 编译参数 -->
+                    <compilerArgs>
+                        <!-- 启用Java 8参数名称保留功能 -->
+                        <arg>-parameters</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- Spring Boot Maven 插件 -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <executions>
+                    <execution>
+                        <id>repackage</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+        <resources>
+            <!-- 第一个资源配置块 -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+            </resource>
+            <!-- 第二个资源配置块 -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>application*</include>
+                    <include>bootstrap*.yml</include>
+                    <include>common*</include>
+                    <include>banner*</include>
+                </includes>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+    </build>
+
+</project>
