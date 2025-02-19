@@ -24,5 +24,6 @@
         <module>banner</module>
         <module>http-interface</module>
         <module>log</module>
+        <module>actuator</module>
     </modules>
 </project>

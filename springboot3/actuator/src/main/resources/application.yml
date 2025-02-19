@@ -1,0 +1,43 @@
+server:
+  port: 12012
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# Spring Boot Actuator 配置
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: "*"
+  endpoint:
+    shutdown:
+      access: unrestricted
+    health:
+      show-details: always
+    env:
+      show-values: always
+  info:
+    build:
+      enabled: true
+    env:
+      enabled: true
+    git:
+      enabled: true
+      mode: full
+    java:
+      enabled: true
+    os:
+      enabled: true
+    process:
+      enabled: true
+info:
+  atengApp:
+    group: ${project.groupId}
+    artifactId: ${project.artifactId}
+    name: ${project.name}
+    version: ${project.version}
+    description: ${project.description}
