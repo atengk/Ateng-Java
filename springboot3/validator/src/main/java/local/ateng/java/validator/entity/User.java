@@ -1,6 +1,7 @@
 package local.ateng.java.validator.entity;
 
 import jakarta.validation.constraints.*;
+import local.ateng.java.validator.validator.MyCustomConstraint;
 import lombok.Data;
 
 @Data
@@ -8,6 +9,7 @@ public class User {
 
     @NotBlank(message = "用户名不能为空")
     @Size(min = 3, max = 20, message = "用户名长度必须在3到20个字符之间")
+    @MyCustomConstraint
     private String username;
 
     @NotBlank(message = "密码不能为空")

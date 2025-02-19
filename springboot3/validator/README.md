@@ -1,4 +1,4 @@
-# SpringBoot3参数效验相关的模块
+# 参数效验
 
 Spring Boot Validation 是一个用于简化 Java 应用程序中数据校验的框架，它基于 Java 的 **Bean Validation 规范（JSR 380）**，并通过注解的方式在代码层面提供方便的校验功能。Spring Boot 提供了 `spring-boot-starter-validation` 起步依赖，集成了 Hibernate Validator 作为默认的校验实现。
 
@@ -6,7 +6,7 @@ Spring Boot Validation 是一个用于简化 Java 应用程序中数据校验的
 
 **注意：**
 
-该模块是基于`全局异常处理模块`
+该模块是基于[全局异常处理模块](/work/Ateng-Java/springboot3/exception/)
 
 
 
@@ -634,8 +634,11 @@ public interface DefaultGroup { }
 自定义注解需要使用 `@Constraint` 注解来标识，这样才会被作为校验注解识别。并且需要指定 `validatedBy` 属性，指定校验器（`ConstraintValidator`）。
 
 ```java
-import javax.validation.Constraint;
-import javax.validation.Payload;
+package local.ateng.java.validator.validator;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.Payload;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -661,8 +664,11 @@ public @interface MyCustomConstraint {
 创建校验器类并实现 `ConstraintValidator` 接口，负责校验注解应用的字段是否符合要求。校验器需要实现 `initialize` 和 `isValid` 方法。
 
 ```java
-import javax.validation.ConstraintValidator;
-import javax.validation.ConstraintValidatorContext;
+package local.ateng.java.validator.validator;
+
+
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
 
 public class MyCustomValidator implements ConstraintValidator<MyCustomConstraint, String> {
 
