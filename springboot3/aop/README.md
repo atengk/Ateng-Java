@@ -894,3 +894,283 @@ curl -Ss -X GET "http://localhost:12013/log/export" -O
 
 ![image-20250220134956901](./assets/image-20250220134956901.png)
 
+### 后续优化
+
+#### 将注解的属性设置为枚举
+
+**模块**
+
+```java
+package local.ateng.java.aop.constants;
+
+/**
+ * 用于定义模块的枚举
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-02-20
+ */
+public enum Module {
+    NULL(null),
+    USER("用户模块"),
+    ORDER("订单模块"),
+    PRODUCT("商品模块");
+
+    private final String description;
+
+    Module(String description) {
+        this.description = description;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+}
+```
+
+**操作类型**
+
+```java
+package local.ateng.java.aop.constants;
+
+/**
+ * 用于定义操作类型的枚举
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-02-20
+ */
+public enum Operation {
+    NULL(null),
+    CREATE("创建"),
+    READ("查询"),
+    UPDATE("更新"),
+    DELETE("删除"),
+    EXPORT("导出"),
+    IMPORT("导入");
+
+    private final String description;
+
+    Operation(String description) {
+        this.description = description;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+}
+```
+
+**修改注解**
+
+修改 @RequestLog 注解的属性
+
+```
+Module module() default Module.NULL;
+Operation operation() default Operation.NULL;
+```
+
+**修改切面**
+
+修改切面获取这两个注解的方法
+
+```
+// 获取注解中配置的模块名、操作类型、操作说明
+logInfo.setModule(requestLog.module().getDescription());
+logInfo.setOperationType(requestLog.operation().getDescription());
+```
+
+**修改使用注解的属性使用枚举**
+
+```
+// 测试 GET 请求 - 用于记录请求日志
+@RequestLog(
+        module = Module.USER,
+        operation = Operation.READ,
+        description = "查询用户信息"
+)
+```
+
+#### 接受事件
+
+在切面的最后发布日志事件，现在来接受这个事件的数据
+
+```java
+package local.ateng.java.aop.service;
+
+import local.ateng.java.aop.event.RequestLogEvent;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+/**
+ * 接受切面发布日志事件的数据
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-02-20
+ */
+@Service
+@Slf4j
+public class RequestLogService {
+
+    @EventListener
+    @Async
+    public void requestLogEvent(RequestLogEvent requestLogEvent) {
+        log.info("接受到日志数据={}", requestLogEvent.getRequestLogInfo());
+        // 将 RequestLogEvent 事件实体类转换成业务类
+        // ...
+    }
+
+}
+```
+
+
+
+## 权限控制
+
+### 创建注解
+
+自定义注解 `@PermissionCheck` 用于权限检查，确保只有符合特定权限的用户才能访问某些接口。我们通过 `@Target` 和 `@Retention` 注解来指定它的作用范围和生命周期。
+
+```java
+package local.ateng.java.aop.annotation;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * 权限控制注解，标记需要进行权限检查的方法
+ */
+@Target(ElementType.METHOD)  // 仅限方法上使用
+@Retention(RetentionPolicy.RUNTIME)  // 运行时有效
+public @interface PermissionCheck {
+    String value();  // 权限标识，比如 "ADMIN", "USER", "MANAGER" 等
+}
+```
+
+**`@Target(ElementType.METHOD)`**：确保该注解仅能应用在方法上，防止误用在类或字段等其他地方。
+
+**`@Retention(RetentionPolicy.RUNTIME)`**：确保该注解能够在运行时通过反射读取，以便 AOP 切面能够识别它并执行相应的逻辑。
+
+### 创建切面
+
+在切面类中，我们使用 `@Around` 环绕通知来计算标记了 `@PermissionCheck` 注解的实现权限检查，确保只有符合特定权限的用户才能访问某些接口。
+
+```java
+package local.ateng.java.aop.aspect;
+
+import jakarta.servlet.http.HttpServletRequest;
+import local.ateng.java.aop.annotation.PermissionCheck;
+import lombok.RequiredArgsConstructor;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+@Aspect
+@Component
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class PermissionAspect {
+
+    private final HttpServletRequest request;  // 自动注入 HttpServletRequest
+
+    /**
+     * 前置通知：拦截带有 @PermissionCheck 注解的方法，检查权限
+     */
+    @Before("@annotation(permissionCheck)")  // 拦截带有 PermissionCheck 注解的方法
+    public void checkPermission(PermissionCheck permissionCheck) throws Exception {
+        String requiredPermission = permissionCheck.value();  // 获取所需权限
+        String userPermission = getUserPermission();  // 从请求头获取用户权限
+
+        if (userPermission == null || !userPermission.equals(requiredPermission)) {
+            // 如果用户权限为空或不匹配所需权限，抛出权限不足异常
+            throw new Exception("权限不足，无法访问该接口");
+        }
+    }
+
+    /**
+     * 从请求头中获取 token，然后解析用户权限
+     */
+    private String getUserPermission() {
+        // 从请求头中获取 token（假设 token 的名字是 "Authorization"）
+        String token = request.getHeader("Authorization");
+
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);  // 去掉 "Bearer " 前缀
+        }
+
+        // 在实际情况下，可以通过解析 token 来获取用户信息
+        // 这里简化为固定返回权限，实际情况中应该解析 token 获取用户权限
+        // 例如：JWT 解码，获取用户角色等信息
+
+        // 假设 token 解析结果为以下内容，用户权限是 "USER" 或 "ADMIN"
+        if ("1234567890".equals(token)) {
+            return "USER";  // 返回 "USER" 权限
+        } else if ("2385569970".equals(token)) {
+            return "ADMIN";  // 返回 "ADMIN" 权限
+        }
+
+        // 如果没有有效的 token 或权限信息，返回 null
+        return null;
+    }
+}
+```
+
+**`@Around("@annotation(PermissionCheck)")`**：指定环绕通知拦截所有标记了 `@PermissionCheck` 注解的方法。
+
+**`joinPoint.proceed()`**：执行目标方法，返回结果。
+
+### 使用切面
+
+#### 创建接口
+
+```java
+package local.ateng.java.aop.controller;
+
+import local.ateng.java.aop.annotation.PermissionCheck;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/permission")
+public class PermissionController {
+
+    // 模拟的接口：只有 "ADMIN" 权限的用户可以访问
+    @PermissionCheck(value = "ADMIN")  // 需要 ADMIN 权限
+    @GetMapping("/admin")
+    public String getAdminInfo() {
+        return "管理员信息";
+    }
+
+    // 模拟的接口：只有 "USER" 权限的用户可以访问
+    @PermissionCheck(value = "USER")  // 需要 USER 权限
+    @GetMapping("/user")
+    public String getUserInfo() {
+        return "用户信息";
+    }
+
+}
+```
+
+#### 调用接口
+
+使用header中的去验证权限，调用接口 `/permission/admin` 显示正常，调用 `/permission/user` 权限不足报错。
+
+```
+curl -Ss -H "Authorization: Bearer 2385569970" \
+    -X GET http://localhost:12013/permission/admin
+```
+
+![image-20250220152658297](./assets/image-20250220152658297.png)
+
+
+
+
+
+
+

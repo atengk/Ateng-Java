@@ -2,6 +2,8 @@ package local.ateng.java.aop.controller;
 
 import jakarta.servlet.http.HttpServletResponse;
 import local.ateng.java.aop.annotation.RequestLog;
+import local.ateng.java.aop.constants.Module;
+import local.ateng.java.aop.constants.Operation;
 import lombok.Data;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,8 +18,8 @@ public class LogController {
 
     // 测试 GET 请求 - 用于记录请求日志
     @RequestLog(
-            module = "测试模块",
-            operation = "查询",
+            module = Module.USER,
+            operation = Operation.READ,
             description = "查询用户信息",
             logParams = true,  // 记录请求参数
             logHeaders = true,  // 记录请求头
@@ -33,8 +35,8 @@ public class LogController {
 
     // 测试 GET 请求 - 用于记录请求日志
     @RequestLog(
-            module = "测试模块",
-            operation = "查询",
+            module = Module.USER,
+            operation = Operation.READ,
             description = "查询用户信息"
     )
     @GetMapping("/userJson/{id}")
@@ -45,8 +47,8 @@ public class LogController {
 
     // 测试 POST 请求 - 用于记录请求日志
     @RequestLog(
-            module = "测试模块",
-            operation = "创建",
+            module = Module.USER,
+            operation = Operation.CREATE,
             description = "创建新用户",
             logParams = true,  // 记录请求参数
             logHeaders = true,  // 记录请求头
@@ -61,8 +63,8 @@ public class LogController {
 
     // 测试 PUT 请求 - 用于记录请求日志
     @RequestLog(
-            module = "测试模块",
-            operation = "更新",
+            module = Module.USER,
+            operation = Operation.UPDATE,
             description = "更新用户信息",
             logParams = true,  // 记录请求参数
             logHeaders = true,  // 记录请求头
@@ -77,8 +79,8 @@ public class LogController {
 
     // 测试 DELETE 请求 - 用于记录请求日志
     @RequestLog(
-            module = "测试模块",
-            operation = "删除",
+            module = Module.USER,
+            operation = Operation.DELETE,
             description = "删除用户",
             logParams = true,  // 记录请求参数
             logHeaders = true,  // 记录请求头
@@ -93,8 +95,8 @@ public class LogController {
 
     // 测试异常 - 用于记录异常日志
     @RequestLog(
-            module = "测试模块",
-            operation = "错误测试",
+            module = Module.USER,
+            operation = Operation.READ,
             description = "测试接口异常记录"
     )
     @PostMapping("/error")
@@ -107,8 +109,8 @@ public class LogController {
 
     // 测试空请求体的 POST 请求 - 用于测试空的请求体日志记录
     @RequestLog(
-            module = "测试模块",
-            operation = "创建",
+            module = Module.USER,
+            operation = Operation.CREATE,
             description = "创建用户（空请求体）"
     )
     @PostMapping("/user/empty")
@@ -120,8 +122,8 @@ public class LogController {
      * 导出简单文本文件
      */
     @RequestLog(
-            module = "数据导出",
-            operation = "导出",
+            module = Module.PRODUCT,
+            operation = Operation.EXPORT,
             description = "导出简单文本文件"
     )
     @GetMapping("/export")

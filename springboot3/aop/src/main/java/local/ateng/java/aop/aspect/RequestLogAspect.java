@@ -49,8 +49,8 @@ public class RequestLogAspect {
             logInfo.setUserAgent(request.getHeader("User-Agent"));
 
             // 获取注解中配置的模块名、操作类型、操作说明
-            logInfo.setModule(requestLog.module());
-            logInfo.setOperationType(requestLog.operation());
+            logInfo.setModule(requestLog.module().getDescription());
+            logInfo.setOperationType(requestLog.operation().getDescription());
             logInfo.setDescription(requestLog.description());
 
             // 记录类名和方法名（全路径）
