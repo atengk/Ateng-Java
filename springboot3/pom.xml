@@ -25,5 +25,6 @@
         <module>http-interface</module>
         <module>log</module>
         <module>actuator</module>
+        <module>aop</module>
     </modules>
 </project>
