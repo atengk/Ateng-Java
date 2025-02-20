@@ -81,14 +81,33 @@ MyBatis-Flex 是一个优雅的 MyBatis 增强框架，它非常轻量、同时�
             <artifactId>mybatis-flex-codegen</artifactId>
         </dependency>
 
-        <!-- Druid 数据源: 高性能数据库连接池 -->
-        <!-- https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-starter -->
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>druid-spring-boot-3-starter</artifactId>
-            <version>${druid.version}</version>
-        </dependency>
     </dependencies>
+```
+
+**添加数据源依赖**
+
+以下任选一种数据库即可
+
+- HikariCP
+
+```xml
+<!-- HikariCP 数据源 依赖 -->
+<dependency>
+    <groupId>com.zaxxer</groupId>
+    <artifactId>HikariCP</artifactId>
+</dependency>
+```
+
+- Druid
+
+```xml
+<!-- Druid 数据源: 高性能数据库连接池 -->
+<!-- https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-starter -->
+<dependency>
+    <groupId>com.alibaba</groupId>
+    <artifactId>druid-spring-boot-3-starter</artifactId>
+    <version>${druid.version}</version>
+</dependency>
 ```
 
 **注解处理器配置**
@@ -134,6 +153,20 @@ spring:
 mybatis-flex:
   global-config:
     print-banner: false
+```
+
+如果使用的是 **HikariCP** ，配置如下
+
+```yaml
+spring:
+  datasource:
+    # ...
+    type: com.zaxxer.hikari.HikariDataSource  # 使用 HikariCP 数据源
+    hikari:
+      maximum-pool-size: 1000  # 最大连接池大小
+      minimum-idle: 10  # 最小空闲连接数
+      idle-timeout: 30000  # 空闲连接超时时间，单位毫秒
+      connection-timeout: 30000  # 获取连接的最大等待时间，单位毫秒
 ```
 
 **编辑 `mybatis-flex.config` 文件**

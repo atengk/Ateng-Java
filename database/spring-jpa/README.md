@@ -26,6 +26,8 @@ Spring Data JPA 的核心工作原理是通过定义 Repository 接口（通常�
 
 ### 添加依赖
 
+#### 添加基础依赖
+
 ```xml
         <!-- MySQL数据库驱动 -->
         <dependency>
@@ -38,17 +40,43 @@ Spring Data JPA 的核心工作原理是通过定义 Repository 接口（通常�
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
-
-        <!-- Druid 数据源: 高性能数据库连接池 -->
-        <!-- https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-starter -->
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>druid-spring-boot-3-starter</artifactId>
-            <version>${druid.version}</version>
-        </dependency>
 ```
 
+#### 添加数据源依赖
+
+以下任选一种数据库即可
+
+- HikariCP
+
+JPA依赖中默认已经包含了该依赖（在spring-boot-starter-jdbc中）
+
+```xml
+<!-- HikariCP 数据源 依赖 -->
+<dependency>
+    <groupId>com.zaxxer</groupId>
+    <artifactId>HikariCP</artifactId>
+</dependency>
+```
+
+- Druid
+
+```xml
+<!-- Druid 数据源: 高性能数据库连接池 -->
+<!-- https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-starter -->
+<dependency>
+    <groupId>com.alibaba</groupId>
+    <artifactId>druid-spring-boot-3-starter</artifactId>
+    <version>${druid.version}</version>
+</dependency>
+```
+
+
+
 ### 编辑配置文件
+
+编辑配置文件 `application.yml`
+
+#### 数据库配置
 
 ```yaml
 ---
@@ -68,6 +96,29 @@ spring:
       max-active: 1000  # 最大活跃连接数
       max-wait: 10000  # 获取连接的最大等待时间，单位毫秒
       async-init: true
+
+```
+
+如果使用的是 **HikariCP** ，配置如下
+
+```yaml
+spring:
+  datasource:
+    # ...
+    type: com.zaxxer.hikari.HikariDataSource  # 使用 HikariCP 数据源
+    hikari:
+      maximum-pool-size: 1000  # 最大连接池大小
+      minimum-idle: 10  # 最小空闲连接数
+      idle-timeout: 30000  # 空闲连接超时时间，单位毫秒
+      connection-timeout: 30000  # 获取连接的最大等待时间，单位毫秒
+```
+
+#### JPA配置
+
+```yaml
+---
+# JPA 配置
+spring:
   jpa:
     show-sql: true
     hibernate:
