@@ -19,5 +19,6 @@
         <module>stream</module>
         <module>mapstruct-plus</module>
         <module>fast-excel</module>
+        <module>lombok</module>
     </modules>
 </project>
