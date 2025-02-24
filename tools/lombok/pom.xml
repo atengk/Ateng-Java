@@ -9,7 +9,7 @@
     <artifactId>lombok</artifactId>
     <version>v1.0</version>
     <name>lombok</name>
-    <description>Java 的 Stream流用法</description>
+    <description>Lombok 是一个 Java 库，通过注解的方式，自动生成常见的 Java 类的样板代码，减少了大量的冗余代码。</description>
 
     <!-- 项目属性 -->
     <properties>
