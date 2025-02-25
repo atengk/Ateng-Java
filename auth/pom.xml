@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 项目信息 -->
+    <groupId>local.ateng.java</groupId>
+    <artifactId>auth</artifactId>
+    <version>v1.0</version>
+    <description>认证相关</description>
+
+    <!-- 打包方式为 POM，表示该项目为聚合项目 -->
+    <packaging>pom</packaging>
+    <!-- 项目包含的子模块 -->
+    <modules>
+        <module>sa-token</module>
+    </modules>
+</project>
