@@ -170,6 +170,8 @@ spring:
 
 ### 编辑 `Configuration` 文件
 
+#### 创建配置
+
 **创建 `MyBatisPlusConfiguration`**
 
 分页插件的DbType需要根据实际数据库类型填写，我这里是MySQL
@@ -202,7 +204,7 @@ public class MyBatisPlusConfiguration {
 }
 ```
 
-**创建代码生成器**
+#### 创建代码生成器
 
 参考官网文档：[地址](https://baomidou.com/guides/new-code-generator/)
 
@@ -213,7 +215,7 @@ public class MyBatisPlusConfiguration {
 - 其他的根据实际情况修改
 
 ```java
-package local.ateng.java.mybatis.generator;
+package local.ateng.java.mybatis.utils;
 
 import com.baomidou.mybatisplus.generator.FastAutoGenerator;
 import com.baomidou.mybatisplus.generator.config.OutputFile;
@@ -235,29 +237,32 @@ import java.util.List;
  * @since 2025-01-13
  */
 public class MybatisPlusGenerator {
-    // 生成的包路径
+    // 根包名
     private static final String BasePackage = "local.ateng.java.mybatis";
+    // 子包名，例如 ${BasePackage}.${ChildPackage} => ${BasePackage}.system
+    private static final String ChildPackage = "";
     // 需要生成的表
     private static final List<String> GenerateTable = Arrays.asList(
             "my_user", "my_order"
     );
 
     public static void main(String[] args) {
+        PathEntity path = getPath();
         FastAutoGenerator.create("jdbc:mysql://192.168.1.10:35725/kongyu", "root", "Admin@123")
                 .globalConfig(builder -> builder
-                        .author("孔余")
-                        .outputDir(getModulePath() + "/src/main/java")
+                        .author("Ateng")
+                        .outputDir(path.getSourceDir())
                         .commentDate("yyyy-MM-dd")
                         .disableOpenDir()
                 )
                 .packageConfig(builder -> builder
-                        .parent(BasePackage)
+                        .parent(path.getBasePackage())
                         .entity("entity")
                         .mapper("mapper")
                         .service("service")
                         .serviceImpl("service.impl")
                         .xml("mapper.xml")
-                        .pathInfo(Collections.singletonMap(OutputFile.xml, getModulePath() + "/src/main/resources/mapper")) // 设置 Mapper XML 文件生成路径
+                        .pathInfo(Collections.singletonMap(OutputFile.xml, path.getMapperXmlPath())) // 设置 Mapper XML 文件生成路径
                 )
                 .strategyConfig(builder -> builder
                         .addInclude(GenerateTable) // 设置需要生成的表名
@@ -287,6 +292,48 @@ public class MybatisPlusGenerator {
         File moduleDir = new File(path).getParentFile();
         return moduleDir.getPath().replace("\\target", "");
     }
+
+    /**
+     * 获取配置需要的路径
+     */
+    public static PathEntity getPath() {
+        String sourceDir = getModulePath() + "/src/main/java";
+        String basePath = BasePackage.replaceAll("^\\.|\\.$", "");
+        String mapperPath = getModulePath() + "/src/main/resources/mapper";
+        if (!ChildPackage.isBlank()) {
+            basePath = basePath + "." + ChildPackage.replaceAll("^\\.|\\.$|^/|/$", "");
+            mapperPath = mapperPath + "/" + ChildPackage.replaceAll("^\\.|\\.$|^/|/$", "");
+        }
+        return new PathEntity(sourceDir, basePath, mapperPath);
+    }
+
+    /**
+     * 设置路径的类
+     */
+    public static class PathEntity {
+        private String sourceDir;
+        private String basePackage;
+        private String mapperXmlPath;
+
+        public PathEntity(String sourceDir, String basePackage, String mapperXmlPath) {
+            this.sourceDir = sourceDir;
+            this.basePackage = basePackage;
+            this.mapperXmlPath = mapperXmlPath;
+        }
+
+        public String getSourceDir() {
+            return sourceDir;
+        }
+
+        public String getBasePackage() {
+            return basePackage;
+        }
+
+        public String getMapperXmlPath() {
+            return mapperXmlPath;
+        }
+    }
+
 }
 ```
 

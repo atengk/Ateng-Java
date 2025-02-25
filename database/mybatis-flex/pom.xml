@@ -189,10 +189,10 @@
                             <version>${lombok.version}</version>
                         </path>
                         <!-- MyBatis-Flex 注解处理器 -->
-                        <path>
+                        <!--<path>
                             <groupId>com.mybatis-flex</groupId>
                             <artifactId>mybatis-flex-processor</artifactId>
-                        </path>
+                        </path>-->
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
