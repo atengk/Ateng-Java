@@ -2,6 +2,8 @@
 
 一个轻量级 java 权限认证框架，让鉴权变得简单、优雅！  
 
+- [官网地址](https://sa-token.cc/index.html)
+
 ![image-20250224085051263](./assets/image-20250224085051263.png)
 
 

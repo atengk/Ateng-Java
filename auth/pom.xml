@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>sa-token</module>
+        <module>spring-security</module>
     </modules>
 </project>
