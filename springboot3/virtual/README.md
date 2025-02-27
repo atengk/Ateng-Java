@@ -8,11 +8,11 @@
 
 启用虚拟线程后，Spring Boot 会自动将一些常用的线程池替换为基于虚拟线程的实现，例如：
 
-1. **异步任务 (`@Async`)**：
+1. **异步任务 (@Async)**：
     - 默认会使用虚拟线程来执行异步任务。
 2. **Web 请求处理**：
     - Spring MVC 的请求处理线程由虚拟线程提供支持。
-3. **任务执行器 (`TaskExecutor`)**：
+3. **任务执行器 (TaskExecutor)**：
     - Spring 默认会自动提供一个基于虚拟线程的 `SimpleAsyncTaskExecutor`。
 
 在 Spring Boot 3 中启用虚拟线程（通过 spring.threads.virtual.enabled=true）后，通常不需要再手动配置传统的线程池，因为虚拟线程的轻量特性使得它本质上可以看作一个“无限大小”的线程池。但是，根据具体的应用场景，可能需要一些额外的配置或调整。
@@ -57,6 +57,21 @@ spring:
   threads:
     virtual:
       enabled: true
+```
+
+**开启异步**
+
+```java
+@SpringBootApplication
+@EnableScheduling
+@EnableAsync
+public class SpringBoot3VirtualApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SpringBoot3VirtualApplication.class, args);
+    }
+
+}
 ```
 
 

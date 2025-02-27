@@ -2,6 +2,12 @@
 
 在 Spring 中，Spring 的 AOP（面向切面编程）是一种编程方式，允许我们在不修改业务代码的前提下，动态地添加一些额外的功能，比如日志记录、性能监控、事务管理等。它通过“切面”来分离这些跨领域的功能，使得核心业务逻辑和这些额外功能解耦，从而提升代码的可维护性和复用性。AOP 在运行时通过代理机制，将增强逻辑（如前置、后置通知等）织入到目标方法的执行中。简单来说，AOP 就是帮助我们在特定的“切入点”上，插入额外的处理逻辑，而不需要修改原本的代码，既提升了代码的整洁性，也使得功能的扩展更加灵活。
 
+
+
+## 概述
+
+### 注解说明
+
 下面是 AOP 通知类型的表格，列出了各个通知类型、触发时机以及常见用法：
 
 | **通知类型** | **注解**          | **触发时机**                       | **常见用法**                                                 |
@@ -12,6 +18,86 @@
 | **异常通知** | `@AfterThrowing`  | 目标方法抛出异常时                 | 1. 异常日志记录 2. 异常处理（例如：发送报警通知、记录错误信息） |
 | **环绕通知** | `@Around`         | 目标方法执行前后                   | 1. 性能监控（例如：计算执行时间） 2. 事务管理（例如：开始和提交事务） 3. 参数处理或修改 |
 | **切点定义** | `@Pointcut`       | 定义切点，指定哪些方法会被通知拦截 | 1. 定义切点表达式，决定哪些方法需要被 AOP 通知拦截 2. 通过注解或方法签名指定通知应用的范围 |
+
+### `pointcut`表达式
+
+在Spring Boot中，AOP的`pointcut`表达式用于定义哪些方法需要被拦截，通常通过`@Pointcut`注解或者在`@Around`、`@Before`、`@After`等注解中使用。`pointcut`表达式有多种写法，常见的有以下几种：
+
+| **表达式类型**                 | **表达式示例**                                               | **说明**                                                     | **匹配场景**                                                 |
+| ------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| **匹配所有方法**               | `@Pointcut("execution(* com.example.service.*.*(..))")`      | 匹配指定包下的所有方法，不考虑返回类型和参数类型。           | 匹配 `com.example.service` 包下的所有方法。                  |
+| **匹配返回类型**               | `@Pointcut("execution(String com.example.service.*.*(..))")` | 匹配返回类型为指定类型的方法。                               | 匹配 `com.example.service` 包下返回类型为 `String` 的所有方法。 |
+| **匹配方法名**                 | `@Pointcut("execution(* com.example.service.*.do*(..))")`    | 匹配方法名符合特定模式的方法（例如以 `do` 开头）。           | 匹配 `com.example.service` 包下所有方法名以 `do` 开头的方法。 |
+| **匹配参数类型**               | `@Pointcut("execution(* com.example.service.*.*(String))")`  | 匹配参数类型为指定类型的方法。                               | 匹配 `com.example.service` 包下参数类型为 `String` 的所有方法。 |
+| **匹配修饰符**                 | `@Pointcut("execution(public * com.example.service.*.*(..))")` | 匹配指定访问修饰符（如 `public`）的方法。                    | 匹配 `com.example.service` 包下所有 `public` 修饰符的方法。  |
+| **匹配子包中的方法**           | `@Pointcut("execution(* com.example.service..*(..))")`       | 匹配指定包及其子包下的所有方法。                             | 匹配 `com.example.service` 包及其所有子包下的方法。          |
+| **匹配任意参数**               | `@Pointcut("execution(* com.example.service.*.*(..))")`      | 匹配方法参数为任意类型和个数的方法。                         | 匹配 `com.example.service` 包下的所有方法，忽略参数类型。    |
+| **匹配带注解的方法**           | `@Pointcut("@annotation(com.example.annotation.MyAnnotation)")` | 匹配带有指定注解的方法。                                     | 匹配所有带有 `@MyAnnotation` 注解的方法。                    |
+| **匹配类注解的方法**           | `@Pointcut("@within(com.example.annotation.MyAnnotation)")`  | 匹配类上标注了指定注解的所有方法。                           | 匹配类上标注了 `@MyAnnotation` 注解的所有方法。              |
+| **匹配参数类型**               | `@Pointcut("args(java.lang.String)")`                        | 匹配参数为指定类型的方法。                                   | 匹配参数类型为 `String` 的所有方法。                         |
+| **匹配第一个参数类型**         | `@Pointcut("args(java.lang.String,..)")`                     | 匹配第一个参数为指定类型的方法。                             | 匹配第一个参数为 `String` 类型的所有方法。                   |
+| **匹配代理类型**               | `@Pointcut("this(com.example.service.MyService)")`           | 匹配当前代理对象类型为指定类型的方法。                       | 匹配代理对象为 `com.example.service.MyService` 类型的方法。  |
+| **匹配目标类型**               | `@Pointcut("target(com.example.service.MyService)")`         | 匹配目标对象类型为指定类型的方法。                           | 匹配目标对象为 `com.example.service.MyService` 类型的方法。  |
+| **匹配类范围的方法**           | `@Pointcut("within(com.example.service.*)")`                 | 匹配指定类或包中的所有方法。                                 | 匹配 `com.example.service` 包下的所有方法。                  |
+| **逻辑否定（排除某些方法）**   | `@Pointcut("execution(* com.example.service.*.*(..)) && !execution(* com.example.service.*.set*(..))")` | 匹配所有方法，但排除某些符合条件的方法（如以 `set` 开头）。  | 匹配 `com.example.service` 包下所有方法，排除掉 `set` 开头的方法。 |
+| **逻辑与（多条件匹配）**       | `@Pointcut("execution(* com.example.service.*.*(..)) && @annotation(com.example.annotation.Log)")` | 匹配满足多个条件的所有方法。例如，匹配 `com.example.service` 包下且有 `@Log` 注解的方法。 | 匹配 `com.example.service` 包下所有带有 `@Log` 注解的方法。  |
+| **逻辑或（任意一个条件满足）** | `@Pointcut("execution(* com.example.service.*.*(..))         |                                                              | execution(* com.example.dao.*.*(..))")`                      |
+
+#### 1. **匹配指定包下所有方法**
+
+```java
+@Pointcut("execution(* com.example.service.*.*(..))")
+public void allServiceMethods() {}
+```
+
+这会匹配 `com.example.service` 包下的所有方法。
+
+#### 2. **匹配指定方法名和参数类型**
+
+```java
+@Pointcut("execution(* com.example.service.*.do*(String))")
+public void methodsWithDoPrefixAndStringParam() {}
+```
+
+这会匹配 `com.example.service` 包下所有方法名以 `do` 开头，且参数类型为 `String` 的方法。
+
+#### 3. **匹配带有特定注解的方法**
+
+```java
+@Pointcut("@annotation(com.example.annotation.Log)")
+public void logAnnotatedMethods() {}
+```
+
+这会匹配所有带有 `@Log` 注解的方法。
+
+也可以这样写：
+
+```java
+@Pointcut("@annotation(log)")
+public void logAnnotatedMethods(Log log) {}
+```
+
+#### 4. **匹配方法的返回类型**
+
+```java
+@Pointcut("execution(String com.example.service.*.*(..))")
+public void stringReturningMethods() {}
+```
+
+这会匹配 `com.example.service` 包下所有返回类型为 `String` 的方法。
+
+#### 5. **匹配排除某些方法**
+
+```java
+@Pointcut("execution(* com.example.service.*.*(..)) && !execution(* com.example.service.*.set*(..))")
+public void allMethodsExceptSetters() {}
+```
+
+这会匹配 `com.example.service` 包下所有方法，但排除掉方法名以 `set` 开头的方法。
+
+
+
+
 
 
 

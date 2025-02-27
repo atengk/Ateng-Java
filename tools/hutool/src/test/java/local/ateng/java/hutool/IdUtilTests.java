@@ -27,4 +27,10 @@ public class IdUtilTests {
         System.out.println(uuid);
     }
 
+    @Test
+    public void test3() {
+        String nanoId = IdUtil.nanoId(32);
+        System.out.println(nanoId);
+    }
+
 }

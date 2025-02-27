@@ -8,6 +8,7 @@ import cn.hutool.jwt.JWT;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 
 /**
  * JWT就是一种网络身份认证和信息交换格式
@@ -67,6 +68,62 @@ public class JWTUtilTests {
 
         String token = myMorse(morseToken, false);
         System.out.println(token);
+    }
+
+    /**
+     * JWT创建
+     */
+    @Test
+    void createToken() {
+        // 密钥
+        String key = "Admin@123";
+        // 当前时间
+        DateTime dateTime = DateUtil.date();
+        // 过期时间
+        DateTime expiresAt = DateUtil.offsetDay(dateTime, 30);
+        // 用户信息
+        HashMap<String, Object> user = new HashMap<>() {{
+            put("username", "ateng");
+            put("password", "******");
+            put("age", "25");
+            put("address", "重庆市");
+        }};
+        final String token = JWT.create()
+                .setKey(key.getBytes())
+                .setPayload("user", user)
+                .setNotBefore(dateTime)
+                .setExpiresAt(expiresAt)
+                .sign();
+        System.out.println(token);
+
+    }
+
+    // JWT解析
+    @Test
+    void parseToken() {
+        String rightToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjp7InBhc3N3b3JkIjoiKioqKioqIiwiYWRkcmVzcyI6IumHjeW6huW4giIsImFnZSI6IjI1IiwidXNlcm5hbWUiOiJhdGVuZyJ9LCJuYmYiOjE3NDA1MzkyODcsImV4cCI6MTc0MzEzMTI4N30.NRwymIUx15avaFJMjzD_04njW0JeUzTYaWijF2hcDCo";
+        final JWT jwt = JWT.of(rightToken);
+        System.out.println(jwt.getHeaders());
+        System.out.println(jwt.getPayloads());
+    }
+
+    // JWT验证 - 验证签名
+    @Test
+    void verify() {
+        // 密钥
+        String key = "Admin@123";
+        String rightToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjp7InBhc3N3b3JkIjoiKioqKioqIiwiYWRkcmVzcyI6IumHjeW6huW4giIsImFnZSI6IjI1IiwidXNlcm5hbWUiOiJhdGVuZyJ9LCJuYmYiOjE3NDA1MzkyODcsImV4cCI6MTc0MzEzMTI4N30.NRwymIUx15avaFJMjzD_04njW0JeUzTYaWijF2hcDCo";
+        boolean verified = JWT.of(rightToken).setKey(key.getBytes()).verify();
+        System.out.println(verified);
+    }
+    // JWT验证 - 详细验证
+    @Test
+    void validate() {
+        // 密钥
+        String key = "Admin@123";
+        String rightToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjp7InBhc3N3b3JkIjoiKioqKioqIiwiYWRkcmVzcyI6IumHjeW6huW4giIsImFnZSI6IjI1IiwidXNlcm5hbWUiOiJhdGVuZyJ9LCJuYmYiOjE3NDA1MzkyODcsImV4cCI6MTc0MzEzMTI4N30.NRwymIUx15avaFJMjzD_04njW0JeUzTYaWijF2hcDCo";
+        boolean validate = JWT.of(rightToken).setKey(key.getBytes()).validate(0);
+        System.out.println(validate);
     }
 
 }
