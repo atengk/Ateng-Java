@@ -26,3 +26,11 @@ spring:
           time-between-eviction-runs: 1s # 空闲对象逐出器线程的运行间隔时间.空闲连接线程释放周期时间
       timeout: 5000ms # 连接超时时间（毫秒）
 ---
+# JWT 相关配置
+jwt:
+  token-name: "token"  # 认证的token名称
+  secret-key: "yN7IRdIJm84mOMiJ65KX372fbDl9cRJN"  # JWT的密钥
+  expiration: 24 # 过期时间，单位小时
+  refresh-expiration: 30 # 续期Token过期时间，单位天
+  redis:
+    key-prefix: "ateng:springsecurity:"  # Redis Key的前缀

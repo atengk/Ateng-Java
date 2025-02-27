@@ -4,6 +4,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import local.ateng.java.auth.constant.AppCodeEnum;
 import local.ateng.java.auth.filter.JwtAuthenticationFilter;
 import local.ateng.java.auth.utils.Result;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -16,20 +18,26 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import java.io.PrintWriter;
+import java.util.Set;
 
 /**
  * SpringSecurity 配置
- * @EnableMethodSecurity(securedEnabled = true, prePostEnabled = true)
- *   @EnableMethodSecurity：确保在配置类中启用方法级安全，其中 prePostEnabled = true 用于启用 @PreAuthorize 注解的支持。
- *   securedEnabled = true：如果需要支持 @Secured 注解，确保此选项启用。
  *
  * @author 孔余
+ * @EnableMethodSecurity(securedEnabled = true, prePostEnabled = true)
+ * @EnableMethodSecurity：确保在配置类中启用方法级安全，其中 prePostEnabled = true 用于启用 @PreAuthorize 注解的支持。
+ * securedEnabled = true：如果需要支持 @Secured 注解，确保此选项启用。
  * @email 2385569970@qq.com
  * @since 2025-02-26
  */
 @Configuration
 @EnableMethodSecurity(securedEnabled = true, prePostEnabled = true)
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class SecurityConfig {
+    // 配置放行的接口列表
+    public static final Set<String> ALLOWED_URLS = Set.of("/user/login", "/actuator/**", "/public/**", "/user/refresh-token");
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     /**
      * 配置 Spring Security 的过滤链，定义各种安全策略和规则。
@@ -44,7 +52,8 @@ public class SecurityConfig {
                 // 配置 URL 路径的权限控制
                 .authorizeHttpRequests(router -> {
                     // 开放登录和 actuator 端点
-                    router.requestMatchers("/user/login", "/actuator/**").permitAll()
+                    router
+                            .requestMatchers(ALLOWED_URLS.toArray(new String[0])).permitAll()  // 放行的接口
                             // 限制 /system/** 只能被拥有 "admin" 角色的用户访问
                             .requestMatchers("/system/**").hasRole("admin")
                             // 限制 /user/add 只能被拥有 "user:add" 权限的用户访问
@@ -61,7 +70,7 @@ public class SecurityConfig {
                 // 设置 session 管理为无状态（适用于 JWT）
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // 添加自定义 JWT 认证过滤器
-                .addFilterBefore(new JwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 // 禁用 CORS 和 CSRF（通常用于无状态认证）
                 .cors(cors -> cors.disable())
                 .csrf(csrf -> csrf.disable())

@@ -1,12 +1,22 @@
 package local.ateng.java.auth.filter;
 
+import cn.hutool.extra.spring.SpringUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import local.ateng.java.auth.config.SecurityConfig;
+import local.ateng.java.auth.constant.AppCodeEnum;
+import local.ateng.java.auth.exception.ServiceException;
+import local.ateng.java.auth.utils.SecurityUtils;
+import local.ateng.java.auth.vo.SysUserVo;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -21,7 +31,13 @@ import java.util.List;
  * @email 2385569970@qq.com
  * @since 2025-02-26
  */
+@Component
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    // Redis Key的前缀
+    private static String REDIS_KEY_PREFIX = SpringUtil.getProperty("jwt.redis.key-prefix", "ateng:springsecurity:");
+    private final RedisTemplate redisTemplate;
 
     /**
      * 过滤器的核心逻辑，处理每个请求并进行身份验证。
@@ -29,52 +45,63 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * @param request     请求对象
      * @param response    响应对象
      * @param filterChain 过滤器链，用于调用下一个过滤器
-     * @throws ServletException 如果发生 Servlet 异常
-     * @throws IOException      如果发生 I/O 异常
      */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        // 从请求中提取 Token
-        String token = getTokenFromRequest(request);
-
-        // 用于演示，实际情况需要验证 Jwt Token 的真实性
-        if ("1234567890".equals(token)) {
-            // 角色和权限对象集合
-            List<GrantedAuthority> authorities = new ArrayList<>();
-            // 角色，注意：Spring Security默认角色需加ROLE_前缀
-            //authorities.add(new SimpleGrantedAuthority("ROLE_" + "admin"));
-            // 权限
-            //authorities.add(new SimpleGrantedAuthority("user.add"));
-            // 构造一个 UsernamePasswordAuthenticationToken 对象，并将其设置到 SecurityContext 中
-            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                    "admin", "******", authorities);
-            authentication.setDetails("我是阿腾");
-            // 将认证信息存入 Spring Security 的上下文中
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+        // 如果请求的 URL 在放行列表中，直接放行，不进行 Token 验证
+        if (isAllowedUrl(request.getRequestURI())) {
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        // 继续执行过滤器链，传递请求和响应
-        filterChain.doFilter(request, response);
+        try {
+            // 从请求中提取 Token
+            String token = SecurityUtils.getToken(request);
+            // 效验Token的有效性
+            Boolean verifyJwtToken = null;
+            if (token != null && !token.isBlank()) {
+                verifyJwtToken = SecurityUtils.verifyJwtToken(token);
+            }
+            if (verifyJwtToken != null && verifyJwtToken) {
+                SysUserVo userVo = SecurityUtils.parseJwtToken(token);
+                // Redis Key前缀
+                String redisSessionPrefixKey = REDIS_KEY_PREFIX + "login:session:";
+                String userName = userVo.getUserName();
+                String redisTokenKey = redisSessionPrefixKey + userName;
+                if (!redisTemplate.hasKey(redisTokenKey)) {
+                    throw new ServiceException(AppCodeEnum.AUTH_ACCESS_TOKEN_EXPIRED.getCode(), AppCodeEnum.AUTH_ACCESS_TOKEN_EXPIRED.getDescription());
+                }
+                // 获取用户的基本信息
+                List<GrantedAuthority> authorities = new ArrayList<>();
+                userVo.getPermissionList().stream().forEach(permission -> authorities.add(new SimpleGrantedAuthority(permission)));
+                userVo.getRoleList().stream().forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
+                // 构造 UsernamePasswordAuthenticationToken 对象，并将其设置到 SecurityContext 中
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(userName, "******", authorities);
+                authentication.setDetails(userVo);
+                // 将认证信息存入 Spring Security 的上下文中
+                SecurityUtils.setAuthenticatedUser(authentication);
+            }
+
+            // 继续执行过滤器链，传递请求和响应
+            filterChain.doFilter(request, response);
+        } catch (ServiceException e) {
+            // 发送错误直接返回给客户端
+            SecurityUtils.sendResponse(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            // 发送错误直接返回给客户端
+            SecurityUtils.sendResponse(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "-1", "token验证失败");
+        }
     }
 
     /**
-     * 从请求头中提取 Token，通常是 Bearer Token。
+     * 检查当前请求 URL 是否属于放行的 URL
      *
-     * @param request 请求对象
-     * @return 提取到的 Token，如果没有则返回 null
+     * @param requestUri 请求 URI
+     * @return 是否是放行的 URL
      */
-    private String getTokenFromRequest(HttpServletRequest request) {
-        // 从请求头中获取 "Authorization" 字段
-        String header = request.getHeader("Authorization");
-
-        // 检查 Authorization 头部是否包含 Bearer Token
-        if (header != null && header.startsWith("Bearer ")) {
-            // 提取 Token 部分
-            return header.substring(7);  // 去掉 "Bearer " 前缀
-        }
-
-        // 如果没有找到 Token，则返回 null
-        return null;
+    private boolean isAllowedUrl(String requestUri) {
+        return SecurityConfig.ALLOWED_URLS.stream().anyMatch(requestUri::startsWith);  // 匹配路径前缀
     }
+
 }
 
