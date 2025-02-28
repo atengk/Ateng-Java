@@ -10,8 +10,6 @@ SpringSecurity6通过集成JWT实现无状态认证。用户登录成功后，�
 
 基于 [异常处理](/work/Ateng-Java/springboot3/exception/) 模块做开发演示
 
-相对路径测试： [异常处理](../springboot3/exception/) 
-
 ### 添加依赖
 
 ```xml

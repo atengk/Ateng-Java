@@ -27,7 +27,7 @@
 
 参考官网链接：[地址](https://mybatis-flex.com/zh/intro/maven.html)
 
-**添加属性**
+#### 添加属性
 
 ```xml
     <!-- 项目属性 -->
@@ -37,7 +37,7 @@
     </properties>
 ```
 
-**添加依赖管理**
+#### 添加依赖管理
 
 ```xml
     <!-- Spring Boot 依赖管理 -->
@@ -55,7 +55,7 @@
     </dependencyManagement>
 ```
 
-**添加依赖**
+#### 添加依赖
 
 ```xml
         <!-- Mybatis Plus 数据库框架 -->
@@ -94,7 +94,7 @@
         </dependency>
 ```
 
-**添加数据源依赖**
+#### 添加数据源依赖
 
 以下任选一种数据库即可
 
@@ -119,6 +119,47 @@ Mybatis-Plus依赖中默认已经包含了该依赖（在spring-boot-starter-jdb
     <groupId>com.alibaba</groupId>
     <artifactId>druid-spring-boot-3-starter</artifactId>
     <version>${druid.version}</version>
+</dependency>
+```
+
+#### 添加数据库驱动
+
+根据实际情况选择数据库驱动
+
+- MySQL
+
+URL: jdbc:mysql://192.168.1.10:35725/kongyu
+
+```xml
+<!-- MySQL数据库驱动 -->
+<dependency>
+    <groupId>com.mysql</groupId>
+    <artifactId>mysql-connector-j</artifactId>
+</dependency>
+```
+
+- PostgreSQL
+
+URL: jdbc:postgresql://192.168.1.10:32297/kongyu?currentSchema=public&stringtype=unspecified
+
+```xml
+<!-- Postgresql数据库驱动 -->
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+</dependency>
+```
+
+- 达梦数据库
+
+jdbc:dm://10.1.244.201:20026?schema=traffic_visualize&compatibleMode=mysql&characterEncoding=UTF-8&useUnicode=true&useSSL=false&tinyInt1isBit=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+
+```xml
+<!-- 达梦数据库驱动 -->
+<dependency>
+    <groupId>com.dameng</groupId>
+    <artifactId>DmJdbcDriver18</artifactId>
+    <version>8.1.3.140</version>
 </dependency>
 ```
 
