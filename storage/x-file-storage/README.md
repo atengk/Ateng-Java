@@ -119,8 +119,8 @@ dromara:
     aliyun-oss:
       - platform: aliyun-oss-1 # 存储平台标识
         enable-storage: true  # 启用存储
-        access-key: LTAI5tJVfWUEYhCSQBQdpn8u
-        secret-key: ZYyd95PSV81ss4SAnNMniSkHdUMQKE
+        access-key: xxx
+        secret-key: xxx
         end-point: oss-cn-chengdu.aliyuncs.com
         bucket-name: lingo-bucket-data
         domain: https://lingo-bucket-data.oss-cn-chengdu.aliyuncs.com/ # 访问域名，注意“/”结尾，例如：https://abc.oss-cn-shanghai.aliyuncs.com/
