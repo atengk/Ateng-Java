@@ -12,9 +12,13 @@ spring:
 spring:
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
+      #max-file-size: 10MB
+      #max-request-size: 10MB
+      # 测试大文件自动分片上传
+      max-file-size: 5GB
+      max-request-size: 5GB
       resolve-lazily: true # 开启 multipart 懒加载
+---
 # 文件存储配置
 dromara:
   x-file-storage:
@@ -29,3 +33,42 @@ dromara:
         bucket-name: test
         domain: "http://dev.minio.lingo.local/test/" # 访问域名，注意“/”结尾，例如：http://minio.abc.com/abc/
         base-path: ateng/ # 基础路径
+    aliyun-oss:
+      - platform: aliyun-oss-1 # 存储平台标识
+        enable-storage: true  # 启用存储
+        access-key: LTAI5tJVfWUEYhCSQBQdpn8u
+        secret-key: ZYyd95PSV81ss4SAnNMniSkHdUMQKE
+        end-point: oss-cn-chengdu.aliyuncs.com
+        bucket-name: lingo-bucket-data
+        domain: https://lingo-bucket-data.oss-cn-chengdu.aliyuncs.com/ # 访问域名，注意“/”结尾，例如：https://abc.oss-cn-shanghai.aliyuncs.com/
+        base-path: ateng/ # 基础路径
+    ftp:
+      - platform: ftp-1 # 存储平台标识
+        enable-storage: true  # 启用存储
+        host: 192.168.1.13 # 主机，例如：192.168.1.105
+        port: 21 # 端口，默认21
+        user: admin # 用户名，默认 anonymous（匿名）
+        password: "Admin@123" # 密码，默认空
+        domain: ftp://192.168.1.13/data/ # 访问域名，注意“/”结尾，例如：ftp://192.168.1.105/
+        base-path: ateng/ # 基础路径
+        storage-path: /data/ # 存储路径，可以配合 Nginx 实现访问，注意“/”结尾，默认“/”
+---
+# 数据库的相关配置
+spring:
+  datasource:
+    url: jdbc:mysql://192.168.1.10:35725/kongyu_file  # MySQL数据库连接URL
+    #url: jdbc:postgresql://192.168.1.10:32297/kongyu?currentSchema=public&stringtype=unspecified  # PostgreSQL数据库连接URL
+    username: root  # 数据库用户名
+    password: Admin@123  # 数据库密码
+    # driver-class-name: com.mysql.cj.jdbc.Driver  # 数据库驱动类，框架会自动适配
+    type: com.alibaba.druid.pool.DruidDataSource  # 使用Druid数据源
+    # Druid连接池配置 https://github.com/alibaba/druid/tree/master/druid-spring-boot-starter
+    druid:
+      initial-size: 10  # 初始化连接池大小
+      min-idle: 10  # 最小空闲连接数
+      max-active: 1000  # 最大活跃连接数
+      max-wait: 10000  # 获取连接的最大等待时间，单位毫秒
+# Mybatis Flex的配置 https://mybatis-flex.com/zh/base/configuration.html
+mybatis-flex:
+  global-config:
+    print-banner: false

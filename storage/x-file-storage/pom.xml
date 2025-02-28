@@ -25,6 +25,9 @@
         <fastjson2.version>2.0.53</fastjson2.version>
         <file-storage.version>2.2.1</file-storage.version>
         <minio.version>8.5.15</minio.version>
+        <aliyun-oss.version>3.18.1</aliyun-oss.version>
+        <mybatis-flex.version>1.10.4</mybatis-flex.version>
+        <druid.version>1.2.24</druid.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -78,17 +81,58 @@
             <artifactId>minio</artifactId>
             <version>${minio.version}</version>
         </dependency>
-        <!--&lt;!&ndash; FTP依赖 &ndash;&gt;
+        <!-- 阿里云OSS -->
+        <dependency>
+            <groupId>com.aliyun.oss</groupId>
+            <artifactId>aliyun-sdk-oss</artifactId>
+            <version>${aliyun-oss.version}</version>
+        </dependency>
+
+        <!-- Commons Net: 提供了对常见网络协议（如 FTP, SMTP, POP3, Telnet 等）的支持 -->
         <dependency>
             <groupId>commons-net</groupId>
             <artifactId>commons-net</artifactId>
             <version>3.9.0</version>
         </dependency>
+
+        <!--糊涂工具类扩展-->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-extra</artifactId>
+            <version>${hutool.version}</version>
+        </dependency>
+
+        <!-- Apache 的对象池 -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
-            <version>2.11.1</version>
-        </dependency>-->
+        </dependency>
+
+        <!-- Mybatis Flex 数据库框架 -->
+        <dependency>
+            <groupId>com.mybatis-flex</groupId>
+            <artifactId>mybatis-flex-spring-boot3-starter</artifactId>
+        </dependency>
+        <!-- MyBatis-Flex 代码生成器 -->
+        <dependency>
+            <groupId>com.mybatis-flex</groupId>
+            <artifactId>mybatis-flex-codegen</artifactId>
+        </dependency>
+
+        <!-- Druid 数据源: 高性能数据库连接池 -->
+        <!-- https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-starter -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>druid-spring-boot-3-starter</artifactId>
+            <version>${druid.version}</version>
+        </dependency>
+
+        <!-- MySQL数据库驱动 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+        </dependency>
+
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->
@@ -98,6 +142,14 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- MyBatis-Flex 依赖管理 -->
+            <dependency>
+                <groupId>com.mybatis-flex</groupId>
+                <artifactId>mybatis-flex-dependencies</artifactId>
+                <version>${mybatis-flex.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
