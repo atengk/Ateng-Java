@@ -37,6 +37,8 @@ public class ThreadPoolConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         // 等待所有任务执行完再关闭
         executor.setAwaitTerminationSeconds(60);
+        // 初始化线程池
+        executor.initialize();
         return executor;
     }
 

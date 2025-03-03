@@ -1,4 +1,6 @@
-# SpringBoot3虚拟线程相关的模块
+# SpringBoot3和JDK21使用虚拟线程
+
+Java 21 引入了 **虚拟线程（Virtual Threads）**，它们是**轻量级线程**，由 JVM 管理，不直接映射到操作系统线程。相比传统线程池，**虚拟线程池更适用于高并发任务**，能减少上下文切换的开销。
 
 虚拟线程是轻量级的线程，它由 JVM 管理，而不是直接由操作系统管理。与传统的内核线程（操作系统线程）相比，虚拟线程具有以下特点：
 
@@ -21,7 +23,9 @@
 
 ## 前提条件
 
+- SpringBoot3.4
 - JDK 21（长期支持版，LTS）
+- 如果配置了ThreadPoolTaskExecutor相关线程池的，请全部删除或者注释
 
 
 
@@ -30,22 +34,22 @@
 **使用undertow容器**
 
 ```xml
-        <!-- Spring Boot Web Starter: 包含用于构建Web应用程序的Spring Boot依赖项 -->
-        <dependency>
+<!-- Spring Boot Web Starter: 包含用于构建Web应用程序的Spring Boot依赖项 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+    <exclusions>
+        <exclusion>
+            <artifactId>spring-boot-starter-tomcat</artifactId>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-            <exclusions>
-                <exclusion>
-                    <artifactId>spring-boot-starter-tomcat</artifactId>
-                    <groupId>org.springframework.boot</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <!-- Web 容器使用 undertow 性能更强 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-undertow</artifactId>
-        </dependency>
+        </exclusion>
+    </exclusions>
+</dependency>
+<!-- Web 容器使用 undertow 性能更强 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-undertow</artifactId>
+</dependency>
 ```
 
 **开启虚拟线程**
