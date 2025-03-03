@@ -20,5 +20,6 @@
         <module>mapstruct-plus</module>
         <module>fast-excel</module>
         <module>lombok</module>
+        <module>async</module>
     </modules>
 </project>

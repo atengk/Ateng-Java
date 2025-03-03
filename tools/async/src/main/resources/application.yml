@@ -1,0 +1,15 @@
+server:
+  port: 11007
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# 开启虚拟线程
+spring:
+  threads:
+    virtual:
+      enabled: true
