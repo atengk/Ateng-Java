@@ -20,5 +20,6 @@
         <module>spark-examples</module>
         <module>spark-standalone</module>
         <module>spark-cluster</module>
+        <module>zookeeper</module>
     </modules>
 </project>
