@@ -21,5 +21,6 @@
         <module>easy-es</module>
         <module>mongo-plus</module>
         <module>mongo-template</module>
+        <module>autotable</module>
     </modules>
 </project>

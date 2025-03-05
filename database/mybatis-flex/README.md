@@ -564,6 +564,8 @@ create table if not exists kongyu.my_order
 
 ## 编译项目
 
+如果已经生成了TableDef，就不用进行该步骤了。
+
 MyBatis-Flex 使用了 APT（Annotation Processing Tool）技术，在项目编译的时候，会自动根据 Entity 类定义的字段帮你生成 "ACCOUNT" 类以及 Entity。使用命令编译：`mvn -DskipTests=true compile` 。如下图所示：
 
 每次entity有变动（修改、新增、删除）都需要重新编译。
