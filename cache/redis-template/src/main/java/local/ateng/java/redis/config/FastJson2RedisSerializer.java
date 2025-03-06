@@ -1,6 +1,5 @@
 package local.ateng.java.redis.config;
 
-
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONB;
 import com.alibaba.fastjson2.JSONReader;
@@ -11,37 +10,34 @@ import org.springframework.data.redis.serializer.SerializationException;
 
 import java.nio.charset.Charset;
 
-/**
- * RedisTemplate Fastjson2 Serializer
- * 自定义Redis序列化
- *
- * @author 孔余
- * @since 2024-01-30 17:29
- */
-public class MyFastJsonRedisSerializer<T> implements RedisSerializer<T> {
+public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
     private final Class<T> type;
     private FastJsonConfig config = new FastJsonConfig();
 
-    public MyFastJsonRedisSerializer(Class<T> type) {
+    public FastJson2RedisSerializer(Class<T> type) {
         config.setCharset(Charset.forName("UTF-8"));
         config.setDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
         // 配置 JSONWriter 的特性
         config.setWriterFeatures(
-                JSONWriter.Feature.WriteClassName,             // 在 JSON 输出中写入类名
-                JSONWriter.Feature.NotWriteNumberClassName,   // 不输出数字类型的类名
-                JSONWriter.Feature.NotWriteSetClassName,      // 不输出 Set 类型的类名
-                JSONWriter.Feature.WriteNulls,                // 输出 null 值的字段
-                JSONWriter.Feature.FieldBased,                // 基于字段访问数据，而不是使用 getter/setter
-                JSONWriter.Feature.BrowserCompatible,         // 生成与浏览器兼容的 JSON
-                JSONWriter.Feature.WriteMapNullValue         // 输出 Map 中 null 值的键
+                // 序列化时输出类型信息
+                JSONWriter.Feature.WriteClassName,
+                // 不输出数字类型的类名
+                JSONWriter.Feature.NotWriteNumberClassName,
+                // 不输出 Set 类型的类名
+                JSONWriter.Feature.NotWriteSetClassName,
+                // 序列化输出空值字段
+                JSONWriter.Feature.WriteNulls,
+                // 在大范围超过JavaScript支持的整数，输出为字符串格式
+                JSONWriter.Feature.BrowserCompatible,
+                // 序列化BigDecimal使用toPlainString，避免科学计数法
+                JSONWriter.Feature.WriteBigDecimalAsPlain
         );
 
         // 配置 JSONReader 的特性
         config.setReaderFeatures(
-                JSONReader.Feature.FieldBased,                // 基于字段访问数据，而不是使用 getter/setter
-                JSONReader.Feature.SupportArrayToBean        // 支持将 JSON 数组解析为 Java Bean
+                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                JSONReader.Feature.SupportSmartMatch
         );
-
 
         // 支持自动类型，要读取带"@type"类型信息的JSON数据，需要显式打开SupportAutoType
         config.setReaderFilters(
@@ -93,4 +89,3 @@ public class MyFastJsonRedisSerializer<T> implements RedisSerializer<T> {
         }
     }
 }
-

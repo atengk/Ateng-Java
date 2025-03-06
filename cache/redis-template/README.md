@@ -66,18 +66,25 @@ spring:
 
 Spring Boot 默认集成的 Jackson 序列化库也可以用来做 Redis 序列化。具体来说，就是可以通过 `Jackson2JsonRedisSerializer` 来进行对象的 JSON 序列化和反序列化。
 
-#### 创建RedisTemplateConfig
+#### 配置序列化和反序列化
 
 ```java
-package local.ateng.java.auth.config;
+package local.ateng.java.redis.config;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
+import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -85,7 +92,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.TimeZone;
 
 /**
@@ -96,73 +108,187 @@ import java.util.TimeZone;
  * 使用 Jackson2JsonRedisSerializer 来序列化和反序列化 Redis 值，确保 Redis 能够存储 Java 对象。
  * 另外，ObjectMapper 的配置确保 JSON 的格式和解析行为符合预期。
  * </p>
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-03-06
  */
 @Configuration
 public class RedisTemplateConfig {
+    
+    // 日期与时间格式化
+    public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
+    public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSSSSS";
 
     /**
-     * 配置 RedisTemplate
-     * <p>
-     * 创建 RedisTemplate，并指定如何序列化和反序列化 Redis 中的键值。
-     * 该配置支持使用 Jackson2JsonRedisSerializer 序列化值，并使用 StringRedisSerializer 序列化键。
-     * </p>
+     * 自定义 Jackson 时间日期的序列化和反序列化规则
      *
-     * @param redisConnectionFactory Redis 连接工厂
-     * @return 配置好的 RedisTemplate
+     * @param objectMapper Jackson 的 ObjectMapper 实例
      */
-    @Bean
-    public RedisTemplate redisTemplate(RedisConnectionFactory redisConnectionFactory) {
-        // 创建 RedisTemplate 实例
-        RedisTemplate template = new RedisTemplate<>();
-        template.setConnectionFactory(redisConnectionFactory);  // 设置连接工厂
+    public static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone, String dateFormat, String dateTimeFormat) {
+        // 设置全局时区，确保 Date 类型数据使用此时区
+        objectMapper.setTimeZone(TimeZone.getTimeZone(timeZone));
 
-        // 使用 StringRedisSerializer 来序列化和反序列化 Redis 键
-        // Redis 键将被序列化为字符串类型
-        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
-        template.setKeySerializer(stringRedisSerializer);  // 设置键的序列化器
-        template.setHashKeySerializer(stringRedisSerializer);  // 设置哈希键的序列化器
+        // 关闭默认时间戳序列化，改为标准格式
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        // 创建 ObjectMapper 实例，用于配置 Jackson 的序列化和反序列化行为
-        ObjectMapper objectMapper = new ObjectMapper();
+        // 避免与 JavaTimeModule 冲突
+        objectMapper.setDateFormat(new SimpleDateFormat(dateTimeFormat));
 
-        // 设置对象的可见性，指定所有属性都可以被序列化（包括 private 字段）
-        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        // Java 8 时间模块
+        JavaTimeModule javaTimeModule = new JavaTimeModule();
 
-        // 启用默认类型标记，即在 JSON 中添加类信息
-        // 通过这种方式，Jackson 会在序列化时将对象的类名作为字段 @class 存储在 JSON 中
-        // As.PROPERTY 表示类型信息将作为对象的一个属性存储
-        objectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,  // 使用最宽松的子类验证
-                ObjectMapper.DefaultTyping.NON_FINAL,  // 对所有非 final 类启用默认类型标记
-                JsonTypeInfo.As.PROPERTY);  // 类型信息作为属性存储
+        // LocalDateTime 序列化 & 反序列化
+        javaTimeModule.addSerializer(LocalDateTime.class,
+                new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
+        javaTimeModule.addDeserializer(LocalDateTime.class,
+                new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
 
-        // 启用自定义的默认类型标识，指定在序列化时在对象中添加 @class 属性
-        objectMapper.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+        // LocalDate 序列化 & 反序列化
+        javaTimeModule.addSerializer(LocalDate.class,
+                new LocalDateSerializer(DateTimeFormatter.ofPattern(dateFormat)));
+        javaTimeModule.addDeserializer(LocalDate.class,
+                new LocalDateDeserializer(DateTimeFormatter.ofPattern(dateFormat)));
 
-        // 设置日期格式为 yyyy-MM-dd HH:mm:ss.SSS，确保在序列化和反序列化过程中使用统一的格式
-        objectMapper.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS"));
+        // 注册 JavaTimeModule
+        objectMapper.registerModule(javaTimeModule);
+    }
 
-        // 设置时区为上海时间
-        objectMapper.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+    /**
+     * 自定义 Jackson 序列化规则
+     *
+     * @param objectMapper Jackson 的 ObjectMapper 实例
+     */
+    public static void customizeJsonSerialization(ObjectMapper objectMapper) {
+        // 关闭 JSON 美化输出（生产环境建议关闭，提高性能）
+        objectMapper.disable(SerializationFeature.INDENT_OUTPUT);
 
-        // 配置反序列化行为：
-        // 如果是原始类型的字段，反序列化时遇到 null 值会转换为字段的默认值
-        objectMapper.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
-
-        // 不序列化值为 null 的字段
-        objectMapper.configure(SerializationFeature.WRITE_NULL_MAP_VALUES, false);
-
-        // 反序列化时遇到未知属性时不会报错
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
-        // 空字符串反序列化为 null
-        objectMapper.configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, true);
-
-        // 遇到空的 Java Bean 不抛出异常
+        // 避免 "No serializer found for class" 异常
         objectMapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
-        // 反序列化时不抛出遇到未知属性的异常
+        // 过滤 null 值，减少 JSON 体积
+        //objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
+        // 过滤空集合、空字符串等无效数据，进一步精简 JSON
+        //objectMapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+
+        // 不过滤 null、空集合、空字符串等无效数据值，保持数据的原始状态
+        objectMapper.setSerializationInclusion(JsonInclude.Include.ALWAYS);
+
+        // 枚举类型：使用 `toString()` 方式序列化，而不是默认的 `name()`
+        objectMapper.enable(SerializationFeature.WRITE_ENUMS_USING_TO_STRING);
+
+        // BigDecimal 序列化时不使用科学计数法，确保数据精确
+        objectMapper.enable(SerializationFeature.WRITE_BIGDECIMAL_AS_PLAIN);
+
+        // 排序字段名，保证 JSON 输出的键顺序固定（有助于缓存和数据比对）
+        objectMapper.enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
+
+        // 将 Long 和 BigInteger 序列化为字符串，防止 JavaScript 丢失精度
+        SimpleModule simpleModule = new SimpleModule();
+        ToStringSerializer stringSerializer = ToStringSerializer.instance;
+        simpleModule.addSerializer(BigDecimal.class, stringSerializer);
+        simpleModule.addSerializer(BigInteger.class, stringSerializer);
+        simpleModule.addSerializer(Long.class, stringSerializer);
+        simpleModule.addSerializer(Long.TYPE, stringSerializer);
+        objectMapper.registerModule(simpleModule);
+    }
+
+    /**
+     * 自定义 Jackson 反序列化规则
+     *
+     * @param objectMapper Jackson 的 ObjectMapper 实例
+     */
+    public static void customizeJsonDeserialization(ObjectMapper objectMapper) {
+        // 允许单个值转数组（例如 1 -> [1]）
+        objectMapper.enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY);
+
+        // 忽略未知字段（避免因缺少字段报错，提升兼容性）
         objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
+        // 处理 原始类型（如 int, long, boolean 等）在反序列化时如果遇到 null 值将其替换为默认值，而不是抛出异常
+        objectMapper.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
+
+        // 使用 BigDecimal 反序列化浮点数，避免精度丢失
+        objectMapper.enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+
+        // 使用枚举的 `toString()` 方法进行反序列化，而不是默认的 `name()`
+        objectMapper.enable(DeserializationFeature.READ_ENUMS_USING_TO_STRING);
+
+        // 允许特殊字符转义
+        objectMapper.enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS);
+        objectMapper.enable(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER);
+
+        // 错误时提供类型检查，增强反序列化稳定性
+        objectMapper.enable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE);
+    }
+
+    /**
+     * 自定义 Jackson JSON 解析设置
+     *
+     * @param objectMapper Jackson 的 ObjectMapper 实例
+     */
+    public static void customizeJsonParsing(ObjectMapper objectMapper) {
+        // 允许 JSON 中带注释，方便开发阶段使用
+        objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+
+        // 允许字段名不带引号（可处理某些特殊格式的 JSON）
+        objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+
+        // 允许单引号作为 JSON 字符串的定界符（适用于某些特殊格式）
+        objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
+        // 允许控制字符的转义（例如，`\n` 或 `\t`）
+        objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true);
+
+        // 允许反斜杠转义任何字符（如：`\\`）
+        objectMapper.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true);
+
+        // 允许无效的 UTF-8 字符（如果 JSON 编码不完全符合标准）
+        objectMapper.configure(JsonParser.Feature.IGNORE_UNDEFINED, true);
+
+        // 允许 JSON 中无序字段（通常是为了性能优化）
+        objectMapper.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
+    }
+
+    /**
+     * 自定义 ObjectMapper 配置以启用默认类型标记。
+     * 该方法的作用是在 JSON 序列化和反序列化时包含类类型信息，
+     * 以便在反序列化时能够正确地识别对象的具体类型。
+     *
+     * @param objectMapper 要配置的 ObjectMapper 实例
+     */
+    public static void customizeJsonClassType(ObjectMapper objectMapper) {
+        // 启用默认类型标记，使 JSON 中包含对象的类信息
+        objectMapper.activateDefaultTyping(
+                LaissezFaireSubTypeValidator.instance, // 允许所有子类型的验证器（最宽松）
+                ObjectMapper.DefaultTyping.NON_FINAL,  // 仅对非 final 类启用类型信息
+                JsonTypeInfo.As.PROPERTY                // 以 JSON 属性的形式存储类型信息
+        );
+    }
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        RedisTemplate redisTemplate = new RedisTemplate();
+        redisTemplate.setConnectionFactory(redisConnectionFactory);
+
+        /**
+         * 使用StringRedisSerializer来序列化和反序列化redis的key值
+         */
+        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+        redisTemplate.setKeySerializer(stringRedisSerializer);
+        redisTemplate.setHashKeySerializer(stringRedisSerializer);
+
+        /**
+         * 创建 ObjectMapper 实例，用于配置 Jackson 的序列化和反序列化行为
+         */
+        ObjectMapper objectMapper = new ObjectMapper();
+        customizeJsonDateTime(objectMapper, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT);
+        customizeJsonSerialization(objectMapper);
+        customizeJsonDeserialization(objectMapper);
+        customizeJsonParsing(objectMapper);
+        customizeJsonClassType(objectMapper);
 
         // 创建 Jackson2JsonRedisSerializer，用于序列化和反序列化值
         // 该序列化器使用配置好的 ObjectMapper
@@ -170,12 +296,14 @@ public class RedisTemplateConfig {
                 new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
 
         // 设置 RedisTemplate 的值的序列化器
-        template.setValueSerializer(jackson2JsonRedisSerializer);
-        template.setHashValueSerializer(jackson2JsonRedisSerializer);  // 设置哈希值的序列化器
+        redisTemplate.setValueSerializer(jackson2JsonRedisSerializer);
+        redisTemplate.setHashValueSerializer(jackson2JsonRedisSerializer);  // 设置哈希值的序列化器
 
-        // 返回配置好的 RedisTemplate
-        return template;
+        // 返回redisTemplate
+        redisTemplate.afterPropertiesSet();
+        return redisTemplate;
     }
+
 }
 ```
 
@@ -203,13 +331,12 @@ public class RedisTemplateConfig {
 </dependency>
 ```
 
-#### 创建RedisSerializer
+#### 配置序列化器
 
-JSONReader.autoTypeFilter修改为包名
+注意修改为自己的包名：`config.setReaderFilters(JSONReader.autoTypeFilter("local.ateng.java."));`
 
 ```java
 package local.ateng.java.redis.config;
-
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONB;
@@ -221,37 +348,34 @@ import org.springframework.data.redis.serializer.SerializationException;
 
 import java.nio.charset.Charset;
 
-/**
- * RedisTemplate Fastjson2 Serializer
- * 自定义Redis序列化
- *
- * @author 孔余
- * @since 2024-01-30 17:29
- */
-public class MyFastJsonRedisSerializer<T> implements RedisSerializer<T> {
+public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
     private final Class<T> type;
     private FastJsonConfig config = new FastJsonConfig();
 
-    public MyFastJsonRedisSerializer(Class<T> type) {
+    public FastJson2RedisSerializer(Class<T> type) {
         config.setCharset(Charset.forName("UTF-8"));
         config.setDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
         // 配置 JSONWriter 的特性
         config.setWriterFeatures(
-                JSONWriter.Feature.WriteClassName,             // 在 JSON 输出中写入类名
-                JSONWriter.Feature.NotWriteNumberClassName,   // 不输出数字类型的类名
-                JSONWriter.Feature.NotWriteSetClassName,      // 不输出 Set 类型的类名
-                JSONWriter.Feature.WriteNulls,                // 输出 null 值的字段
-                JSONWriter.Feature.FieldBased,                // 基于字段访问数据，而不是使用 getter/setter
-                JSONWriter.Feature.BrowserCompatible,         // 生成与浏览器兼容的 JSON
-                JSONWriter.Feature.WriteMapNullValue         // 输出 Map 中 null 值的键
+                // 序列化时输出类型信息
+                JSONWriter.Feature.WriteClassName,
+                // 不输出数字类型的类名
+                JSONWriter.Feature.NotWriteNumberClassName,
+                // 不输出 Set 类型的类名
+                JSONWriter.Feature.NotWriteSetClassName,
+                // 序列化输出空值字段
+                JSONWriter.Feature.WriteNulls,
+                // 在大范围超过JavaScript支持的整数，输出为字符串格式
+                JSONWriter.Feature.BrowserCompatible,
+                // 序列化BigDecimal使用toPlainString，避免科学计数法
+                JSONWriter.Feature.WriteBigDecimalAsPlain
         );
 
         // 配置 JSONReader 的特性
         config.setReaderFeatures(
-                JSONReader.Feature.FieldBased,                // 基于字段访问数据，而不是使用 getter/setter
-                JSONReader.Feature.SupportArrayToBean        // 支持将 JSON 数组解析为 Java Bean
+                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                JSONReader.Feature.SupportSmartMatch
         );
-
 
         // 支持自动类型，要读取带"@type"类型信息的JSON数据，需要显式打开SupportAutoType
         config.setReaderFilters(
@@ -305,7 +429,7 @@ public class MyFastJsonRedisSerializer<T> implements RedisSerializer<T> {
 }
 ```
 
-#### 创建RedisTemplateConfig
+#### 配置序列化和反序列化
 
 ```java
 package local.ateng.java.redis.config;
@@ -316,31 +440,26 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+/**
+ * RedisTemplate 配置类
+ *
+ * <p>
+ * 该类负责配置 RedisTemplate，允许对象进行序列化和反序列化。
+ * 在这里，我们使用了 StringRedisSerializer 来序列化和反序列化 Redis 键，
+ * 使用 FastJsonRedisSerializer 来序列化和反序列化 Redis 值，确保 Redis 能够存储 Java 对象。
+ * </p>
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-03-06
+ */
 @Configuration
 public class RedisTemplateConfig {
 
     @Bean
-    public RedisTemplate redisTemplate(RedisConnectionFactory redisConnectionFactory) {
-        return getRedisTemplate(redisConnectionFactory);
-    }
-
-    /**
-     * 在 Spring Data Redis 中集成 Fastjson2
-     * 使用 GenericFastJsonRedisSerializer 作为 RedisTemplate 的 RedisSerializer 来提升JSON序列化和反序列化速度。
-     * https://github.com/alibaba/fastjson2/blob/main/docs/spring_support_cn.md#4-%E5%9C%A8-spring-data-redis-%E4%B8%AD%E9%9B%86%E6%88%90-fastjson2
-     *
-     * @param redisConnectionFactory
-     * @return
-     */
-    private RedisTemplate getRedisTemplate(RedisConnectionFactory redisConnectionFactory) {
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
         RedisTemplate redisTemplate = new RedisTemplate();
         redisTemplate.setConnectionFactory(redisConnectionFactory);
-
-        /**
-         * 使用GenericFastJsonRedisSerializer来序列化和反序列化redis的key和value值
-         */
-        //GenericFastJsonRedisSerializer genericFastJsonRedisSerializer = new GenericFastJsonRedisSerializer();
-        //redisTemplate.setDefaultSerializer(fastJsonRedisSerializer);//设置默认的Serialize，包含 keySerializer & valueSerializer
 
         /**
          * 使用StringRedisSerializer来序列化和反序列化redis的key值
@@ -348,19 +467,66 @@ public class RedisTemplateConfig {
         StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
         redisTemplate.setKeySerializer(stringRedisSerializer);
         redisTemplate.setHashKeySerializer(stringRedisSerializer);
+
         /**
-         * 自定义Serializer来序列化和反序列化redis的value值
+         * 使用自定义的Fastjson2的Serializer来序列化和反序列化redis的value值
          */
-        MyFastJsonRedisSerializer myFastJsonRedisSerializer = new MyFastJsonRedisSerializer(Object.class);
-        redisTemplate.setValueSerializer(myFastJsonRedisSerializer);
-        redisTemplate.setHashValueSerializer(myFastJsonRedisSerializer);
-        redisTemplate.setStringSerializer(myFastJsonRedisSerializer);
+        FastJson2RedisSerializer fastJson2RedisSerializer = new FastJson2RedisSerializer(Object.class);
+        redisTemplate.setValueSerializer(fastJson2RedisSerializer);
+        redisTemplate.setHashValueSerializer(fastJson2RedisSerializer);
+
         // 返回redisTemplate
         redisTemplate.afterPropertiesSet();
         return redisTemplate;
     }
 
 }
+```
+
+
+
+## 注入使用
+
+### 不写泛型
+
+注入RedisTemplate
+
+```
+private final RedisTemplate redisTemplate;
+```
+
+写入数据
+
+```
+redisTemplate.opsForValue().set("myUser", myUser);
+```
+
+读取数据
+
+```
+MyUser myUser = (MyUser) redisTemplate.opsForValue().get("myUser");
+```
+
+
+
+### 写入泛型
+
+注入RedisTemplate
+
+```
+private final RedisTemplate<String, Object> redisTemplate;
+```
+
+写入数据
+
+```
+redisTemplate.opsForValue().set("myUser", myUser);
+```
+
+读取数据
+
+```
+MyUser myUser = (MyUser) redisTemplate.opsForValue().get("myUser");
 ```
 
 
