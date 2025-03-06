@@ -298,6 +298,10 @@ Cron 表达式格式：
 
 ### 创建任务服务
 
+这里使用的是虚拟线程，那么就是使用 `SimpleAsyncTaskScheduler taskScheduler;`
+
+如果使用的是线程池，就需要使用 `ThreadPoolTaskScheduler taskScheduler;`
+
 ```java
 package local.ateng.java.scheduled.service;
 

@@ -1,7 +1,5 @@
 # FastJson2
 
-https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn
-
 FASTJSON v2是FASTJSON项目的重要升级，目标是为下一个十年提供一个高性能的JSON库。通过同一套API，
 
 支持JSON/JSONB两种协议，JSONPath是一等公民。
@@ -12,138 +10,13 @@ FASTJSON v2是FASTJSON项目的重要升级，目标是为下一个十年提供�
 支持Android (2.0.10.android)
 支持Graal Native-Image (2.0.10.graal)
 
+- [官方文档](https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn)
+- [自定义序列化和反序列化](https://github.com/alibaba/fastjson2/wiki/register_custom_reader_writer_cn)
+- [Features配置](https://github.com/alibaba/fastjson2/wiki/Features_cn)
 
 
-## SpringBoot集成Fastjson2
 
-### 添加依赖
-
-**编辑pom.xml添加依赖**
-
-```xml
-        <!-- 高性能的JSON库 -->
-        <!-- https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn#0-fastjson-20%E4%BB%8B%E7%BB%8D -->
-        <dependency>
-            <groupId>com.alibaba.fastjson2</groupId>
-            <artifactId>fastjson2</artifactId>
-            <version>${fastjson2.version}</version>
-        </dependency>
-        <!-- 在 Spring 中集成 Fastjson2 -->
-        <!-- https://github.com/alibaba/fastjson2/blob/main/docs/spring_support_cn.md -->
-        <dependency>
-            <groupId>com.alibaba.fastjson2</groupId>
-            <artifactId>fastjson2-extension-spring6</artifactId>
-            <version>${fastjson2.version}</version>
-        </dependency>
-```
-
-### 配置转换器
-
-**配置WebMvcConfigurer**
-
-```java
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.support.config.FastJsonConfig;
-import com.alibaba.fastjson2.support.spring.http.converter.FastJsonHttpMessageConverter;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.MediaType;
-import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.List;
-
-/**
- * 在 Spring Web MVC 中集成 Fastjson2
- * https://github.com/alibaba/fastjson2/blob/main/docs/spring_support_cn.md#2-%E5%9C%A8-spring-web-mvc-%E4%B8%AD%E9%9B%86%E6%88%90-fastjson2
- *
- * @author 孔余
- * @since 2024-02-05 15:06
- */
-@Configuration
-public class MyWebMvcConfigurer implements WebMvcConfigurer {
-    /**
-     * Fastjson2转换器配置
-     *
-     * @return
-     */
-    private static FastJsonHttpMessageConverter getFastJsonHttpMessageConverter() {
-        FastJsonHttpMessageConverter converter = new FastJsonHttpMessageConverter();
-        FastJsonConfig config = new FastJsonConfig();
-        config.setCharset(Charset.forName("UTF-8"));
-        config.setDateFormat("yyyy-MM-dd HH:mm:ss");
-        config.setWriterFeatures(
-                //JSONWriter.Feature.WriteNulls, // 将String类型字段的空值序列化输出为空字符串""
-                //JSONWriter.Feature.FieldBased, // 基于字段序列化，如果不配置，会默认基于public的field和getter方法序列化。配置后，会基于非static的field（包括private）做序列化。
-                //JSONWriter.Feature.NullAsDefaultValue, // 将空置输出为缺省值，Number类型的null都输出为0，String类型的null输出为""，数组和Collection类型的输出为[]
-                JSONWriter.Feature.BrowserCompatible, // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.WriteMapNullValue,
-                JSONWriter.Feature.BrowserSecure // 浏览器安全，将会'<' '>' '(' ')'字符做转义输出
-        );
-        config.setReaderFeatures(
-                //JSONReader.Feature.FieldBased, // 基于字段反序列化，如果不配置，会默认基于public的field和getter方法序列化。配置后，会基于非static的field（包括private）做反序列化。在fieldbase配置下会更安全
-                //JSONReader.Feature.InitStringFieldAsEmpty, // 初始化String字段为空字符串""
-                JSONReader.Feature.SupportArrayToBean, // 支持数据映射的方式
-                JSONReader.Feature.UseBigDecimalForDoubles // 默认配置会使用BigDecimal来parse小数，打开后会使用Double
-        );
-        converter.setFastJsonConfig(config);
-        converter.setDefaultCharset(StandardCharsets.UTF_8);
-        converter.setSupportedMediaTypes(Collections.singletonList(MediaType.APPLICATION_JSON));
-        return converter;
-    }
-
-    @Override
-    public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
-        FastJsonHttpMessageConverter converter = getFastJsonHttpMessageConverter();
-        converters.add(0, converter);
-    }
-
-}
-```
-
-**配置全局JSON**
-
-```java
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.JSONWriter;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.EventListener;
-
-/**
- * 全局配置fastjson2
- *
- * @author 孔余
- * @email 2385569970@qq.com
- * @date 2024-06-21 11:38:11
- */
-@Configuration
-public class FastJsonConfig {
-
-    @EventListener
-    public void run(ApplicationReadyEvent event) {
-        JSON.config(
-                //JSONWriter.Feature.WriteNulls, // 将String类型字段的空值序列化输出为空字符串""
-                //JSONWriter.Feature.FieldBased, // 基于字段序列化，如果不配置，会默认基于public的field和getter方法序列化。配置后，会基于非static的field（包括private）做序列化。
-                //JSONWriter.Feature.NullAsDefaultValue, // 将空置输出为缺省值，Number类型的null都输出为0，String类型的null输出为""，数组和Collection类型的输出为[]
-                JSONWriter.Feature.BrowserCompatible, // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.WriteMapNullValue,
-                JSONWriter.Feature.BrowserSecure // 浏览器安全，将会'<' '>' '(' ')'字符做转义输出
-        );
-
-        JSON.config(
-                //JSONReader.Feature.FieldBased, // 基于字段反序列化，如果不配置，会默认基于public的field和getter方法序列化。配置后，会基于非static的field（包括private）做反序列化。在fieldbase配置下会更安全
-                //JSONReader.Feature.InitStringFieldAsEmpty, // 初始化String字段为空字符串""
-                JSONReader.Feature.SupportArrayToBean, // 支持数据映射的方式
-                JSONReader.Feature.UseBigDecimalForDoubles // 默认配置会使用BigDecimal来parse小数
-        );
-    }
-}
-```
+## 使用Fastjson2
 
 ### 创建实体类
 
@@ -219,42 +92,6 @@ public class UserInfoEntity {
     private LocalDateTime createAt;
 }
 ```
-
-**ClassNameEntity**
-
-```java
-@Data
-public class ClassNameEntity {
-    private String name;
-    private List<UserInfoEntity> users;
-}
-```
-
-### 配置接口
-
-**ClassNameController**
-
-```java
-@RestController
-@RequestMapping("/class")
-public class ClassNameController {
-
-    @PostMapping("/add")
-    public ClassNameEntity add(@RequestBody ClassNameEntity className) {
-        return className;
-    }
-
-    @PostMapping("/user")
-    public UserInfoEntity add(@RequestBody UserInfoEntity userInfoEntity) {
-        return userInfoEntity;
-    }
-
-}
-```
-
-
-
-## 使用Fastjson2
 
 ### 测试数据准备
 
@@ -687,5 +524,1102 @@ public class JSONObjectTests {
         int length = (int) JSONPath.eval(JSON.toJSONString(list), "$[?(@.age = 88)].length()"); // 返回列表对象的age=88的数据的长度
         System.out.println(length);
     }
+```
+
+
+
+
+
+## 常用注解及使用方法
+
+### 常用注解
+
+#### 1. `@JSONField` - 指定序列化和反序列化的字段名称
+
+**作用**：用于指定字段在 JSON 中的名称，可以用于字段、getter 或 setter 方法，支持对字段进行更细粒度的配置，如格式化日期、指定序列化特性等。
+
+**示例**：
+
+```java
+import com.alibaba.fastjson.annotation.JSONField;
+
+public class User {
+    private int id;
+
+    @JSONField(name = "full_name")
+    private String name;
+
+    @JSONField(format = "yyyy-MM-dd")
+    private Date birthDate;
+
+    // 省略构造方法、getter 和 setter
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "id": 1,
+    "full_name": "Tom",
+    "birthDate": "1990-01-01"
+}
+```
+
+#### 2. `@JSONField(serialize = false)` - 禁用字段序列化
+
+**作用**：标记某个字段在序列化时被忽略，不会出现在 JSON 输出中。
+
+**示例**：
+
+```java
+import com.alibaba.fastjson.annotation.JSONField;
+
+public class User {
+    private int id;
+
+    @JSONField(serialize = false)
+    private String password;
+
+    // 省略构造方法、getter 和 setter
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "id": 1
+}
+```
+
+---
+
+#### 3. `@JSONField(deserialize = false)` - 禁用字段反序列化
+
+**作用**：标记某个字段在反序列化时被忽略，Fastjson 会忽略传入 JSON 中的该字段。
+
+**示例**：
+
+```java
+import com.alibaba.fastjson.annotation.JSONField;
+
+public class User {
+    private int id;
+
+    @JSONField(deserialize = false)
+    private String password;
+
+    // 省略构造方法、getter 和 setter
+}
+```
+
+**反序列化时**，即使 JSON 中包含 `"password"` 字段，Fastjson 会忽略并不会赋值给该字段。
+
+---
+
+#### 4. **大整数转字符串** - `@JSONField(serializeFeatures = JSONWriter.Feature.WriteBigDecimalAsPlain)`
+
+**作用**：避免大整数或 BigDecimal 失真，转换为字符串输出。
+
+```java
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.JSONWriter;
+import java.math.BigDecimal;
+
+public class Order {
+    @JSONField(serializeFeatures = JSONWriter.Feature.WriteBigDecimalAsPlain)
+    private BigDecimal amount;
+}
+```
+
+**输入数据**：
+
+```json
+{
+    "amount": 9999999999999999999.99
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "amount": "9999999999999999999.99"
+}
+```
+
+---
+
+#### 5. **小数保留固定位数** - `@JSONField(format = "#0.00")`
+
+**作用**：控制小数位数。
+
+```java
+import com.alibaba.fastjson2.annotation.JSONField;
+import java.math.BigDecimal;
+
+public class Product {
+    @JSONField(format = "#0.00")
+    private BigDecimal price;
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "price": "123.46"
+}
+```
+
+---
+
+#### 6. **小数转百分比** - `@JSONField(format = "#0.##%")`
+
+**作用**：把小数转换为百分比格式。
+
+```java
+import com.alibaba.fastjson2.annotation.JSONField;
+import java.math.BigDecimal;
+
+public class Rate {
+    @JSONField(format = "#0.##%")
+    private BigDecimal discountRate;
+}
+```
+
+**输入对象**：
+
+```java
+Rate rate = new Rate();
+rate.discountRate = new BigDecimal("0.075");
+```
+
+**序列化结果**：
+
+```json
+{
+    "discountRate": "7.5%"
+}
+```
+
+#### 7. `@JSONField(ordinal = 1)` - 控制字段序列化顺序
+
+**作用**：指定字段在序列化时的顺序，可以通过 `ordinal` 属性来控制。
+
+**示例**：
+
+```java
+import com.alibaba.fastjson.annotation.JSONField;
+
+public class User {
+    @JSONField(ordinal = 2)
+    private int id;
+
+    @JSONField(ordinal = 1)
+    private String name;
+
+    // 省略构造方法、getter 和 setter
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "name": "Tom",
+    "id": 1
+}
+```
+
+---
+
+#### 8. `@JSONField(defaultValue = "default")` - 设置默认值
+
+**作用**：为字段设置一个默认值，在序列化或反序列化时，如果字段值为 `null` 或缺失，则使用该默认值。
+
+**示例**：
+
+```java
+import com.alibaba.fastjson.annotation.JSONField;
+
+public class User {
+    private int id;
+
+    @JSONField(defaultValue = "Anonymous")
+    private String name;
+
+    // 省略构造方法、getter 和 setter
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "id": 1,
+    "name": "Anonymous"
+}
+```
+
+#### 9. **自定义序列化** - `@JSONField(serializeUsing = xx.class)`
+
+**作用**：用于指定自定义的序列化逻辑。
+
+```java
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.writer.ObjectWriter;
+
+import java.lang.reflect.Type;
+
+public class Product {
+    @JSONField(serializeUsing = PriceSerializer.class)
+    private double price;
+}
+
+// 自定义序列化器
+class PriceSerializer implements ObjectWriter<Double> {
+    @Override
+    public void write(JSONWriter jsonWriter, Object price, Object fieldName, Type fieldType, long features) {
+        jsonWriter.writeString("$" + String.format("%.2f", price));
+    }
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "price": "$99.99"
+}
+```
+
+---
+
+#### 10. **自定义反序列化** - `@JSONField(deserializeUsing = xx.class)`
+
+**作用**：用于自定义反序列化逻辑。
+
+```java
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.reader.ObjectReader;
+
+import java.lang.reflect.Type;
+
+public class Product {
+    @JSONField(deserializeUsing = PriceDeserializer.class)
+    private double price;
+}
+
+// 自定义反序列化器
+class PriceDeserializer implements ObjectReader<Double> {
+    @Override
+    public Double readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
+        String value = jsonReader.readString();
+        return Double.parseDouble(value.replace("$", ""));
+    }
+}
+```
+
+**输入 JSON**：
+
+```json
+{
+    "price": "$99.99"
+}
+```
+
+**反序列化**：
+
+```java
+Product product = JSON.parseObject(json, Product.class);
+System.out.println(product.price); // 输出: 99.99
+```
+
+#### 11. @JSONType 全局控制类序列化和反序列化
+
+##### **1. `orders` - 指定字段的序列化顺序**
+
+**作用**：控制 JSON 输出时的字段顺序。
+
+```java
+import com.alibaba.fastjson2.annotation.JSONType;
+
+@JSONType(orders = {"name", "age", "id"})
+public class User {
+    private int id;
+    private String name;
+    private int age;
+
+    // 省略构造方法、getter 和 setter
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "name": "Tom",
+    "age": 25,
+    "id": 1
+}
+```
+
+> **注意**：`orders` 指定的字段顺序会优先于 `@JSONField(ordinal = xx)`
+
+---
+
+##### **2. `ignores` - 忽略指定字段**
+
+**作用**：不让某些字段出现在 JSON 序列化结果中，相当于 `@JSONField(serialize = false)`。
+
+```java
+import com.alibaba.fastjson2.annotation.JSONType;
+
+@JSONType(ignores = {"password", "phoneNumber"})
+public class User {
+    private int id;
+    private String name;
+    private String password;
+    private String phoneNumber;
+}
+```
+
+**序列化结果**（`password` 和 `phoneNumber` 被忽略）：
+
+```json
+{
+    "id": 1,
+    "name": "Tom"
+}
+```
+
+---
+
+##### **3. `naming` - 统一修改字段命名风格**
+
+**作用**：自动转换 JSON 字段的命名风格（如驼峰转下划线）。
+
+```java
+import com.alibaba.fastjson2.annotation.JSONType;
+import com.alibaba.fastjson2.PropertyNamingStrategy;
+
+@JSONType(naming = PropertyNamingStrategy.SnakeCase)
+public class User {
+    private int userId;
+    private String userName;
+}
+```
+
+**序列化结果**（驼峰命名转换为下划线）：
+
+```json
+{
+    "user_id": 1,
+    "user_name": "Tom"
+}
+```
+
+> **支持的命名策略**：
+>
+> - `CamelCase`（默认）- 驼峰命名（userName）
+> - `SnakeCase` - 下划线命名（user_name）
+> - `KebabCase` - 短横线命名（user-name）
+> - `UpperCase` - 全大写（USERNAME）
+
+---
+
+##### **4. `serializeFeatures` - 启用额外的序列化特性**
+
+**作用**：启用 `Fastjson2` 的特定序列化规则，例如 **忽略 `null` 值等**。
+
+```java
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.annotation.JSONType;
+
+import java.util.Date;
+
+@JSONType(serializeFeatures = {JSONWriter.Feature.WriteMapNullValue})
+public class Order {
+    private int id;
+    private Date createTime;
+    private String remark; // 可能为 null
+
+    // 省略构造方法、getter 和 setter
+}
+```
+
+**序列化结果**（`null` 字段不被忽略，日期使用 ISO8601 格式）：
+
+```json
+{
+    "id": 1,
+    "createTime": "2024-03-06T15:30:00Z",
+    "remark": null
+}
+```
+
+> **常见 `serializeFeatures`：**
+>
+> - `WriteNulls`：输出 `null` 值字段（默认不输出 `null`）。
+> - `WriteBigDecimalAsPlain`：防止 `BigDecimal` 以科学计数法表示。
+> - `PrettyFormat`：格式化 JSON 以便于阅读。
+
+---
+
+##### **5. `deserializeFeatures` - 反序列化时启用额外特性**
+
+**作用**：修改 JSON 解析时的行为，比如 **忽略大小写、自动去掉下划线等**。
+
+```java
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.annotation.JSONType;
+
+@JSONType(deserializeFeatures = JSONReader.Feature.SupportSmartMatch)
+public class User {
+    private int userId;
+    private String userName;
+}
+```
+
+**输入 JSON**（即使字段大小写不同或有下划线，也能正确解析）：
+
+```json
+{
+    "User_Id": 1,
+    "USER_NAME": "Tom"
+}
+```
+
+> **常见 `deserializeFeatures`：**
+>
+> - `SupportSmartMatch`：忽略字段大小写、下划线等自动匹配字段。
+> - `IgnoreSetNullValue`：如果 JSON 里有 `null`，不会赋值给对象的属性。
+
+---
+
+##### **6. `@JSONType` + `@JSONField` 组合使用**
+
+**作用**：`@JSONType` 设置全局规则，`@JSONField` 控制单个字段。
+
+```java
+import com.alibaba.fastjson2.annotation.JSONType;
+import com.alibaba.fastjson2.annotation.JSONField;
+
+@JSONType(naming = PropertyNamingStrategy.SnakeCase, ignores = {"password"})
+public class User {
+    private int userId;
+    private String userName;
+
+    @JSONField(serialize = false)
+    private String password;
+
+    @JSONField(format = "#0.00")
+    private double balance;
+}
+```
+
+**序列化结果**（`password` 被忽略，`balance` 保留两位小数）：
+
+```json
+{
+    "user_id": 1,
+    "user_name": "Tom",
+    "balance": "99.99"
+}
+```
+
+
+
+### 使用方法
+
+#### 创建实体类
+
+```java
+package local.ateng.java.serialize.entity;
+
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.PropertyNamingStrategy;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.annotation.JSONType;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serial;
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.List;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JSONType(orders = {"name", "age", "id"}, naming = PropertyNamingStrategy.SnakeCase, serializeFeatures = {JSONWriter.Feature.WriteNulls, JSONWriter.Feature.PrettyFormat})
+public class MyUser implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 主键id
+     */
+    @JSONField(ordinal = 1, serializeFeatures = JSONWriter.Feature.WriteLongAsString)
+    private Long id;
+
+    /**
+     * 名称
+     */
+    @JSONField(name = "full_name", label = "User Name")
+    private String name;
+
+    /**
+     * 年龄
+     */
+    private Integer age;
+
+    /**
+     * 手机号码
+     */
+    private String phoneNumber;
+
+    /**
+     * 邮箱
+     */
+    private String email;
+
+    /**
+     * 分数
+     */
+    @JSONField(serializeFeatures = JSONWriter.Feature.WriteBigDecimalAsPlain)
+    private BigDecimal score;
+
+    /**
+     * 比例
+     */
+    @JSONField(format = "##.##%")
+    private Double ratio;
+
+    /**
+     * 生日
+     */
+    @JSONField(format = "yyyy-MM-dd")
+    private LocalDate birthday;
+
+    /**
+     * 所在省份
+     */
+    @JSONField(defaultValue = "Chongqing")
+    private String province;
+
+    /**
+     * 所在城市
+     */
+    private String city;
+
+    /**
+     * 创建时间
+     */
+    @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
+    private LocalDateTime createTime;
+    private Date createTime2;
+    private Date createTime3;
+    private int num;
+    private List<String> list;
+
+}
+```
+
+
+
+#### 使用JSON
+
+使用测试类来进行演示
+
+```java
+package local.ateng.java.serialize;
+
+import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.serialize.entity.MyUser;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+public class Fastjson2AnnotationTests {
+
+    @Test
+    public void serialization() {
+        // 创建对象
+        MyUser myUser = MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(25)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .score(new BigDecimal("88.911"))
+                .ratio(0.7147)
+                .birthday(LocalDate.parse("2000-01-01"))
+                .province(null)
+                .city("重庆市")
+                .createTime(LocalDateTime.now())
+                .build();
+        // 进行序列化
+        String json = JSONObject.toJSONString(myUser);
+        System.out.println(json);
+    }
+
+    @Test
+    public void deserialization() {
+        // 创建数据
+        String json = "{\"id\":\"1\",\"age\":25,\"phoneNumber\":\"1762306666\",\"email\":\"kongyu2385569970@gmail.com\",\"score\":\"88.91\",\"ratio\":0.7147,\"birthday\":\"2000-01-01\",\"province\":\"重庆市\",\"city\":\"重庆市\",\"createTime\":\"2025-03-05 11:02:56\",\"full_name\":\"ateng\"}";
+        // 进行反序列化
+        MyUser myUser = JSONObject.parseObject(json, MyUser.class);;
+        System.out.println(myUser);
+    }
+
+}
+```
+
+序列化serialization结果：
+
+```json
+{"age":25,"id":null,"birthday":"2000-01-01","city":"重庆市","create_time":"2025-03-06 10:01:52.693","create_time2":null,"create_time3":null,"email":"kongyu2385569970@gmail.com","full_name":"ateng","num":0,"phone_number":"1762306666","province":null,"ratio":null,"score":88.911}
+```
+
+反序列化deserialization结果
+
+```
+MyUser(id=1, name=ateng, age=25, phoneNumber=null, email=kongyu2385569970@gmail.com, score=88.91, ratio=0.7147, birthday=2000-01-01, province=重庆市, city=重庆市, createTime=null, createTime2=null, createTime3=null, num=0, list=null)
+```
+
+
+
+#### 使用Controller
+
+在 **Spring Web MVC** 中，Jackson 主要用于处理 HTTP 请求和响应的 JSON 序列化与反序列化。当 Controller 返回 Java 对象时，Spring MVC 通过 `MappingJackson2HttpMessageConverter` 将其转换为 JSON 响应给前端，反之，当前端发送 JSON 数据时，Spring MVC 会自动解析，并使用 Jackson 将其转换为 Java 对象。在实际应用中，`@RestController` 或 `@ResponseBody` 注解可以让 Spring 自动调用 Jackson 进行序列化，而 `@RequestBody` 注解则让 Jackson 负责反序列化。
+
+```java
+package local.ateng.java.serialize.controller;
+
+import local.ateng.java.serialize.entity.MyUser;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@RestController
+@RequestMapping("/jackson")
+public class JacksonController {
+
+    // 序列化
+    @GetMapping("/serialize")
+    public MyUser serialize() {
+        return MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(25)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .score(new BigDecimal("88.911"))
+                .ratio(0.7147)
+                .birthday(LocalDate.parse("2000-01-01"))
+                .province("重庆市")
+                .city("重庆市")
+                .createTime(LocalDateTime.now())
+                .build();
+    }
+
+    // 反序列化
+    @PostMapping("/deserialize")
+    public String deserialize(@RequestBody MyUser myUser) {
+        System.out.println(myUser);
+        return "ok";
+    }
+
+}
+```
+
+**访问序列化接口**
+
+```
+curl -X GET http://localhost:12014/jackson/serialize
+```
+
+示例输出：
+
+```json
+{"id":"1","age":25,"phoneNumber":"1762306666","email":"kongyu2385569970@gmail.com","score":"88.91","ratio":0.7147,"birthday":"2000-01-01","province":"重庆市","city":"重庆市","createTime":"2025-03-05 11:32:34.043","full_name":"ateng"}
+```
+
+**访问反序列化接口**
+
+```
+curl -X POST http://192.168.100.2:12014/jackson/deserialize \
+     -H "Content-Type: application/json" \
+     -d '{
+           "id": 1,
+           "name": "ateng",
+           "age": 25,
+           "phoneNumber": "1762306666",
+           "email": "kongyu2385569970@gmail.com",
+           "score": 88.911,
+           "ratio": 0.7147,
+           "birthday": "2000-01-01",
+           "province": "Chongqing",
+           "city": "Chongqing",
+           "createTime": "2025-03-05 14:30:00"
+         }'
+```
+
+控制台打印
+
+```
+MyUser(id=1, name=null, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=Chongqing, city=Chongqing, createTime=2025-03-05T14:30)
+```
+
+
+
+## 自定义序列化和反序列化
+
+参考：[官方文档](https://github.com/alibaba/fastjson2/wiki/register_custom_reader_writer_cn)
+
+### 自定义序列化
+
+自定义序列化允许你控制对象在序列化过程中的行为，特别是当你需要将某些对象转换为特殊格式时（如日期、金额、对象的某些字段等）。
+
+#### 1. **实现 `ObjectWriter` 接口自定义序列化**
+
+在 Fastjson2 中，序列化过程是通过实现 `ObjectWriter` 接口来完成的。你可以实现该接口来自定义如何序列化某个类。
+
+**步骤**：
+
+1. 创建自定义的 `ObjectWriter`。
+2. 使用 `@JSONField(serializeUsing = CustomSerializer.class)` 注解指定自定义序列化器。
+
+**示例：自定义金额序列化器**
+
+假设你希望在序列化时将金额字段格式化为 `￥100.00`。
+
+```java
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.writer.ObjectWriter;
+
+import java.lang.reflect.Type;
+
+public class Product {
+    private String name;
+    @JSONField(serializeUsing = PriceSerializer.class)  // 指定自定义序列化器
+    private double price;
+
+    public Product(String name, double price) {
+        this.name = name;
+        this.price = price;
+    }
+}
+
+// 自定义序列化器：将金额格式化为人民币符号
+class PriceSerializer implements ObjectWriter<Double> {
+    @Override
+    public void write(JSONWriter jsonWriter, Object value, Object fieldName, Type fieldType, long features) {
+        String formattedPrice = "￥" + String.format("%.2f", value);
+        jsonWriter.writeString(formattedPrice);
+    }
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "name": "Laptop",
+    "price": "￥1999.99"
+}
+```
+
+---
+
+#### 2. **自定义枚举序列化**
+
+你可能希望将枚举的值自定义为特定的字符串，而不是默认的 `name()` 方法返回值。
+
+**示例：自定义枚举序列化**
+
+```java
+import com.alibaba.fastjson2.annotation.JSONField;
+
+public class Order {
+    private int id;
+    
+    @JSONField(serializeUsing = StatusSerializer.class)
+    private OrderStatus status;
+
+    public Order(int id, OrderStatus status) {
+        this.id = id;
+        this.status = status;
+    }
+}
+
+enum OrderStatus {
+    PENDING,
+    SHIPPED,
+    DELIVERED
+}
+
+// 自定义枚举序列化器
+class StatusSerializer implements ObjectWriter<OrderStatus> {
+    @Override
+    public void write(JSONWriter jsonWriter, Object status, Object fieldName, Type fieldType, long features) {
+        switch (status) {
+            case PENDING:
+                jsonWriter.writeString("Processing");
+                break;
+            case SHIPPED:
+                jsonWriter.writeString("In Transit");
+                break;
+            case DELIVERED:
+                jsonWriter.writeString("Delivered");
+                break;
+            default:
+                jsonWriter.writeString("Unknown");
+                break;
+        }
+    }
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "id": 123,
+    "status": "Processing"
+}
+```
+
+---
+
+#### 3. **自定义日期格式化**
+
+如果你需要自定义日期的序列化格式，可以实现 `ObjectWriter` 来定制日期的输出格式。
+
+**示例：自定义日期格式**
+
+```java
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.annotation.JSONField;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class Event {
+    private String name;
+    
+    @JSONField(serializeUsing = DateSerializer.class)
+    private Date eventDate;
+
+    public Event(String name, Date eventDate) {
+        this.name = name;
+        this.eventDate = eventDate;
+    }
+}
+
+// 自定义日期序列化器：将日期格式化为自定义格式
+class DateSerializer implements ObjectWriter<Date> {
+    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+    @Override
+    public void write(JSONWriter jsonWriter, Object date, Object fieldName, Type fieldType, long features) {
+        String formattedDate = sdf.format(date);
+        jsonWriter.writeString(formattedDate);
+    }
+}
+```
+
+**序列化结果**：
+
+```json
+{
+    "name": "Conference",
+    "eventDate": "2025-03-06 10:00:00"
+}
+```
+
+---
+
+### **自定义反序列化**
+
+自定义反序列化允许你在对象从 JSON 反序列化时，应用特殊的转换逻辑。通过实现 `ObjectReader` 接口，可以定义如何将 JSON 中的某些字段转换为你想要的对象。
+
+#### 1. **实现 `ObjectReader` 接口自定义反序列化**
+
+**步骤**：
+
+1. 创建自定义的 `ObjectReader`。
+2. 使用 `@JSONField(deserializeUsing = CustomDeserializer.class)` 注解指定自定义反序列化器。
+
+**示例：自定义金额反序列化器**
+
+假设你的 JSON 数据包含金额的字符串格式，例如 `"￥100.00"`，你希望将其转换为 `double` 类型。
+
+```java
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.reader.ObjectReader;
+
+import java.lang.reflect.Type;
+
+public class Product {
+    private String name;
+    @JSONField(deserializeUsing = PriceDeserializer.class)  // 指定自定义反序列化器
+    private double price;
+
+    public Product(String name, double price) {
+        this.name = name;
+        this.price = price;
+    }
+}
+
+// 自定义反序列化器：将 "￥100.00" 转换为 double
+class PriceDeserializer implements ObjectReader<Double> {
+    @Override
+    public Double readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
+        String value = jsonReader.readString();
+        return Double.parseDouble(value.replace("￥", ""));
+    }
+}
+```
+
+**反序列化时**：
+
+```java
+String json = "{\"name\":\"Laptop\",\"price\":\"￥1999.99\"}";
+Product product = JSON.parseObject(json, Product.class);
+System.out.println(product.price); // 输出 1999.99
+```
+
+---
+
+#### 2. **自定义枚举反序列化**
+
+你也可以自定义枚举类型的反序列化规则。例如，你的 JSON 数据包含 `Processing`、`Shipped` 等字符串，而不是枚举的默认名称。
+
+**示例：自定义枚举反序列化**
+
+```java
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.reader.ObjectReader;
+
+import java.lang.reflect.Type;
+
+public class Order {
+    private int id;
+    
+    @JSONField(deserializeUsing = StatusDeserializer.class)
+    private OrderStatus status;
+
+    public Order(int id, OrderStatus status) {
+        this.id = id;
+        this.status = status;
+    }
+}
+
+enum OrderStatus {
+    PENDING,
+    SHIPPED,
+    DELIVERED
+}
+
+// 自定义反序列化器：将字符串转为枚举
+class StatusDeserializer implements ObjectReader<OrderStatus> {
+    @Override
+    public OrderStatus readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
+        String status = jsonReader.readString();
+        switch (status) {
+            case "Processing":
+                return OrderStatus.PENDING;
+            case "In Transit":
+                return OrderStatus.SHIPPED;
+            case "Delivered":
+                return OrderStatus.DELIVERED;
+            default:
+                return OrderStatus.PENDING;
+        }
+    }
+}
+```
+
+**反序列化时**：
+
+```java
+String json = "{\"id\":123,\"status\":\"In Transit\"}";
+Order order = JSON.parseObject(json, Order.class);
+System.out.println(order.status); // 输出 SHIPPED
+```
+
+---
+
+#### 3. **自定义日期反序列化**
+
+如果 JSON 中的日期字段格式与你的 Java 对象不匹配，你可以实现一个自定义的反序列化器来解析它。
+
+**示例：自定义日期反序列化器**
+
+```java
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson2.reader.ObjectReader;
+
+import java.lang.reflect.Type;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class Event {
+    private String name;
+    
+    @JSONField(deserializeUsing = DateDeserializer.class)
+    private Date eventDate;
+
+    public Event(String name, Date eventDate) {
+        this.name = name;
+        this.eventDate = eventDate;
+    }
+}
+
+// 自定义日期反序列化器：将 "yyyy-MM-dd HH:mm:ss" 格式的日期字符串解析为 Date
+class DateDeserializer implements ObjectReader<Date> {
+    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+    @Override
+    public Date readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
+        String dateStr = jsonReader.readString();
+        try {
+            return sdf.parse(dateStr);
+        } catch (Exception e) {
+            return null;  // 解析失败时返回 null
+       
+
+ }
+    }
+}
+```
+
+**反序列化时**：
+
+```java
+String json = "{\"name\":\"Conference\",\"eventDate\":\"2025-03-06 10:00:00\"}";
+Event event = JSON.parseObject(json, Event.class);
+System.out.println(event.eventDate); // 输出：Thu Mar 06 10:00:00 GMT 2025
 ```
 
