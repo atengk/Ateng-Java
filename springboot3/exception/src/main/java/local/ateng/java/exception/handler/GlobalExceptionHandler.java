@@ -53,7 +53,7 @@ public class GlobalExceptionHandler {
         // 设置状态码
         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         // 构建返回结果
-        return Result.error(firstErrorMessage).setData(errors);
+        return Result.failure(firstErrorMessage).withData(errors);
     }
 
     // 处理 GET 请求参数校验失败的异常
@@ -96,7 +96,7 @@ public class GlobalExceptionHandler {
         ex.printStackTrace();
         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         // 构建返回结果
-        return Result.error(code, message).setData(data);
+        return Result.failure(code, message).withData(data);
     }
 
     // 处理其他的异常
@@ -137,7 +137,7 @@ public class GlobalExceptionHandler {
         // 设置状态码
         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         // 构建返回结果
-        return Result.error(message);
+        return Result.failure(message);
     }
 
 

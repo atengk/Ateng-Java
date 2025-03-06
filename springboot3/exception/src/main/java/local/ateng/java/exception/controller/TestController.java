@@ -27,7 +27,7 @@ public class TestController {
             put("result", result);
             put("null", null);
         }};
-        return Result.success(AppCodeEnum.SUCCESS.getCode(), AppCodeEnum.SUCCESS.getDescription()).setData(map);
+        return Result.success(AppCodeEnum.SUCCESS.getCode(), AppCodeEnum.SUCCESS.getDescription()).withData(map);
     }
 
 }
