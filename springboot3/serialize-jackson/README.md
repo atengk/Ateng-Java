@@ -13,16 +13,6 @@
 
 
 
-## **在 Spring Boot 3 中如何处理序列化和反序列化**
-
-Spring Boot 3 **默认使用 Jackson** 作为 JSON 处理库，以下方式可以 **自定义序列化和反序列化**：
-
-1. **使用 Jackson 注解**（简单方式）
-2. **自定义 `JsonSerializer` 和 `JsonDeserializer`**（复杂数据格式）
-3. **全局 ObjectMapper 配置**（全局格式化）
-
-
-
 ## 常用注解及使用方法
 
 ### 常用注解
@@ -631,6 +621,7 @@ Event(title=Meeting, startTime=2024-03-05T12:30)
 **作用**：在序列化/反序列化时包含类的类型信息，常用于继承结构。
 
 **示例**：
+
 ```java
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -837,7 +828,9 @@ MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@
 
 
 
-#### 使用接口
+#### 使用Controller
+
+在 **Spring Web MVC** 中，Jackson 主要用于处理 HTTP 请求和响应的 JSON 序列化与反序列化。当 Controller 返回 Java 对象时，Spring MVC 通过 `MappingJackson2HttpMessageConverter` 将其转换为 JSON 响应给前端，反之，当前端发送 JSON 数据时，Spring MVC 会自动解析，并使用 Jackson 将其转换为 Java 对象。在实际应用中，`@RestController` 或 `@ResponseBody` 注解可以让 Spring 自动调用 Jackson 进行序列化，而 `@RequestBody` 注解则让 Jackson 负责反序列化。
 
 ```java
 package local.ateng.java.serialize.controller;
@@ -1170,9 +1163,11 @@ public class NumberToStringDeserializer extends JsonDeserializer<String> {
 
 
 
-## 全局 ObjectMapper 配置
+## Spring Web MVC序列化和反序列化
 
 在 Spring Boot 中，定义 `@Bean ObjectMapper` 会 **覆盖默认的 JSON 配置**，影响 **`@RestController` 返回值**、`@RequestBody` 解析、以及 `@Autowired ObjectMapper` 注入。这样可以 **统一全局 JSON 格式**（如时间格式、属性命名）并 **修改 Jackson 默认行为**，确保应用中的 JSON 处理符合需求。如果不定义，Spring Boot 会使用默认 `ObjectMapper`，但无法定制其行为。
+
+### 配置
 
 ```java
 package local.ateng.java.serialize.config;
@@ -1211,38 +1206,39 @@ import java.util.TimeZone;
 public class JacksonConfig {
 
     // 日期与时间格式化
-    private static final String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
-    private static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
+    public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
     /**
      * 自定义 Jackson 时间日期的序列化和反序列化规则
      *
      * @param objectMapper Jackson 的 ObjectMapper 实例
      */
-    public static void customizeJsonDateTime(ObjectMapper objectMapper) {
+    public static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone,String dateFormat, String dateTimeFormat) {
         // 设置全局时区，确保 Date 类型数据使用此时区
-        objectMapper.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+        objectMapper.setTimeZone(TimeZone.getTimeZone(timeZone));
 
         // 关闭默认时间戳序列化，改为标准格式
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         // 避免与 JavaTimeModule 冲突
-        objectMapper.setDateFormat(new SimpleDateFormat(DEFAULT_DATE_TIME_FORMAT));
+        objectMapper.setDateFormat(new SimpleDateFormat(dateTimeFormat));
 
         // Java 8 时间模块
         JavaTimeModule javaTimeModule = new JavaTimeModule();
 
         // LocalDateTime 序列化 & 反序列化
         javaTimeModule.addSerializer(LocalDateTime.class,
-                new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_TIME_FORMAT)));
+                new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
         javaTimeModule.addDeserializer(LocalDateTime.class,
-                new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_TIME_FORMAT)));
+                new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
 
         // LocalDate 序列化 & 反序列化
         javaTimeModule.addSerializer(LocalDate.class,
-                new LocalDateSerializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
+                new LocalDateSerializer(DateTimeFormatter.ofPattern(dateFormat)));
         javaTimeModule.addDeserializer(LocalDate.class,
-                new LocalDateDeserializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
+                new LocalDateDeserializer(DateTimeFormatter.ofPattern(dateFormat)));
 
         // 注册 JavaTimeModule
         objectMapper.registerModule(javaTimeModule);
@@ -1357,7 +1353,7 @@ public class JacksonConfig {
         // 创建 ObjectMapper 实例
         ObjectMapper objectMapper = new ObjectMapper();
         // 配置日期和时间的序列化与反序列化
-        customizeJsonDateTime(objectMapper);
+        customizeJsonDateTime(objectMapper, DEFAULT_TIME_ZONE,DEFAULT_DATE_FORMAT,DEFAULT_DATE_TIME_FORMAT);
         // 配置 JSON 序列化相关设置
         customizeJsonSerialization(objectMapper);
         // 配置 JSON 反序列化相关设置
@@ -1371,7 +1367,283 @@ public class JacksonConfig {
 }
 ```
 
+### 使用
+
+```java
+package local.ateng.java.serialize.controller;
+
+import local.ateng.java.serialize.entity.MyUser;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@RestController
+@RequestMapping("/jackson")
+public class JacksonController {
+
+    // 序列化
+    @GetMapping("/serialize")
+    public MyUser serialize() {
+        return MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(25)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .score(new BigDecimal("88.911"))
+                .ratio(0.7147)
+                .birthday(LocalDate.parse("2000-01-01"))
+                .province("重庆市")
+                .city("重庆市")
+                .createTime(LocalDateTime.now())
+                .build();
+    }
+
+    // 反序列化
+    @PostMapping("/deserialize")
+    public String deserialize(@RequestBody MyUser myUser) {
+        System.out.println(myUser);
+        return "ok";
+    }
+
+}
+```
+
+**访问序列化接口**
+
+```
+curl -X GET http://localhost:12014/jackson/serialize
+```
+
+示例输出：
+
+```json
+{"id":"1","name":"ateng","age":25,"phoneNumber":"1762306666","email":"kongyu2385569970@gmail.com","score":"88.911","ratio":0.7147,"birthday":"2000-01-01","province":"重庆市","city":"重庆市","createTime":"2025-03-06 08:28:19","createTime2":null,"createTime3":null,"num":0,"list":null}
+```
+
+**访问反序列化接口**
+
+```
+curl -X POST http://192.168.100.2:12014/jackson/deserialize \
+     -H "Content-Type: application/json" \
+     -d '{
+           "id": 1,
+           "name": "ateng",
+           "age": 25,
+           "phoneNumber": "1762306666",
+           "email": "kongyu2385569970@gmail.com",
+           "score": 88.911,
+           "ratio": 0.7147,
+           "birthday": "2000-01-01",
+           "province": "Chongqing",
+           "city": "Chongqing",
+           "createTime": "2025-03-05 14:30:00"
+         }'
+```
+
+控制台打印
+
+```
+MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=Chongqing, city=Chongqing, createTime=2025-03-05T14:30, createTime2=null, createTime3=null, num=0, list=null)
+```
 
 
 
+## Spring Data Redis序列化和反序列化
+
+在 **Spring Data Redis** 中，Jackson 主要用于将 Java 对象序列化为 JSON 存入 Redis，并在读取时反序列化回 Java 对象。由于 Redis 只能存储字符串或二进制数据，因此 `RedisTemplate` 需要配置合适的序列化器，如 `Jackson2JsonRedisSerializer`，以确保对象能正确存储和恢复。
+
+### 配置
+
+```java
+package local.ateng.java.serialize.config;
+
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+/**
+ * RedisTemplate 配置类
+ * <p>
+ * 该类负责配置 RedisTemplate，允许对象进行序列化和反序列化。
+ * 在这里，我们使用了 StringRedisSerializer 来序列化和反序列化 Redis 键，
+ * 使用 Jackson2JsonRedisSerializer 来序列化和反序列化 Redis 值，确保 Redis 能够存储 Java 对象。
+ * 另外，ObjectMapper 的配置确保 JSON 的格式和解析行为符合预期。
+ * </p>
+ */
+@Configuration
+public class RedisTemplateConfig {
+    // 日期与时间格式化
+    public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
+    public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSSSSS";
+
+    /**
+     * 自定义 ObjectMapper 配置以启用默认类型标记。
+     * 该方法的作用是在 JSON 序列化和反序列化时包含类类型信息，
+     * 以便在反序列化时能够正确地识别对象的具体类型。
+     *
+     * @param objectMapper 要配置的 ObjectMapper 实例
+     */
+    public static void customizeJsonClassType(ObjectMapper objectMapper) {
+        // 启用默认类型标记，使 JSON 中包含对象的类信息
+        objectMapper.activateDefaultTyping(
+                LaissezFaireSubTypeValidator.instance, // 允许所有子类型的验证器（最宽松）
+                ObjectMapper.DefaultTyping.NON_FINAL,  // 仅对非 final 类启用类型信息
+                JsonTypeInfo.As.PROPERTY                // 以 JSON 属性的形式存储类型信息
+        );
+    }
+
+    /**
+     * 配置 RedisTemplate
+     * <p>
+     * 创建 RedisTemplate，并指定如何序列化和反序列化 Redis 中的键值。
+     * 该配置支持使用 Jackson2JsonRedisSerializer 序列化值，并使用 StringRedisSerializer 序列化键。
+     * </p>
+     *
+     * @param redisConnectionFactory Redis 连接工厂
+     * @return 配置好的 RedisTemplate
+     */
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        // 创建 RedisTemplate 实例
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(redisConnectionFactory);  // 设置连接工厂
+
+        // 使用 StringRedisSerializer 来序列化和反序列化 Redis 键
+        // Redis 键将被序列化为字符串类型
+        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+        template.setKeySerializer(stringRedisSerializer);  // 设置键的序列化器
+        template.setHashKeySerializer(stringRedisSerializer);  // 设置哈希键的序列化器
+
+        // 创建 ObjectMapper 实例，用于配置 Jackson 的序列化和反序列化行为
+        ObjectMapper objectMapper = new ObjectMapper();
+        JacksonConfig.customizeJsonDateTime(objectMapper, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT);
+        JacksonConfig.customizeJsonSerialization(objectMapper);
+        JacksonConfig.customizeJsonDeserialization(objectMapper);
+        JacksonConfig.customizeJsonParsing(objectMapper);
+        customizeJsonClassType(objectMapper);
+
+        // 创建 Jackson2JsonRedisSerializer，用于序列化和反序列化值
+        // 该序列化器使用配置好的 ObjectMapper
+        Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer =
+                new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
+
+        // 设置 RedisTemplate 的值的序列化器
+        template.setValueSerializer(jackson2JsonRedisSerializer);
+        template.setHashValueSerializer(jackson2JsonRedisSerializer);  // 设置哈希值的序列化器
+
+        // 返回配置好的 RedisTemplate
+        template.afterPropertiesSet();
+        return template;
+    }
+
+}
+```
+
+### 使用
+
+```java
+package local.ateng.java.serialize.controller;
+
+import local.ateng.java.serialize.entity.MyUser;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.List;
+
+@RestController
+@RequestMapping("/redis")
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class RedisController {
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    // 序列化
+    @GetMapping("/serialize")
+    public String serialize() {
+        MyUser myUser = MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(null)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .score(new BigDecimal("88.911"))
+                .ratio(0.7147)
+                .birthday(LocalDate.parse("2000-01-01"))
+                .province(null)
+                .city("重庆市")
+                .createTime(LocalDateTime.now())
+                .createTime2(new Date())
+                .list(List.of())
+                .build();
+        redisTemplate.opsForValue().set("myUser", myUser);
+        return "ok";
+    }
+
+    // 反序列化
+    @GetMapping("/deserialize")
+    public String deserialize() {
+        MyUser myUser = (MyUser) redisTemplate.opsForValue().get("myUser");
+        System.out.println(myUser);
+        System.out.println(myUser.getCreateTime());
+        return "ok";
+    }
+
+}
+```
+
+序列化到Redis
+
+```json
+{
+    "@class": "local.ateng.java.serialize.entity.MyUser",
+    "id": "1",
+    "name": "ateng",
+    "age": null,
+    "phoneNumber": "1762306666",
+    "email": "kongyu2385569970@gmail.com",
+    "score": [
+        "java.math.BigDecimal",
+        "88.911"
+    ],
+    "ratio": 0.7147,
+    "birthday": "2000-01-01",
+    "province": null,
+    "city": "重庆市",
+    "createTime": "2025-03-06 08:46:55.760579",
+    "createTime2": [
+        "java.util.Date",
+        "2025-03-06 08:46:55.000760"
+    ],
+    "createTime3": null,
+    "num": 0,
+    "list": [
+        "java.util.ImmutableCollections$ListN",
+        []
+    ]
+}
+```
+
+反序列化输出
+
+```
+MyUser(id=1, name=ateng, age=null, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2025-03-06T08:46:55.760579, createTime2=Thu Mar 06 08:46:55 CST 2025, createTime3=null, num=0, list=[])
+```
 

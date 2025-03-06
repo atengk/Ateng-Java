@@ -34,38 +34,39 @@ import java.util.TimeZone;
 public class JacksonConfig {
 
     // 日期与时间格式化
-    private static final String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
-    private static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
+    public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
     /**
      * 自定义 Jackson 时间日期的序列化和反序列化规则
      *
      * @param objectMapper Jackson 的 ObjectMapper 实例
      */
-    public static void customizeJsonDateTime(ObjectMapper objectMapper) {
+    public static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone,String dateFormat, String dateTimeFormat) {
         // 设置全局时区，确保 Date 类型数据使用此时区
-        objectMapper.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+        objectMapper.setTimeZone(TimeZone.getTimeZone(timeZone));
 
         // 关闭默认时间戳序列化，改为标准格式
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         // 避免与 JavaTimeModule 冲突
-        objectMapper.setDateFormat(new SimpleDateFormat(DEFAULT_DATE_TIME_FORMAT));
+        objectMapper.setDateFormat(new SimpleDateFormat(dateTimeFormat));
 
         // Java 8 时间模块
         JavaTimeModule javaTimeModule = new JavaTimeModule();
 
         // LocalDateTime 序列化 & 反序列化
         javaTimeModule.addSerializer(LocalDateTime.class,
-                new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_TIME_FORMAT)));
+                new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
         javaTimeModule.addDeserializer(LocalDateTime.class,
-                new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_TIME_FORMAT)));
+                new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
 
         // LocalDate 序列化 & 反序列化
         javaTimeModule.addSerializer(LocalDate.class,
-                new LocalDateSerializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
+                new LocalDateSerializer(DateTimeFormatter.ofPattern(dateFormat)));
         javaTimeModule.addDeserializer(LocalDate.class,
-                new LocalDateDeserializer(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
+                new LocalDateDeserializer(DateTimeFormatter.ofPattern(dateFormat)));
 
         // 注册 JavaTimeModule
         objectMapper.registerModule(javaTimeModule);
@@ -180,7 +181,7 @@ public class JacksonConfig {
         // 创建 ObjectMapper 实例
         ObjectMapper objectMapper = new ObjectMapper();
         // 配置日期和时间的序列化与反序列化
-        customizeJsonDateTime(objectMapper);
+        customizeJsonDateTime(objectMapper, DEFAULT_TIME_ZONE,DEFAULT_DATE_FORMAT,DEFAULT_DATE_TIME_FORMAT);
         // 配置 JSON 序列化相关设置
         customizeJsonSerialization(objectMapper);
         // 配置 JSON 反序列化相关设置
