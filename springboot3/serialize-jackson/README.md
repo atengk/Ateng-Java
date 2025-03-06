@@ -752,7 +752,7 @@ public class MyUser implements Serializable {
 
 
 
-#### 使用ObjectMapper
+#### 使用JSON
 
 使用测试类来进行演示
 
@@ -914,7 +914,7 @@ MyUser(id=1, name=null, age=25, phoneNumber=1762306666, email=kongyu2385569970@g
 
 
 
-## 自定义 `JsonSerializer` 和 `JsonDeserializer`
+## 自定义序列化和反序列化
 
 ### **1. `JsonSerializer` - 自定义序列化**
 

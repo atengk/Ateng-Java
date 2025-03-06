@@ -26,5 +26,7 @@
         <module>log</module>
         <module>actuator</module>
         <module>aop</module>
+        <module>serialize-fastjson2</module>
+        <module>serialize-jackson</module>
     </modules>
 </project>
