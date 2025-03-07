@@ -21,5 +21,6 @@
         <module>fast-excel</module>
         <module>lombok</module>
         <module>async</module>
+        <module>jackson</module>
     </modules>
 </project>
