@@ -11,6 +11,8 @@
 | **Redis 缓存**                     | Java 对象 → JSON 存入 Redis | 取出 JSON → Java 对象     |
 | **消息队列（MQ）**                 | Java 对象 → JSON 发送       | 监听 JSON → Java 对象     |
 
+- [Fastjson2使用文档](/work/Ateng-Java/tools/fastjson2/)
+
 
 
 ## 基础配置
