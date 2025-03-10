@@ -1,0 +1,15 @@
+server:
+  port: 11003
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: reactive
+  application:
+    name: ${project.artifactId}
+---
+# 环境配置
+spring:
+  profiles:
+    active: @profiles.active@
+    desc: @profiles.desc@

@@ -15,5 +15,7 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>lock4j</module>
+        <module>spring-cloud-nacos</module>
+        <module>spring-cloud-gateway</module>
     </modules>
 </project>
