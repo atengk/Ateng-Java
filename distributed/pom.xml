@@ -17,5 +17,8 @@
         <module>lock4j</module>
         <module>spring-cloud-nacos</module>
         <module>spring-cloud-gateway</module>
+        <module>spring-cloud-dubbo-api</module>
+        <module>spring-cloud-dubbo-provider</module>
+        <module>spring-cloud-dubbo-consumer</module>
     </modules>
 </project>

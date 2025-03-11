@@ -1,0 +1,36 @@
+# nacos 配置
+spring:
+  cloud:
+    nacos:
+      # nacos:8848 服务地址
+      server-addr: 192.168.1.10:30648
+      username: nacos
+      password: Admin@123
+      discovery:
+        # 注册组
+        group: ${spring.profiles.active}
+        namespace: a8126e6d-5758-4f5b-b892-2522a250074c
+      config:
+        # 配置组
+        group: ${spring.profiles.active}
+        namespace: a8126e6d-5758-4f5b-b892-2522a250074c
+  config:
+    import: # 引入配置nacos中的配置application-common.yml
+      - optional:nacos:application-common.yml
+      - optional:nacos:${spring.application.name}.yml
+---
+# Dubbo 配置
+dubbo:
+  application:
+    name: dubbo-${spring.application.name}
+  protocol:
+    name: dubbo
+    port: -1
+  # 注册中心配置
+  registry:
+    address: nacos://${spring.cloud.nacos.server-addr}
+    group: ${spring.cloud.nacos.discovery.group}
+    username: ${spring.cloud.nacos.username}
+    password: ${spring.cloud.nacos.password}
+    parameters:
+      namespace: ${spring.cloud.nacos.discovery.namespace}
