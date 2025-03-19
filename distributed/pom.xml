@@ -22,5 +22,7 @@
         <module>spring-cloud-dubbo-consumer</module>
         <module>spring-cloud-openfeign</module>
         <module>spring-cloud-sentinel</module>
+        <module>spring-cloud-seata</module>
+        <module>spring-cloud-seata-demo</module>
     </modules>
 </project>
