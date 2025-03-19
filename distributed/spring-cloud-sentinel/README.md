@@ -373,11 +373,13 @@ public class SentinelController {
 
 
 
-## 流控规则（Flow Rule）
+## 使用Sentinel
+
+### 流控规则（Flow Rule）
 
 通过设置每秒请求数（QPS）或并发数等方式限制接口流量，防止瞬时流量过载。支持排队等待、拒绝请求等处理方式，保障系统稳定性。还可根据调用关系设置不同的限流策略。
 
-### Nacos配置
+#### Nacos配置
 
 在 Nacos 中添加配置，添加这个后需要重启相关的应用
 
@@ -402,7 +404,7 @@ spring:
 
 ![image-20250317171619011](./assets/image-20250317171619011.png)
 
-### 添加规则
+#### 添加规则
 
 在以上配置的 `dataId` 创建规则配置，添加后立即生效
 
@@ -428,7 +430,7 @@ spring:
 
 ![image-20250317172338980](./assets/image-20250317172338980.png)
 
-### 参数详解
+#### 参数详解
 
 | **参数**          | **类型**  | **含义**                                 | **可选值**                                                   |
 | ----------------- | --------- | ---------------------------------------- | ------------------------------------------------------------ |
@@ -442,7 +444,7 @@ spring:
 
 
 
-### 访问接口
+#### 访问接口
 
 ```
 curl http://localhost:11008/sentinel/hello
@@ -454,11 +456,11 @@ curl http://localhost:11008/sentinel/hello
 
 
 
-## 熔断降级规则（Degrade Rule）
+### 熔断降级规则（Degrade Rule）
 
 当接口的异常比例、慢调用比例或异常数达到阈值时，触发熔断。短期内拒绝请求，待恢复后自动关闭熔断，防止因服务故障导致的连锁崩溃，保护整体系统稳定。
 
-### Nacos配置
+#### Nacos配置
 
 在 Nacos 中添加配置，添加这个后需要重启相关的应用
 
@@ -483,7 +485,7 @@ spring:
 
 ![image-20250317172822590](./assets/image-20250317172822590.png)
 
-### 添加规则
+#### 添加规则
 
 在以上配置的 `dataId` 创建规则配置，添加后立即生效
 
@@ -510,7 +512,7 @@ spring:
 
 ![image-20250318085621245](./assets/image-20250318085621245.png)
 
-### 参数详解
+#### 参数详解
 
 | **参数**             | **类型** | **含义**                    | **可选值**                                                |
 | -------------------- | -------- | --------------------------- | --------------------------------------------------------- |
@@ -524,7 +526,7 @@ spring:
 
 
 
-### 访问接口
+#### 访问接口
 
 ```
 http://localhost:11008/sentinel/slowRequest
@@ -534,11 +536,11 @@ http://localhost:11008/sentinel/slowRequest
 
 
 
-## 热点参数限流规则（Param Flow Rule）
+### 热点参数限流规则（Param Flow Rule）
 
 针对请求中某些重要参数（如商品ID、用户ID）进行限流。若某个参数的访问频率过高，可单独限制它的请求量，避免个别热点数据导致系统负载过高。
 
-### Nacos配置
+#### Nacos配置
 
 在 Nacos 中添加配置，添加这个后需要重启相关的应用
 
@@ -563,7 +565,7 @@ spring:
 
 ![image-20250318110645065](./assets/image-20250318110645065.png)
 
-### 添加规则
+#### 添加规则
 
 在以上配置的 `dataId` 创建规则配置，添加后立即生效
 
@@ -595,7 +597,7 @@ spring:
 
 ![image-20250318092526667](./assets/image-20250318092526667.png)
 
-### 参数详解
+#### 参数详解
 
 | **参数名**          | **类型**       | **默认值**  | **含义**                                                     |
 | ------------------- | -------------- | ----------- | ------------------------------------------------------------ |
@@ -626,7 +628,7 @@ spring:
 
 
 
-### 访问接口
+#### 访问接口
 
 ```
 http://localhost:11008/sentinel/hotParam?item=ateng
@@ -638,11 +640,11 @@ http://localhost:11008/sentinel/hotParam?item=ateng
 
 
 
-## 访问控制规则（Authority Rule）
+### 访问控制规则（Authority Rule）
 
 根据调用方身份、用户标签等维度限制访问权限。可通过黑名单、白名单方式控制哪些用户或服务可访问特定接口，确保敏感接口或资源的安全性。
 
-### 配置 RequestOriginParser
+#### 配置 RequestOriginParser
 
 ```java
 package local.ateng.java.cloud.sentinel;
@@ -681,7 +683,7 @@ public class HeaderOriginParser implements RequestOriginParser {
 }
 ```
 
-### Nacos配置
+#### Nacos配置
 
 在 Nacos 中添加配置，添加这个后需要重启相关的应用
 
@@ -706,7 +708,7 @@ spring:
 
 ![image-20250318110625467](./assets/image-20250318110625467.png)
 
-### 添加规则
+#### 添加规则
 
 在以上配置的 `dataId` 创建规则配置，添加后立即生效
 
@@ -728,7 +730,7 @@ spring:
 
 ![image-20250318104130059](./assets/image-20250318104130059.png)
 
-### 参数详解
+#### 参数详解
 
 | 参数名称   | 说明                                                         | 示例值                  |
 | ---------- | ------------------------------------------------------------ | ----------------------- |
@@ -738,7 +740,7 @@ spring:
 
 
 
-### 访问接口
+#### 访问接口
 
 ```
 http://localhost:11008/sentinel/auth
@@ -754,11 +756,11 @@ http://localhost:11008/sentinel/auth
 
 
 
-## 系统规则（Systen Rule）
+### 系统规则（Systen Rule）
 
 基于整体系统负载进行限流保护。当CPU使用率、内存占用或入口QPS超过设定阈值时，系统会自动触发限流或拒绝部分请求，优先保障核心功能的稳定运行。
 
-### Nacos配置
+#### Nacos配置
 
 在 Nacos 中添加配置，添加这个后需要重启相关的应用
 
@@ -783,7 +785,7 @@ spring:
 
 ![image-20250318111243812](./assets/image-20250318111243812.png)
 
-### 添加规则
+#### 添加规则
 
 在以上配置的 `dataId` 创建规则配置，添加后立即生效
 
@@ -807,7 +809,7 @@ spring:
 
 ![image-20250318112333018](./assets/image-20250318112333018.png)
 
-### 参数详解
+#### 参数详解
 
 以下是 Sentinel 系统规则中这些参数的配置实例及解释，以表格形式呈现：
 
@@ -819,3 +821,88 @@ spring:
 | 入口 QPS   | 3000     | 每秒查询数（QPS）阈值。限制进入系统的请求数，避免系统过载。  |
 | CPU 使用率 | 80       | CPU 使用率阈值，百分比形式。当 CPU 使用率超过该值时触发限流。 |
 
+
+
+## 整合远程调用
+
+### 整合OpenFeign
+
+参考 [OpenFeign使用文档](/work/Ateng-Java/distributed/spring-cloud-openfeign/) 整合
+
+添加配置文件，开启feign对sentinel的支持
+
+```yaml
+---
+# 开启feign对sentinel的支持
+feign:
+  sentinel:
+    enabled: true
+```
+
+使用OpenFeign
+
+```java
+@FeignClient(name = "spring-cloud-nacos", fallback = FeignLoadBalancerServiceFallback.class)
+public interface FeignLoadBalancerService {
+
+    @GetMapping("/config/get")
+    String get();
+
+}
+
+@RestController
+@RequestMapping("/loadbalancer")
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class LoadBalancerController {
+
+    private final FeignLoadBalancerService feignLoadBalancerService;
+
+    @GetMapping("/get")
+    public String get() {
+        return feignLoadBalancerService.get();
+    }
+
+}
+```
+
+有调用到OpenFeign的地方就会这样显示，按照以上的操作进行相应的配置即可
+
+![image-20250319170346960](./assets/image-20250319170346960.png)
+
+
+
+### 整合Dubbo
+
+参考 [Dubbo使用文档](/work/Ateng-Java/distributed/spring-cloud-dubbo-provider/) 整合
+
+添加依赖
+
+```xml
+<!-- Sentinel 集成 Dubbo -->
+<dependency>
+    <groupId>org.apache.dubbo</groupId>
+    <artifactId>dubbo-sentinel-spring-boot-starter</artifactId>
+</dependency>
+```
+
+使用Dubbo
+
+```java
+@RestController
+@RequestMapping("/dubbo")
+public class DubboController {
+
+    @DubboReference
+    private RemoteUserService remoteUserService;
+
+    @GetMapping("/get")
+    public RemoteUser get() {
+        return remoteUserService.getUser();
+    }
+
+}
+```
+
+有调用到Dubbo的地方就会这样显示，按照以上的操作进行相应的配置即可
+
+![image-20250319172255193](./assets/image-20250319172255193.png)
