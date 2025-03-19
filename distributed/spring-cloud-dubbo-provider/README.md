@@ -33,6 +33,15 @@ Dubbo 采用 **生产者（Provider）-消费者（Consumer）-注册中心（Re
 
 ## 基础配置
 
+### 添加配置属性
+
+```xml
+<!-- 项目属性 -->
+<properties>
+    <dubbo.version>3.3.4</dubbo.version>
+</properties>
+```
+
 ### 添加依赖管理
 
 ```xml

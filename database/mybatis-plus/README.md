@@ -77,13 +77,13 @@
         <dependency>
             <groupId>org.apache.velocity</groupId>
             <artifactId>velocity-engine-core</artifactId>
-            <version>2.4.1</version>
+            <version>2.3</version>
         </dependency>
         <!-- 代码生成器的模板引擎 FreemarkerTemplateEngine -->
         <!--<dependency>
             <groupId>org.freemarker</groupId>
             <artifactId>freemarker</artifactId>
-            <version>2.3.34</version>
+            <version>2.3.31</version>
         </dependency>-->
         <!-- MyBatis-Plus SQL分析与打印功能 -->
         <!-- 有性能损耗，在生产环境中谨慎使用 -->

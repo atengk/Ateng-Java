@@ -18,6 +18,11 @@ Spring Cloud OpenFeign 是 Spring Cloud 生态系统中的一个声明式 HTTP �
     <groupId>org.springframework.cloud</groupId>
     <artifactId>spring-cloud-starter-openfeign</artifactId>
 </dependency>
+<!-- Spring Cloud 负载均衡启动器依赖，用于客户端负载均衡 -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+</dependency>
 ```
 
 完整pom.xml如下
@@ -129,6 +134,12 @@ Spring Cloud OpenFeign 是 Spring Cloud 生态系统中的一个声明式 HTTP �
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
 
+        <!-- Spring Cloud 负载均衡启动器依赖，用于客户端负载均衡 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+        
     </dependencies>
 
     <!-- 依赖管理 -->
