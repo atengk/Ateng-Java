@@ -6,6 +6,7 @@ import local.ateng.java.redis.entity.UserInfoEntity;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.RedisTemplate;
 
@@ -16,6 +17,8 @@ import java.util.List;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 class MyRedisTemplateApplicationTests {
     private final RedisTemplate redisTemplate;
+    @Qualifier("redisTemplateDev")
+    private final RedisTemplate redisTemplateDev;
 
     @Test
     void test02() {
@@ -63,5 +66,27 @@ class MyRedisTemplateApplicationTests {
         JSONObject jsonObject = (JSONObject) redisTemplate.opsForValue().get("test:jsonObject");
         System.out.println(jsonObject);
     }
+
+    @Test
+    void test05() {
+        UserInfoEntity user = UserInfoEntity.builder()
+                .id(100L)
+                .name("John Doe")
+                .age(25)
+                .score(85.5)
+                .birthday(new Date())
+                .province("")
+                .city("Example City")
+                .build();
+        redisTemplateDev.opsForValue().set("test:user", user);
+    }
+
+    @Test
+    void test05_1() {
+        UserInfoEntity user = (UserInfoEntity) redisTemplateDev.opsForValue().get("test:user");
+        System.out.println(user);
+        System.out.println(user.getName());
+    }
+
 
 }

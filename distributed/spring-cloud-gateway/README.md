@@ -650,3 +650,300 @@ management:
     curl -X POST http://localhost:11003/actuator/gateway/refresh
     ```
 
+
+
+## 跨域配置
+
+```java
+package local.ateng.java.cloud.config;
+
+import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.stereotype.Component;
+import org.springframework.web.cors.reactive.CorsUtils;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
+import reactor.core.publisher.Mono;
+
+/**
+ * 跨域配置
+ *
+ * @author Ateng
+ * @email 2385569970@qq.com
+ * @since 2025-03-24
+ */
+@Component
+public class GlobalCorsFilter implements WebFilter, Ordered {
+
+    /**
+     * 这里为支持的请求头，如果有自定义的header字段请自己添加
+     */
+    private static final String ALLOWED_HEADERS =
+            "X-Requested-With, Content-Language, Content-Type, " +
+                    "Authorization, clientid, credential, X-XSRF-TOKEN, " +
+                    "isToken, token, Admin-Token, App-Token, Encrypt-Key, isEncrypt";
+
+    /**
+     * 允许的请求方法
+     */
+    private static final String ALLOWED_METHODS = "GET,POST,PUT,DELETE,OPTIONS,HEAD";
+
+    /**
+     * 允许的请求来源，使用 * 表示允许任何来源
+     */
+    private static final String ALLOWED_ORIGIN = "*";
+
+    /**
+     * 允许前端访问的响应头，使用 * 表示允许任何响应头
+     */
+    private static final String ALLOWED_EXPOSE = "*";
+
+    /**
+     * 预检请求的缓存时间，单位为秒（此处设置为 5 小时）
+     */
+    private static final String MAX_AGE = "18000L";
+
+    /**
+     * 实现跨域配置的 Web 过滤器
+     *
+     * @param exchange ServerWebExchange 对象，表示一次 Web 交换
+     * @param chain    WebFilterChain 对象，表示一组 Web 过滤器链
+     * @return Mono<Void> 表示异步的过滤器链处理结果
+     */
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        // 判断请求是否为跨域请求
+        if (CorsUtils.isCorsRequest(request)) {
+            ServerHttpResponse response = exchange.getResponse();
+            HttpHeaders headers = response.getHeaders();
+            headers.add("Access-Control-Allow-Headers", ALLOWED_HEADERS);
+            headers.add("Access-Control-Allow-Methods", ALLOWED_METHODS);
+            headers.add("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
+            headers.add("Access-Control-Expose-Headers", ALLOWED_EXPOSE);
+            headers.add("Access-Control-Max-Age", MAX_AGE);
+            headers.add("Access-Control-Allow-Credentials", "true");
+            // 处理预检请求的 OPTIONS 方法，直接返回成功状态码
+            if (request.getMethod() == HttpMethod.OPTIONS) {
+                response.setStatusCode(HttpStatus.OK);
+                return Mono.empty();
+            }
+        }
+        return chain.filter(exchange);
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.HIGHEST_PRECEDENCE;
+    }
+}
+```
+
+
+
+## 请求日志打印
+
+### 请求Body缓存
+
+```java
+package local.ateng.java.cloud.config;
+
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+/**
+ * 全局缓存获取body请求数据（解决流不能重复读取问题）
+ *
+ * @author Ateng
+ * @email 2385569970@qq.com
+ * @since 2025-03-24
+ */
+@Component
+public class GlobalCacheRequestFilter implements GlobalFilter, Ordered {
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // 只缓存json类型请求
+        String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+        if (!StringUtils.startsWithIgnoreCase(header, MediaType.APPLICATION_JSON_VALUE)) {
+            return chain.filter(exchange);
+        }
+        return ServerWebExchangeUtils.cacheRequestBody(exchange, (serverHttpRequest) -> {
+            if (serverHttpRequest == exchange.getRequest()) {
+                return chain.filter(exchange);
+            }
+            return chain.filter(exchange.mutate().request(serverHttpRequest).build());
+        });
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.HIGHEST_PRECEDENCE + 1;
+    }
+}
+```
+
+### 全局日志过滤器
+
+```java
+package local.ateng.java.cloud.config;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashSet;
+
+import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ORIGINAL_REQUEST_URL_ATTR;
+
+/**
+ * 全局日志过滤器
+ * 用于打印请求执行参数与响应时间等等
+ *
+ * @author Ateng
+ * @email 2385569970@qq.com
+ * @since 2025-03-24
+ */
+@Slf4j
+@Component
+public class GlobalLogFilter implements GlobalFilter, Ordered {
+
+    private static final String START_TIME = "startTime";
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        LinkedHashSet<URI> uris = exchange.getAttributeOrDefault(GATEWAY_ORIGINAL_REQUEST_URL_ATTR, new LinkedHashSet<>());
+        URI requestUri = uris.stream().findFirst().orElse(request.getURI());
+        String path = UriComponentsBuilder.fromPath(requestUri.getRawPath()).build().toUriString();
+        String url = request.getMethod().name() + " " + path;
+
+        // 打印请求参数
+        String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
+        if (StringUtils.startsWithIgnoreCase(header, MediaType.APPLICATION_JSON_VALUE)) {
+            // 从缓存中读取request内的body
+            String jsonParam;
+            Object obj = exchange.getAttributes().get(ServerWebExchangeUtils.CACHED_REQUEST_BODY_ATTR);
+            DataBuffer buffer = (DataBuffer) obj;
+            try (DataBuffer.ByteBufferIterator iterator = buffer.readableByteBuffers()) {
+                CharBuffer charBuffer = StandardCharsets.UTF_8.decode(iterator.next());
+                jsonParam = charBuffer.toString();
+            }
+            log.info("[PLUS]开始请求 => URL[{}],参数类型[json],参数:[{}]", url, jsonParam);
+        } else {
+            MultiValueMap<String, String> parameterMap = request.getQueryParams();
+            log.info("[PLUS]开始请求 => URL[{}],param={}", url, parameterMap);
+        }
+        exchange.getAttributes().put(START_TIME, System.currentTimeMillis());
+        return chain.filter(exchange).then(Mono.fromRunnable(() -> {
+            Long startTime = exchange.getAttribute(START_TIME);
+            if (startTime != null) {
+                long executeTime = (System.currentTimeMillis() - startTime);
+                log.info("[PLUS]结束请求 => URL[{}],耗时:[{}]毫秒", url, executeTime);
+            }
+        }));
+    }
+
+    @Override
+    public int getOrder() {
+        // 日志处理器在负载均衡器之后执行 负载均衡器会导致线程切换 无法获取上下文内容
+        // 如需在日志内操作线程上下文 例如获取登录用户数据等 可以打开下方注释代码
+        // return ReactiveLoadBalancerClientFilter.LOAD_BALANCER_CLIENT_FILTER_ORDER - 1;
+        return Ordered.LOWEST_PRECEDENCE;
+    }
+
+}
+```
+
+## 全局异常
+
+```java
+package local.ateng.java.cloud.handler;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
+import org.springframework.cloud.gateway.support.NotFoundException;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.util.LinkedHashMap;
+
+/**
+ * 网关统一异常处理
+ * 
+ * @author Ateng
+ * @email 2385569970@qq.com
+ * @since 2025-03-24
+ */
+@Slf4j
+@Order(-1)
+@Configuration
+public class GatewayExceptionHandler implements ErrorWebExceptionHandler {
+
+    @Override
+    public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
+        ServerHttpResponse response = exchange.getResponse();
+
+        if (exchange.getResponse().isCommitted()) {
+            return Mono.error(ex);
+        }
+
+        String msg;
+
+        if (ex instanceof NotFoundException) {
+            msg = "服务未找到";
+        } else if (ex instanceof ResponseStatusException responseStatusException) {
+            msg = responseStatusException.getMessage();
+        } else {
+            msg = "内部服务器错误";
+        }
+
+        log.error("[网关异常处理]请求路径:{},异常信息:{}", exchange.getRequest().getPath(), ex.getMessage());
+
+        // 返回
+        response.setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
+        LinkedHashMap<String, String> result = new LinkedHashMap<>() {{
+            put("code", "-1");
+            put("msg", msg);
+            put("data", null);
+        }};
+        DataBuffer dataBuffer = response.bufferFactory().wrap(result.toString().getBytes());
+        return response.writeWith(Mono.just(dataBuffer));
+    }
+}
+```
+

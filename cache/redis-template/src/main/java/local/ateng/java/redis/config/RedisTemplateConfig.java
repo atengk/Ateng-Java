@@ -14,9 +14,14 @@ import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -44,6 +49,12 @@ import java.util.TimeZone;
  */
 @Configuration
 public class RedisTemplateConfig {
+
+    private final MyRedisProperties myRedisProperties;
+
+    public RedisTemplateConfig(MyRedisProperties myRedisProperties) {
+        this.myRedisProperties = myRedisProperties;
+    }
 
     // 日期与时间格式化
     public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
@@ -227,6 +238,66 @@ public class RedisTemplateConfig {
         // 设置 RedisTemplate 的值的序列化器
         redisTemplate.setValueSerializer(jackson2JsonRedisSerializer);
         redisTemplate.setHashValueSerializer(jackson2JsonRedisSerializer);  // 设置哈希值的序列化器
+
+        // 返回redisTemplate
+        redisTemplate.afterPropertiesSet();
+        return redisTemplate;
+    }
+
+    /**
+     * Lettuce的Redis连接工厂
+     *
+     * @param redisProperties Redis服务的参数
+     * @return Lettuce连接工厂
+     */
+    private LettuceConnectionFactory createLettuceConnectionFactory(RedisProperties redisProperties) {
+        RedisProperties.Pool pool = redisProperties.getLettuce().getPool();
+        // 设置Redis的服务参数
+        RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
+        redisConfig.setHostName(redisProperties.getHost());
+        redisConfig.setDatabase(redisProperties.getDatabase());
+        redisConfig.setPort(redisProperties.getPort());
+        redisConfig.setPassword(redisProperties.getPassword());
+        // 设置连接池属性
+        GenericObjectPoolConfig<Object> poolConfig = new GenericObjectPoolConfig();
+        poolConfig.setMaxTotal(pool.getMaxActive());
+        poolConfig.setMaxIdle(pool.getMaxIdle());
+        poolConfig.setMinIdle(pool.getMinIdle());
+        poolConfig.setMaxWait(pool.getMaxWait());
+        poolConfig.setTimeBetweenEvictionRuns(pool.getTimeBetweenEvictionRuns());
+        LettucePoolingClientConfiguration clientConfig = LettucePoolingClientConfiguration
+                .builder()
+                .commandTimeout(redisProperties.getTimeout())
+                .poolConfig(poolConfig)
+                .build();
+        // 返回Lettuce的Redis连接工厂
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(redisConfig, clientConfig);
+        factory.afterPropertiesSet();
+        return factory;
+    }
+
+    /**
+     * 自定义Redis配置，从MyRedisProperties获取redis-dev的配置，redisTemplateDev
+     * 使用：
+     *
+     * @return
+     * @Qualifier("redisTemplateDev") private final RedisTemplate redisTemplateDev;
+     */
+    @Bean
+    public RedisTemplate<String, Object> redisTemplateDev() {
+        // 连接Redis
+        LettuceConnectionFactory factory = this.createLettuceConnectionFactory(myRedisProperties.getRedisDev());
+        RedisTemplate redisTemplate = new RedisTemplate();
+        redisTemplate.setConnectionFactory(factory);
+
+        /**
+         * 使用StringRedisSerializer来序列化和反序列化redis的key值
+         */
+        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+        redisTemplate.setKeySerializer(stringRedisSerializer);
+        redisTemplate.setHashKeySerializer(stringRedisSerializer);
+
+        // 值序列化，使用Jackson或者Fastjson2...
 
         // 返回redisTemplate
         redisTemplate.afterPropertiesSet();
