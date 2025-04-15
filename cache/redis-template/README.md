@@ -485,6 +485,164 @@ public class RedisTemplateConfig {
 
 
 
+## 添加多个Redis（可选）
+
+### 添加配置文件
+
+```yaml
+---
+# Redis的相关配置
+spring:
+  data:
+    # ...
+    redis-dev:
+      host: 192.168.1.10 # Redis服务器地址
+      database: 101 # Redis数据库索引（默认为0）
+      port: 42784 # Redis服务器连接端口
+      password: Admin@123 # Redis服务器连接密码（默认为空）
+      client-type: lettuce  # 默认使用Lettuce作为Redis客户端
+      lettuce:
+        pool:
+          max-active: 100 # 连接池最大连接数（使用负值表示没有限制）
+          max-wait: -1s # 连接池最大阻塞等待时间（使用负值表示没有限制）
+          max-idle: 100 # 连接池中的最大空闲连接
+          min-idle: 0 # 连接池最小空闲连接数
+          time-between-eviction-runs: 1s # 空闲对象逐出器线程的运行间隔时间.空闲连接线程释放周期时间
+      timeout: 10000ms # 连接超时时间（毫秒）
+```
+
+### 添加配置属性
+
+```java
+/**
+ * 自定义Redis配置文件
+ *
+ * @author 孔余
+ * @since 2024-01-18 11:02
+ */
+@ConfigurationProperties(prefix = "spring.data")
+@Configuration
+@Data
+public class MyRedisProperties {
+    private RedisProperties redisDev;
+    // private RedisProperties redisTest;
+}
+```
+
+### 添加连接工厂
+
+在 RedisTemplateConfig 文件中添加连接工厂信息
+
+```java
+    /**
+     * Lettuce的Redis连接工厂
+     *
+     * @param redisProperties Redis服务的参数
+     * @return Lettuce连接工厂
+     */
+    private LettuceConnectionFactory createLettuceConnectionFactory(RedisProperties redisProperties) {
+        RedisProperties.Pool pool = redisProperties.getLettuce().getPool();
+        // 设置Redis的服务参数
+        RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
+        redisConfig.setHostName(redisProperties.getHost());
+        redisConfig.setDatabase(redisProperties.getDatabase());
+        redisConfig.setPort(redisProperties.getPort());
+        redisConfig.setPassword(redisProperties.getPassword());
+        // 设置连接池属性
+        GenericObjectPoolConfig<Object> poolConfig = new GenericObjectPoolConfig();
+        poolConfig.setMaxTotal(pool.getMaxActive());
+        poolConfig.setMaxIdle(pool.getMaxIdle());
+        poolConfig.setMinIdle(pool.getMinIdle());
+        poolConfig.setMaxWait(pool.getMaxWait());
+        poolConfig.setTimeBetweenEvictionRuns(pool.getTimeBetweenEvictionRuns());
+        LettucePoolingClientConfiguration clientConfig = LettucePoolingClientConfiguration
+                .builder()
+                .commandTimeout(redisProperties.getTimeout())
+                .poolConfig(poolConfig)
+                .build();
+        // 返回Lettuce的Redis连接工厂
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(redisConfig, clientConfig);
+        factory.afterPropertiesSet();
+        return factory;
+    }
+```
+
+### 创建Bean
+
+在 RedisTemplateConfig 文件中添加连接工厂信息
+
+#### 注入Properties
+
+```java
+private final MyRedisProperties myRedisProperties;
+
+public RedisTemplateConfig(MyRedisProperties myRedisProperties) {
+    this.myRedisProperties = myRedisProperties;
+}
+```
+
+#### 创建Bean
+
+```java
+/**
+ * 自定义Redis配置，从MyRedisProperties获取redis-dev的配置，redisTemplateDev
+ * 使用：
+ *
+ * @return
+ * @Qualifier("redisTemplateDev") private final RedisTemplate redisTemplateDev;
+ */
+@Bean
+public RedisTemplate<String, Object> redisTemplateDev() {
+    // 连接Redis
+    LettuceConnectionFactory factory = this.createLettuceConnectionFactory(myRedisProperties.getRedisDev());
+    RedisTemplate redisTemplate = new RedisTemplate();
+    redisTemplate.setConnectionFactory(factory);
+
+    /**
+     * 使用StringRedisSerializer来序列化和反序列化redis的key值
+     */
+    StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+    redisTemplate.setKeySerializer(stringRedisSerializer);
+    redisTemplate.setHashKeySerializer(stringRedisSerializer);
+    
+    // 值序列化，使用Jackson或者Fastjson2...
+
+    // 返回redisTemplate
+    redisTemplate.afterPropertiesSet();
+    return redisTemplate;
+}
+```
+
+### 使用新Redis
+
+```java
+    @Qualifier("redisTemplateDev") 
+    private final RedisTemplate redisTemplateDev;
+
+    @Test
+    void test05() {
+        UserInfoEntity user = UserInfoEntity.builder()
+                .id(100L)
+                .name("John Doe")
+                .age(25)
+                .score(85.5)
+                .birthday(new Date())
+                .province("")
+                .city("Example City")
+                .build();
+        redisTemplateDev.opsForValue().set("test:user", user);
+    }
+
+    @Test
+    void test05_1() {
+        UserInfoEntity user = (UserInfoEntity) redisTemplateDev.opsForValue().get("test:user");
+        System.out.println(user);
+        System.out.println(user.getName());
+    }
+```
+
+
+
 ## 注入使用
 
 ### 不写泛型

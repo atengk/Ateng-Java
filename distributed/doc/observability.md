@@ -45,4 +45,7 @@ java -javaagent:opentelemetry-javaagent.jar \
      -jar spring-cloud-gateway-v1.0.jar
 ```
 
+采样参数：
 
+- -Dotel.traces.sampler=traceidratio: 指定采样器类型
+- -Dotel.traces.sampler.arg=0.2: 设置采样比例参数，`0.2` 表示 20% 的采样率
