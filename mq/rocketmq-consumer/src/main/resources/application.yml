@@ -1,0 +1,17 @@
+server:
+  port: 13006
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# RocketMQ配置
+rocketmq:
+  name-server: 192.168.1.12:9876  # RocketMQ nameserver 地址
+  consumer:
+    group: ${spring.application.name}
+    pull-batch-size: 32          # 每次拉取消息最大数（默认32）
+    message-model: CLUSTERING    # 消费模式：BROADCASTING 或 CLUSTERING（集群）

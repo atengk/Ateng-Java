@@ -1,0 +1,18 @@
+server:
+  port: 13005
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# RocketMQ配置
+rocketmq:
+  name-server: 192.168.1.12:9876  # RocketMQ nameserver 地址
+  producer:
+    group: ${spring.application.name}  # 生产者组名
+    send-message-timeout: 3000  # 发送消息超时时间(毫秒)
+    retry-times-when-send-failed: 2  # 发送失败重试次数
+    enable-msg-trace: true  # 开启 消息轨迹（Trace）

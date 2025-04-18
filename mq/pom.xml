@@ -18,5 +18,7 @@
         <module>rabbitmq-consumer</module>
         <module>kafka-provider</module>
         <module>kafka-consumer</module>
+        <module>rocketmq-provider</module>
+        <module>rocketmq-consumer</module>
     </modules>
 </project>
