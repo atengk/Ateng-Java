@@ -22,5 +22,6 @@
         <module>mongo-plus</module>
         <module>mongo-template</module>
         <module>autotable</module>
+        <module>mybatis-flex-postgis</module>
     </modules>
 </project>
