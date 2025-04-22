@@ -736,3 +736,100 @@ map.on('moveend', () => {
     }
 ```
 
+#### 网格数据聚合
+
+```java
+    @Test
+    void select5() {
+        String sql = "WITH\n" +
+                "-- 模拟当前视图的边界和缩放级别\n" +
+                "params AS (\n" +
+                "  SELECT\n" +
+                "    ST_MakeEnvelope(?,?,?,?,?) AS bbox,\n" +
+                "    ? AS zoom_level  -- 改这个值模拟不同缩放级别\n" +
+                "),\n" +
+                "\n" +
+                "-- 根据 zoom_level 决定网格大小，若 zoom >= 16 则为 NULL 表示不聚合\n" +
+                "grid_size AS (\n" +
+                "  SELECT\n" +
+                "    zoom_level,\n" +
+                "    CASE\n" +
+                "      WHEN zoom_level < 5 THEN 0.5        -- 世界级\n" +
+                "      WHEN zoom_level < 7 THEN 0.2        -- 国家级\n" +
+                "      WHEN zoom_level < 9 THEN 0.1        -- 区域级\n" +
+                "      WHEN zoom_level < 11 THEN 0.05      -- 城市级\n" +
+                "      WHEN zoom_level < 13 THEN 0.02      -- 区县级\n" +
+                "      WHEN zoom_level < 14 THEN 0.01      -- 街道级\n" +
+                "      WHEN zoom_level < 15 THEN 0.005     -- 社区级\n" +
+                "      WHEN zoom_level < 16 THEN 0.002     -- 小区级\n" +
+                "      ELSE NULL                           -- >=16 显示原始点\n" +
+                "    END AS cell_size,\n" +
+                "    bbox\n" +
+                "  FROM params\n" +
+                "),\n" +
+                "\n" +
+                "-- 构造网格（当 cell_size 非空时才构建）\n" +
+                "grid AS (\n" +
+                "  SELECT (ST_SquareGrid(gs.cell_size, gs.bbox)).*\n" +
+                "  FROM grid_size gs\n" +
+                "  WHERE gs.cell_size IS NOT NULL\n" +
+                "),\n" +
+                "\n" +
+                "-- 聚合数据（仅当 zoom_level < 16）\n" +
+                "aggregated AS (\n" +
+                "  SELECT\n" +
+                "    ST_Centroid(g.geom) AS center_point,\n" +
+                "    COUNT(p.*) AS point_count,\n" +
+                "    JSON_AGG(\n" +
+                "        JSON_BUILD_OBJECT(\n" +
+                "            'id', p.id,\n" +
+                "            'name', p.name,\n" +
+                "            'category', p.category\n" +
+                "        )\n" +
+                "    ) AS data_items\n" +
+                "  FROM grid g\n" +
+                "  JOIN point_entities p\n" +
+                "    ON ST_Intersects(g.geom, p.geom)\n" +
+                "  GROUP BY g.geom\n" +
+                "),\n" +
+                "\n" +
+                "-- 原始点数据（仅当 zoom_level >= 16）\n" +
+                "raw_points AS (\n" +
+                "  SELECT\n" +
+                "    p.geom AS center_point,\n" +
+                "    1 AS point_count,\n" +
+                "    JSON_BUILD_ARRAY(\n" +
+                "        JSON_BUILD_OBJECT(\n" +
+                "            'id', p.id,\n" +
+                "            'name', p.name,\n" +
+                "            'category', p.category\n" +
+                "        )\n" +
+                "    ) AS data_items\n" +
+                "  FROM point_entities p, params pa\n" +
+                "  WHERE ST_Intersects(p.geom, pa.bbox)\n" +
+                ")\n" +
+                ", result AS (\n" +
+                "-- 最终输出\n" +
+                "SELECT * FROM aggregated WHERE (SELECT zoom_level FROM params) < 16\n" +
+                "UNION ALL\n" +
+                "SELECT * FROM raw_points WHERE (SELECT zoom_level FROM params) >= 16\n" +
+                ")\n" +
+                "SELECT\n" +
+                "    JSON_BUILD_OBJECT(\n" +
+                "        'type', 'FeatureCollection',\n" +
+                "        'features', jsonb_agg(ST_AsGeoJSON(r)::jsonb)\n" +
+                "    ) AS feature\n" +
+                "FROM result as r;";
+        PGobject pgObject = (PGobject) Db.selectObject(sql, 106.50, 29.50, 106.60, 29.60, 4326, 13);
+        System.out.println(pgObject.getType());
+        System.out.println(pgObject.getValue());
+    }
+```
+
+打印内容
+
+```
+json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.605]}, "properties": {"data_items": [{"id": 2, "name": "重庆北站", "category": "交通枢纽"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "重庆市", "category": "重庆市"}, {"id": 7, "name": "重庆市", "category": "重庆市"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "解放碑步行街", "category": "商业区"}, {"id": 4, "name": "洪崖洞", "category": "景点"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.545]}, "properties": {"data_items": [{"id": 3, "name": "重庆市人民医院", "category": "医疗机构"}], "point_count": 1}}]}
+```
+

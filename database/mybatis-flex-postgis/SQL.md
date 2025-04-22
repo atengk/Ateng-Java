@@ -206,17 +206,6 @@ WHERE ST_Within(geom, ST_GeomFromText(
 
 **查询矩形范围内的点（bounding box）**
 
-当前端地图移动或缩放时，只加载当前视图范围内的点，前端传入地图视图边界（bounding box）
-
-```
-{
-  "minLat": ...,
-  "minLng": ...,
-  "maxLat": ...,
-  "maxLng": ...
-}
-```
-
 后端使用 `ST_MakeEnvelope` 和 `ST_Within` 查询
 
 ```sql
@@ -235,20 +224,6 @@ WHERE ST_Within(
     ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
 );
 ```
-
-**地图视图变化频繁问题解决**
-
-用户滑动地图很快时会触发大量请求，造成后端压力大 + 前端性能差 + 数据抖动
-
-地图视图变化频繁时只监听 `moveend` 而不是 `move`
-
-```
-map.on('moveend', () => {
-  // 获取地图范围然后请求数据
-});
-```
-
-
 
 #### 点与点之间的距离查询
 
@@ -329,6 +304,394 @@ SELECT jsonb_build_object(
     'features', jsonb_agg(ST_AsGeoJSON(t)::jsonb)
 ) AS geojson_collection
 FROM point_entities t;
+```
+
+#### 数据简化
+
+**基础示例**
+
+简化几何图形的实际使用示例，它可以在前端地图缩放级别较低时，减少图形点数，提升渲染性能。
+
+```sql
+SELECT
+    id,
+    name,
+    category,
+    ST_SimplifyPreserveTopology(geom, 0.001) AS simplified_geom
+FROM point_entities
+WHERE ST_Within(
+    geom,
+    ST_MakeEnvelope(106.0, 29.0, 107.0, 30.0, 4326)
+);
+```
+
+**动态根据缩放级别简化**
+
+```sql
+WITH zoom AS (
+    SELECT 11 AS zoom_level  -- 前端传入的缩放级别
+)
+SELECT
+    id,
+    name,
+    category,
+    CASE
+        WHEN z.zoom_level < 5 THEN ST_SimplifyPreserveTopology(p.geom, 0.1)
+        WHEN z.zoom_level < 7 THEN ST_SimplifyPreserveTopology(p.geom, 0.05)
+        WHEN z.zoom_level < 9 THEN ST_SimplifyPreserveTopology(p.geom, 0.01)
+        WHEN z.zoom_level < 11 THEN ST_SimplifyPreserveTopology(p.geom, 0.005)
+        WHEN z.zoom_level < 13 THEN ST_SimplifyPreserveTopology(p.geom, 0.001)
+        WHEN z.zoom_level < 15 THEN ST_SimplifyPreserveTopology(p.geom, 0.0005)
+        WHEN z.zoom_level < 17 THEN ST_SimplifyPreserveTopology(p.geom, 0.0001)
+        ELSE p.geom
+    END AS display_geom
+FROM point_entities p
+CROSS JOIN zoom z
+WHERE ST_Within(
+    p.geom,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+);
+```
+
+
+
+#### 网格数据聚合
+
+**按固定网格聚合**
+
+按0.1度×0.1度的网格聚合点数据
+
+```sql
+SELECT
+    ST_SnapToGrid(geom, 0.1, 0.1) AS grid_center,
+    COUNT(*) AS point_count,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', id,
+            'name', name,
+            'category', category
+        )
+    ) AS data_items
+FROM
+    point_entities
+WHERE
+    ST_Within(geom, ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326))
+GROUP BY
+    ST_SnapToGrid(geom, 0.1, 0.1)
+ORDER BY
+    point_count DESC;
+```
+
+返回GeoJSON数据
+
+```sql
+WITH aggregated AS (
+    SELECT
+        ST_SnapToGrid(geom, 0.1, 0.1),
+        COUNT(*) AS point_count,
+        JSON_AGG(
+            JSON_BUILD_OBJECT(
+                'id', id,
+                'name', name,
+                'category', category
+            )
+        ) AS data_items
+    FROM
+        point_entities
+    WHERE
+        ST_Within(geom, ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326))
+    GROUP BY
+        ST_SnapToGrid(geom, 0.1, 0.1)
+    ORDER BY
+        point_count DESC
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(agg)::jsonb)
+    ) AS feature
+FROM aggregated as agg;
+```
+
+返回以下数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.6, 29.6]}, "properties": {"data_items": [{"id": 1, "name": "解放碑步行街", "category": "商业区"}, {"id": 4, "name": "洪崖洞", "category": "景点"}, {"id": 6, "name": "重庆市", "category": "重庆市"}, {"id": 7, "name": "重庆市", "category": "重庆市"}], "point_count": 4}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.5, 29.5]}, "properties": {"data_items": [{"id": 3, "name": "重庆市人民医院", "category": "医疗机构"}], "point_count": 1}}]}
+```
+
+
+
+**按缩放级别动态聚合**
+
+```sql
+WITH zoom_params AS (
+    SELECT 11 AS zoom_level  -- 动态传入
+),
+base AS (
+    SELECT
+        CASE
+            WHEN zp.zoom_level < 5 THEN ST_SnapToGrid(p.geom, 2.0, 2.0)
+            WHEN zp.zoom_level < 7 THEN ST_SnapToGrid(p.geom, 1.0, 1.0)
+            WHEN zp.zoom_level < 9 THEN ST_SnapToGrid(p.geom, 0.5, 0.5)
+            WHEN zp.zoom_level < 11 THEN ST_SnapToGrid(p.geom, 0.2, 0.2)
+            WHEN zp.zoom_level = 11 THEN ST_SnapToGrid(p.geom, 0.1, 0.1)
+            ELSE p.geom
+        END AS display_geom,
+        p.id,
+        p.name,
+        p.category,
+        zp.zoom_level
+    FROM point_entities p
+    CROSS JOIN zoom_params zp
+    WHERE ST_Within(
+        p.geom,
+        ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+    )
+),
+aggregated AS (
+    SELECT
+        display_geom,
+        COUNT(*) AS point_count,
+        JSON_AGG(
+            JSON_BUILD_OBJECT(
+                'id', id,
+                'name', name,
+                'category', category
+            )
+        ) AS data_items,
+        MAX(zoom_level) AS zoom_level
+    FROM base
+    GROUP BY display_geom
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(agg)::jsonb)
+    ) AS feature
+FROM aggregated as agg;
+```
+
+关键sql说明
+
+- `WITH zoom_params AS (...)`：定义缩放级别参数，这个可以由前端传入。
+     用于控制不同的缩放级别返回不同精度的几何信息。
+- `ST_SnapToGrid(p.geom, ...)`:
+    - 对点进行“网格化”处理，作用是将多个落在同一网格的点聚合为一个；
+    - 网格大小根据 `zoom_level` 动态控制（值越小网格越密集）；
+    - 这样就实现了缩放越小（视野越大）聚合越粗的效果。
+- `display_geom`:
+    - 表示聚合后的“代表几何位置”（用于地图展示）；
+    - 低缩放级别为聚合中心，高缩放级别为原始点。
+- `CROSS JOIN zoom_params zp`: 将缩放级别参数与每条数据绑定，使查询可以使用 zoom_level 来动态调整逻辑
+- `ST_Within(..., ST_MakeEnvelope(...))`:
+    - 空间过滤，只查询在指定矩形边界内的点；
+    - 提高查询效率，减少不必要的几何数据。
+- `JSON_AGG(...)`:
+    - 将聚合后的点的信息（id、name、category）以数组形式合并；
+    - 为了低缩放级别下展示聚合点时仍能展示明细数据（如 hover 弹出列表）。
+- `MAX(zoom_level)`:
+    - 将 zoom_level 提升到 `aggregated` 层，便于后续判断分支逻辑。
+- `JSON_BUILD_OBJECT(...)` in `SELECT`:
+    - 最终输出符合 GeoJSON 格式的 `FeatureCollection`；
+    - `ST_AsGeoJSON(...)` 将聚合后的 `display_geom` 转换成 GeoJSON 格式；
+    - `jsonb_agg(...)` 把所有 feature 聚合成 `features` 字段内容。
+
+返回数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.6, 29.6]}, "properties": {"data_items": [{"id": 1, "name": "解放碑步行街", "category": "商业区"}, {"id": 4, "name": "洪崖洞", "category": "景点"}, {"id": 6, "name": "重庆市", "category": "重庆市"}, {"id": 7, "name": "重庆市", "category": "重庆市"}], "zoom_level": 11, "point_count": 4}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.5, 29.5]}, "properties": {"data_items": [{"id": 3, "name": "重庆市人民医院", "category": "医疗机构"}], "zoom_level": 11, "point_count": 1}}]}
+```
+
+
+
+#### 网格数据聚合2
+
+**按固定网格聚合**
+
+该 SQL 在指定的地理范围内生成固定大小的网格，并对每个网格单元内的点数据进行空间聚合，输出每个格子的中心点坐标、包含的点数量以及这些点的属性信息列表，便于前端根据地图缩放级别展示聚合后的结果。
+
+```sql
+WITH
+grid AS (
+  SELECT (ST_SquareGrid(
+    0.01,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+  )).*
+),
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(p.*) AS point_count,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', id,
+            'name', name,
+            'category', category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN point_entities p
+    ON ST_Intersects(g.geom, p.geom)
+  GROUP BY g.geom
+)
+SELECT * FROM aggregated;
+```
+
+关键部分说明：
+
+- `ST_MakeEnvelope(...)`: 创建聚合的地理范围（矩形边界框bounding box）。
+- `ST_SquareGrid(0.01, ...)`: 生成边长为 0.01 的正方形网格。
+- `grid AS (...)`: 定义网格临时表，每行表示一个格子。
+- `ST_Intersects(g.geom, p.geom)`: 判断点是否落入网格格子中。
+- `ST_Centroid(g.geom)`: 计算每个网格格子的中心点坐标。
+- `COUNT(p.*)`: 统计每个格子中包含的点数量。
+- `JSON_AGG(JSON_BUILD_OBJECT(...))`: 聚合点的属性为 JSON 数组。
+- `GROUP BY g.geom`: 以格子为单位分组聚合。
+- `SELECT * FROM aggregated`: 输出聚合结果（中心点、数量、明细）。
+
+返回GeoJSON数据
+
+```sql
+WITH
+grid AS (
+  SELECT (ST_SquareGrid(
+    0.01,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+  )).*
+),
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(p.*) AS point_count,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', id,
+            'name', name,
+            'category', category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN point_entities p
+    ON ST_Intersects(g.geom, p.geom)
+  GROUP BY g.geom
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(agg)::jsonb)
+    ) AS feature
+FROM aggregated as agg;
+```
+
+返回以下数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.605]}, "properties": {"data_items": [{"id": 2, "name": "重庆北站", "category": "交通枢纽"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "重庆市", "category": "重庆市"}, {"id": 7, "name": "重庆市", "category": "重庆市"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "解放碑步行街", "category": "商业区"}, {"id": 4, "name": "洪崖洞", "category": "景点"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.545]}, "properties": {"data_items": [{"id": 3, "name": "重庆市人民医院", "category": "医疗机构"}], "point_count": 1}}]}
+```
+
+
+
+**按缩放级别动态聚合**
+
+根据前端传入的缩放级别与地图边界，动态判断是否对点数据进行网格聚合。低缩放级别时以网格聚合形式返回中心点和属性，高缩放级别（zoom ≥ 16）则返回原始点数据，并统一以 GeoJSON FeatureCollection 输出，适配地图可视化需求。
+
+```sql
+WITH
+-- 模拟当前视图的边界和缩放级别
+params AS (
+  SELECT
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326) AS bbox,
+    13 AS zoom_level  -- 改这个值模拟不同缩放级别
+),
+
+-- 根据 zoom_level 决定网格大小，若 zoom >= 16 则为 NULL 表示不聚合
+grid_size AS (
+  SELECT
+    zoom_level,
+    CASE
+      WHEN zoom_level < 5 THEN 0.5        -- 世界级
+      WHEN zoom_level < 7 THEN 0.2        -- 国家级
+      WHEN zoom_level < 9 THEN 0.1        -- 区域级
+      WHEN zoom_level < 11 THEN 0.05      -- 城市级
+      WHEN zoom_level < 13 THEN 0.02      -- 区县级
+      WHEN zoom_level < 14 THEN 0.01      -- 街道级
+      WHEN zoom_level < 15 THEN 0.005     -- 社区级
+      WHEN zoom_level < 16 THEN 0.002     -- 小区级
+      ELSE NULL                           -- >=16 显示原始点
+    END AS cell_size,
+    bbox
+  FROM params
+),
+
+-- 构造网格（当 cell_size 非空时才构建）
+grid AS (
+  SELECT (ST_SquareGrid(gs.cell_size, gs.bbox)).*
+  FROM grid_size gs
+  WHERE gs.cell_size IS NOT NULL
+),
+
+-- 聚合数据（仅当 zoom_level < 16）
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(p.*) AS point_count,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', p.id,
+            'name', p.name,
+            'category', p.category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN point_entities p
+    ON ST_Intersects(g.geom, p.geom)
+  GROUP BY g.geom
+),
+
+-- 原始点数据（仅当 zoom_level >= 16）
+raw_points AS (
+  SELECT
+    p.geom AS center_point,
+    1 AS point_count,
+    JSON_BUILD_ARRAY(
+        JSON_BUILD_OBJECT(
+            'id', p.id,
+            'name', p.name,
+            'category', p.category
+        )
+    ) AS data_items
+  FROM point_entities p, params pa
+  WHERE ST_Intersects(p.geom, pa.bbox)
+)
+, result AS (
+-- 最终输出
+SELECT * FROM aggregated WHERE (SELECT zoom_level FROM params) < 16
+UNION ALL
+SELECT * FROM raw_points WHERE (SELECT zoom_level FROM params) >= 16
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(r)::jsonb)
+    ) AS feature
+FROM result as r;
+```
+
+关键部分说明：
+
+- `params`: 定义地图的可视边界 (`bbox`) 和当前缩放等级 (`zoom_level`)，作为后续逻辑判断的基础。
+- `grid_size`: 根据 `zoom_level` 计算网格的边长（`cell_size`），zoom 越小格子越大；当 zoom ≥ 16 时，返回 `NULL` 表示不做聚合。
+- `grid`: 在 `cell_size` 非空时，构造指定区域内的正方形网格，作为聚合区域的基础。
+- `aggregated`: 针对 zoom < 16 情况，将点数据按网格聚合，返回每个格子中心点、点数量及聚合后的属性数据（以 JSON 数组形式表示）。
+- `raw_points`: 针对 zoom ≥ 16 的情况，返回边界范围内的原始点数据，构造为类似聚合结构（每个点当作单独一格），便于前端统一处理。
+- `result`: 根据当前 zoom 级别选择性地返回聚合数据或原始点数据（两者通过 `UNION ALL` 合并）。
+- `ST_AsGeoJSON(...)`:
+     将每条记录转换为 GeoJSON Feature，统一输出为 `FeatureCollection`，方便前端直接加载渲染。
+
+返回数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.605]}, "properties": {"data_items": [{"id": 2, "name": "重庆北站", "category": "交通枢纽"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "重庆市", "category": "重庆市"}, {"id": 7, "name": "重庆市", "category": "重庆市"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "解放碑步行街", "category": "商业区"}, {"id": 4, "name": "洪崖洞", "category": "景点"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.545]}, "properties": {"data_items": [{"id": 3, "name": "重庆市人民医院", "category": "医疗机构"}], "point_count": 1}}]}
 ```
 
 
@@ -475,6 +838,245 @@ SELECT jsonb_build_object(
     'features', jsonb_agg(ST_AsGeoJSON(t)::jsonb)
 ) AS geojson_collection
 FROM linestring_entities t;
+```
+
+#### 数据简化
+
+**基础示例**
+
+简化几何图形的实际使用示例，它可以在前端地图缩放级别较低时，减少图形点数，提升渲染性能。
+
+```sql
+SELECT
+    id,
+    name,
+    category,
+    ST_SimplifyPreserveTopology(geom, 0.001) AS simplified_geom
+FROM linestring_entities
+WHERE ST_Within(
+    geom,
+    ST_MakeEnvelope(106.0, 29.0, 107.0, 30.0, 4326)
+);
+```
+
+**动态根据缩放级别简化**
+
+```sql
+WITH zoom AS (
+    SELECT 11 AS zoom_level  -- 前端传入的缩放级别
+)
+SELECT
+    id,
+    name,
+    category,
+    CASE
+        WHEN z.zoom_level < 5 THEN ST_SimplifyPreserveTopology(p.geom, 0.1)
+        WHEN z.zoom_level < 7 THEN ST_SimplifyPreserveTopology(p.geom, 0.05)
+        WHEN z.zoom_level < 9 THEN ST_SimplifyPreserveTopology(p.geom, 0.01)
+        WHEN z.zoom_level < 11 THEN ST_SimplifyPreserveTopology(p.geom, 0.005)
+        WHEN z.zoom_level < 13 THEN ST_SimplifyPreserveTopology(p.geom, 0.001)
+        WHEN z.zoom_level < 15 THEN ST_SimplifyPreserveTopology(p.geom, 0.0005)
+        WHEN z.zoom_level < 17 THEN ST_SimplifyPreserveTopology(p.geom, 0.0001)
+        ELSE p.geom
+    END AS display_geom
+FROM linestring_entities p
+CROSS JOIN zoom z
+WHERE ST_Within(
+    p.geom,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+);
+```
+
+#### 网格数据聚合2
+
+**按固定网格聚合**
+
+将线数据（`linestring_entities`）按照固定大小网格进行空间聚合，统计每个网格中相交的线数量、线段在该格子内的总长度（单位：米）以及相关属性，并以网格中心点作为代表位置输出，适用于中低缩放级别下的地图线聚合展示。
+
+```sql
+WITH
+grid AS (
+  SELECT (ST_SquareGrid(
+    0.01,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+  )).*
+),
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(l.*) AS line_count,
+    SUM(ST_Length(ST_Intersection(g.geom, l.geom)::geography)) AS total_length_meters,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', l.id,
+            'name', l.name,
+            'category', l.category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN linestring_entities l
+    ON ST_Intersects(g.geom, l.geom)
+  GROUP BY g.geom
+)
+SELECT * FROM aggregated;
+```
+
+关键部分说明：
+
+- `grid`: 使用 `ST_SquareGrid` 构造一个网格，覆盖指定的地理范围（此处为 `(106.50, 29.50, 106.60, 29.60)`），每个网格单元为 0.01 度大小的正方形。
+- `ST_MakeEnvelope(...)`: 定义查询所覆盖的地理边界（bounding box），即当前地图视图区域。
+- `ST_Intersects(g.geom, l.geom)`: 判断线是否与当前网格单元相交，作为聚合判断条件。
+- `ST_Centroid(g.geom) AS center_point`: 计算每个网格的中心点，用于前端可视化定位。
+- `COUNT(l.*) AS line_count`: 统计当前网格内交叉的线数量。
+- `ST_Intersection(g.geom, l.geom)`: 提取线与网格单元相交的部分几何形状。
+- `ST_Length(...::geography)`: 计算相交线段的实际长度（以米为单位），`::geography` 用于准确的地理距离测量。
+- `SUM(...) AS total_length_meters`: 聚合当前格子中所有线段的总长度。
+- `JSON_AGG(...) AS data_items`: 将当前格子内所有线条的属性（id、name、category）聚合成一个 JSON 数组，便于前端展示属性详情。
+
+返回GeoJSON数据
+
+```sql
+WITH
+grid AS (
+  SELECT (ST_SquareGrid(
+    0.01,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+  )).*
+),
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(l.*) AS line_count,
+    SUM(ST_Length(ST_Intersection(g.geom, l.geom)::geography)) AS total_length_meters,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', l.id,
+            'name', l.name,
+            'category', l.category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN linestring_entities l
+    ON ST_Intersects(g.geom, l.geom)
+  GROUP BY g.geom
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(agg)::jsonb)
+    ) AS feature
+FROM aggregated as agg;
+```
+
+返回以下数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.595]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "line_count": 1, "total_length_meters": 716.4163453553116}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.595]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "line_count": 1, "total_length_meters": 884.5061051889184}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.605]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "line_count": 1, "total_length_meters": 666.4949035224914}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.605]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "line_count": 1, "total_length_meters": 259.4872114699714}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.585]}, "properties": {"data_items": [{"id": 3, "name": "嘉陵江滨江绿道", "category": "步道"}], "line_count": 1, "total_length_meters": 515.1228885356956}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.585]}, "properties": {"data_items": [{"id": 3, "name": "嘉陵江滨江绿道", "category": "步道"}], "line_count": 1, "total_length_meters": 866.5683256849777}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.585]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "line_count": 1, "total_length_meters": 180.29555483446813}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}], "line_count": 1, "total_length_meters": 133.4566188717526}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}], "line_count": 1, "total_length_meters": 1026.6049140227747}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}, {"id": 2, "name": "轨道交通2号线（解放碑段）", "category": "轨道交通"}], "line_count": 2, "total_length_meters": 1387.0509002394483}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}], "line_count": 1, "total_length_meters": 120.27199158585553}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.555]}, "properties": {"data_items": [{"id": 5, "name": "南滨路夜景段", "category": "景观道路"}], "line_count": 1, "total_length_meters": 291.28655503501346}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.545]}, "properties": {"data_items": [{"id": 5, "name": "南滨路夜景段", "category": "景观道路"}], "line_count": 1, "total_length_meters": 34.91093782416542}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.555]}, "properties": {"data_items": [{"id": 5, "name": "南滨路夜景段", "category": "景观道路"}], "line_count": 1, "total_length_meters": 520.9349802079854}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.555]}, "properties": {"data_items": [{"id": 2, "name": "轨道交通2号线（解放碑段）", "category": "轨道交通"}], "line_count": 1, "total_length_meters": 860.176449045972}}]}
+```
+
+
+
+**按缩放级别动态聚合**
+
+根据前端传入的缩放级别与地图边界，动态判断是否对点数据进行网格聚合。低缩放级别时以网格聚合形式返回中心点和属性，高缩放级别（zoom ≥ 16）则返回原始点数据，并统一以 GeoJSON FeatureCollection 输出，适配地图可视化需求。
+
+```sql
+WITH
+-- 模拟当前视图的边界和缩放级别
+params AS (
+  SELECT
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326) AS bbox,
+    13 AS zoom_level  -- 改这个值模拟不同缩放级别
+),
+
+-- 根据 zoom_level 决定网格大小，若 zoom >= 16 则为 NULL 表示不聚合
+grid_size AS (
+  SELECT
+    zoom_level,
+    CASE
+      WHEN zoom_level < 5 THEN 0.5        -- 世界级
+      WHEN zoom_level < 7 THEN 0.2        -- 国家级
+      WHEN zoom_level < 9 THEN 0.1        -- 区域级
+      WHEN zoom_level < 11 THEN 0.05      -- 城市级
+      WHEN zoom_level < 13 THEN 0.02      -- 区县级
+      WHEN zoom_level < 14 THEN 0.01      -- 街道级
+      WHEN zoom_level < 15 THEN 0.005     -- 社区级
+      WHEN zoom_level < 16 THEN 0.002     -- 小区级
+      ELSE NULL                           -- >=16 显示原始点
+    END AS cell_size,
+    bbox
+  FROM params
+),
+
+-- 构造网格（当 cell_size 非空时才构建）
+grid AS (
+  SELECT (ST_SquareGrid(gs.cell_size, gs.bbox)).*
+  FROM grid_size gs
+  WHERE gs.cell_size IS NOT NULL
+),
+
+-- 聚合数据（仅当 zoom_level < 16）
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(l.*) AS point_count,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', l.id,
+            'name', l.name,
+            'category', l.category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN linestring_entities l
+    ON ST_Intersects(g.geom, l.geom)
+  GROUP BY g.geom
+),
+
+-- 原始点数据（仅当 zoom_level >= 16）
+raw_points AS (
+  SELECT
+    l.geom AS center_point,
+    1 AS point_count,
+    JSON_BUILD_ARRAY(
+        JSON_BUILD_OBJECT(
+            'id', l.id,
+            'name', l.name,
+            'category', l.category
+        )
+    ) AS data_items
+  FROM linestring_entities l, params pa
+  WHERE ST_Intersects(l.geom, pa.bbox)
+)
+, result AS (
+-- 最终输出
+SELECT * FROM aggregated WHERE (SELECT zoom_level FROM params) < 16
+UNION ALL
+SELECT * FROM raw_points WHERE (SELECT zoom_level FROM params) >= 16
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(r)::jsonb)
+    ) AS feature
+FROM result as r;
+```
+
+关键部分说明：
+
+- `params`: 定义地图的可视边界 (`bbox`) 和当前缩放等级 (`zoom_level`)，作为后续逻辑判断的基础。
+- `grid_size`: 根据 `zoom_level` 计算网格的边长（`cell_size`），zoom 越小格子越大；当 zoom ≥ 16 时，返回 `NULL` 表示不做聚合。
+- `grid`: 在 `cell_size` 非空时，构造指定区域内的正方形网格，作为聚合区域的基础。
+- `aggregated`: 针对 zoom < 16 情况，将点数据按网格聚合，返回每个格子中心点、点数量及聚合后的属性数据（以 JSON 数组形式表示）。
+- `raw_points`: 针对 zoom ≥ 16 的情况，返回边界范围内的原始点数据，构造为类似聚合结构（每个点当作单独一格），便于前端统一处理。
+- `result`: 根据当前 zoom 级别选择性地返回聚合数据或原始点数据（两者通过 `UNION ALL` 合并）。
+- `ST_AsGeoJSON(...)`:
+     将每条记录转换为 GeoJSON Feature，统一输出为 `FeatureCollection`，方便前端直接加载渲染。
+
+返回数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.595]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.595]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.605]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.605]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.585]}, "properties": {"data_items": [{"id": 3, "name": "嘉陵江滨江绿道", "category": "步道"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.585]}, "properties": {"data_items": [{"id": 3, "name": "嘉陵江滨江绿道", "category": "步道"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.585]}, "properties": {"data_items": [{"id": 4, "name": "红旗河沟至重庆北站道路", "category": "主干道"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}, {"id": 2, "name": "轨道交通2号线（解放碑段）", "category": "轨道交通"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "长江滨江路段", "category": "城市道路"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.555]}, "properties": {"data_items": [{"id": 5, "name": "南滨路夜景段", "category": "景观道路"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.545]}, "properties": {"data_items": [{"id": 5, "name": "南滨路夜景段", "category": "景观道路"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.555]}, "properties": {"data_items": [{"id": 5, "name": "南滨路夜景段", "category": "景观道路"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.555]}, "properties": {"data_items": [{"id": 2, "name": "轨道交通2号线（解放碑段）", "category": "轨道交通"}], "point_count": 1}}]}
 ```
 
 
@@ -643,6 +1245,245 @@ SELECT jsonb_build_object(
     'features', jsonb_agg(ST_AsGeoJSON(t)::jsonb)
 ) AS geojson_collection
 FROM polygon_entities t;
+```
+
+#### 数据简化
+
+**基础示例**
+
+简化几何图形的实际使用示例，它可以在前端地图缩放级别较低时，减少图形点数，提升渲染性能。
+
+```sql
+SELECT
+    id,
+    name,
+    category,
+    ST_SimplifyPreserveTopology(geom, 0.001) AS simplified_geom
+FROM polygon_entities
+WHERE ST_Within(
+    geom,
+    ST_MakeEnvelope(106.0, 29.0, 107.0, 30.0, 4326)
+);
+```
+
+**动态根据缩放级别简化**
+
+```sql
+WITH zoom AS (
+    SELECT 11 AS zoom_level  -- 前端传入的缩放级别
+)
+SELECT
+    id,
+    name,
+    category,
+    CASE
+        WHEN z.zoom_level < 5 THEN ST_SimplifyPreserveTopology(p.geom, 0.1)
+        WHEN z.zoom_level < 7 THEN ST_SimplifyPreserveTopology(p.geom, 0.05)
+        WHEN z.zoom_level < 9 THEN ST_SimplifyPreserveTopology(p.geom, 0.01)
+        WHEN z.zoom_level < 11 THEN ST_SimplifyPreserveTopology(p.geom, 0.005)
+        WHEN z.zoom_level < 13 THEN ST_SimplifyPreserveTopology(p.geom, 0.001)
+        WHEN z.zoom_level < 15 THEN ST_SimplifyPreserveTopology(p.geom, 0.0005)
+        WHEN z.zoom_level < 17 THEN ST_SimplifyPreserveTopology(p.geom, 0.0001)
+        ELSE p.geom
+    END AS display_geom
+FROM polygon_entities p
+CROSS JOIN zoom z
+WHERE ST_Within(
+    p.geom,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+);
+```
+
+#### 网格数据聚合2
+
+**按固定网格聚合**
+
+按照固定大小网格进行空间聚合，统计每个网格中相交的多边形数量、多边形在该格子内的总面积（单位：米）以及相关属性，并以网格中心点作为代表位置输出，适用于中低缩放级别下的地图线聚合展示。
+
+```sql
+WITH
+grid AS (
+  SELECT (ST_SquareGrid(
+    0.01,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+  )).*
+),
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(p.*) AS polygon_count,
+    SUM(ST_Area(p.geom::geography)) AS total_area,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', p.id,
+            'name', p.name,
+            'category', p.category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN polygon_entities p
+    ON ST_Intersects(g.geom, p.geom)
+  GROUP BY g.geom
+)
+SELECT * FROM aggregated;
+```
+
+关键部分说明：
+
+- `grid`: 使用 `ST_SquareGrid` 构造一个网格，覆盖指定的地理范围（此处为 `(106.50, 29.50, 106.60, 29.60)`），每个网格单元为 0.01 度大小的正方形。
+- `ST_MakeEnvelope(...)`: 定义查询所覆盖的地理边界（bounding box），即当前地图视图区域。
+- `ST_Intersects(g.geom, l.geom)`: 判断线是否与当前网格单元相交，作为聚合判断条件。
+- `ST_Centroid(g.geom) AS center_point`: 计算每个网格的中心点，用于前端可视化定位。
+- `COUNT(l.*) AS line_count`: 统计当前网格内交叉的线数量。
+- `ST_Intersection(g.geom, l.geom)`: 提取线与网格单元相交的部分几何形状。
+- `ST_Length(...::geography)`: 计算相交线段的实际长度（以米为单位），`::geography` 用于准确的地理距离测量。
+- `SUM(...) AS total_length_meters`: 聚合当前格子中所有线段的总长度。
+- `JSON_AGG(...) AS data_items`: 将当前格子内所有线条的属性（id、name、category）聚合成一个 JSON 数组，便于前端展示属性详情。
+
+返回GeoJSON数据
+
+```sql
+WITH
+grid AS (
+  SELECT (ST_SquareGrid(
+    0.01,
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326)
+  )).*
+),
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(p.*) AS polygon_count,
+    SUM(ST_Area(p.geom::geography)) AS total_area,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', p.id,
+            'name', p.name,
+            'category', p.category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN polygon_entities p
+    ON ST_Intersects(g.geom, p.geom)
+  GROUP BY g.geom
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(agg)::jsonb)
+    ) AS feature
+FROM aggregated as agg;
+```
+
+返回以下数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "人民大礼堂广场", "category": "地标广场"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75222532.97116923, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.565]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.585]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 9658396.74378395, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.585]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.575]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 9658396.74378395, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.565]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 9658396.74378395, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.555]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 9658396.74378395, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.535]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 9658396.74378395, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.545]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 9658396.74378395, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.545]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.555]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.555]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 84840701.85728645, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.555]}, "properties": {"data_items": [{"id": 2, "name": "鹅岭公园区域", "category": "城市公园"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75260077.84918952, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 1, "name": "人民大礼堂广场", "category": "地标广场"}], "total_area": 75222532.97116923, "polygon_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "total_area": 75182305.1135025, "polygon_count": 1}}]}
+```
+
+
+
+**按缩放级别动态聚合**
+
+根据前端传入的缩放级别与地图边界，动态判断是否对点数据进行网格聚合。低缩放级别时以网格聚合形式返回中心点和属性，高缩放级别（zoom ≥ 16）则返回原始点数据，并统一以 GeoJSON FeatureCollection 输出，适配地图可视化需求。
+
+```sql
+WITH
+-- 模拟当前视图的边界和缩放级别
+params AS (
+  SELECT
+    ST_MakeEnvelope(106.50, 29.50, 106.60, 29.60, 4326) AS bbox,
+    13 AS zoom_level  -- 改这个值模拟不同缩放级别
+),
+
+-- 根据 zoom_level 决定网格大小，若 zoom >= 16 则为 NULL 表示不聚合
+grid_size AS (
+  SELECT
+    zoom_level,
+    CASE
+      WHEN zoom_level < 5 THEN 0.5        -- 世界级
+      WHEN zoom_level < 7 THEN 0.2        -- 国家级
+      WHEN zoom_level < 9 THEN 0.1        -- 区域级
+      WHEN zoom_level < 11 THEN 0.05      -- 城市级
+      WHEN zoom_level < 13 THEN 0.02      -- 区县级
+      WHEN zoom_level < 14 THEN 0.01      -- 街道级
+      WHEN zoom_level < 15 THEN 0.005     -- 社区级
+      WHEN zoom_level < 16 THEN 0.002     -- 小区级
+      ELSE NULL                           -- >=16 显示原始点
+    END AS cell_size,
+    bbox
+  FROM params
+),
+
+-- 构造网格（当 cell_size 非空时才构建）
+grid AS (
+  SELECT (ST_SquareGrid(gs.cell_size, gs.bbox)).*
+  FROM grid_size gs
+  WHERE gs.cell_size IS NOT NULL
+),
+
+-- 聚合数据（仅当 zoom_level < 16）
+aggregated AS (
+  SELECT
+    ST_Centroid(g.geom) AS center_point,
+    COUNT(p.*) AS point_count,
+    JSON_AGG(
+        JSON_BUILD_OBJECT(
+            'id', p.id,
+            'name', p.name,
+            'category', p.category
+        )
+    ) AS data_items
+  FROM grid g
+  JOIN polygon_entities p
+    ON ST_Intersects(g.geom, p.geom)
+  GROUP BY g.geom
+),
+
+-- 原始点数据（仅当 zoom_level >= 16）
+raw_points AS (
+  SELECT
+    p.geom AS center_point,
+    1 AS point_count,
+    JSON_BUILD_ARRAY(
+        JSON_BUILD_OBJECT(
+            'id', p.id,
+            'name', p.name,
+            'category', p.category
+        )
+    ) AS data_items
+  FROM polygon_entities p, params pa
+  WHERE ST_Intersects(p.geom, pa.bbox)
+)
+, result AS (
+-- 最终输出
+SELECT * FROM aggregated WHERE (SELECT zoom_level FROM params) < 16
+UNION ALL
+SELECT * FROM raw_points WHERE (SELECT zoom_level FROM params) >= 16
+)
+SELECT
+    JSON_BUILD_OBJECT(
+        'type', 'FeatureCollection',
+        'features', jsonb_agg(ST_AsGeoJSON(r)::jsonb)
+    ) AS feature
+FROM result as r;
+```
+
+关键部分说明：
+
+- `params`: 定义地图的可视边界 (`bbox`) 和当前缩放等级 (`zoom_level`)，作为后续逻辑判断的基础。
+- `grid_size`: 根据 `zoom_level` 计算网格的边长（`cell_size`），zoom 越小格子越大；当 zoom ≥ 16 时，返回 `NULL` 表示不做聚合。
+- `grid`: 在 `cell_size` 非空时，构造指定区域内的正方形网格，作为聚合区域的基础。
+- `aggregated`: 针对 zoom < 16 情况，将点数据按网格聚合，返回每个格子中心点、点数量及聚合后的属性数据（以 JSON 数组形式表示）。
+- `raw_points`: 针对 zoom ≥ 16 的情况，返回边界范围内的原始点数据，构造为类似聚合结构（每个点当作单独一格），便于前端统一处理。
+- `result`: 根据当前 zoom 级别选择性地返回聚合数据或原始点数据（两者通过 `UNION ALL` 合并）。
+- `ST_AsGeoJSON(...)`:
+     将每条记录转换为 GeoJSON Feature，统一输出为 `FeatureCollection`，方便前端直接加载渲染。
+
+返回数据
+
+```json
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.605]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.595]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.565]}, "properties": {"data_items": [{"id": 1, "name": "人民大礼堂广场", "category": "地标广场"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.565]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.585]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.585]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.585]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.575]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.575]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.565]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.565]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.555]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.535]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.605, 29.545]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.595, 29.545]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 13, "name": "渝中区和南岸区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.585, 29.555]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.575, 29.555]}, "properties": {"data_items": [{"id": 13, "name": "渝中区和南岸区", "category": "城区"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.565, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.555]}, "properties": {"data_items": [{"id": 2, "name": "鹅岭公园区域", "category": "城市公园"}, {"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}, {"id": 1, "name": "人民大礼堂广场", "category": "地标广场"}], "point_count": 2}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.555]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.505, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.515, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.525, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.535, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.545, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.545]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}, {"type": "Feature", "geometry": {"type": "Point", "coordinates": [106.555, 29.535]}, "properties": {"data_items": [{"id": 6, "name": "渝中核心区", "category": "城区"}], "point_count": 1}}]}
 ```
 
 
