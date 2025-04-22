@@ -4,4 +4,34 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="local.ateng.java.mybatis.mapper.MyUserMapper">
 
+    <!-- 查询所有用户 -->
+    <select id="selectAllUsers" resultType="local.ateng.java.mybatis.entity.MyUser">
+        SELECT * FROM my_user;
+    </select>
+
+    <!-- 根据ID查询用户 -->
+    <select id="selectUserById" parameterType="java.lang.Long" resultType="local.ateng.java.mybatis.entity.MyUser">
+        SELECT * FROM my_user WHERE id = #{id};
+    </select>
+
+    <!-- 查询所有用户及其对应的订单信息 -->
+    <select id="selectUsersWithOrders" resultType="com.alibaba.fastjson2.JSONObject">
+        SELECT
+        u.id as id,
+        u.name,
+        u.age,
+        u.score,
+        u.birthday,
+        u.province,
+        u.city,
+        u.create_time,
+        o.id as order_id,
+        o.date as order_date,
+        o.total_amount as order_total_amount
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+        WHERE 1=1
+        <if test="orderId != null">AND o.id = #{orderId}</if>
+    </select>
+
 </mapper>

@@ -56,17 +56,17 @@ public class GlobalLogFilter implements GlobalFilter, Ordered {
                 CharBuffer charBuffer = StandardCharsets.UTF_8.decode(iterator.next());
                 jsonParam = charBuffer.toString();
             }
-            log.info("[PLUS]开始请求 => URL[{}],参数类型[json],参数:[{}]", url, jsonParam);
+            log.info("[Ateng]开始请求 => URL[{}],参数类型[json],参数:[{}]", url, jsonParam);
         } else {
             MultiValueMap<String, String> parameterMap = request.getQueryParams();
-            log.info("[PLUS]开始请求 => URL[{}],param={}", url, parameterMap);
+            log.info("[Ateng]开始请求 => URL[{}],param={}", url, parameterMap);
         }
         exchange.getAttributes().put(START_TIME, System.currentTimeMillis());
         return chain.filter(exchange).then(Mono.fromRunnable(() -> {
             Long startTime = exchange.getAttribute(START_TIME);
             if (startTime != null) {
                 long executeTime = (System.currentTimeMillis() - startTime);
-                log.info("[PLUS]结束请求 => URL[{}],耗时:[{}]毫秒", url, executeTime);
+                log.info("[Ateng]结束请求 => URL[{}],耗时:[{}]毫秒", url, executeTime);
             }
         }));
     }

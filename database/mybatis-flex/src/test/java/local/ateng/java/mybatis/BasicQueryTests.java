@@ -3,6 +3,7 @@ package local.ateng.java.mybatis;
 import com.alibaba.fastjson2.JSON;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryColumn;
+import com.mybatisflex.core.row.Db;
 import com.mybatisflex.core.row.Row;
 import local.ateng.java.mybatis.entity.MyUser;
 import local.ateng.java.mybatis.service.MyOrderService;
@@ -155,4 +156,23 @@ public class BasicQueryTests {
         System.out.println("Pages: " + pages);
         users.forEach(user -> System.out.println(user));
     }
+
+    @Test
+    void test09() {
+        Row row = Db.selectOneBySql("select * from my_user limit 1");
+        System.out.println(row);
+    }
+
+    @Test
+    void test10() {
+        List<Row> list = Db.selectListBySql("select * from my_user limit 10");
+        System.out.println(list);
+    }
+
+    @Test
+    void test11() {
+        Object obj = Db.selectObject("select 1");
+        System.out.println(String.valueOf(obj));
+    }
+
 }
