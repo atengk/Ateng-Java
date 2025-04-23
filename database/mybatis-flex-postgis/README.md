@@ -99,6 +99,8 @@ spring:
 mybatis-flex:
   global-config:
     print-banner: false
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
 ```
 
 **编辑 `mybatis-flex.config` 文件**

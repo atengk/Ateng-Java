@@ -191,6 +191,8 @@ spring:
 mybatis-plus:
   global-config:
     banner: false
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
 ```
 
 如果使用的是 **HikariCP** ，配置如下

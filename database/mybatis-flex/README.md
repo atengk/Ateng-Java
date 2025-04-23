@@ -191,6 +191,8 @@ spring:
 mybatis-flex:
   global-config:
     print-banner: false
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
 ```
 
 如果使用的是 **HikariCP** ，配置如下
@@ -825,6 +827,8 @@ public class BasicQueryTests {
 mybatis-flex:
   global-config:
     print-banner: false
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
   datasource:
     # 第一个数据源为默认数据源
     # https://mybatis-flex.com/zh/core/multi-datasource.html
