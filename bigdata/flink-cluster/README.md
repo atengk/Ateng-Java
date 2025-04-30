@@ -821,7 +821,7 @@ public class SQLGeneratorToKafka {
 
 ### Flink Standalone
 
-部署集群参考：[安装Flink集群](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/cluster/)
+部署集群参考：[安装Flink集群](https://atengk.github.io/ops/#/work/bigdata/05-flink/cluster/)
 
 将Jar包运行在Flink Standalone集群上，这里以运行Sink数据到Kafka为示例。
 
@@ -861,7 +861,7 @@ flink run -d \
 
 ### YARN
 
-部署集群参考：[安装配置Flink On YARN](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/yarn/)
+部署集群参考：[安装配置Flink On YARN](https://atengk.github.io/ops/#/work/bigdata/05-flink/yarn/)
 
 将Jar包运行在YARN集群上，这里以运行Sink数据到Kafka为示例。
 
@@ -922,7 +922,7 @@ java -jar \
 
 ### Kubernetes
 
-使用 `flink-kubernetes-operator` 运行任务，详情参考：[Flink Operator](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/kubernetes-operator/)
+使用 `flink-kubernetes-operator` 运行任务，详情参考：[Flink Operator](https://atengk.github.io/ops/#/work/bigdata/05-flink/kubernetes-operator/)
 
 将任务需要的依赖作用域设置为compile，例如我这里是需要用到Kafka Connector，pom.xml的依赖配置如下
 

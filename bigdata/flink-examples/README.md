@@ -320,7 +320,7 @@ Flink程序就输入以下内容：
 
 ### Flink Standalone
 
-部署集群参考：[安装Flink集群](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/cluster/)
+部署集群参考：[安装Flink集群](https://atengk.github.io/ops/#/work/bigdata/05-flink/cluster/)
 
 将Jar包运行在Flink Standalone集群上，这里以运行Sink数据到Kafka为示例。
 
@@ -361,7 +361,7 @@ flink run -d \
 
 ### YARN
 
-部署集群参考：[安装配置Flink On YARN](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/yarn/)
+部署集群参考：[安装配置Flink On YARN](https://atengk.github.io/ops/#/work/bigdata/05-flink/yarn/)
 
 将Jar包运行在YARN集群上，这里以运行Sink数据到Kafka为示例。
 
@@ -408,7 +408,7 @@ flink run-application -t yarn-application \
 
 ### Kubernetes
 
-使用 `flink-kubernetes-operator` 运行任务，详情参考：[Flink Operator](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/kubernetes-operator/)
+使用 `flink-kubernetes-operator` 运行任务，详情参考：[Flink Operator](https://atengk.github.io/ops/#/work/bigdata/05-flink/kubernetes-operator/)
 
 注意依赖问题，要么把相关服务的依赖，例如 flink-connector-kafka 的作用域设置为compile（默认）。
 
@@ -12044,7 +12044,7 @@ public class PostgreSQL {
 
 #### Iceberg
 
-参考：[使用Iceberg文档](https://kongyu666.github.io/ops/#/work/bigdata/06-iceberg/?id=spark)
+参考：[使用Iceberg文档](https://atengk.github.io/ops/#/work/bigdata/06-iceberg/?id=spark)
 
 添加依赖
 

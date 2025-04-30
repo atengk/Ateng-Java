@@ -7,7 +7,7 @@ Nacos通常与微服务架构中的其他组件一起使用，像是 Spring Clou
 - [官方文档](https://nacos.io/docs/v2.4/overview/)
 - [GitHub](https://github.com/alibaba/nacos)
 
-- [部署文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/nacos/v2.4.3/)
+- [部署文档](https://atengk.github.io/ops/#/work/kubernetes/service/nacos/v2.4.3/)
 
 
 

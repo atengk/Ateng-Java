@@ -5,7 +5,7 @@
 参考文档：
 
 - [官方文档](https://snailjob.opensnail.com/)
-- [安装文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/snail-job/v1.3.0/)
+- [安装文档](https://atengk.github.io/ops/#/work/kubernetes/service/snail-job/v1.3.0/)
 
 
 

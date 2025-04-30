@@ -12,8 +12,8 @@ Kafka是一个开源的分布式流处理平台，主要用于处理实时数据
 
 - [官网链接](https://kafka.apache.org/)
 - [SpringCloudStream使用文档](https://docs.spring.io/spring-cloud-stream/reference/kafka/kafka-binder/usage.html)
-- [K8S部署文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/kafka/v3.8.1/cluster/)
-- [Docker部署文档](https://kongyu666.github.io/ops/#/work/docker/service/kafka/)
+- [K8S部署文档](https://atengk.github.io/ops/#/work/kubernetes/service/kafka/v3.8.1/cluster/)
+- [Docker部署文档](https://atengk.github.io/ops/#/work/docker/service/kafka/)
 
 ### 添加依赖
 
@@ -1037,8 +1037,8 @@ RabbitMQ 是一种开源的消息代理软件，广泛用于实现消息队列�
 
 - [官网链接](https://www.rabbitmq.com/)
 - [SpringCloudStream使用文档](https://docs.spring.io/spring-cloud-stream/reference/rabbit/rabbit_overview.html)
-- [K8S部署文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/rabbitmq/v4.0.2/)
-- [Docker部署文档](https://kongyu666.github.io/ops/#/work/docker/service/rabbitmq/)
+- [K8S部署文档](https://atengk.github.io/ops/#/work/kubernetes/service/rabbitmq/v4.0.2/)
+- [Docker部署文档](https://atengk.github.io/ops/#/work/docker/service/rabbitmq/)
 
 ### 添加依赖
 
@@ -2018,7 +2018,7 @@ curl http://localhost:11011/rabbit/send-ateng?message=ateng
 
 - [官网链接](https://rocketmq.apache.org/zh/)
 - [SpringCloudStream使用文档](https://sca.aliyun.com/docs/2023/user-guide/rocketmq/quick-start/)
-- [部署文档](https://kongyu666.github.io/ops/#/work/service/springcloudalibaba/rocketmq/standalone/)
+- [部署文档](https://atengk.github.io/ops/#/work/service/springcloudalibaba/rocketmq/standalone/)
 
 ### 添加依赖
 

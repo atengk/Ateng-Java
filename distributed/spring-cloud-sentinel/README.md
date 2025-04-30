@@ -5,7 +5,7 @@
 - [官网链接](https://sentinelguard.io/zh-cn/index.html)
 - [集成SpringCloudAlibaba](https://github.com/alibaba/spring-cloud-alibaba/wiki/Sentinel)
 
-- [Dashboard部署文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/sentinel/)
+- [Dashboard部署文档](https://atengk.github.io/ops/#/work/kubernetes/service/sentinel/)
 
 
 

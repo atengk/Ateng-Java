@@ -5,7 +5,7 @@
 参考链接：
 
 - [官方文档](https://www.yuque.com/powerjob/guidence/processor)
-- [安装文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/powerjob/v5.1.1)
+- [安装文档](https://atengk.github.io/ops/#/work/kubernetes/service/powerjob/v5.1.1)
 
 
 

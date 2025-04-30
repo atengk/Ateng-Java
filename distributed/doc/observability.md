@@ -3,8 +3,8 @@
 ## OpenTelemetry
 
 - [Github文档](https://github.com/open-telemetry/opentelemetry-java-instrumentation)
-- [使用文档](https://kongyu666.github.io/ops/#/work/service/opentelemetry/)
-- [Jaeger使用文档](https://kongyu666.github.io/ops/#/work/service/jaeger/)
+- [使用文档](https://atengk.github.io/ops/#/work/service/opentelemetry/)
+- [Jaeger使用文档](https://atengk.github.io/ops/#/work/service/jaeger/)
 
 **添加依赖**
 

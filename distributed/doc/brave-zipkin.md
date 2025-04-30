@@ -25,7 +25,7 @@ Zipkin 的工作流大致分为四个阶段：
 
 
 
-- [Zipkin部署文档](https://kongyu666.github.io/ops/#/work/kubernetes/service/zipkin/v3.4.4/)
+- [Zipkin部署文档](https://atengk.github.io/ops/#/work/kubernetes/service/zipkin/v3.4.4/)
 
 
 

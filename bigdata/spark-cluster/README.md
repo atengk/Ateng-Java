@@ -714,7 +714,7 @@ public class SQLCount {
 
 ### Spark Standalone
 
-部署集群参考：[安装Spark集群](https://kongyu666.github.io/ops/#/work/bigdata/05-spark/cluster/)
+部署集群参考：[安装Spark集群](https://atengk.github.io/ops/#/work/bigdata/05-spark/cluster/)
 
 将Jar包运行在Spark Standalone集群上，这里以运行读取Hive数据库数据为例。
 
@@ -773,7 +773,7 @@ hadoop fs -ls /data/spark/output
 
 ### YARN
 
-部署集群参考：[安装配置Spark On YARN](https://kongyu666.github.io/ops/#/work/bigdata/05-flink/yarn/)
+部署集群参考：[安装配置Spark On YARN](https://atengk.github.io/ops/#/work/bigdata/05-flink/yarn/)
 
 将Jar包运行在Spark Standalone集群上，这里以运行读取Hive数据库数据为例。
 
@@ -844,7 +844,7 @@ java -jar \
 
 ### Kubernetes
 
-参考：[Spark Operator使用文档](https://kongyu666.github.io/ops/#/work/bigdata/05-spark/kubernetes-operator/examples/)
+参考：[Spark Operator使用文档](https://atengk.github.io/ops/#/work/bigdata/05-spark/kubernetes-operator/examples/)
 
 以下Spark应用配置参考
 

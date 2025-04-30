@@ -929,7 +929,7 @@ public class RequestTimingEventListener implements ApplicationListener<ServletRe
 
 ### 创建证书
 
-**参考[openssl创建证书](https://kongyu666.github.io/ops/#/work/service/tls/tls-openssl/)，得到以下证书：**
+**参考[openssl创建证书](https://atengk.github.io/ops/#/work/service/tls/tls-openssl/)，得到以下证书：**
 
 生成服务端证书时注意修改 **dn** 和 **alt_names** 模块的内容，**alt_names**中需要填写会和服务端有交互的域名和IP
 

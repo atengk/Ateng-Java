@@ -4,8 +4,8 @@
 
 参考部署文档
 
-- [Docker部署Jar](https://kongyu666.github.io/ops/#/work/docker/service/java/)
-- [Kubernetes部署Jar](https://kongyu666.github.io/ops/#/work/kubernetes/service/java-app/v1.1/)，对于k8s中部署，需要添加一个PVC挂载到Deployment中，首先在initContainers中判断是否存在/opt/app/lib目录，不存在就下载（提前将lib/打包上传到HTTP）并解压，然后containers中按照相应的参数启动服务。
+- [Docker部署Jar](https://atengk.github.io/ops/#/work/docker/service/java/)
+- [Kubernetes部署Jar](https://atengk.github.io/ops/#/work/kubernetes/service/java-app/v1.1/)，对于k8s中部署，需要添加一个PVC挂载到Deployment中，首先在initContainers中判断是否存在/opt/app/lib目录，不存在就下载（提前将lib/打包上传到HTTP）并解压，然后containers中按照相应的参数启动服务。
 
 
 
