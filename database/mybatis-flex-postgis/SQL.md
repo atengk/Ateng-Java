@@ -153,6 +153,50 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 
 
 
+## 简单查询
+
+### 几何对象构造方法
+
+#### **使用 WKT + SRID（**最常见**）**
+
+标准 WKT，SRID 作为第二参数
+
+```sql
+SELECT ST_GeomFromText('POINT(116.39 39.90)', 4326);
+```
+
+#### 使用 EWKT（内嵌 SRID）
+
+SRID 和几何一起写，更清晰直观，适合前端直接传入
+
+```sql
+SELECT ST_GeomFromEWKT('SRID=4326;POINT(116.39 39.90)');
+```
+
+#### 使用 WKT + 设置 SRID 手动方式
+
+适用于已有 WKT，不支持传 SRID 的函数场景
+
+```sql
+SELECT ST_SetSRID(ST_GeomFromText('POINT(116.39 39.90)'), 4326);
+```
+
+#### 使用 GeoJSON
+
+使用 GeoJSON（默认 SRID = 4326）
+
+```sql
+SELECT ST_GeomFromGeoJSON('{"type":"Point","coordinates":[116.39,39.90]}');
+```
+
+定义 SRID
+
+```sql
+SELECT ST_SetSRID(ST_GeomFromGeoJSON('...'), 4326);
+```
+
+
+
 ## POINT点表
 
 ### 数据准备

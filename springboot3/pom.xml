@@ -29,5 +29,6 @@
         <module>serialize-fastjson2</module>
         <module>serialize-jackson</module>
         <module>docker</module>
+        <module>email</module>
     </modules>
 </project>
