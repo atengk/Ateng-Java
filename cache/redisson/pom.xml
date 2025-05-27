@@ -24,6 +24,7 @@
         <lombok.version>1.18.36</lombok.version>
         <fastjson2.version>2.0.53</fastjson2.version>
         <hutool.version>5.8.35</hutool.version>
+        <redisson.version>3.47.0</redisson.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -76,7 +77,7 @@
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson-spring-boot-starter</artifactId>
-            <version>3.44.0</version>
+            <version>${redisson.version}</version>
         </dependency>
 
     </dependencies>

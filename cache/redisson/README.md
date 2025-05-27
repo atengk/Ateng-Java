@@ -11,11 +11,15 @@ Redisson 是一个基于 Redis 的 Java 客户端，提供了丰富的分布式�
 ### 添加依赖
 
 ```xml
+<!-- 项目属性 -->
+<properties>
+    <redisson.version>3.47.0</redisson.version>
+</properties>
 <!-- Redisson 依赖 -->
 <dependency>
     <groupId>org.redisson</groupId>
     <artifactId>redisson-spring-boot-starter</artifactId>
-    <version>3.44.0</version>
+    <version>${redisson.version}</version>
 </dependency>
 ```
 

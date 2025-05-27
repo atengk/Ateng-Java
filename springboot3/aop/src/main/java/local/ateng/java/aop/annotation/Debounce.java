@@ -25,4 +25,7 @@ public @interface Debounce {
 
     // 提示消息
     String message() default "操作频繁，请稍候再试";
+
+    // 自定义参数keys做判断，支持 Spring EL 表达式
+    String[] keys() default {};
 }
