@@ -1,8 +1,11 @@
 package local.ateng.java.mybatis;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import local.ateng.java.mybatis.entity.MyJson;
 import local.ateng.java.mybatis.entity.MyUser;
+import local.ateng.java.mybatis.service.IMyJsonService;
 import local.ateng.java.mybatis.service.IMyOrderService;
 import local.ateng.java.mybatis.service.IMyUserService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,7 @@ import java.util.Map;
 public class BasicQueryTests {
     private final IMyUserService myUserService;
     private final IMyOrderService myOrderService;
+    private final IMyJsonService myJsonService;
 
     @Test
     void test() {
@@ -86,18 +90,24 @@ public class BasicQueryTests {
         // 引入 MyBatis-Plus 分页插件
         Page<MyUser> page = new Page<>(2, 10);  // 第2页，每页10条记录
         // 分页查询
-        Page<MyUser> userPage = myUserService.lambdaQuery()
+        page = myUserService.lambdaQuery()
                 .between(MyUser::getId, 88, 888)
                 .page(page);
         // 获取分页结果
-        List<MyUser> users = userPage.getRecords();  // 分页数据
-        long total = userPage.getTotal();  // 总记录数
-        long pages = userPage.getPages();  // 总页数
+        List<MyUser> users = page.getRecords();  // 分页数据
+        long total = page.getTotal();  // 总记录数
+        long pages = page.getPages();  // 总页数
         // 输出查询结果
-        System.out.println(userPage);
+        System.out.println(page);
         System.out.println("Total: " + total);
         System.out.println("Pages: " + pages);
         users.forEach(user -> System.out.println(user));
+    }
+
+    @Test
+    void test07() {
+        List<MyJson> list = myJsonService.list();
+        System.out.println(JSON.toJSONString(list));
     }
 
 }

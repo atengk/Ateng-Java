@@ -546,19 +546,88 @@ public class BasicQueryTests {
         // 引入 MyBatis-Plus 分页插件
         Page<MyUser> page = new Page<>(2, 10);  // 第2页，每页10条记录
         // 分页查询
-        Page<MyUser> userPage = myUserService.lambdaQuery()
+        page = myUserService.lambdaQuery()
                 .between(MyUser::getId, 88, 888)
                 .page(page);
         // 获取分页结果
-        List<MyUser> users = userPage.getRecords();  // 分页数据
-        long total = userPage.getTotal();  // 总记录数
-        long pages = userPage.getPages();  // 总页数
+        List<MyUser> users = page.getRecords();  // 分页数据
+        long total = page.getTotal();  // 总记录数
+        long pages = page.getPages();  // 总页数
         // 输出查询结果
-        System.out.println(userPage);
+        System.out.println(page);
         System.out.println("Total: " + total);
         System.out.println("Pages: " + pages);
         users.forEach(user -> System.out.println(user));
     }
+```
+
+
+
+## JSON字段
+
+### 创建表
+
+创建表
+
+```sql
+drop table if exists my_json;
+create table my_json
+(
+    id           bigint auto_increment primary key,
+    name         varchar(16) not null comment '名称',
+    my_json_object json comment 'JSONObject数据',
+    my_json_array  json comment 'JSONOArray数据'
+) comment 'Json表';
+```
+
+写入数据
+
+```sql
+ INSERT INTO my_json (name, my_json_object, my_json_array) VALUES
+ ('Alice',  '{"age": 25, "city": "Shanghai"}',  '["reading", "cycling"]'),
+ ('Bob',    '{"age": 30, "city": "Beijing"}',   '["chess", "music"]'),
+ ('Charlie', '{"age": 35, "city": "Guangzhou"}', '["food", "travel"]'),
+ ('Diana',  '{"age": 40, "city": "Shenzhen"}',  '["movie", "art"]');
+```
+
+### 使用IService的方式
+
+需要 实体类配置 的注解属性
+
+使用 `MybatisPlusGenerator` 生成代码，然后修改实体类的JSON字段配置
+
+#### @TableName配置
+
+添加 `autoResultMap = true`
+
+```
+@TableName(value = "my_json", autoResultMap = true)
+```
+
+#### @TableField配置
+
+添加 `typeHandler = JacksonTypeHandler.class` 或者 `Fastjson2TypeHandler.class`
+
+```
+@TableField(value = "my_json_object", typeHandler = JacksonTypeHandler.class)
+```
+
+### 使用Mapper XML的方式
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="local.ateng.java.mybatis.mapper.MyJsonMapper">
+
+    <resultMap id="myJsonResultMap" type="local.ateng.java.mybatis.entity.MyJson">
+        <result column="my_json_object" property="myJsonObject" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="my_json_array" property="myJsonArray" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+    </resultMap>
+
+    <select id="selectMyJson" resultMap="myJsonResultMap">
+        select id, name, my_json_object, my_json_array from my_json;
+    </select>
+</mapper>
 ```
 
 
@@ -779,3 +848,285 @@ public class MapperTests {
 }
 ```
 
+
+
+## Mapper XML常用标签
+
+### #{} 和 ${}
+
+|      | `#{}`                                 | `${}`                        |
+| ---- | ------------------------------------- | ---------------------------- |
+| 作用 | **安全绑定参数**（PreparedStatement） | **纯文本拼接**（Statement）  |
+| 适用 | 大多数条件                            | 列名、表名这类需要动态拼接时 |
+| 风险 | **安全**（防 SQL 注入）               | **有风险**（容易 SQL 注入）  |
+| 渲染 | 渲染时为 `?`                          | 渲染时为具体文本             |
+| 建议 | **推荐使用**                          | 仅在需要拼接列/表时慎用      |
+
+### 🔹 `<select>`
+
+定义 **select语句**：
+
+```xml
+<select id="selectByUsername" parameterType="string" resultType="User">
+  SELECT * FROM user WHERE username = #{username}
+</select>
+```
+
+------
+
+### 🔹 `<insert>`
+
+定义 **插入语句**：
+
+```xml
+<insert id="insertUser" parameterType="User">
+  INSERT INTO user (username, password) VALUES (#{username}, #{password})
+</insert>
+```
+
+------
+
+### 🔹 `<update>`
+
+定义 **修改语句**：
+
+```xml
+<update id="updateUsername" parameterType="User">
+  UPDATE user SET username = #{username} WHERE id = #{id}
+</update>
+```
+
+------
+
+### 🔹 `<delete>`
+
+定义 **删除语句**：
+
+```xml
+<delete id="deleteById" parameterType="long">
+  DELETE FROM user WHERE id = #{id}
+</delete>
+```
+
+------
+
+### 🔹1️⃣ `<select>`
+
+定义一个 **select** 查询语句，最基础标签。
+
+```xml
+<select id="findById" parameterType="java.lang.Long" resultMap="BaseResultMap">
+  SELECT * FROM user WHERE id = #{id}
+</select>
+```
+
+------
+
+### 🔹2️⃣ `<![CDATA[]]>`
+
+主要作用：**在其中写大于、小于这类需要转义的操作时**更加直观。
+
+```xml
+<select id="findAllGreaterThanId" parameterType="java.lang.Long" resultMap="BaseResultMap">
+  SELECT * FROM user WHERE id <![CDATA[ > ]]> #{id}
+</select>
+```
+
+------
+
+### 🔹3️⃣ `<if>`
+
+按条件拼接语块，适用 **条件拼接**。
+
+```xml
+<select id="findByConditions" parameterType="User" resultMap="BaseResultMap">
+  SELECT * FROM user WHERE 1 = 1
+  <if test="username != null">
+    AND username = #{username}
+  </if>
+  <if test="email != null">
+    AND email = #{email}
+  </if>
+</select>
+```
+
+------
+
+### 🔹4️⃣ `<choose>` / `<when>` / `<otherwise>`
+
+适用 **多条件中只需要其中一个**时。
+
+```xml
+<select id="findByOption" parameterType="User" resultMap="BaseResultMap">
+  SELECT * FROM user WHERE 1 = 1
+  <choose>
+    <when test="username != null">
+      AND username = #{username}
+    </when>
+    <when test="email != null">
+      AND email = #{email}
+    </when>
+    <otherwise>
+      LIMIT 10
+    </otherwise>
+  </choose>
+</select>
+```
+
+------
+
+### 🔹5️⃣ `<where>`
+
+自动插入 `WHERE` ，且可以自动移除第一个条件前多余的 `AND/OR`。
+
+```xml
+<select id="findAllWithWhere" parameterType="User" resultMap="BaseResultMap">
+  SELECT * FROM user
+  <where>
+    <if test="username != null">
+      AND username = #{username}
+    </if>
+    <if test="email != null">
+      OR email = #{email}
+    </if>
+  </where>
+</select>
+```
+
+------
+
+### 🔹6️⃣ `<trim>`
+
+可以实现灵活地拼接条件，如可以指定 `suffixOverrides` 或 `prefixOverrides`。
+
+```xml
+<select id="findAllWithTrim" parameterType="User" resultMap="BaseResultMap">
+  SELECT * FROM user
+  <trim prefix="WHERE" prefixOverrides="AND | OR">
+    <if test="username != null">
+      AND username = #{username}
+    </if>
+    <if test="email != null">
+      OR email = #{email}
+    </if>
+  </trim>
+</select>
+```
+
+------
+
+### 🔹7️⃣ `<foreach>`
+
+适用批量条件，如 `in (...) ` 查询。
+
+```xml
+<select id="findByIds" parameterType="list" resultMap="BaseResultMap">
+  SELECT * FROM user WHERE id IN
+  <foreach item="id" index="i" collection="list" open="(" separator="," close=")"> 
+    #{id} 
+  </foreach>
+</select>
+```
+
+## resultMap
+
+### 🔹1️⃣ `<resultMap>` 的作用：
+
+- **将数据表列（column）与对象属性（property）进行对应**。
+- 能适用以下几种适用时机：
+    - 列名与属性不一一对应时（列为 `foo_field` ，属性为 `fooField`）
+    - 一对一关联时（可以用 `<association>`）
+    - 一对多关联时（可以用 `<collection>`）
+    - 有复合主键时（可以用多个 `<id>`）
+
+------
+
+### 🔹2️⃣ `resultMap` 的主要标签：
+
+| 标签            | 作用                                   |
+| --------------- | -------------------------------------- |
+| `<id>`          | 定义**主键列**                         |
+| `<result>`      | 定义**普通列**与**对象属性**的映射     |
+| `<association>` | 定义**一对一关联**时的列与对象的关系   |
+| `<collection>`  | 定义**一对多关联**时的列与 List 的关系 |
+| `<constructor>` | 适用需要通过有参构造函数进行赋值时     |
+
+------
+
+### 🔹3️⃣ `resultMap` 的最基础用法（列和属性不同时）：
+
+```xml
+<resultMap id="BaseResultMap" type="User">
+  <id column="id_field" property="id" />
+  <result column="username_field" property="username" />
+  <result column="email_field" property="email" />
+</resultMap>
+
+<select id="findById" parameterType="java.lang.Long" resultMap="BaseResultMap">
+  SELECT id_field, username_field, email_field FROM user WHERE id_field = #{id}
+</select>
+```
+
+------
+
+### 🔹4️⃣ 一对一关联（association）：
+
+假如 `User` 有一个 `Profile` 对象：
+
+```java
+public class User {
+    private Long id;
+    private String username;
+    private Profile profile;
+}
+```
+
+我们可以这样配置：
+
+```xml
+<resultMap id="UserWithProfile" type="User">
+  <id column="id_field" property="id" />
+  <result column="username_field" property="username" />
+  
+  <association property="profile" javaType="Profile">
+    <id column="profile_id_field" property="id" />
+    <result column="profile_name_field" property="profileName" />
+  </association>
+</resultMap>
+
+<select id="findUserWithProfile" parameterType="java.lang.Long" resultMap="UserWithProfile">
+  SELECT u.*, p.* FROM user u JOIN profile p ON u.profile_id_field = p.id_field WHERE u.id_field = #{id}
+</select>
+```
+
+------
+
+### 🔹5️⃣ 一对多关联（collection）：
+
+假如 `User` 有很多 `Order`：
+
+```java
+public class User {
+    private Long id;
+    private String username;
+    private List<Order> orders;
+}
+```
+
+我们可以这样配置：
+
+```xml
+<resultMap id="UserWithOrders" type="User">
+  <id column="id_field" property="id" />
+  <result column="username_field" property="username" />
+  
+  <collection property="orders" ofType="Order">
+    <id column="order_id_field" property="id" />
+    <result column="order_number_field" property="orderNumber" />
+  </collection>
+</resultMap>
+
+<select id="findUserWithOrders" parameterType="java.lang.Long" resultMap="UserWithOrders">
+  SELECT u.*, o.* FROM user u LEFT JOIN orders o ON u.id_field = o.user_id_field WHERE u.id_field = #{id}
+</select>
+```

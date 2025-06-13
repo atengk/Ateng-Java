@@ -26,7 +26,7 @@ public class MybatisPlusGenerator {
     private static final String ChildPackage = "";
     // 需要生成的表
     private static final List<String> GenerateTable = Arrays.asList(
-            "my_user", "my_order"
+            "my_json"
     );
 
     public static void main(String[] args) {

@@ -1,7 +1,9 @@
 package local.ateng.java.mybatis;
 
 import com.alibaba.fastjson2.JSONObject;
+import local.ateng.java.mybatis.entity.MyJson;
 import local.ateng.java.mybatis.entity.MyUser;
+import local.ateng.java.mybatis.mapper.MyJsonMapper;
 import local.ateng.java.mybatis.mapper.MyUserMapper;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import java.util.List;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class MapperTests {
     private final MyUserMapper myUserMapper;
+    private final MyJsonMapper myJsonMapper;
 
     @Test
     void test01() {
@@ -32,4 +35,11 @@ public class MapperTests {
         List<JSONObject> list = myUserMapper.selectUsersWithOrders(1L);
         System.out.println(list);
     }
+
+    @Test
+    void test04() {
+        List<MyJson> myJsons = myJsonMapper.selectMyJson();
+        System.out.println(myJsons);
+    }
+
 }

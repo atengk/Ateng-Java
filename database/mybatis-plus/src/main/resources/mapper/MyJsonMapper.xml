@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="local.ateng.java.mybatis.mapper.MyJsonMapper">
+
+    <resultMap id="myJsonResultMap" type="local.ateng.java.mybatis.entity.MyJson">
+        <result column="my_json_object" property="myJsonObject" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="my_json_array" property="myJsonArray" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+    </resultMap>
+
+    <select id="selectMyJson" resultMap="myJsonResultMap">
+        select id, name, my_json_object, my_json_array from my_json;
+    </select>
+</mapper>
