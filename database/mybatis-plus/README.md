@@ -924,7 +924,141 @@ void test05() {
 输出内容
 
 ```
+2025-06-16T21:08:33.640+08:00  INFO 37408 --- [mybatis-plus] [           main] p6spy                                    : #1750079313640 | took 18ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+SELECT COUNT(*) AS total FROM my_user u WHERE u.city LIKE concat('%', ?, '%')
+SELECT COUNT(*) AS total FROM my_user u WHERE u.city LIKE concat('%', '重', '%');
+2025-06-16T21:08:33.661+08:00  INFO 37408 --- [mybatis-plus] [           main] p6spy                                    : #1750079313661 | took 5ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+SELECT
+        u.id as id,
+        u.name,
+        u.age,
+        u.score,
+        u.birthday,
+        u.province,
+        u.city,
+        u.create_time,
+        o.id as order_id,
+        o.date as order_date,
+        o.total_amount as order_total_amount
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE u.city like concat('%', ?, '%') LIMIT ?
+SELECT
+        u.id as id,
+        u.name,
+        u.age,
+        u.score,
+        u.birthday,
+        u.province,
+        u.city,
+        u.create_time,
+        o.id as order_id,
+        o.date as order_date,
+        o.total_amount as order_total_amount
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE u.city like concat('%', '重', '%') LIMIT 3;
 Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":542,"order_date":"2007-05-08","order_total_amount":398.58}, {"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":973,"order_date":"2008-10-27","order_total_amount":830.81}, {"id":2,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆"}], total=85, size=3, current=1, orders=[], optimizeCountSql=true, searchCount=true, optimizeJoinOfCountSql=true, maxLimit=null, countId='null'}
+```
+
+### 使用QueryWrapper
+
+#### 创建Mapper
+
+**重点：** 参数名仍然必须是 `"ew"`，MyBatis-Plus 才能识别并自动拼接条件。
+
+```java
+public interface MyUserMapper extends BaseMapper<MyUser> {
+
+    // 分页查询，传入wrapper
+    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param("ew") QueryWrapper<MyUser> wrapper);
+}
+```
+
+#### 创建Mapper.xml
+
+传 `wrapper` 给自定义 SQL 时，在where条件中加 `${ew.customSqlSegment}`。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="local.ateng.java.mybatis.mapper.MyUserMapper">
+
+    <select id="selectUsersWithOrderPageWrapper" resultType="com.alibaba.fastjson2.JSONObject">
+        SELECT
+            u.id as id,
+            u.name,
+            u.age,
+            u.score,
+            u.birthday,
+            u.province,
+            u.city,
+            u.create_time,
+            o.id as order_id,
+            o.date as order_date,
+            o.total_amount as order_total_amount
+        FROM my_user u
+            LEFT JOIN my_order o ON u.id = o.user_id
+        <where>
+            ${ew.sqlSegment}
+        </where>
+    </select>
+
+</mapper>
+
+```
+
+#### 测试使用
+
+```java
+@Test
+void test06() {
+    QueryWrapper<MyUser> wrapper = new QueryWrapper<>();
+    wrapper.like("city", "重");
+    wrapper.eq("u.id", 1);
+    IPage<JSONObject> page = myUserMapper.selectUsersWithOrderPageWrapper(new Page(1, 3), wrapper);
+    System.out.println(page);
+}
+```
+
+输出内容
+
+```
+2025-06-16T21:08:02.429+08:00  INFO 32540 --- [mybatis-plus] [           main] p6spy                                    : #1750079282429 | took 5ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+SELECT COUNT(*) AS total FROM my_user u WHERE (city LIKE ? AND u.id = ?)
+SELECT COUNT(*) AS total FROM my_user u WHERE (city LIKE '%重%' AND u.id = 1);
+2025-06-16T21:08:02.448+08:00  INFO 32540 --- [mybatis-plus] [           main] p6spy                                    : #1750079282448 | took 2ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+SELECT
+            u.id as id,
+            u.name,
+            u.age,
+            u.score,
+            u.birthday,
+            u.province,
+            u.city,
+            u.create_time,
+            o.id as order_id,
+            o.date as order_date,
+            o.total_amount as order_total_amount
+        FROM my_user u
+            LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE (city LIKE ? AND u.id = ?) LIMIT ?
+SELECT
+            u.id as id,
+            u.name,
+            u.age,
+            u.score,
+            u.birthday,
+            u.province,
+            u.city,
+            u.create_time,
+            o.id as order_id,
+            o.date as order_date,
+            o.total_amount as order_total_amount
+        FROM my_user u
+            LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE (city LIKE '%重%' AND u.id = 1) LIMIT 3;
+Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":542,"order_date":"2007-05-08","order_total_amount":398.58}, {"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":973,"order_date":"2008-10-27","order_total_amount":830.81}], total=1, size=3, current=1, orders=[], optimizeCountSql=true, searchCount=true, optimizeJoinOfCountSql=true, maxLimit=null, countId='null'}
 ```
 
 

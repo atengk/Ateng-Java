@@ -1,6 +1,7 @@
 package local.ateng.java.mybatis;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import local.ateng.java.mybatis.entity.MyJson;
@@ -47,6 +48,15 @@ public class MapperTests {
     @Test
     void test05() {
         IPage<JSONObject> page = myUserMapper.selectUsersWithOrderPage(new Page(1, 3), "重");
+        System.out.println(page);
+    }
+
+    @Test
+    void test06() {
+        QueryWrapper<MyUser> wrapper = new QueryWrapper<>();
+        wrapper.like("city", "重");
+        wrapper.eq("u.id", 1);
+        IPage<JSONObject> page = myUserMapper.selectUsersWithOrderPageWrapper(new Page(1, 3), wrapper);
         System.out.println(page);
     }
 
