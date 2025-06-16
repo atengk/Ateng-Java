@@ -735,7 +735,9 @@ public class UserServiceImpl implements UserService {
 
 ## 使用Mapper XML
 
-### 创建Mapper
+### 基本使用
+
+#### 创建Mapper
 
 ```java
 package local.ateng.java.mybatis.mapper;
@@ -768,7 +770,7 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
 }
 ```
 
-### 创建Mapper.xml
+#### 创建Mapper.xml
 
 ```java
 <?xml version="1.0" encoding="UTF-8"?>
@@ -808,7 +810,7 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
 </mapper>
 ```
 
-### 测试使用
+#### 测试使用
 
 ```java
 package local.ateng.java.mybatis;
@@ -848,71 +850,106 @@ public class MapperTests {
 }
 ```
 
+### 分页查询
 
+#### 创建Mapper
 
-## Mapper XML常用标签
+- **定义**：在 Mapper 方法中传入 `Page` 对象和查询参数，实现分页查询。
 
-### #{} 和 ${}
+```java
+public interface MyUserMapper extends BaseMapper<MyUser> {
 
-|      | `#{}`                                 | `${}`                        |
-| ---- | ------------------------------------- | ---------------------------- |
-| 作用 | **安全绑定参数**（PreparedStatement） | **纯文本拼接**（Statement）  |
-| 适用 | 大多数条件                            | 列名、表名这类需要动态拼接时 |
-| 风险 | **安全**（防 SQL 注入）               | **有风险**（容易 SQL 注入）  |
-| 渲染 | 渲染时为 `?`                          | 渲染时为具体文本             |
-| 建议 | **推荐使用**                          | 仅在需要拼接列/表时慎用      |
+    // 分页查询
+    IPage<JSONObject> selectUsersWithOrderPage(Page page, @Param("city") String city);
+}
+```
 
-### 🔹 `<select>`
+**执行过程**：
 
-定义 **select语句**：
+1. **自动执行总数查询**（`COUNT`），用于获取满足条件的总记录数。
+2. **执行带 `LIMIT` 的分页查询**，返回当前页数据。
+
+**原理**：
+ MyBatis-Plus 内置分页拦截器自动拦截查询，先执行总数查询，再追加分页 SQL（`LIMIT offset, size`），最后封装为 `IPage` 对象返回。
+
+**返回值**：
+ `IPage` 包含当前页数据列表、总记录数、总页数等信息，方便分页展示和逻辑处理。
+
+**优势**：
+ 免写复杂分页 SQL，减少错误，提升开发效率。
+
+#### 创建Mapper.xml
 
 ```xml
-<select id="selectByUsername" parameterType="string" resultType="User">
-  SELECT * FROM user WHERE username = #{username}
-</select>
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="local.ateng.java.mybatis.mapper.MyUserMapper">
+
+    <select id="selectUsersWithOrderPage" resultType="com.alibaba.fastjson2.JSONObject">
+        SELECT
+        u.id as id,
+        u.name,
+        u.age,
+        u.score,
+        u.birthday,
+        u.province,
+        u.city,
+        u.create_time,
+        o.id as order_id,
+        o.date as order_date,
+        o.total_amount as order_total_amount
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+        <where>
+            <if test="city != null">
+                u.city like concat('%', #{city}, '%')
+            </if>
+        </where>
+    </select>
+
+</mapper>
+
 ```
+
+#### 测试使用
+
+```java
+@Test
+void test05() {
+    IPage<JSONObject> page = myUserMapper.selectUsersWithOrderPage(new Page(1, 20), "重");
+    System.out.println(page);
+}
+```
+
+输出内容
+
+```
+Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":542,"order_date":"2007-05-08","order_total_amount":398.58}, {"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":973,"order_date":"2008-10-27","order_total_amount":830.81}, {"id":2,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆"}], total=85, size=3, current=1, orders=[], optimizeCountSql=true, searchCount=true, optimizeJoinOfCountSql=true, maxLimit=null, countId='null'}
+```
+
+
+
+## 🌟 Mapper XML常用标签整理
 
 ------
 
-### 🔹 `<insert>`
+## 🟣 `#{}` 和 `${}` 的主要差异
 
-定义 **插入语句**：
-
-```xml
-<insert id="insertUser" parameterType="User">
-  INSERT INTO user (username, password) VALUES (#{username}, #{password})
-</insert>
-```
-
-------
-
-### 🔹 `<update>`
-
-定义 **修改语句**：
-
-```xml
-<update id="updateUsername" parameterType="User">
-  UPDATE user SET username = #{username} WHERE id = #{id}
-</update>
-```
+|      | `#{}`                                           | `${}`                             |
+| ---- | ----------------------------------------------- | --------------------------------- |
+| 作用 | **推荐**，按占位绑定，由 PreparedStatement 设置 | **纯文本拼接**，适用表/列动态拼接 |
+| 风险 | 安全（防 SQL 注入）                             | 有风险（容易 SQL 注入）           |
+| 渲染 | 渲染时为 `?`                                    | 渲染时为具体文本                  |
+| 建议 | 优先使用                                        | 仅在需要时（如列名、表名拼接）    |
 
 ------
 
-### 🔹 `<delete>`
+## 🟣 基本标签（适用增删改查）
 
-定义 **删除语句**：
+### 🔹`<select>` — 定义**数据的读取语句**
 
-```xml
-<delete id="deleteById" parameterType="long">
-  DELETE FROM user WHERE id = #{id}
-</delete>
-```
-
-------
-
-### 🔹1️⃣ `<select>`
-
-定义一个 **select** 查询语句，最基础标签。
+✅适用条件：按条件进行数据**检索**。
+ ✅作用：将数据从表中**查出**，可以绑定到对象或者 List。
 
 ```xml
 <select id="findById" parameterType="java.lang.Long" resultMap="BaseResultMap">
@@ -922,42 +959,83 @@ public class MapperTests {
 
 ------
 
-### 🔹2️⃣ `<![CDATA[]]>`
+### 🔹`<insert>` — 定义**插入语句**
 
-主要作用：**在其中写大于、小于这类需要转义的操作时**更加直观。
+✅适用条件：插入数据时使用。
+ ✅作用：将对象中准备好的数据插入到表中。
 
 ```xml
-<select id="findAllGreaterThanId" parameterType="java.lang.Long" resultMap="BaseResultMap">
+<insert id="insertUser" parameterType="User">
+  INSERT INTO user (username, password) VALUES (#{username}, #{password})
+</insert>
+```
+
+------
+
+### 🔹`<update>` — 定义**修改语句**
+
+✅适用条件：需要修改表中现有数据时。
+ ✅作用：按条件修改指定的数据列。
+
+```xml
+<update id="updateUsername" parameterType="User">
+  UPDATE user SET username = #{username} WHERE id = #{id}
+</update>
+```
+
+------
+
+### 🔹`<delete>` — 定义**删除语句**
+
+✅适用条件：按条件删除数据时。
+ ✅作用：从表中移除符合条件的数据。
+
+```xml
+<delete id="deleteById" parameterType="long">
+  DELETE FROM user WHERE id = #{id}
+</delete>
+```
+
+------
+
+## 🟣 动态标签（适用条件拼接）
+
+### 🔹`<![CDATA[]]>` —转义操作
+
+✅适用条件：需要写出 `>` 或 `<` 等需要转义的条件时。
+ ✅作用：保持语法简洁，与 MyBatis 无关，仅仅是为了避免解析错误。
+
+```xml
+<select id="findAllGreaterThanId" parameterType="java.lang.Long">
   SELECT * FROM user WHERE id <![CDATA[ > ]]> #{id}
 </select>
 ```
 
 ------
 
-### 🔹3️⃣ `<if>`
+### 🔹`<if>` —按条件拼接片段
 
-按条件拼接语块，适用 **条件拼接**。
+✅适用条件：需要有条件地拼接不同的 `WHERE` 子句时。
+ ✅作用：若条件为 true 则拼接其中的 SQL。
 
 ```xml
-<select id="findByConditions" parameterType="User" resultMap="BaseResultMap">
+<select id="findByConditions" parameterType="User">
   SELECT * FROM user WHERE 1 = 1
   <if test="username != null">
     AND username = #{username}
-  </if>
-  <if test="email != null">
-    AND email = #{email}
   </if>
 </select>
 ```
 
 ------
 
-### 🔹4️⃣ `<choose>` / `<when>` / `<otherwise>`
+### 🔹`<choose>` —按条件进行分枝处理
 
-适用 **多条件中只需要其中一个**时。
+✅适用条件：有多个条件时，按**第一个为 true 的条件**拼接。
+ ✅作用：适用**if-else**结构。
 
 ```xml
-<select id="findByOption" parameterType="User" resultMap="BaseResultMap">
+<select id="findByOption" parameterType="User">
   SELECT * FROM user WHERE 1 = 1
   <choose>
     <when test="username != null">
@@ -975,12 +1053,13 @@ public class MapperTests {
 
 ------
 
-### 🔹5️⃣ `<where>`
+### 🔹`<where>` —智能拼接 `AND/OR`
 
-自动插入 `WHERE` ，且可以自动移除第一个条件前多余的 `AND/OR`。
+✅适用条件：有条件时自动插入 `WHERE` ，且会移除最前多余的 `AND/OR`。
+ ✅作用：简化拼接语法。
 
 ```xml
-<select id="findAllWithWhere" parameterType="User" resultMap="BaseResultMap">
+<select id="findAllWithWhere" parameterType="User">
   SELECT * FROM user
   <where>
     <if test="username != null">
@@ -995,14 +1074,15 @@ public class MapperTests {
 
 ------
 
-### 🔹6️⃣ `<trim>`
+### 🔹`<trim>` —按规则清理拼接
 
-可以实现灵活地拼接条件，如可以指定 `suffixOverrides` 或 `prefixOverrides`。
+✅适用条件：需要按规则移除指定前后关键字时。
+ ✅作用：可以指定 `suffixOverrides` 或 `prefixOverrides`。
 
 ```xml
-<select id="findAllWithTrim" parameterType="User" resultMap="BaseResultMap">
+<select id="findAllWithTrim" parameterType="User">
   SELECT * FROM user
-  <trim prefix="WHERE" prefixOverrides="AND | OR">
+  <trim prefix="WHERE" prefixOverrides="AND|OR">
     <if test="username != null">
       AND username = #{username}
     </if>
@@ -1015,73 +1095,43 @@ public class MapperTests {
 
 ------
 
-### 🔹7️⃣ `<foreach>`
+### 🔹`<foreach>` —适用批量条件（in语法）
 
-适用批量条件，如 `in (...) ` 查询。
+✅适用条件：需要对一个数组/ List进行批量拼接时。
+ ✅作用：可以轻松实现 `in (...)` 查询。
 
 ```xml
-<select id="findByIds" parameterType="list" resultMap="BaseResultMap">
+<select id="findByIds" parameterType="list">
   SELECT * FROM user WHERE id IN
-  <foreach item="id" index="i" collection="list" open="(" separator="," close=")"> 
+  <foreach item="id" collection="list" open="(" separator="," close=")"> 
     #{id} 
   </foreach>
 </select>
 ```
 
-## resultMap
+------
 
-### 🔹1️⃣ `<resultMap>` 的作用：
+## 🟣 resultMap —列与对象的高度自由映射
 
-- **将数据表列（column）与对象属性（property）进行对应**。
-- 能适用以下几种适用时机：
-    - 列名与属性不一一对应时（列为 `foo_field` ，属性为 `fooField`）
-    - 一对一关联时（可以用 `<association>`）
-    - 一对多关联时（可以用 `<collection>`）
-    - 有复合主键时（可以用多个 `<id>`）
+✅适用条件：列名与对象属性不一一对应时，或者需要进行关联时。
+ ✅作用：可以进行一对一、一对多甚至是有参赋值。
+
+| 标签            | 作用                         |
+| --------------- | ---------------------------- |
+| `<id>`          | 定义**主键列**对应哪个属性   |
+| `<result>`      | 定义普通列与对象哪个属性对应 |
+| `<association>` | 定义一对一时的关联           |
+| `<collection>`  | 定义一对多时的关联           |
+| `<constructor>` | 适用有参构造时进行赋值       |
 
 ------
 
-### 🔹2️⃣ `resultMap` 的主要标签：
+## 🟣 一对一
 
-| 标签            | 作用                                   |
-| --------------- | -------------------------------------- |
-| `<id>`          | 定义**主键列**                         |
-| `<result>`      | 定义**普通列**与**对象属性**的映射     |
-| `<association>` | 定义**一对一关联**时的列与对象的关系   |
-| `<collection>`  | 定义**一对多关联**时的列与 List 的关系 |
-| `<constructor>` | 适用需要通过有参构造函数进行赋值时     |
+#### association
 
-------
-
-### 🔹3️⃣ `resultMap` 的最基础用法（列和属性不同时）：
-
-```xml
-<resultMap id="BaseResultMap" type="User">
-  <id column="id_field" property="id" />
-  <result column="username_field" property="username" />
-  <result column="email_field" property="email" />
-</resultMap>
-
-<select id="findById" parameterType="java.lang.Long" resultMap="BaseResultMap">
-  SELECT id_field, username_field, email_field FROM user WHERE id_field = #{id}
-</select>
-```
-
-------
-
-### 🔹4️⃣ 一对一关联（association）：
-
-假如 `User` 有一个 `Profile` 对象：
-
-```java
-public class User {
-    private Long id;
-    private String username;
-    private Profile profile;
-}
-```
-
-我们可以这样配置：
+✅适用条件：需要联合表进行**关联**时（1对1）。
+ ✅作用：可以轻松地将关联表的数据按对象进行嵌套。
 
 ```xml
 <resultMap id="UserWithProfile" type="User">
@@ -1093,27 +1143,25 @@ public class User {
     <result column="profile_name_field" property="profileName" />
   </association>
 </resultMap>
+```
 
-<select id="findUserWithProfile" parameterType="java.lang.Long" resultMap="UserWithProfile">
-  SELECT u.*, p.* FROM user u JOIN profile p ON u.profile_id_field = p.id_field WHERE u.id_field = #{id}
-</select>
+#### 直接映射嵌套属性
+
+```xml
+<resultMap id="UserWithProfileSimple" type="User">
+  <id column="id_field" property="id" />
+  <result column="username_field" property="username" />
+  <result column="profile_id_field" property="profile.id" />
+  <result column="profile_name_field" property="profile.profileName" />
+</resultMap>
 ```
 
 ------
 
-### 🔹5️⃣ 一对多关联（collection）：
+## 🟣 一对多（collection）
 
-假如 `User` 有很多 `Order`：
-
-```java
-public class User {
-    private Long id;
-    private String username;
-    private List<Order> orders;
-}
-```
-
-我们可以这样配置：
+✅适用条件：需要获取**一对多**的数据时（如一个用户有多个购买记录)。
+ ✅作用：可以将关联的数据按 List 映射到对象中。
 
 ```xml
 <resultMap id="UserWithOrders" type="User">
@@ -1125,8 +1173,5 @@ public class User {
     <result column="order_number_field" property="orderNumber" />
   </collection>
 </resultMap>
-
-<select id="findUserWithOrders" parameterType="java.lang.Long" resultMap="UserWithOrders">
-  SELECT u.*, o.* FROM user u LEFT JOIN orders o ON u.id_field = o.user_id_field WHERE u.id_field = #{id}
-</select>
 ```
+

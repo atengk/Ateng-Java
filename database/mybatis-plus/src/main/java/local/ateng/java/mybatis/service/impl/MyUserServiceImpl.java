@@ -1,5 +1,7 @@
 package local.ateng.java.mybatis.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import local.ateng.java.mybatis.entity.MyUser;
 import local.ateng.java.mybatis.mapper.MyUserMapper;
 import local.ateng.java.mybatis.service.IMyUserService;
@@ -17,4 +19,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class MyUserServiceImpl extends ServiceImpl<MyUserMapper, MyUser> implements IMyUserService {
 
+    void test() {
+        Page<MyUser> myUserPage = new Page<>();
+        IPage<MyUser> page = this.page(null);
+    }
 }

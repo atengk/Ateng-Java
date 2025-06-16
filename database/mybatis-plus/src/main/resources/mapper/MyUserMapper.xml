@@ -31,5 +31,26 @@
         WHERE 1=1
             <if test="orderId != null">AND o.id = #{orderId}</if>
     </select>
+    <select id="selectUsersWithOrderPage" resultType="com.alibaba.fastjson2.JSONObject">
+        SELECT
+        u.id as id,
+        u.name,
+        u.age,
+        u.score,
+        u.birthday,
+        u.province,
+        u.city,
+        u.create_time,
+        o.id as order_id,
+        o.date as order_date,
+        o.total_amount as order_total_amount
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+        <where>
+            <if test="city != null">
+                u.city like concat('%', #{city}, '%')
+            </if>
+        </where>
+    </select>
 
 </mapper>

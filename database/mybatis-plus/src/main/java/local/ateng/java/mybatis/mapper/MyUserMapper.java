@@ -2,6 +2,8 @@ package local.ateng.java.mybatis.mapper;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import local.ateng.java.mybatis.entity.MyUser;
 import org.apache.ibatis.annotations.Param;
 
@@ -25,4 +27,6 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
     // 根据查询条件获取用户及其订单信息
     List<JSONObject> selectUsersWithOrders(@Param("orderId") Long orderId);
 
+    // 分页查询
+    IPage<JSONObject> selectUsersWithOrderPage(Page page, @Param("city") String city);
 }
