@@ -977,7 +977,7 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
 
 #### 创建Mapper.xml
 
-传 `wrapper` 给自定义 SQL 时，在where条件中加 `${ew.customSqlSegment}`。
+传 `wrapper` 给自定义 SQL 时，在where条件中加 `${ew.sqlSegment}`。
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1000,6 +1000,7 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
         FROM my_user u
             LEFT JOIN my_order o ON u.id = o.user_id
         <where>
+            0 = 0 and
             ${ew.sqlSegment}
         </where>
     </select>
@@ -1016,6 +1017,7 @@ void test06() {
     QueryWrapper<MyUser> wrapper = new QueryWrapper<>();
     wrapper.like("city", "重");
     wrapper.eq("u.id", 1);
+    wrapper.orderByAsc("u.id");
     IPage<JSONObject> page = myUserMapper.selectUsersWithOrderPageWrapper(new Page(1, 3), wrapper);
     System.out.println(page);
 }
@@ -1059,6 +1061,137 @@ SELECT
             LEFT JOIN my_order o ON u.id = o.user_id
          WHERE (city LIKE '%重%' AND u.id = 1) LIMIT 3;
 Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":542,"order_date":"2007-05-08","order_total_amount":398.58}, {"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":973,"order_date":"2008-10-27","order_total_amount":830.81}], total=1, size=3, current=1, orders=[], optimizeCountSql=true, searchCount=true, optimizeJoinOfCountSql=true, maxLimit=null, countId='null'}
+```
+
+### 分页自定义Count
+
+在一些复杂SQL情况下，MybatisPlus的分页查询Count可能会出现不正确的情况，这里可以使用 **CTE** 或者 **自定义查询Count** 来解决
+
+CTE 的SQL示例
+
+```
+
+```
+
+自定义查询Count如下：
+
+#### 创建Mapper
+
+**重点：** 参数名仍然必须是 `"ew"`，MyBatis-Plus 才能识别并自动拼接条件。
+
+```java
+public interface MyUserMapper extends BaseMapper<MyUser> {
+
+    // 分页查询，传入wrapper
+    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param("ew") QueryWrapper<MyUser> wrapper);
+}
+```
+
+#### 创建Mapper.xml
+
+注意 `selectUsersWithOrderPageWrapperCount` 用于后续配置分页查询Count
+
+```xml
+    <select id="selectUsersWithOrderPageWrapperCount" resultType="java.lang.Long">
+        SELECT
+        COUNT(1) AS total
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+        <where>
+            0 = 0 and
+            ${ew.sqlSegment}
+        </where>
+    </select>
+    <select id="selectUsersWithOrderPageWrapper" resultType="com.alibaba.fastjson2.JSONObject">
+        SELECT
+            u.id as id,
+            u.name,
+            u.age,
+            u.score,
+            u.birthday,
+            u.province,
+            u.city,
+            u.create_time,
+            o.id as order_id,
+            o.date as order_date,
+            o.total_amount as order_total_amount
+        FROM my_user u
+            LEFT JOIN my_order o ON u.id = o.user_id
+        <where>
+            0 = 0 and
+            ${ew.sqlSegment}
+        </where>
+    </select>
+```
+
+#### 测试使用
+
+`page.setCountId("selectUsersWithOrderPageWrapperCount");` 设置查询分页的Mapper id
+
+```java
+    @Test
+    void test06() {
+        QueryWrapper<MyUser> wrapper = new QueryWrapper<>();
+        wrapper.like("city", "重");
+        wrapper.eq("u.id", 1);
+        wrapper.orderByAsc("u.id");
+        Page<JSONObject> page = new Page(1, 3);
+        page.setCountId("selectUsersWithOrderPageWrapperCount");
+        IPage<JSONObject> pageList = myUserMapper.selectUsersWithOrderPageWrapper(page, wrapper);
+        System.out.println(pageList);
+    }
+```
+
+输出内容
+
+```
+2025-06-17T21:07:45.371+08:00  INFO 21272 --- [mybatis-plus] [           main] p6spy                                    : #1750165665371 | took 5ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+SELECT
+        COUNT(1)
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE 0 = 0 and
+            (city LIKE ? AND u.id = ?) ORDER BY u.id ASC
+SELECT
+        COUNT(1)
+        FROM my_user u
+        LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE 0 = 0 and
+            (city LIKE '%重%' AND u.id = 1) ORDER BY u.id ASC;
+2025-06-17T21:07:45.389+08:00  INFO 21272 --- [mybatis-plus] [           main] p6spy                                    : #1750165665389 | took 2ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+SELECT
+            u.id as id,
+            u.name,
+            u.age,
+            u.score,
+            u.birthday,
+            u.province,
+            u.city,
+            u.create_time,
+            o.id as order_id,
+            o.date as order_date,
+            o.total_amount as order_total_amount
+        FROM my_user u
+            LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE 0 = 0 and
+            (city LIKE ? AND u.id = ?) ORDER BY u.id ASC LIMIT ?
+SELECT
+            u.id as id,
+            u.name,
+            u.age,
+            u.score,
+            u.birthday,
+            u.province,
+            u.city,
+            u.create_time,
+            o.id as order_id,
+            o.date as order_date,
+            o.total_amount as order_total_amount
+        FROM my_user u
+            LEFT JOIN my_order o ON u.id = o.user_id
+         WHERE 0 = 0 and
+            (city LIKE '%重%' AND u.id = 1) ORDER BY u.id ASC LIMIT 3;
+Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":542,"order_date":"2007-05-08","order_total_amount":398.58}, {"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":973,"order_date":"2008-10-27","order_total_amount":830.81}], total=2, size=3, current=1, orders=[], optimizeCountSql=true, searchCount=true, optimizeJoinOfCountSql=true, maxLimit=null, countId='selectUsersWithOrderPageWrapperCount'}
 ```
 
 

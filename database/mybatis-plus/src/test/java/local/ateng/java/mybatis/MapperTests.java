@@ -55,9 +55,11 @@ public class MapperTests {
     void test06() {
         QueryWrapper<MyUser> wrapper = new QueryWrapper<>();
         wrapper.like("city", "重");
-        wrapper.eq("u.id", 1);
-        IPage<JSONObject> page = myUserMapper.selectUsersWithOrderPageWrapper(new Page(1, 3), wrapper);
-        System.out.println(page);
+        wrapper.eq("id", 1);
+        wrapper.orderByAsc("u.id");
+        Page<JSONObject> page = new Page(1, 3);
+        IPage<JSONObject> pageList = myUserMapper.selectUsersWithOrderPageWrapper(page, wrapper);
+        System.out.println(pageList);
     }
 
 }
