@@ -1,9 +1,10 @@
 package local.ateng.java.mybatis.mapper;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Constants;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import local.ateng.java.mybatis.entity.MyUser;
 import org.apache.ibatis.annotations.Param;
@@ -32,5 +33,5 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
     IPage<JSONObject> selectUsersWithOrderPage(Page page, @Param("city") String city);
 
     // 分页查询，传入wrapper
-    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param("ew") QueryWrapper<MyUser> wrapper);
+    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param(Constants.WRAPPER) Wrapper wrapper);
 }
