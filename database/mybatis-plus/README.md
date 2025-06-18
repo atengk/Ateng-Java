@@ -1069,8 +1069,26 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 CTE 的SQL示例
 
-```
-
+```sql
+WITH result AS (
+    SELECT u.id           AS id,
+           u.name,
+           u.age,
+           u.score,
+           u.birthday,
+           u.province,
+           u.city,
+           u.create_time,
+           o.id           AS order_id,
+           o.date         AS order_date,
+           o.total_amount AS order_total_amount
+    FROM my_user u
+             LEFT JOIN my_order o ON u.id = o.user_id
+)
+SELECT *
+FROM result
+WHERE 0 = 0
+  AND (city LIKE '%重%' AND id = 1);
 ```
 
 自定义查询Count如下：
