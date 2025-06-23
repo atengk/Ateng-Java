@@ -1767,3 +1767,174 @@ public class RedisController {
 ```
 
 ![image-20250217112843688](./assets/image-20250217112843688.png)
+
+
+
+## Lua脚本
+
+### 使用示例
+
+```java
+@SpringBootTest
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class RedisScript {
+    private final RedisTemplate redisTemplate;
+
+    @Test
+    public void test() {
+        boolean success = setIfAbsentWithExpire("myKey", "someValue", 60);
+        System.out.println("是否设置成功: " + success);
+    }
+
+    /**
+     * 尝试设置一个键值对到 Redis 中，只有当该 key 不存在时才设置，并带有过期时间。
+     *
+     * @param key           要设置的 Redis key
+     * @param value         要设置的值
+     * @param expireSeconds 过期时间（单位：秒）
+     * @return 如果设置成功（即 key 原本不存在），返回 true；否则返回 false
+     */
+    public boolean setIfAbsentWithExpire(String key, String value, int expireSeconds) {
+        // Lua 脚本：如果 key 不存在，则 setex 设置键值并设置过期时间，否则不做任何操作
+        String script = "" +
+                // 判断 key 是否存在（返回 0 表示不存在）
+                "if redis.call('exists', KEYS[1]) == 0 then " +
+                // 如果不存在，则 setex 设置 key，ARGV[2] 是过期时间
+                "   redis.call('setex', KEYS[1], ARGV[2], ARGV[1]); " +
+                // 设置成功，返回 1
+                "   return 1; " +
+                "else " +
+                // 如果已存在，返回 0
+                "   return 0; " +
+                "end";
+
+        // 构造 RedisScript 对象，指定返回类型为 Long（Lua 返回 1 或 0）
+        DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
+        redisScript.setScriptText(script);
+        redisScript.setResultType(Long.class);
+
+        // 执行脚本：传入 key（作为 KEYS[1]），value 和 expireSeconds（作为 ARGV[1] 和 ARGV[2]）
+        Long result = (Long) redisTemplate.execute(
+                redisScript,
+                Collections.singletonList(key),  // 只有一个 key
+                value,                           // ARGV[1]：要设置的值
+                expireSeconds                    // ARGV[2]：过期时间
+        );
+
+        // 返回脚本执行结果（1 表示设置成功，0 表示 key 已存在）
+        return result != null && result == 1;
+    }
+}
+```
+
+在项目中使用 Redis Lua 脚本主要是为了**原子性操作**和**提高性能**。以下是一些常见场景及对应的 Redis Lua 脚本：
+
+------
+
+### 1. **分布式锁（简单实现）**
+
+```lua
+-- 尝试设置锁
+-- KEYS[1]: 锁的key
+-- ARGV[1]: 锁的值（通常是UUID）
+-- ARGV[2]: 过期时间（单位：秒）
+
+if redis.call('SETNX', KEYS[1], ARGV[1]) == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[2])
+    return 1
+else
+    return 0
+end
+```
+
+------
+
+### 2. **分布式锁释放（避免误删）**
+
+```lua
+-- 安全释放锁
+-- KEYS[1]: 锁的key
+-- ARGV[1]: 请求者设置的值（必须匹配才能删除）
+
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+else
+    return 0
+end
+```
+
+------
+
+### 3. **限流器（令牌桶/漏斗）**
+
+```lua
+-- 固定窗口限流（每分钟允许访问N次）
+-- KEYS[1]: 计数器key
+-- ARGV[1]: 限流阈值
+-- ARGV[2]: 过期时间（单位：秒）
+
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+
+if current > tonumber(ARGV[1]) then
+    return 0 -- 拒绝
+else
+    return 1 -- 允许
+end
+```
+
+------
+
+### 4. **队列的原子弹出多个元素**
+
+```lua
+-- 从列表中原子弹出N个元素（例如实现批处理）
+-- KEYS[1]: 列表key
+-- ARGV[1]: 弹出的数量N
+
+local result = {}
+for i = 1, tonumber(ARGV[1]) do
+    local item = redis.call('LPOP', KEYS[1])
+    if not item then
+        break
+    end
+    table.insert(result, item)
+end
+return result
+```
+
+------
+
+### 5. **库存扣减（防止超卖）**
+
+```lua
+-- KEYS[1]: 商品库存key
+-- ARGV[1]: 扣减的数量
+
+local stock = tonumber(redis.call('GET', KEYS[1]))
+local reduce = tonumber(ARGV[1])
+if stock >= reduce then
+    return redis.call('DECRBY', KEYS[1], reduce)
+else
+    return -1
+end
+```
+
+------
+
+### 6. **Set 集合的幂等写入 + 限长**
+
+```lua
+-- KEYS[1]: Set 集合key
+-- ARGV[1]: 要加入的元素
+-- ARGV[2]: 最大长度
+
+local added = redis.call('SADD', KEYS[1], ARGV[1])
+if redis.call('SCARD', KEYS[1]) > tonumber(ARGV[2]) then
+    redis.call('SPOP', KEYS[1])  -- 随机踢出一个
+end
+return added
+```
+
