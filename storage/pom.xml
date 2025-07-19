@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>x-file-storage</module>
+        <module>aws-s3</module>
     </modules>
 </project>
