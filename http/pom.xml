@@ -17,5 +17,6 @@
         <module>web-client</module>
         <module>rest-template</module>
         <module>forest</module>
+        <module>rest-template-jdk8</module>
     </modules>
 </project>
