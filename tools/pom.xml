@@ -22,5 +22,6 @@
         <module>lombok</module>
         <module>async</module>
         <module>jackson</module>
+        <module>custom-utils</module>
     </modules>
 </project>
