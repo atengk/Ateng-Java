@@ -162,6 +162,63 @@ public class ZipUtil {
         }
     }
 
+    /**
+     * 将多个输入流压缩为 zip 格式并写入到输出流中（适用于 Spring Boot 文件下载）
+     *
+     * @param fileNames zip 包中的文件名列表（与 streams 一一对应）
+     * @param streams   输入流列表（与 fileNames 一一对应）
+     * @param output    输出流（通常为 HttpServletResponse.getOutputStream()）
+     * @throws IOException 如果压缩或写入时发生错误
+     */
+    public static void zipStreams(List<String> fileNames, List<InputStream> streams, OutputStream output) throws IOException {
+        Objects.requireNonNull(fileNames, "文件名列表不能为空");
+        Objects.requireNonNull(streams, "输入流列表不能为空");
+        Objects.requireNonNull(output, "输出流不能为空");
+
+        if (fileNames.size() != streams.size()) {
+            throw new IllegalArgumentException("文件名列表与输入流列表长度不一致");
+        }
+
+        try (ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(output))) {
+            zos.setLevel(Deflater.BEST_COMPRESSION);
+
+            for (int i = 0; i < fileNames.size(); i++) {
+                String fileName = fileNames.get(i);
+                InputStream inputStream = streams.get(i);
+
+                if (fileName == null || inputStream == null) {
+                    continue; // 跳过空的项
+                }
+
+                // 统一分隔符（兼容 Linux 和 Windows）
+                String zipEntryName = fileName.replace(File.separator, "/");
+
+                zos.putNextEntry(new ZipEntry(zipEntryName));
+
+                try (InputStream is = inputStream) {
+                    copyStream(is, zos);
+                }
+
+                zos.closeEntry();
+            }
+        }
+    }
+
+    /**
+     * 将多个输入流压缩为 zip 文件并写入到指定路径
+     */
+    public static void zipStreams(List<String> fileNames, List<InputStream> streams, Path zipTarget) throws IOException {
+        Objects.requireNonNull(zipTarget, "压缩目标路径不能为空");
+
+        // 确保目标目录存在
+        if (zipTarget.getParent() != null) {
+            Files.createDirectories(zipTarget.getParent());
+        }
+
+        try (OutputStream out = Files.newOutputStream(zipTarget)) {
+            zipStreams(fileNames, streams, out);
+        }
+    }
 
     /**
      * 内部递归压缩方法

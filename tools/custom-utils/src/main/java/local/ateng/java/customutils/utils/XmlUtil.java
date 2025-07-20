@@ -18,6 +18,13 @@ import java.util.*;
 public class XmlUtil {
 
     /**
+     * 禁止实例化工具类
+     */
+    private XmlUtil() {
+        throw new UnsupportedOperationException("工具类不可实例化");
+    }
+
+    /**
      * 解析 XML 文件并返回 Document 对象
      *
      * @param file XML 文件路径

@@ -61,6 +61,151 @@ public final class FileUtil {
     }
 
     /**
+     * 获取相对路径（B 相对于 A 的路径）
+     *
+     * @param baseDir 基准目录（A）
+     * @param target  目标路径（B）
+     * @return 相对路径（baseDir.relativize(target)）
+     * @throws IllegalArgumentException 参数不能为空或不规范
+     */
+    public static Path getRelativePath(Path baseDir, Path target) {
+        if (baseDir == null || target == null) {
+            throw new IllegalArgumentException("基准路径或目标路径不能为空");
+        }
+        return baseDir.toAbsolutePath().normalize().relativize(
+                target.toAbsolutePath().normalize());
+    }
+
+    /**
+     * 获取安全相对路径（不同根返回 null）
+     *
+     * @param baseDir 基准目录（A）
+     * @param target  目标路径（B）
+     * @return 相对路径（baseDir.relativize(target)）
+     */
+    public static Path getRelativizeSafely(Path baseDir, Path target) {
+        if (baseDir == null || target == null) return null;
+        Path absBase = baseDir.toAbsolutePath().normalize();
+        Path absTarget = target.toAbsolutePath().normalize();
+
+        try {
+            return absBase.relativize(absTarget);
+        } catch (IllegalArgumentException e) {
+            // 不在同一个根路径下无法 relativize
+            return null;
+        }
+    }
+
+    /**
+     * 获取文件名（不包含路径）
+     *
+     * @param path 文件或目录路径
+     * @return 文件名
+     */
+    public static String getFileName(Path path) {
+        if (path == null) return "";
+        Path fileName = path.getFileName();
+        return fileName != null ? fileName.toString() : "";
+    }
+
+    /**
+     * 获取文件类型（即扩展名，如 txt、jpg）
+     *
+     * @param path 文件路径
+     * @return 扩展名（无点），没有则返回空串
+     */
+    public static String getFileExtension(Path path) {
+        if (path == null) return "";
+        String fileName = getFileName(path);
+        int index = fileName.lastIndexOf(".");
+        if (index > 0 && index < fileName.length() - 1) {
+            return fileName.substring(index + 1);
+        }
+        return "";
+    }
+
+    /**
+     * 获取文件大小（单位：字节）
+     *
+     * @param path 文件路径
+     * @return 文件大小（long），不存在返回 -1
+     */
+    public static long getFileSize(Path path) {
+        if (path == null || !Files.exists(path) || !Files.isRegularFile(path)) {
+            return -1L;
+        }
+        try {
+            return Files.size(path);
+        } catch (IOException e) {
+            return -1L;
+        }
+    }
+
+    /**
+     * 判断 child 是否为 parent 的子路径（逻辑包含关系）
+     *
+     * @param parent 父路径
+     * @param child  子路径
+     * @return true 表示 child 在 parent 内部
+     */
+    public static boolean isSubPath(Path parent, Path child) {
+        if (parent == null || child == null) return false;
+
+        Path normParent = parent.toAbsolutePath().normalize();
+        Path normChild = child.toAbsolutePath().normalize();
+
+        return normChild.startsWith(normParent);
+    }
+
+    /**
+     * 获取绝对路径并规范化
+     *
+     * @param path 任意路径
+     * @return 规范后的绝对路径
+     */
+    public static Path toAbsoluteNormalized(Path path) {
+        return path == null ? null : path.toAbsolutePath().normalize();
+    }
+
+    /**
+     * 获取不带扩展名的文件路径
+     *
+     * @param path 文件路径
+     * @return 去掉扩展名的路径字符串
+     */
+    public static String getPathWithoutExtension(Path path) {
+        if (path == null) return "";
+        String fileName = getFileName(path);
+        int index = fileName.lastIndexOf(".");
+        return index > 0 ? fileName.substring(0, index) : fileName;
+    }
+
+    /**
+     * 安全拼接子路径（防止 null 或非法）
+     *
+     * @param base     基础目录
+     * @param relative 相对路径（文件名、子目录）
+     * @return 拼接后的路径
+     */
+    public static Path getResolveSafe(Path base, String relative) {
+        if (base == null || relative == null || relative.trim().isEmpty()) {
+            return base;
+        }
+        return base.resolve(relative.trim()).normalize();
+    }
+
+    /**
+     * 获取真实路径（包含符号链接解析）
+     *
+     * @param path 路径
+     * @return 真实路径
+     * @throws IOException 获取失败
+     */
+    public static Path getCanonicalPath(Path path) throws IOException {
+        return path == null ? null : path.toRealPath();
+    }
+
+    /**
      * 创建目录（含父级）
      *
      * @param dirPath 目录路径
@@ -492,7 +637,7 @@ public final class FileUtil {
     /**
      * 批量复制文件到指定目录
      *
-     * @param sources 文件路径列表（不支持目录）
+     * @param sources   文件路径列表（不支持目录）
      * @param targetDir 目标目录（必须是目录）
      * @throws IOException 拷贝失败抛出异常
      */
