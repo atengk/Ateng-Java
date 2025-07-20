@@ -11,6 +11,7 @@ import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -18,11 +19,6 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Zip 工具类：支持将多个文件或目录压缩为 zip 文件或输出流
- * 示例：
- * 压缩目录：ZipUtil.zip(Collections.singletonList(Paths.get("D:\\temp\\zip")), Paths.get("D:\\temp\\zip.zip"));
- * 压缩文件：ZipUtil.zip(Arrays.asList(Paths.get("D:\\temp\\20250718\\1.jpg"), Paths.get("D:\\temp\\20250718\\2.jpg")), Paths.get("D:\\temp\\zip.zip"));
- * 压缩文件和目录（混合）：ZipUtil.zip(Arrays.asList(Paths.get("D:\\temp\\20250718\\1.jpg"), Paths.get("D:\\temp\\20250718\\2.jpg"), Paths.get("D:\\temp\\20240422")), Paths.get("D:\\temp\\zip.zip"));
- * 解压：ZipUtil.unzip(Paths.get("D:\\temp\\zip.zip"), Paths.get("D:\\temp\\zip"));
  *
  * @author Ateng
  * @since 2025-07-19
@@ -40,7 +36,7 @@ public class ZipUtil {
     }
 
     public static void main(String[] args) throws IOException {
-        ZipUtil.unzip(Paths.get("D:\\temp\\zip.zip"), Paths.get("D:\\temp\\zip"));
+        ZipUtil.zip(Paths.get("D:\\temp\\zip"), Paths.get("D:\\temp\\zip.zip"), false);
     }
 
     /**
@@ -52,6 +48,32 @@ public class ZipUtil {
      */
     public static void zip(Path source, Path zipTarget) throws IOException {
         zip(Collections.singletonList(source), zipTarget);
+    }
+
+    /**
+     * 将文件或目录压缩为zip文件，支持是否包含根目录
+     *
+     * @param source        文件或目录路径
+     * @param zipTarget     目标zip文件路径
+     * @param includeRootDir 是否包含根目录名
+     * @throws IOException IO异常
+     */
+    public static void zip(Path source, Path zipTarget, boolean includeRootDir) throws IOException {
+        Objects.requireNonNull(source, "source不能为空");
+        Objects.requireNonNull(zipTarget, "zipTarget不能为空");
+
+        if (!Files.exists(source)) {
+            throw new IllegalArgumentException("待压缩路径不存在：" + source);
+        }
+
+        // 取目录下一层所有文件和目录（非递归）
+        List<Path> children = Files.list(source).collect(Collectors.toList());
+        if (includeRootDir) {
+            zip(source, zipTarget);
+        } else {
+            zip(children, zipTarget);
+        }
+
     }
 
     /**
@@ -84,6 +106,10 @@ public class ZipUtil {
             for (Path source : sources) {
                 if (!Files.exists(source)) {
                     continue; // 如果文件不存在，跳过
+                }
+                // 如果源路径本身就是zipTarget，跳过
+                if (source.toAbsolutePath().normalize().equals(zipTarget)) {
+                    continue;
                 }
                 Path basePath = source.getParent() != null ? source.getParent() : source;
                 zipPath(source, basePath, zos); // 压缩路径

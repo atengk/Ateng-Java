@@ -329,17 +329,4 @@ public class XmlUtil {
         return map;
     }
 
-    public static void main(String[] args) throws Exception {
-        Map<String, Object> address = new HashMap<>();
-        address.put("street", "123 Main St");
-        address.put("city", "New York");
-
-        Map<String, Object> person = new HashMap<>();
-        person.put("name", "John");
-        person.put("age", 30);
-        person.put("address", address);
-
-        String xml = XmlUtil.mapToXml(person, "person");
-        System.out.println("XML Output:\n" + xml);
-    }
 }
