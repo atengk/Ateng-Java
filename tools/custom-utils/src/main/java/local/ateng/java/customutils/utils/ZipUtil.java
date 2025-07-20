@@ -7,7 +7,6 @@ import java.net.URLEncoder;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -33,10 +32,6 @@ public class ZipUtil {
     private ZipUtil() {
         // 工具类不能实例化
         throw new UnsupportedOperationException("工具类不可实例化");
-    }
-
-    public static void main(String[] args) throws IOException {
-        ZipUtil.zip(Paths.get("D:\\temp\\zip"), Paths.get("D:\\temp\\zip.zip"), false);
     }
 
     /**
@@ -258,8 +253,17 @@ public class ZipUtil {
         // 如果是目录，递归处理子文件
         if (Files.isDirectory(source)) {
             try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(source)) {
+                boolean isEmpty = true;
                 for (Path subPath : directoryStream) {
-                    zipPath(subPath, basePath, zos); // 递归压缩
+                    isEmpty = false;
+                    zipPath(subPath, basePath, zos); // 递归压缩子路径
+                }
+
+                if (isEmpty) {
+                    // 空目录，添加 ZipEntry
+                    String dirEntryName = basePath.relativize(source).toString().replace(File.separatorChar, '/') + "/";
+                    zos.putNextEntry(new ZipEntry(dirEntryName));
+                    zos.closeEntry();
                 }
             }
         } else {
