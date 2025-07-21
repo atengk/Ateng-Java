@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.*;
@@ -22,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -300,6 +302,37 @@ public class S3Service {
                 .build();
 
         return s3Client.getObject(request);
+    }
+
+    /**
+     * 下载文件并返回 Base64 编码字符串（不包含 data 前缀）
+     *
+     * @param key S3 文件路径
+     * @return Base64 编码后的字符串（如：iVBORw0KGgoAAAANS...）
+     */
+    public String downloadFileAsBase64(String key) {
+        try (ResponseInputStream<GetObjectResponse> s3Stream = downloadFile(key)) {
+            byte[] bytes = toByteArray(s3Stream);
+            return Base64.getEncoder().encodeToString(bytes);
+        } catch (IOException e) {
+            throw new RuntimeException("下载或转换文件为 Base64 失败：" + key, e);
+        }
+    }
+
+    /**
+     * 下载文件并返回带 data: 前缀的 Base64 URI 字符串
+     *
+     * @param key S3 文件路径
+     * @return Base64 URI 字符串（如：data:image/png;base64,iVBORw0KGgoAAAANS...）
+     */
+    public String downloadFileAsBase64Uri(String key) {
+        try (ResponseInputStream<GetObjectResponse> s3Stream = downloadFile(key)) {
+            byte[] bytes = toByteArray(s3Stream);
+            String contentType = s3Stream.response().contentType();
+            return "data:" + contentType + ";base64," + Base64.getEncoder().encodeToString(bytes);
+        } catch (IOException e) {
+            throw new RuntimeException("下载或转换文件为 Base64 URI 失败：" + key, e);
+        }
     }
 
     /**
@@ -674,6 +707,7 @@ public class S3Service {
 
     /**
      * 生成文件的临时访问链接
+     * curl示例：curl -X PUT -T myfile.jpg "https://your-presigned-url-from-java"
      *
      * @param key      文件路径（S3 Key）
      * @param duration 链接有效时长
@@ -691,6 +725,29 @@ public class S3Service {
                 .build();
 
         URL url = s3Presigner.presignGetObject(presignRequest).url();
+
+        return url.toString();
+    }
+
+    /**
+     * 生成用于临时上传文件的 Presigned URL（PUT 方法）
+     *
+     * @param key      要上传到的 S3 路径（key）
+     * @param duration 上传链接的有效时长
+     * @return 上传用的临时 URL
+     */
+    public String generatePresignedUploadUrl(String key, Duration duration) {
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .key(key)
+                .build();
+
+        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                .signatureDuration(duration)
+                .putObjectRequest(putObjectRequest)
+                .build();
+
+        URL url = s3Presigner.presignPutObject(presignRequest).url();
 
         return url.toString();
     }

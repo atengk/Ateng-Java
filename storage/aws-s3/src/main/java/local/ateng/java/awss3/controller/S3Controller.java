@@ -82,7 +82,7 @@ public class S3Controller {
     @GetMapping("/zip")
     public ResponseEntity<Void> zip(HttpServletResponse response) throws IOException {
         List<Path> localPaths = Arrays.asList(Paths.get("D:\\temp\\download\\1.jpg"), Paths.get("D:\\temp\\download\\2.jpg"));
-        ZipUtil.writeZipToResponse(localPaths, response, "孔余  asdhasiu 8738&@!*&#(!.zip");
+        ZipUtil.zip(localPaths, response, "孔余  asdhasiu 8738&@!*&#(!.zip");
         return ResponseEntity.noContent().build();
     }
 

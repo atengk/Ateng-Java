@@ -48,8 +48,8 @@ public class ZipUtil {
     /**
      * 将文件或目录压缩为zip文件，支持是否包含根目录
      *
-     * @param source        文件或目录路径
-     * @param zipTarget     目标zip文件路径
+     * @param source         文件或目录路径
+     * @param zipTarget      目标zip文件路径
      * @param includeRootDir 是否包含根目录名
      * @throws IOException IO异常
      */
@@ -67,6 +67,60 @@ public class ZipUtil {
             zip(source, zipTarget);
         } else {
             zip(children, zipTarget);
+        }
+
+    }
+
+    /**
+     * 将文件或目录压缩为zip文件，支持是否包含根目录
+     *
+     * @param source         文件或目录路径
+     * @param output         输出流
+     * @param includeRootDir 是否包含根目录名
+     * @throws IOException IO异常
+     */
+    public static void zip(Path source, OutputStream output, boolean includeRootDir) throws IOException {
+        Objects.requireNonNull(source, "source不能为空");
+        Objects.requireNonNull(output, "output不能为空");
+
+        if (!Files.exists(source)) {
+            throw new IllegalArgumentException("待压缩路径不存在：" + source);
+        }
+
+        // 取目录下一层所有文件和目录（非递归）
+        List<Path> children = Files.list(source).collect(Collectors.toList());
+        if (includeRootDir) {
+            zip(Collections.singletonList(source), output);
+        } else {
+            zip(children, output);
+        }
+
+    }
+
+    /**
+     * 将文件或目录压缩为zip文件，支持是否包含根目录
+     *
+     * @param source         文件或目录路径
+     * @param response       HttpServletResponse
+     * @param zipFileName    是否包含根目录名
+     * @param includeRootDir 下载文件名
+     * @throws IOException IO异常
+     */
+    public static void zip(Path source, HttpServletResponse response, String zipFileName, boolean includeRootDir) throws IOException {
+        Objects.requireNonNull(source, "source不能为空");
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        Objects.requireNonNull(zipFileName, "下载文件名不能为空");
+
+        if (!Files.exists(source)) {
+            throw new IllegalArgumentException("待压缩路径不存在：" + source);
+        }
+
+        // 取目录下一层所有文件和目录（非递归）
+        List<Path> children = Files.list(source).collect(Collectors.toList());
+        if (includeRootDir) {
+            zip(Collections.singletonList(source), response, zipFileName);
+        } else {
+            zip(children, response, zipFileName);
         }
 
     }
@@ -151,7 +205,7 @@ public class ZipUtil {
      * @param zipFileName 最终下载的文件名（例如 "files.zip"）
      * @throws IOException 如果压缩或写入过程中发生 I/O 错误，抛出异常
      */
-    public static void writeZipToResponse(List<Path> sources, HttpServletResponse response, String zipFileName) throws IOException {
+    public static void zip(List<Path> sources, HttpServletResponse response, String zipFileName) throws IOException {
         Objects.requireNonNull(sources, "要压缩的文件列表不能为空");
         Objects.requireNonNull(response, "HttpServletResponse 不能为空");
         Objects.requireNonNull(zipFileName, "下载文件名不能为空");

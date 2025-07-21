@@ -7,10 +7,10 @@ import java.net.URLEncoder;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -18,11 +18,6 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Zip 工具类：支持将多个文件或目录压缩为 zip 文件或输出流
- * 示例：
- * 压缩目录：ZipUtil.zip(Collections.singletonList(Paths.get("D:\\temp\\zip")), Paths.get("D:\\temp\\zip.zip"));
- * 压缩文件：ZipUtil.zip(Arrays.asList(Paths.get("D:\\temp\\20250718\\1.jpg"), Paths.get("D:\\temp\\20250718\\2.jpg")), Paths.get("D:\\temp\\zip.zip"));
- * 压缩文件和目录（混合）：ZipUtil.zip(Arrays.asList(Paths.get("D:\\temp\\20250718\\1.jpg"), Paths.get("D:\\temp\\20250718\\2.jpg"), Paths.get("D:\\temp\\20240422")), Paths.get("D:\\temp\\zip.zip"));
- * 解压：ZipUtil.unzip(Paths.get("D:\\temp\\zip.zip"), Paths.get("D:\\temp\\zip"));
  *
  * @author Ateng
  * @since 2025-07-19
@@ -39,10 +34,6 @@ public class ZipUtil {
         throw new UnsupportedOperationException("工具类不可实例化");
     }
 
-    public static void main(String[] args) throws IOException {
-        ZipUtil.unzip(Paths.get("D:\\temp\\zip.zip"), Paths.get("D:\\temp\\zip"));
-    }
-
     /**
      * 将文件/目录压缩为 zip 文件
      *
@@ -52,6 +43,86 @@ public class ZipUtil {
      */
     public static void zip(Path source, Path zipTarget) throws IOException {
         zip(Collections.singletonList(source), zipTarget);
+    }
+
+    /**
+     * 将文件或目录压缩为zip文件，支持是否包含根目录
+     *
+     * @param source         文件或目录路径
+     * @param zipTarget      目标zip文件路径
+     * @param includeRootDir 是否包含根目录名
+     * @throws IOException IO异常
+     */
+    public static void zip(Path source, Path zipTarget, boolean includeRootDir) throws IOException {
+        Objects.requireNonNull(source, "source不能为空");
+        Objects.requireNonNull(zipTarget, "zipTarget不能为空");
+
+        if (!Files.exists(source)) {
+            throw new IllegalArgumentException("待压缩路径不存在：" + source);
+        }
+
+        // 取目录下一层所有文件和目录（非递归）
+        List<Path> children = Files.list(source).collect(Collectors.toList());
+        if (includeRootDir) {
+            zip(source, zipTarget);
+        } else {
+            zip(children, zipTarget);
+        }
+
+    }
+
+    /**
+     * 将文件或目录压缩为zip文件，支持是否包含根目录
+     *
+     * @param source         文件或目录路径
+     * @param output         输出流
+     * @param includeRootDir 是否包含根目录名
+     * @throws IOException IO异常
+     */
+    public static void zip(Path source, OutputStream output, boolean includeRootDir) throws IOException {
+        Objects.requireNonNull(source, "source不能为空");
+        Objects.requireNonNull(output, "output不能为空");
+
+        if (!Files.exists(source)) {
+            throw new IllegalArgumentException("待压缩路径不存在：" + source);
+        }
+
+        // 取目录下一层所有文件和目录（非递归）
+        List<Path> children = Files.list(source).collect(Collectors.toList());
+        if (includeRootDir) {
+            zip(Collections.singletonList(source), output);
+        } else {
+            zip(children, output);
+        }
+
+    }
+
+    /**
+     * 将文件或目录压缩为zip文件，支持是否包含根目录
+     *
+     * @param source         文件或目录路径
+     * @param response       HttpServletResponse
+     * @param zipFileName    是否包含根目录名
+     * @param includeRootDir 下载文件名
+     * @throws IOException IO异常
+     */
+    public static void zip(Path source, HttpServletResponse response, String zipFileName, boolean includeRootDir) throws IOException {
+        Objects.requireNonNull(source, "source不能为空");
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        Objects.requireNonNull(zipFileName, "下载文件名不能为空");
+
+        if (!Files.exists(source)) {
+            throw new IllegalArgumentException("待压缩路径不存在：" + source);
+        }
+
+        // 取目录下一层所有文件和目录（非递归）
+        List<Path> children = Files.list(source).collect(Collectors.toList());
+        if (includeRootDir) {
+            zip(Collections.singletonList(source), response, zipFileName);
+        } else {
+            zip(children, response, zipFileName);
+        }
+
     }
 
     /**
@@ -84,6 +155,10 @@ public class ZipUtil {
             for (Path source : sources) {
                 if (!Files.exists(source)) {
                     continue; // 如果文件不存在，跳过
+                }
+                // 如果源路径本身就是zipTarget，跳过
+                if (source.toAbsolutePath().normalize().equals(zipTarget)) {
+                    continue;
                 }
                 Path basePath = source.getParent() != null ? source.getParent() : source;
                 zipPath(source, basePath, zos); // 压缩路径
@@ -130,7 +205,7 @@ public class ZipUtil {
      * @param zipFileName 最终下载的文件名（例如 "files.zip"）
      * @throws IOException 如果压缩或写入过程中发生 I/O 错误，抛出异常
      */
-    public static void writeZipToResponse(List<Path> sources, HttpServletResponse response, String zipFileName) throws IOException {
+    public static void zip(List<Path> sources, HttpServletResponse response, String zipFileName) throws IOException {
         Objects.requireNonNull(sources, "要压缩的文件列表不能为空");
         Objects.requireNonNull(response, "HttpServletResponse 不能为空");
         Objects.requireNonNull(zipFileName, "下载文件名不能为空");
@@ -162,6 +237,63 @@ public class ZipUtil {
         }
     }
 
+    /**
+     * 将多个输入流压缩为 zip 格式并写入到输出流中（适用于 Spring Boot 文件下载）
+     *
+     * @param fileNames zip 包中的文件名列表（与 streams 一一对应）
+     * @param streams   输入流列表（与 fileNames 一一对应）
+     * @param output    输出流（通常为 HttpServletResponse.getOutputStream()）
+     * @throws IOException 如果压缩或写入时发生错误
+     */
+    public static void zipStreams(List<String> fileNames, List<InputStream> streams, OutputStream output) throws IOException {
+        Objects.requireNonNull(fileNames, "文件名列表不能为空");
+        Objects.requireNonNull(streams, "输入流列表不能为空");
+        Objects.requireNonNull(output, "输出流不能为空");
+
+        if (fileNames.size() != streams.size()) {
+            throw new IllegalArgumentException("文件名列表与输入流列表长度不一致");
+        }
+
+        try (ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(output))) {
+            zos.setLevel(Deflater.BEST_COMPRESSION);
+
+            for (int i = 0; i < fileNames.size(); i++) {
+                String fileName = fileNames.get(i);
+                InputStream inputStream = streams.get(i);
+
+                if (fileName == null || inputStream == null) {
+                    continue; // 跳过空的项
+                }
+
+                // 统一分隔符（兼容 Linux 和 Windows）
+                String zipEntryName = fileName.replace(File.separator, "/");
+
+                zos.putNextEntry(new ZipEntry(zipEntryName));
+
+                try (InputStream is = inputStream) {
+                    copyStream(is, zos);
+                }
+
+                zos.closeEntry();
+            }
+        }
+    }
+
+    /**
+     * 将多个输入流压缩为 zip 文件并写入到指定路径
+     */
+    public static void zipStreams(List<String> fileNames, List<InputStream> streams, Path zipTarget) throws IOException {
+        Objects.requireNonNull(zipTarget, "压缩目标路径不能为空");
+
+        // 确保目标目录存在
+        if (zipTarget.getParent() != null) {
+            Files.createDirectories(zipTarget.getParent());
+        }
+
+        try (OutputStream out = Files.newOutputStream(zipTarget)) {
+            zipStreams(fileNames, streams, out);
+        }
+    }
 
     /**
      * 内部递归压缩方法
@@ -175,8 +307,17 @@ public class ZipUtil {
         // 如果是目录，递归处理子文件
         if (Files.isDirectory(source)) {
             try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(source)) {
+                boolean isEmpty = true;
                 for (Path subPath : directoryStream) {
-                    zipPath(subPath, basePath, zos); // 递归压缩
+                    isEmpty = false;
+                    zipPath(subPath, basePath, zos); // 递归压缩子路径
+                }
+
+                if (isEmpty) {
+                    // 空目录，添加 ZipEntry
+                    String dirEntryName = basePath.relativize(source).toString().replace(File.separatorChar, '/') + "/";
+                    zos.putNextEntry(new ZipEntry(dirEntryName));
+                    zos.closeEntry();
                 }
             }
         } else {
