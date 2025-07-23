@@ -125,6 +125,85 @@ public final class FileUtil {
     }
 
     /**
+     * 根据文件扩展名获取 MIME 类型（不含点），不区分大小写
+     *
+     * @param fileExtension 文件扩展名（如 "jpg", "txt"），无需带点
+     * @return MIME 类型，未知类型返回 "application/octet-stream"
+     */
+    public static String getMimeType(String fileExtension) {
+        if (fileExtension == null || fileExtension.trim().isEmpty()) {
+            return "application/octet-stream";
+        }
+
+        String ext = fileExtension.trim().toLowerCase();
+
+        switch (ext) {
+            // 文本
+            case "txt": return "text/plain";
+            case "csv": return "text/csv";
+            case "html": case "htm": return "text/html";
+            case "xml": return "application/xml";
+            case "json": return "application/json";
+
+            // 图片
+            case "jpg": case "jpeg": return "image/jpeg";
+            case "png": return "image/png";
+            case "gif": return "image/gif";
+            case "bmp": return "image/bmp";
+            case "webp": return "image/webp";
+            case "svg": return "image/svg+xml";
+            case "ico": return "image/x-icon";
+
+            // 文档
+            case "pdf": return "application/pdf";
+            case "doc": return "application/msword";
+            case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "xls": return "application/vnd.ms-excel";
+            case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "ppt": return "application/vnd.ms-powerpoint";
+            case "pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case "rtf": return "application/rtf";
+
+            // 压缩包
+            case "zip": return "application/zip";
+            case "rar": return "application/x-rar-compressed";
+            case "7z": return "application/x-7z-compressed";
+            case "gz": return "application/gzip";
+            case "tar": return "application/x-tar";
+
+            // 音频
+            case "mp3": return "audio/mpeg";
+            case "wav": return "audio/wav";
+            case "ogg": return "audio/ogg";
+            case "m4a": return "audio/mp4";
+
+            // 视频
+            case "mp4": return "video/mp4";
+            case "avi": return "video/x-msvideo";
+            case "mov": return "video/quicktime";
+            case "mkv": return "video/x-matroska";
+            case "webm": return "video/webm";
+            case "flv": return "video/x-flv";
+
+            // 字体
+            case "ttf": return "font/ttf";
+            case "otf": return "font/otf";
+            case "woff": return "font/woff";
+            case "woff2": return "font/woff2";
+
+            // 脚本与代码
+            case "js": return "application/javascript";
+            case "css": return "text/css";
+            case "java": return "text/x-java-source";
+            case "py": return "text/x-python";
+            case "json5": return "application/json";
+
+            // 默认
+            default: return "application/octet-stream";
+        }
+    }
+
+    /**
      * 获取文件大小（单位：字节）
      *
      * @param path 文件路径
