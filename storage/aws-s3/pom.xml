@@ -23,7 +23,7 @@
         <lombok.version>1.18.36</lombok.version>
         <hutool.version>5.8.35</hutool.version>
         <fastjson2.version>2.0.53</fastjson2.version>
-        <awssdk.version>2.16.1</awssdk.version>
+        <awssdk.version>2.27.10</awssdk.version>
     </properties>
 
     <!-- 项目依赖 -->

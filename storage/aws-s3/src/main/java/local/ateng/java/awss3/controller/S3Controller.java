@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.services.s3.model.S3Object;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -41,6 +40,11 @@ public class S3Controller {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/downloadToResponse")
+    public void downloadToResponse(String key, String fileName, HttpServletResponse response) {
+        s3Service.downloadToResponse(key, fileName, response);
+    }
+
     @PostMapping("/downloadMultipleToFilesAsync")
     public ResponseEntity<Void> downloadMultipleToFilesAsync() {
         List<String> keys = Arrays.asList("upload/1.jpg", "upload/2.jpg", "upload/3.jpg");
@@ -50,8 +54,8 @@ public class S3Controller {
     }
 
     @GetMapping("/listFiles")
-    public ResponseEntity<List<S3Object>> listFiles() {
-        List<S3Object> files = s3Service.listFiles("/");
+    public ResponseEntity<List<String>> listFiles(String prefix) {
+        List<String> files = s3Service.listFiles(prefix);
         return ResponseEntity.ok(files);
     }
 

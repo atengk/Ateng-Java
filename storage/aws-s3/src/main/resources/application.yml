@@ -22,3 +22,4 @@ s3:
   secret-key: Admin@123
   region: us-east-1
   bucket-name: data
+  path-style-access: true

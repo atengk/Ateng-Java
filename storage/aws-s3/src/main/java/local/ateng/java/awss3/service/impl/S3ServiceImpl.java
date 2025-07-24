@@ -56,6 +56,7 @@ public class S3ServiceImpl implements S3Service {
      * @return 字节数组
      * @throws IOException IO 异常
      */
+    @Override
     public byte[] toByteArray(InputStream inputStream) throws IOException {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[BUFFER_SIZE];
@@ -244,7 +245,7 @@ public class S3ServiceImpl implements S3Service {
         for (int i = 0; i < keys.size(); i++) {
             String key = keys.get(i);
             InputStream inputStream = inputStreams.get(i);
-            uploadFile(key, inputStream);  // 假设 uploadFile 支持 InputStream 上传
+            uploadFile(key, inputStream);
         }
     }
 
@@ -653,7 +654,9 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public void deleteFiles(List<String> keys) {
-        if (keys == null || keys.isEmpty()) return;
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
 
         List<ObjectIdentifier> objects = keys.stream().map(k -> ObjectIdentifier.builder().key(k).build()).collect(Collectors.toList());
 
@@ -728,11 +731,13 @@ public class S3ServiceImpl implements S3Service {
      * @return 文件列表
      */
     @Override
-    public List<S3Object> listFiles(String prefix) {
+    public List<String> listFiles(String prefix) {
         ListObjectsV2Request request = ListObjectsV2Request.builder().bucket(s3Properties.getBucketName()).prefix(prefix).build();
 
         ListObjectsV2Response response = s3Client.listObjectsV2(request);
-        return response.contents();
+        return response.contents().stream()
+                .map(S3Object::key)
+                .collect(Collectors.toList());
     }
 
     /**

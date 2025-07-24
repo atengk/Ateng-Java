@@ -3,7 +3,6 @@ package local.ateng.java.awss3.service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.s3.model.S3Object;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
@@ -267,9 +266,9 @@ public interface S3Service {
      * 列出指定前缀下的所有文件
      *
      * @param prefix 路径前缀
-     * @return S3 文件对象列表
+     * @return S3 文件列表
      */
-    List<S3Object> listFiles(String prefix);
+    List<String> listFiles(String prefix);
 
     /**
      * 生成临时访问链接（GET）
