@@ -23,5 +23,6 @@
         <module>mongo-template</module>
         <module>autotable</module>
         <module>mybatis-flex-postgis</module>
+        <module>mybatis-plus-jdk8</module>
     </modules>
 </project>

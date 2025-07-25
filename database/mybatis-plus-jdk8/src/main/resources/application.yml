@@ -1,0 +1,22 @@
+server:
+  port: 15012
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# 数据库的相关配置
+spring:
+  datasource:
+    url: jdbc:mysql://192.168.1.12:44001/kongyu  # MySQL数据库连接URL
+    username: root  # 数据库用户名
+    password: Admin@123  # 数据库密码
+    type: com.zaxxer.hikari.HikariDataSource  # 使用 HikariCP 数据源
+    hikari:
+      maximum-pool-size: 1000  # 最大连接池大小
+      minimum-idle: 10  # 最小空闲连接数
+      idle-timeout: 30000  # 空闲连接超时时间，单位毫秒
+      connection-timeout: 30000  # 获取连接的最大等待时间，单位毫秒
