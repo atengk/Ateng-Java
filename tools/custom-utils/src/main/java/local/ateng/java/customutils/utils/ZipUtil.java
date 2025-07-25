@@ -22,7 +22,7 @@ import java.util.zip.ZipOutputStream;
  * @author Ateng
  * @since 2025-07-19
  */
-public class ZipUtil {
+public final class ZipUtil {
 
     /**
      * 缓冲区大小

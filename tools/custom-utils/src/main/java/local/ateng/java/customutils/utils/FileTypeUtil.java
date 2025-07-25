@@ -14,7 +14,7 @@ import java.util.Locale;
  * @author Ateng
  * @since 2025-07-21
  */
-public class FileTypeUtil {
+public final class FileTypeUtil {
 
     private static final Tika tika = new Tika();
 

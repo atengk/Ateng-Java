@@ -15,7 +15,7 @@ import java.util.*;
  * @author Ateng
  * @since 2025-07-19
  */
-public class XmlUtil {
+public final class XmlUtil {
 
     /**
      * 禁止实例化工具类
