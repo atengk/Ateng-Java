@@ -40,6 +40,11 @@ public class S3Controller {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/downloadFileAsBase64Uri")
+    public ResponseEntity<String> downloadFileAsBase64Uri(String key) {
+        return ResponseEntity.ok(s3Service.downloadFileAsBase64Uri(key));
+    }
+
     @PostMapping("/downloadToResponse")
     public void downloadToResponse(String key, String fileName, HttpServletResponse response) {
         s3Service.downloadToResponse(key, fileName, response);
@@ -68,6 +73,12 @@ public class S3Controller {
     @GetMapping("/generatePresignedUrl")
     public ResponseEntity<String> generatePresignedUrl(String key) {
         String url = s3Service.generatePresignedUrl(key, Duration.ofHours(1));
+        return ResponseEntity.ok(url);
+    }
+
+    @GetMapping("/generatePresignedUploadUrl")
+    public ResponseEntity<String> generatePresignedUploadUrl(String key) {
+        String url = s3Service.generatePresignedUploadUrl(key, Duration.ofHours(1));
         return ResponseEntity.ok(url);
     }
 
