@@ -4,6 +4,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 时间工具类
@@ -200,6 +201,132 @@ public final class DateTimeUtil {
                                     LocalDateTime start2, LocalDateTime end2) {
         return start1 != null && end1 != null && start2 != null && end2 != null
                 && !start1.isAfter(end2) && !start2.isAfter(end1);
+    }
+
+    /**
+     * 判断两个时间是否在同一天
+     *
+     * @param dt1 时间1
+     * @param dt2 时间2
+     * @return 是否是同一天
+     */
+    public static boolean isSameDay(LocalDateTime dt1, LocalDateTime dt2) {
+        if (dt1 == null || dt2 == null) {
+            return false;
+        }
+        return dt1.toLocalDate().isEqual(dt2.toLocalDate());
+    }
+
+    /**
+     * 判断第一个时间是否早于第二个时间
+     *
+     * @param dt1 时间1
+     * @param dt2 时间2
+     * @return 是否早于
+     */
+    public static boolean isBefore(LocalDateTime dt1, LocalDateTime dt2) {
+        if (dt1 == null || dt2 == null) {
+            return false;
+        }
+        return dt1.isBefore(dt2);
+    }
+
+    /**
+     * 判断第一个时间是否晚于第二个时间
+     *
+     * @param dt1 时间1
+     * @param dt2 时间2
+     * @return 是否晚于
+     */
+    public static boolean isAfter(LocalDateTime dt1, LocalDateTime dt2) {
+        if (dt1 == null || dt2 == null) {
+            return false;
+        }
+        return dt1.isAfter(dt2);
+    }
+
+    /**
+     * 判断两个时间是否相等（精确到秒）
+     *
+     * @param dt1 时间1
+     * @param dt2 时间2
+     * @return 是否相等
+     */
+    public static boolean isEqualIgnoreNano(LocalDateTime dt1, LocalDateTime dt2) {
+        if (dt1 == null || dt2 == null) {
+            return false;
+        }
+        return dt1.truncatedTo(ChronoUnit.SECONDS).isEqual(dt2.truncatedTo(ChronoUnit.SECONDS));
+    }
+
+    /**
+     * 判断两个日期是否在同一个月
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 是否同月
+     */
+    public static boolean isSameMonth(LocalDate d1, LocalDate d2) {
+        if (d1 == null || d2 == null) {
+            return false;
+        }
+        return d1.getYear() == d2.getYear() && d1.getMonth() == d2.getMonth();
+    }
+
+    /**
+     * 判断目标时间是否在指定时间段内（闭区间）
+     *
+     * @param target 目标时间
+     * @param start  起始时间（含）
+     * @param end    结束时间（含）
+     * @return 是否在时间段内
+     */
+    public static boolean isTimeInRange(LocalTime target, LocalTime start, LocalTime end) {
+        if (target == null || start == null || end == null) {
+            return false;
+        }
+        return !target.isBefore(start) && !target.isAfter(end);
+    }
+
+    /**
+     * 判断两个 ZonedDateTime 是否代表同一瞬间（忽略时区差异）
+     *
+     * @param zdt1 时间1
+     * @param zdt2 时间2
+     * @return 是否同一时刻
+     */
+    public static boolean isSameInstant(ZonedDateTime zdt1, ZonedDateTime zdt2) {
+        if (zdt1 == null || zdt2 == null) {
+            return false;
+        }
+        return zdt1.toInstant().equals(zdt2.toInstant());
+    }
+
+    /**
+     * 判断两个 ZonedDateTime 是否在同一天（按其各自的本地日期）
+     *
+     * @param zdt1 时间1
+     * @param zdt2 时间2
+     * @return 是否为同一天
+     */
+    public static boolean isSameDay(ZonedDateTime zdt1, ZonedDateTime zdt2) {
+        if (zdt1 == null || zdt2 == null) {
+            return false;
+        }
+        return zdt1.toLocalDate().isEqual(zdt2.toLocalDate());
+    }
+
+    /**
+     * 判断 LocalDateTime 是否为今天
+     *
+     * @param dateTime 要判断的时间
+     * @return 是否是今天
+     */
+    public static boolean isToday(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return false;
+        }
+        return LocalDate.now().isEqual(dateTime.toLocalDate());
     }
 
     /**
@@ -648,6 +775,29 @@ public final class DateTimeUtil {
     }
 
     /**
+     * 内部通用方法：按指定单位和步长列出时间
+     *
+     * @param start 开始时间（含）
+     * @param end   结束时间（含）
+     * @param unit  单位（如 ChronoUnit.HOURS）
+     * @param step  步长（如每2小时传2）
+     * @return 时间字符串列表
+     */
+    public static List<LocalDateTime> listDateTimeRange(LocalDateTime start, LocalDateTime end,
+                                                        ChronoUnit unit, long step) {
+        if (start == null || end == null || unit == null || step <= 0 || start.isAfter(end)) {
+            return Collections.emptyList();
+        }
+        List<LocalDateTime> result = new ArrayList<>();
+        LocalDateTime current = start;
+        while (!current.isAfter(end)) {
+            result.add(current);
+            current = current.plus(step, unit);
+        }
+        return result;
+    }
+
+    /**
      * 内部通用方法：按指定单位和步长列出时间字符串
      *
      * @param start   开始时间（含）
@@ -657,19 +807,17 @@ public final class DateTimeUtil {
      * @param pattern 格式化字符串
      * @return 时间字符串列表
      */
-    private static List<String> listTimeRangeInternal(LocalDateTime start, LocalDateTime end,
-                                                      ChronoUnit unit, long step, String pattern) {
+    public static List<String> listDateTimeRange(LocalDateTime start, LocalDateTime end,
+                                                 ChronoUnit unit, long step, String pattern) {
         if (start == null || end == null || unit == null || pattern == null || step <= 0 || start.isAfter(end)) {
             return Collections.emptyList();
         }
-        List<String> result = new ArrayList<>();
+        List<LocalDateTime> dateTimeList = listDateTimeRange(start, end, unit, step);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
-        LocalDateTime current = start;
-        while (!current.isAfter(end)) {
-            result.add(current.format(formatter));
-            current = current.plus(step, unit);
-        }
-        return result;
+        return dateTimeList
+                .stream()
+                .map(formatter::format)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -681,7 +829,7 @@ public final class DateTimeUtil {
      * @return 每年的时间字符串列表
      */
     public static List<String> listYearlyRange(LocalDate start, LocalDate end, String pattern) {
-        return listTimeRangeInternal(toStartOfDay(start), toStartOfDay(end), ChronoUnit.YEARS, 1, pattern);
+        return listDateTimeRange(toStartOfDay(start), toStartOfDay(end), ChronoUnit.YEARS, 1, pattern);
     }
 
     /**
@@ -693,7 +841,7 @@ public final class DateTimeUtil {
      * @return 每月的时间字符串列表
      */
     public static List<String> listMonthlyRange(LocalDate start, LocalDate end, String pattern) {
-        return listTimeRangeInternal(toStartOfDay(start), toStartOfDay(end), ChronoUnit.MONTHS, 1, pattern);
+        return listDateTimeRange(toStartOfDay(start), toStartOfDay(end), ChronoUnit.MONTHS, 1, pattern);
     }
 
     /**
@@ -705,7 +853,7 @@ public final class DateTimeUtil {
      * @return 日期字符串列表
      */
     public static List<String> listDayRange(LocalDate start, LocalDate end, String pattern) {
-        return listTimeRangeInternal(toStartOfDay(start), toStartOfDay(end), ChronoUnit.DAYS, 1, pattern);
+        return listDateTimeRange(toStartOfDay(start), toStartOfDay(end), ChronoUnit.DAYS, 1, pattern);
     }
 
     /**
@@ -717,7 +865,7 @@ public final class DateTimeUtil {
      * @return 每小时的时间字符串列表
      */
     public static List<String> listHourlyRange(LocalDateTime start, LocalDateTime end, String pattern) {
-        return listTimeRangeInternal(start, end, ChronoUnit.HOURS, 1, pattern);
+        return listDateTimeRange(start, end, ChronoUnit.HOURS, 1, pattern);
     }
 
     /**
@@ -729,7 +877,7 @@ public final class DateTimeUtil {
      * @return 每分钟的时间字符串列表
      */
     public static List<String> listMinuteRange(LocalDateTime start, LocalDateTime end, String pattern) {
-        return listTimeRangeInternal(start, end, ChronoUnit.MINUTES, 1, pattern);
+        return listDateTimeRange(start, end, ChronoUnit.MINUTES, 1, pattern);
     }
 
     /**
@@ -741,12 +889,7 @@ public final class DateTimeUtil {
      * @return 每秒的时间字符串列表
      */
     public static List<String> listSecondRange(LocalDateTime start, LocalDateTime end, String pattern) {
-        return listTimeRangeInternal(start, end, ChronoUnit.SECONDS, 1, pattern);
-    }
-
-
-    public static void main(String[] args) {
-
+        return listDateTimeRange(start, end, ChronoUnit.SECONDS, 1, pattern);
     }
 
 }
