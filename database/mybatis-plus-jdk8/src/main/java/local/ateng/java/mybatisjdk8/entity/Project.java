@@ -1,19 +1,20 @@
 package local.ateng.java.mybatisjdk8.entity;
 
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import local.ateng.java.mybatisjdk8.handler.FastjsonTypeHandler;
+import local.ateng.java.mybatisjdk8.handler.*;
 import lombok.Data;
+import org.locationtech.jts.geom.Geometry;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * <p>
@@ -24,7 +25,7 @@ import java.time.LocalTime;
  * @since 2025-07-17
  */
 @Data
-@TableName("project")
+@TableName(value = "project", autoResultMap = true)
 public class Project implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -38,8 +39,8 @@ public class Project implements Serializable {
     /**
      * 顺序UUID，用于替代ID，全局唯一
      */
-    @TableField("uuid")
-    private String uuid;
+    @TableField(value = "uuid", typeHandler = UUIDTypeHandler.class)
+    private UUID uuid;
 
     /**
      * 名称，最大100字符
@@ -158,31 +159,31 @@ public class Project implements Serializable {
     /**
      * JSON对象类型数据
      */
-    @TableField(value = "json_object", typeHandler = FastjsonTypeHandler.class)
-    private JSONObject jsonObject;
+    @TableField(value = "json_object", typeHandler = Fastjson2TypeHandler.class)
+    private MyData jsonObject;
 
     /**
      * JSON数组类型数据
      */
-    @TableField(value = "json_array", typeHandler = FastjsonTypeHandler.class)
-    private JSONArray jsonArray;
+    @TableField(value = "json_array", typeHandler = Fastjson2ArrayMyDataTypeHandler.class)
+    private List<MyData> jsonArray;
 
     /**
-     * 地理坐标（经纬度），POINT类型
+     * 地理坐标（经纬度）
      */
-    @TableField("location")
-    private byte[] location;
+    @TableField(value = "location", typeHandler = GeometryTypeHandler.class)
+    private Geometry location;
 
     /**
      * IP地址，支持IPv6
      */
-    @TableField("ip_address")
+    @TableField(value = "ip_address", typeHandler = IPAddressTypeHandler.class)
     private String ipAddress;
 
     /**
      * 二进制大数据字段
      */
-    @TableField("binary_data")
+    @TableField(value = "binary_data", typeHandler = Base64TypeHandler.class)
     private String binaryData;
 
     /**
@@ -196,4 +197,5 @@ public class Project implements Serializable {
      */
     @TableField("updated_at")
     private LocalDateTime updatedAt;
+
 }

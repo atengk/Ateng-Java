@@ -1052,4 +1052,23 @@ public final class StringUtil {
         return str.matches("^[a-zA-Z0-9]+$");
     }
 
+    /**
+     * 将字节数组转换为十六进制字符串（大写，空格分隔，每字节两位）
+     *
+     * @param bytes 字节数组
+     * @return 十六进制字符串，格式如： "AB CD 12"，为空返回空字符串
+     */
+    public static String bytesToHex(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02X ", b));
+        }
+        // 去除最后一个空格
+        return sb.toString().trim();
+    }
+
 }

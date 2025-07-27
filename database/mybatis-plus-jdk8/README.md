@@ -1328,7 +1328,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-## 🟣 `#{}` 和 `${}` 的主要差异
+### 🟣 `#{}` 和 `${}` 的主要差异
 
 |      | `#{}`                                           | `${}`                             |
 | ---- | ----------------------------------------------- | --------------------------------- |
@@ -1339,9 +1339,9 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-## 🟣 基本标签（适用增删改查）
+### 🟣 基本标签（适用增删改查）
 
-### 🔹`<select>` — 定义**数据的读取语句**
+🔹`<select>` — 定义**数据的读取语句**
 
 ✅适用条件：按条件进行数据**检索**。
  ✅作用：将数据从表中**查出**，可以绑定到对象或者 List。
@@ -1354,7 +1354,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<insert>` — 定义**插入语句**
+🔹`<insert>` — 定义**插入语句**
 
 ✅适用条件：插入数据时使用。
  ✅作用：将对象中准备好的数据插入到表中。
@@ -1367,7 +1367,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<update>` — 定义**修改语句**
+🔹`<update>` — 定义**修改语句**
 
 ✅适用条件：需要修改表中现有数据时。
  ✅作用：按条件修改指定的数据列。
@@ -1380,7 +1380,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<delete>` — 定义**删除语句**
+🔹`<delete>` — 定义**删除语句**
 
 ✅适用条件：按条件删除数据时。
  ✅作用：从表中移除符合条件的数据。
@@ -1393,9 +1393,9 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-## 🟣 动态标签（适用条件拼接）
+### 🟣 动态标签（适用条件拼接）
 
-### 🔹`<![CDATA[]]>` —转义操作
+🔹`<![CDATA[]]>` —转义操作
 
 ✅适用条件：需要写出 `>` 或 `<` 等需要转义的条件时。
  ✅作用：保持语法简洁，与 MyBatis 无关，仅仅是为了避免解析错误。
@@ -1408,7 +1408,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<if>` —按条件拼接片段
+🔹`<if>` —按条件拼接片段
 
 ✅适用条件：需要有条件地拼接不同的 `WHERE` 子句时。
  ✅作用：若条件为 true 则拼接其中的 SQL。
@@ -1424,7 +1424,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<choose>` —按条件进行分枝处理
+🔹`<choose>` —按条件进行分枝处理
 
 ✅适用条件：有多个条件时，按**第一个为 true 的条件**拼接。
  ✅作用：适用**if-else**结构。
@@ -1448,7 +1448,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<where>` —智能拼接 `AND/OR`
+🔹`<where>` —智能拼接 `AND/OR`
 
 ✅适用条件：有条件时自动插入 `WHERE` ，且会移除最前多余的 `AND/OR`。
  ✅作用：简化拼接语法。
@@ -1469,7 +1469,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<trim>` —按规则清理拼接
+🔹`<trim>` —按规则清理拼接
 
 ✅适用条件：需要按规则移除指定前后关键字时。
  ✅作用：可以指定 `suffixOverrides` 或 `prefixOverrides`。
@@ -1490,7 +1490,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🔹`<foreach>` —适用批量条件（in语法）
+🔹`<foreach>` —适用批量条件（in语法）
 
 ✅适用条件：需要对一个数组/ List进行批量拼接时。
  ✅作用：可以轻松实现 `in (...)` 查询。
@@ -1506,7 +1506,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-## 🟣 resultMap —列与对象的高度自由映射
+### 🟣 resultMap —列与对象的高度自由映射
 
 ✅适用条件：列名与对象属性不一一对应时，或者需要进行关联时。
  ✅作用：可以进行一对一、一对多甚至是有参赋值。
@@ -1521,9 +1521,9 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-## 🟣 一对一
+#### 🟣 一对一
 
-#### association
+association
 
 ✅适用条件：需要联合表进行**关联**时（1对1）。
  ✅作用：可以轻松地将关联表的数据按对象进行嵌套。
@@ -1540,7 +1540,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 </resultMap>
 ```
 
-#### 直接映射嵌套属性
+直接映射嵌套属性
 
 ```xml
 <resultMap id="UserWithProfileSimple" type="User">
@@ -1553,7 +1553,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-## 🟣 一对多（collection）
+#### 🟣 一对多（collection）
 
 ✅适用条件：需要获取**一对多**的数据时（如一个用户有多个购买记录)。
  ✅作用：可以将关联的数据按 List 映射到对象中。
@@ -1568,5 +1568,670 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
     <result column="order_number_field" property="orderNumber" />
   </collection>
 </resultMap>
+```
+
+
+
+## TypeHandler
+
+### UUIDTypeHandler
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import org.apache.ibatis.type.BaseTypeHandler;
+import org.apache.ibatis.type.JdbcType;
+
+import java.nio.ByteBuffer;
+import java.sql.*;
+import java.util.UUID;
+
+/**
+ * MyBatis 类型处理器：将 MySQL 的 binary(16) 字段与 Java 的 UUID 类型进行映射转换。
+ * <p>
+ * 用于处理数据库中使用 UUID_TO_BIN(uuid()) 生成的顺序 UUID（二进制格式），
+ * Java 端字段必须使用 {@link java.util.UUID} 类型。
+ * </p>
+ *
+ * <pre>
+ * 数据库字段类型：binary(16)
+ * Java 字段类型：java.util.UUID
+ * </pre>
+ * <p>
+ * 示例使用：
+ * <pre>
+ * &#64;TableField(typeHandler = UUIDTypeHandler.class)
+ * private UUID uuid;
+ * </pre>
+ * <p>
+ * 注意：实体类字段必须为 {@code UUID} 类型，不能使用 {@code byte[]} 或 {@code String}。
+ *
+ * @author 孔余
+ * @since 2025-07-27
+ */
+public class UUIDTypeHandler extends BaseTypeHandler<UUID> {
+
+    /**
+     * 将 Java UUID 类型参数设置到 PreparedStatement 中，以字节数组形式写入 binary(16) 字段。
+     *
+     * @param ps       PreparedStatement 对象
+     * @param i        参数索引（从1开始）
+     * @param uuid     要写入的 UUID 值，不能为空
+     * @param jdbcType JDBC 类型（可为空）
+     * @throws SQLException SQL 操作异常
+     */
+    @Override
+    public void setNonNullParameter(PreparedStatement ps, int i, UUID uuid, JdbcType jdbcType) throws SQLException {
+        try {
+            ps.setBytes(i, uuidToBytes(uuid));
+        } catch (Exception e) {
+            ps.setNull(i, Types.NULL);
+        }
+    }
+
+    /**
+     * 从结果集中获取 UUID 值（通过列名），并将 binary(16) 转为 UUID 类型。
+     *
+     * @param rs         结果集对象
+     * @param columnName 列名
+     * @return 对应的 UUID 值，如果字段为 null 则返回 null
+     * @throws SQLException SQL 操作异常
+     */
+    @Override
+    public UUID getNullableResult(ResultSet rs, String columnName) throws SQLException {
+        byte[] bytes = rs.getBytes(columnName);
+        return bytes != null ? bytesToUUID(bytes) : null;
+    }
+
+    /**
+     * 从结果集中获取 UUID 值（通过列索引），并将 binary(16) 转为 UUID 类型。
+     *
+     * @param rs          结果集对象
+     * @param columnIndex 列索引（从1开始）
+     * @return 对应的 UUID 值，如果字段为 null 则返回 null
+     * @throws SQLException SQL 操作异常
+     */
+    @Override
+    public UUID getNullableResult(ResultSet rs, int columnIndex) throws SQLException {
+        byte[] bytes = rs.getBytes(columnIndex);
+        return bytes != null ? bytesToUUID(bytes) : null;
+    }
+
+    /**
+     * 从存储过程中获取 UUID 值（通过列索引），并将 binary(16) 转为 UUID 类型。
+     *
+     * @param cs          CallableStatement 对象
+     * @param columnIndex 列索引（从1开始）
+     * @return 对应的 UUID 值，如果字段为 null 则返回 null
+     * @throws SQLException SQL 操作异常
+     */
+    @Override
+    public UUID getNullableResult(CallableStatement cs, int columnIndex) throws SQLException {
+        byte[] bytes = cs.getBytes(columnIndex);
+        return bytes != null ? bytesToUUID(bytes) : null;
+    }
+
+    /**
+     * 将 UUID 对象转换为 16 字节的二进制数组。
+     *
+     * @param uuid 要转换的 UUID
+     * @return 二进制数组表示的 UUID（长度为16）
+     */
+    private byte[] uuidToBytes(UUID uuid) {
+        ByteBuffer buffer = ByteBuffer.allocate(16);
+        buffer.putLong(uuid.getMostSignificantBits());
+        buffer.putLong(uuid.getLeastSignificantBits());
+        return buffer.array();
+    }
+
+    /**
+     * 将 16 字节的二进制数组转换为 UUID 对象。
+     *
+     * @param bytes 长度为16的字节数组
+     * @return 对应的 UUID 对象
+     */
+    private UUID bytesToUUID(byte[] bytes) {
+        try {
+            if (bytes == null || bytes.length != 16) {
+                return null;
+            }
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            long high = buffer.getLong();
+            long low = buffer.getLong();
+            return new UUID(high, low);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+}
+
+
+
+```
+
+### IPAddressTypeHandler
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import org.apache.ibatis.type.BaseTypeHandler;
+import org.apache.ibatis.type.JdbcType;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.sql.*;
+
+/**
+ * MyBatis 类型处理器：将 MySQL 的 varbinary(16) 字段与 Java 中的 IP 字符串进行转换。
+ * <p>
+ * 在数据库中使用 INET6_ATON('127.0.01') | INET6_ATON('::1') 生成的 IPv4或者IPv6地址（二进制格式）
+ * 支持 IPv4（4字节）和 IPv6（16字节）地址的互相映射。
+ * 如果字段内容非法或解析异常，则返回 null。
+ * </p>
+ *
+ * <pre>
+ * 数据库字段类型：varbinary(16)
+ * Java 字段类型：String（如 "192.168.1.1" 或 "::1"）
+ * </pre>
+ * <p>
+ * 示例使用：
+ * <pre>
+ * &#64;TableField(typeHandler = IPAddressTypeHandler.class)
+ * private String ipAddress;
+ * </pre>
+ *
+ * @author 孔余
+ * @since 2025-07-27
+ */
+public class IPAddressTypeHandler extends BaseTypeHandler<String> {
+
+    /**
+     * 设置非空 IP 字符串参数到 PreparedStatement，写入为对应字节数组。
+     *
+     * @param ps       PreparedStatement 对象
+     * @param i        参数索引
+     * @param ip       IP 地址字符串（IPv4 或 IPv6）
+     * @param jdbcType JDBC 类型
+     * @throws SQLException SQL异常
+     */
+    @Override
+    public void setNonNullParameter(PreparedStatement ps, int i, String ip, JdbcType jdbcType) throws SQLException {
+        try {
+            byte[] addressBytes = InetAddress.getByName(ip).getAddress();
+            ps.setBytes(i, addressBytes);
+        } catch (UnknownHostException e) {
+            ps.setNull(i, Types.NULL);
+        }
+    }
+
+    /**
+     * 通过列名获取 IP 字符串（从结果集）
+     */
+    @Override
+    public String getNullableResult(ResultSet rs, String columnName) throws SQLException {
+        return toIpString(rs.getBytes(columnName));
+    }
+
+    /**
+     * 通过列索引获取 IP 字符串（从结果集）
+     */
+    @Override
+    public String getNullableResult(ResultSet rs, int columnIndex) throws SQLException {
+        return toIpString(rs.getBytes(columnIndex));
+    }
+
+    /**
+     * 从存储过程中通过列索引获取 IP 字符串
+     */
+    @Override
+    public String getNullableResult(CallableStatement cs, int columnIndex) throws SQLException {
+        return toIpString(cs.getBytes(columnIndex));
+    }
+
+    /**
+     * 将 IP 地址字节数组转换为字符串（IPv4 或 IPv6），非法时返回 null。
+     *
+     * @param bytes IP 字节数组（应为 4 或 16 字节）
+     * @return 字符串形式的 IP 地址，或 null
+     */
+    private String toIpString(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        try {
+            // 自动兼容 IPv4（4字节）和 IPv6（16字节）
+            InetAddress byAddress = InetAddress.getByAddress(bytes);
+            return byAddress.getHostAddress();
+        } catch (UnknownHostException e) {
+            return null;
+        }
+    }
+
+}
+
+
+```
+
+### Base64TypeHandler
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import org.apache.ibatis.type.BaseTypeHandler;
+import org.apache.ibatis.type.JdbcType;
+
+import java.sql.*;
+import java.util.Base64;
+
+/**
+ * MyBatis TypeHandler：用于将 MySQL 中的二进制字段（如 BLOB、BINARY、VARBINARY）与 Java 字段进行映射。
+ *
+ * <p>功能说明：
+ * <ul>
+ *   <li>将数据库中的二进制数据（byte[]）转换为 Base64 字符串，用于 Java 字段是 String 的情况</li>
+ *   <li>将 Java 中的 Base64 字符串解码为 byte[] 后写入数据库</li>
+ *   <li>支持查询时自动判断字段是否为 null，避免异常</li>
+ * </ul>
+ *
+ * <p>适用数据库字段类型：
+ * <ul>
+ *   <li>BLOB</li>
+ *   <li>BINARY(n)</li>
+ *   <li>VARBINARY(n)</li>
+ * </ul>
+ *
+ * <p>适用 Java 字段类型：
+ * <ul>
+ *   <li>String（Base64 格式）</li>
+ * </ul>
+ *
+ * <p>使用示例：
+ * <pre>{@code
+ * @TableField(typeHandler = Base64TypeHandler.class)
+ * private String binaryData;
+ * }</pre>
+ *
+ * <p>注意事项：
+ * <ul>
+ *   <li>若字段为 null，查询时将返回 null，不抛出异常</li>
+ *   <li>编码格式为标准 Base64，不包含换行</li>
+ * </ul>
+ *
+ * @author 孔余
+ * @since 2025-07-27
+ */
+public class Base64TypeHandler extends BaseTypeHandler<String> {
+
+    /**
+     * 设置非空参数：将 Base64 字符串解码为 byte[] 写入数据库
+     *
+     * @param ps        PreparedStatement 对象
+     * @param i         参数索引（从1开始）
+     * @param parameter Base64 编码字符串
+     * @param jdbcType  JDBC 类型（应为 BLOB）
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public void setNonNullParameter(PreparedStatement ps, int i, String parameter, JdbcType jdbcType) throws SQLException {
+        try {
+            byte[] decoded = Base64.getDecoder().decode(parameter);
+            ps.setBytes(i, decoded);
+        } catch (Exception e) {
+            ps.setNull(i, Types.NULL);
+        }
+    }
+
+    /**
+     * 通过列名获取结果：将 byte[] 转为 Base64 字符串
+     *
+     * @param rs         结果集
+     * @param columnName 列名
+     * @return Base64 编码字符串，异常或为空时返回 null
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public String getNullableResult(ResultSet rs, String columnName) throws SQLException {
+        try {
+            byte[] bytes = rs.getBytes(columnName);
+            return bytes != null ? Base64.getEncoder().encodeToString(bytes) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 通过列索引获取结果：将 byte[] 转为 Base64 字符串
+     *
+     * @param rs          结果集
+     * @param columnIndex 列索引（从1开始）
+     * @return Base64 编码字符串，异常或为空时返回 null
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public String getNullableResult(ResultSet rs, int columnIndex) throws SQLException {
+        try {
+            byte[] bytes = rs.getBytes(columnIndex);
+            return bytes != null ? Base64.getEncoder().encodeToString(bytes) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 通过 CallableStatement 获取结果：将 byte[] 转为 Base64 字符串
+     *
+     * @param cs          CallableStatement 对象
+     * @param columnIndex 输出参数索引
+     * @return Base64 编码字符串，异常或为空时返回 null
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public String getNullableResult(CallableStatement cs, int columnIndex) throws SQLException {
+        try {
+            byte[] bytes = cs.getBytes(columnIndex);
+            return bytes != null ? Base64.getEncoder().encodeToString(bytes) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+}
+
+
+```
+
+### GeometryTypeHandler
+
+添加依赖
+
+```xml
+<!-- 地理空间数据处理库 -->
+<dependency>
+    <groupId>org.locationtech.jts</groupId>
+    <artifactId>jts-core</artifactId>
+    <version>1.20.0</version>
+</dependency>
+```
+
+数据构建
+
+```java
+GeometryFactory factory = new GeometryFactory(new PrecisionModel(), 4326);
+Point point = factory.createPoint(new Coordinate(106.55, 29.56));
+```
+
+实体类字段
+
+```java
+/**
+ * 地理坐标（经纬度）
+ */
+@TableField(value = "location", typeHandler = GeometryTypeHandler.class)
+private Geometry location;
+```
+
+具体代码
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import org.apache.ibatis.type.BaseTypeHandler;
+import org.apache.ibatis.type.JdbcType;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.io.ByteOrderValues;
+import org.locationtech.jts.io.WKBReader;
+import org.locationtech.jts.io.WKBWriter;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.sql.*;
+import java.util.Arrays;
+
+/**
+ * MyBatis Plus 类型处理器：用于映射 MySQL 中的 Geometry 字段与 JTS 的 Geometry 对象
+ *
+ * <p>注意：</p>
+ * <ul>
+ *   <li>写入时使用 WKB（带 SRID）格式</li>
+ *   <li>读取时自动跳过前4字节的 SRID 并返回 Geometry 对象</li>
+ *   <li>如解析失败，返回 null，不抛出异常</li>
+ * </ul>
+ *
+ * <p>建议 MySQL 字段类型为 <code>geometry SRID 4326</code></p>
+ *
+ * @author 孔余
+ * @since 2025-07-27
+ */
+public class GeometryTypeHandler extends BaseTypeHandler<Geometry> {
+
+    /**
+     * 设置非空参数到 PreparedStatement 中，使用带 SRID 的 WKB 格式。
+     *
+     * @param ps        预编译 SQL 语句
+     * @param i         参数索引（从1开始）
+     * @param parameter Geometry 参数
+     * @param jdbcType  JDBC 类型（可为空）
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public void setNonNullParameter(PreparedStatement ps, int i, Geometry parameter, JdbcType jdbcType) throws SQLException {
+        if (parameter == null) {
+            ps.setNull(i, Types.BINARY);
+            return;
+        }
+
+        try {
+            // 获取 SRID，默认 4326
+            int srid = parameter.getSRID() > 0 ? parameter.getSRID() : 4326;
+
+            // 使用 WKBWriter 生成 2D 小端 WKB，禁用 EWKB 扩展（Z/M/SRID）
+            WKBWriter wkbWriter = new WKBWriter(2, ByteOrderValues.LITTLE_ENDIAN, false);
+            byte[] wkb = wkbWriter.write(parameter);
+
+            // 拼接 SRID（4 字节小端序）和 WKB
+            ByteBuffer buffer = ByteBuffer.allocate(4 + wkb.length);
+            buffer.order(ByteOrder.LITTLE_ENDIAN);
+            buffer.putInt(srid);
+            buffer.put(wkb);
+
+            // 设置参数值为 MySQL 支持的 EWKB 格式二进制
+            ps.setBytes(i, buffer.array());
+        } catch (Exception e) {
+            // 保证接口契约，设置为 SQL NULL，避免报错
+            ps.setNull(i, Types.BINARY);
+        }
+    }
+
+    /**
+     * 从 ResultSet 中获取 Geometry 对象（按列名）
+     *
+     * @param rs         结果集
+     * @param columnName 列名
+     * @return Geometry 对象或 null
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public Geometry getNullableResult(ResultSet rs, String columnName) throws SQLException {
+        return parseGeometry(rs.getBytes(columnName));
+    }
+
+    /**
+     * 从 ResultSet 中获取 Geometry 对象（按列索引）
+     *
+     * @param rs          结果集
+     * @param columnIndex 列索引（从1开始）
+     * @return Geometry 对象或 null
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public Geometry getNullableResult(ResultSet rs, int columnIndex) throws SQLException {
+        return parseGeometry(rs.getBytes(columnIndex));
+    }
+
+    /**
+     * 从 CallableStatement 中获取 Geometry 对象
+     *
+     * @param cs          存储过程调用
+     * @param columnIndex 列索引（从1开始）
+     * @return Geometry 对象或 null
+     * @throws SQLException SQL 异常
+     */
+    @Override
+    public Geometry getNullableResult(CallableStatement cs, int columnIndex) throws SQLException {
+        return parseGeometry(cs.getBytes(columnIndex));
+    }
+
+    /**
+     * 解析 MySQL 返回的 GEOMETRY 字节流（包含 SRID 前缀）
+     *
+     * @param bytes GEOMETRY 字节流
+     * @return Geometry 对象或 null（如果失败）
+     */
+    private Geometry parseGeometry(byte[] bytes) {
+        if (bytes == null || bytes.length < 5) {
+            return null;
+        }
+
+        try {
+            // 提取 SRID（前4字节）
+            ByteBuffer sridBuffer = ByteBuffer.wrap(bytes, 0, 4).order(ByteOrder.LITTLE_ENDIAN);
+            int srid = sridBuffer.getInt();
+
+            // 提取 WKB 并解析
+            byte[] wkb = Arrays.copyOfRange(bytes, 4, bytes.length);
+            WKBReader reader = new WKBReader();
+            Geometry geometry = reader.read(wkb);
+            geometry.setSRID(srid);
+
+            return geometry;
+        } catch (Exception e) {
+            return null; // 解析失败返回 null
+        }
+    }
+}
+
+```
+
+### FastjsonTypeHandler
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.parser.Feature;
+import com.alibaba.fastjson.parser.ParserConfig;
+import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
+
+/**
+ * MyBatis Plus 使用 Fastjson 实现的自定义 TypeHandler
+ * <p>
+ * 该类用于 JSON 字符串与 Java 对象之间的转换，推荐用于字段存储为 JSON 的场景。
+ * 在处理过程中，对 JSON 的解析、序列化做了一些容错处理，比如：
+ * 1. JSON 字符串字段有多余属性时不抛出异常。
+ * 2. 对 JSON 解析和序列化时的配置进行自定义，以确保兼容性和性能。
+ *
+ * @param <T> JSON 对应的 Java 类型
+ * @since 2025-07-25
+ */
+public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
+
+    // 存储 Java 对象的目标类型
+    private final Class<T> type;
+
+    /**
+     * 构造方法，初始化目标类型
+     *
+     * @param type Java 对象的类型
+     */
+    public FastjsonTypeHandler(Class<T> type) {
+        this.type = type;
+    }
+
+    /**
+     * 解析 JSON 字符串为 Java 对象
+     * <p>
+     * 通过 Fastjson 库的 JSON.parseObject 方法，将 JSON 字符串转换为指定的 Java 对象。
+     * 同时，配置了自动类型支持、忽略不匹配字段以及支持数组映射为对象等特性。
+     *
+     * @param json JSON 字符串
+     * @return 转换后的 Java 对象，如果解析失败返回 null
+     */
+    @Override
+    protected T parse(String json) {
+        try {
+            // 配置 ParserConfig，设置自动类型支持，并允许包名前缀
+            ParserConfig config = new ParserConfig();
+            config.addAccept("local.ateng.java.");
+
+            return JSON.parseObject(
+                    json, this.type,
+                    config,
+                    // 支持 @type 字段进行反序列化（用于多态、自动识别类型）
+                    Feature.SupportAutoType,
+                    // JSON 中有多余字段时忽略，不抛异常
+                    Feature.IgnoreNotMatch,
+                    // 支持将 JSON 数组映射为 Java Bean（按顺序赋值）
+                    Feature.SupportArrayToBean
+            );
+        } catch (Exception e) {
+            // 解析失败时，不抛出异常，直接返回 null
+            return null;
+        }
+    }
+
+    /**
+     * 将 Java 对象转换为 JSON 字符串
+     * <p>
+     * 使用 Fastjson 序列化对象时，启用了多个序列化特性，包括：
+     * 1. 输出类名（支持多态反序列化）。
+     * 2. 包含 null 值字段。
+     * 3. 关闭循环引用检测以提高性能。
+     *
+     * @param obj Java 对象
+     * @return 对象的 JSON 字符串表示
+     */
+    @Override
+    protected String toJson(T obj) {
+        try {
+            if (obj == null) {
+                return null;
+            }
+
+            // 序列化对象为 JSON 字符串，并启用相关特性
+            return JSON.toJSONString(obj,
+                    // 添加 @type 字段（全类名），支持反序列化为原类型
+                    SerializerFeature.WriteClassName,
+                    // Map 中字段即使为 null 也输出
+                    SerializerFeature.WriteMapNullValue,
+                    // 将 null 的 List 序列化为 []
+                    SerializerFeature.WriteNullListAsEmpty,
+                    // 将 null 的字符串序列化为 ""
+                    SerializerFeature.WriteNullStringAsEmpty,
+                    // null 的数字字段序列化为 0
+                    SerializerFeature.WriteNullNumberAsZero,
+                    // null 的布尔字段序列化为 false
+                    SerializerFeature.WriteNullBooleanAsFalse,
+                    // 关闭循环引用检测（性能更高）
+                    SerializerFeature.DisableCircularReferenceDetect
+            );
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+}
+```
+
+### Fastjson2TypeHandler
+
+```java
+
+```
+
+### JacksonTypeHandler
+
+```java
+
 ```
 

@@ -9,7 +9,8 @@
     <artifactId>mybatis-plus-jdk8</artifactId>
     <version>v1.0</version>
     <name>mybatis-plus</name>
-    <description>MyBatis-Plus 是一个 MyBatis 的增强工具，在 MyBatis 的基础上只做增强不做改变，为简化开发、提高效率而生。</description>
+    <description>MyBatis-Plus 是一个 MyBatis 的增强工具，在 MyBatis 的基础上只做增强不做改变，为简化开发、提高效率而生。
+    </description>
 
     <!-- 项目属性 -->
     <properties>
@@ -107,6 +108,13 @@
             <groupId>org.apache.velocity</groupId>
             <artifactId>velocity-engine-core</artifactId>
             <version>2.3</version>
+        </dependency>
+
+        <!-- 地理空间数据处理库 -->
+        <dependency>
+            <groupId>org.locationtech.jts</groupId>
+            <artifactId>jts-core</artifactId>
+            <version>1.20.0</version>
         </dependency>
 
     </dependencies>
