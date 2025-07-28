@@ -1,14 +1,14 @@
 package local.ateng.java.mybatisjdk8.handler;
 
 
-import com.baomidou.mybatisplus.core.toolkit.Assert;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -16,13 +16,7 @@ import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
-import org.apache.ibatis.type.JdbcType;
-import org.apache.ibatis.type.MappedJdbcTypes;
-import org.apache.ibatis.type.MappedTypes;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.text.SimpleDateFormat;
@@ -31,67 +25,106 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.TimeZone;
 
-@MappedTypes({Object.class})
-@MappedJdbcTypes({JdbcType.VARCHAR})
-public class JacksonTypeHandler extends AbstractJsonTypeHandler<Object> {
-    private static final Logger log = LoggerFactory.getLogger(com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class);
+/**
+ * 通用的 Jackson 类型处理器，用于将 JSON 字段与 Java 对象之间互相转换。
+ * <p>
+ * 该处理器基于 Jackson 实现，适用于 MyBatis Plus 的 JSON 类型字段映射。
+ * <p>
+ * 通常用于如下场景：
+ * <pre>{@code
+ * @TableField(typeHandler = JacksonTypeHandler.class)
+ * private MyEntity data;
+ * }</pre>
+ * <pre>{@code
+ *  * @TableField(typeHandler = JacksonTypeHandler.class)
+ *  * private List<MyEntity> dataList;
+ *  * }</pre>
+ *
+ * @param <T> 要序列化或反序列化的目标类型
+ * @author 孔余
+ * @since 2025-07-28
+ */
+public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
+
+    /**
+     * Jackson 的全局 ObjectMapper 实例（懒加载、单例）
+     */
     private static ObjectMapper OBJECT_MAPPER;
-    private final Class<?> type;
 
-    public JacksonTypeHandler(Class<?> type) {
-        if (log.isTraceEnabled()) {
-            log.trace("JacksonTypeHandler(" + type + ")");
-        }
+    /**
+     * 目标类型的 Class 对象，用于反序列化
+     */
+    private final Class<T> type;
 
-        Assert.notNull(type, "Type argument cannot be null", new Object[0]);
+    /**
+     * 构造函数，指定当前处理的对象类型
+     *
+     * @param type 要处理的 Java 类型
+     */
+    public JacksonTypeHandler(Class<T> type) {
         this.type = type;
     }
 
+    /**
+     * 反序列化 JSON 字符串为 Java 对象
+     *
+     * @param json JSON 字符串
+     * @return Java 对象，失败或为空时返回 null
+     */
     @Override
-    protected Object parse(String json) {
+    protected T parse(String json) {
         try {
             return getObjectMapper().readValue(json, this.type);
-        } catch (IOException var3) {
-            IOException e = var3;
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            // 可按需添加日志记录
+            return null;
         }
     }
 
+    /**
+     * 将 Java 对象序列化为 JSON 字符串
+     *
+     * @param obj Java 对象
+     * @return JSON 字符串，失败或对象为 null 时返回 null
+     */
     @Override
-    protected String toJson(Object obj) {
+    protected String toJson(T obj) {
         try {
+            if (obj == null) {
+                return null;
+            }
             return getObjectMapper().writeValueAsString(obj);
-        } catch (JsonProcessingException var3) {
-            JsonProcessingException e = var3;
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            // 可按需添加日志记录
+            return null;
         }
-    }
-
-    public static ObjectMapper getObjectMapper() {
-        if (null == OBJECT_MAPPER) {
-            OBJECT_MAPPER = new ObjectMapper();
-            // 配置日期和时间的序列化与反序列化
-            customizeJsonDateTime(OBJECT_MAPPER, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT);
-            // 配置 JSON 序列化相关设置
-            customizeJsonSerialization(OBJECT_MAPPER);
-            // 配置 JSON 反序列化相关设置
-            customizeJsonDeserialization(OBJECT_MAPPER);
-            // 配置 JSON 解析相关设置
-            customizeJsonParsing(OBJECT_MAPPER);
-        }
-
-        return OBJECT_MAPPER;
-    }
-
-    public static void setObjectMapper(ObjectMapper objectMapper) {
-        Assert.notNull(objectMapper, "ObjectMapper should not be null", new Object[0]);
-        OBJECT_MAPPER = objectMapper;
     }
 
     // 日期与时间格式化
     public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
-    public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
+
+    public static ObjectMapper getObjectMapper() {
+        if (OBJECT_MAPPER == null) {
+            synchronized (JacksonTypeHandler.class) {
+                if (OBJECT_MAPPER == null) {
+                    OBJECT_MAPPER = new ObjectMapper();
+                    // 配置日期和时间的序列化与反序列化
+                    customizeJsonDateTime(OBJECT_MAPPER, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT);
+                    // 配置 JSON 序列化相关设置
+                    customizeJsonSerialization(OBJECT_MAPPER);
+                    // 配置 JSON 反序列化相关设置
+                    customizeJsonDeserialization(OBJECT_MAPPER);
+                    // 配置 JSON 解析相关设置
+                    customizeJsonParsing(OBJECT_MAPPER);
+                    // 配置反序列化时自动转换的设置
+                    customizeJsonClassType(OBJECT_MAPPER);
+                }
+            }
+        }
+        return OBJECT_MAPPER;
+    }
 
     /**
      * 自定义 Jackson 时间日期的序列化和反序列化规则
@@ -160,7 +193,7 @@ public class JacksonTypeHandler extends AbstractJsonTypeHandler<Object> {
         // 将 Long 和 BigInteger 序列化为字符串，防止 JavaScript 丢失精度
         SimpleModule simpleModule = new SimpleModule();
         ToStringSerializer stringSerializer = ToStringSerializer.instance;
-        simpleModule.addSerializer(BigInteger.class, ToStringSerializer.instance);
+        simpleModule.addSerializer(BigInteger.class, stringSerializer);
         simpleModule.addSerializer(BigDecimal.class, stringSerializer);
         simpleModule.addSerializer(BigInteger.class, stringSerializer);
         simpleModule.addSerializer(Long.class, stringSerializer);
@@ -223,6 +256,25 @@ public class JacksonTypeHandler extends AbstractJsonTypeHandler<Object> {
 
         // 允许 JSON 中无序字段（通常是为了性能优化）
         objectMapper.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
+    }
+
+    /**
+     * 自定义 ObjectMapper 配置以启用默认类型标记。
+     * 该方法的作用是在 JSON 序列化和反序列化时包含类类型信息，
+     * 以便在反序列化时能够正确地识别对象的具体类型。
+     *
+     * @param objectMapper 要配置的 ObjectMapper 实例
+     */
+    public static void customizeJsonClassType(ObjectMapper objectMapper) {
+        // 启用默认类型标记，使 JSON 中包含对象的类信息
+        objectMapper.activateDefaultTyping(
+                // 允许所有子类型的验证器（最宽松）
+                LaissezFaireSubTypeValidator.instance,
+                // 仅对非 final 类启用类型信息
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                // 以 JSON 属性的形式存储类型信息
+                JsonTypeInfo.As.PROPERTY
+        );
     }
 
 }

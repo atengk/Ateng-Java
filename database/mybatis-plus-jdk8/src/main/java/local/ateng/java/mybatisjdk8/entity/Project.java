@@ -159,13 +159,13 @@ public class Project implements Serializable {
     /**
      * JSON对象类型数据
      */
-    @TableField(value = "json_object", typeHandler = Fastjson2TypeHandler.class)
+    @TableField(value = "json_object", typeHandler = FastjsonTypeHandler.class)
     private MyData jsonObject;
 
     /**
      * JSON数组类型数据
      */
-    @TableField(value = "json_array", typeHandler = Fastjson2ArrayMyDataTypeHandler.class)
+    @TableField(value = "json_array", typeHandler = FastjsonTypeHandler.class)
     private List<MyData> jsonArray;
 
     /**

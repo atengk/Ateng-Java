@@ -2,77 +2,71 @@ package local.ateng.java.mybatisjdk8.handler;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.parser.Feature;
-import com.alibaba.fastjson.parser.ParserConfig;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 
 /**
- * MyBatis Plus 使用 Fastjson 实现的自定义 TypeHandler
+ * 通用的 Fastjson 类型处理器，用于 MyBatis Plus 中将 Java 对象与 JSON 字段互相转换。
  * <p>
- * 该类用于 JSON 字符串与 Java 对象之间的转换，推荐用于字段存储为 JSON 的场景。
- * 在处理过程中，对 JSON 的解析、序列化做了一些容错处理，比如：
- * 1. JSON 字符串字段有多余属性时不抛出异常。
- * 2. 对 JSON 解析和序列化时的配置进行自定义，以确保兼容性和性能。
+ * 本处理器使用 Fastjson 1.x 实现，支持自动类型识别、空值处理、类型信息保留等功能。
+ * 通常用于如下场景：
+ * <pre>{@code
+ * @TableField(typeHandler = JacksonTypeHandler.class)
+ * private MyEntity data;
+ * }</pre>
+ * <pre>{@code
+ *  * @TableField(typeHandler = JacksonTypeHandler.class)
+ *  * private List<MyEntity> dataList;
+ *  * }</pre>
  *
- * @param <T> JSON 对应的 Java 类型
- * @since 2025-07-25
+ * @param <T> 要序列化或反序列化的目标 Java 类型
+ * @author 孔余
+ * @since 2025-07-28
  */
 public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
-    // 存储 Java 对象的目标类型
+    /**
+     * 目标类型的 Class 对象，用于反序列化
+     */
     private final Class<T> type;
 
     /**
-     * 构造方法，初始化目标类型
+     * 构造方法，指定当前处理的对象类型
      *
-     * @param type Java 对象的类型
+     * @param type 要处理的 Java 类型
      */
     public FastjsonTypeHandler(Class<T> type) {
         this.type = type;
     }
 
     /**
-     * 解析 JSON 字符串为 Java 对象
-     * <p>
-     * 通过 Fastjson 库的 JSON.parseObject 方法，将 JSON 字符串转换为指定的 Java 对象。
-     * 同时，配置了自动类型支持、忽略不匹配字段以及支持数组映射为对象等特性。
+     * 将 JSON 字符串解析为 Java 对象
      *
-     * @param json JSON 字符串
-     * @return 转换后的 Java 对象，如果解析失败返回 null
+     * @param json 数据库中的 JSON 字符串
+     * @return Java 对象，解析失败或为空时返回 null
      */
     @Override
     protected T parse(String json) {
         try {
-            // 配置 ParserConfig，设置自动类型支持，并允许包名前缀
-            ParserConfig config = new ParserConfig();
-            config.addAccept("local.ateng.java.");
-
             return JSON.parseObject(
-                    json, this.type,
-                    config,
-                    // 支持 @type 字段进行反序列化（用于多态、自动识别类型）
+                    json,
+                    this.type,
+                    // 支持 "@type" 字段进行自动类型识别（适用于多态反序列化）
                     Feature.SupportAutoType,
-                    // JSON 中有多余字段时忽略，不抛异常
-                    Feature.IgnoreNotMatch,
-                    // 支持将 JSON 数组映射为 Java Bean（按顺序赋值）
-                    Feature.SupportArrayToBean
+                    // 当 JSON 中存在 Java 类中没有的字段时忽略，不抛出异常
+                    Feature.IgnoreNotMatch
             );
         } catch (Exception e) {
-            // 解析失败时，不抛出异常，直接返回 null
+            // 解析失败时返回 null（可视情况记录日志）
             return null;
         }
     }
 
     /**
-     * 将 Java 对象转换为 JSON 字符串
-     * <p>
-     * 使用 Fastjson 序列化对象时，启用了多个序列化特性，包括：
-     * 1. 输出类名（支持多态反序列化）。
-     * 2. 包含 null 值字段。
-     * 3. 关闭循环引用检测以提高性能。
+     * 将 Java 对象序列化为 JSON 字符串，用于写入数据库字段
      *
      * @param obj Java 对象
-     * @return 对象的 JSON 字符串表示
+     * @return JSON 字符串，序列化失败或对象为 null 时返回 null
      */
     @Override
     protected String toJson(T obj) {
@@ -81,26 +75,25 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
                 return null;
             }
 
-            // 序列化对象为 JSON 字符串，并启用相关特性
             return JSON.toJSONString(obj,
-                    // 添加 @type 字段（全类名），支持反序列化为原类型
+                    // 添加 "@type" 字段，保留类的全限定名，便于反序列化时识别原类型
                     SerializerFeature.WriteClassName,
-                    // Map 中字段即使为 null 也输出
+                    // Map 类型字段即使为 null 也输出
                     SerializerFeature.WriteMapNullValue,
-                    // 将 null 的 List 序列化为 []
+                    // 将 null 的 List 类型字段序列化为空数组 []
                     SerializerFeature.WriteNullListAsEmpty,
-                    // 将 null 的字符串序列化为 ""
+                    // 将 null 的字符串字段序列化为空字符串 ""
                     SerializerFeature.WriteNullStringAsEmpty,
-                    // null 的数字字段序列化为 0
+                    // 将 null 的数字字段序列化为 0
                     SerializerFeature.WriteNullNumberAsZero,
-                    // null 的布尔字段序列化为 false
+                    // 将 null 的布尔字段序列化为 false
                     SerializerFeature.WriteNullBooleanAsFalse,
-                    // 关闭循环引用检测（性能更高）
+                    // 禁用循环引用检测，提高性能（如果存在对象引用自身需谨慎）
                     SerializerFeature.DisableCircularReferenceDetect
             );
         } catch (Exception e) {
+            // 序列化失败时返回 null（可根据需要记录错误日志）
             return null;
         }
     }
-
 }

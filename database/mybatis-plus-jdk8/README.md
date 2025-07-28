@@ -2114,82 +2114,78 @@ public class GeometryTypeHandler extends BaseTypeHandler<Geometry> {
 
 ### FastjsonTypeHandler
 
+在 `Fastjson1` 在存储 Bean、List数据都可以，并且不会出现类型擦除的问题（Fastjson1的反序列化不会受@type顺序的影响，Fastjson2必须在数据第一个才能自动映射）。
+
 ```java
 package local.ateng.java.mybatisjdk8.handler;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.parser.Feature;
-import com.alibaba.fastjson.parser.ParserConfig;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 
 /**
- * MyBatis Plus 使用 Fastjson 实现的自定义 TypeHandler
+ * 通用的 Fastjson 类型处理器，用于 MyBatis Plus 中将 Java 对象与 JSON 字段互相转换。
  * <p>
- * 该类用于 JSON 字符串与 Java 对象之间的转换，推荐用于字段存储为 JSON 的场景。
- * 在处理过程中，对 JSON 的解析、序列化做了一些容错处理，比如：
- * 1. JSON 字符串字段有多余属性时不抛出异常。
- * 2. 对 JSON 解析和序列化时的配置进行自定义，以确保兼容性和性能。
+ * 本处理器使用 Fastjson 1.x 实现，支持自动类型识别、空值处理、类型信息保留等功能。
+ * 通常用于如下场景：
+ * <pre>{@code
+ * @TableField(typeHandler = JacksonTypeHandler.class)
+ * private MyEntity data;
+ * }</pre>
+ * <pre>{@code
+ *  * @TableField(typeHandler = JacksonTypeHandler.class)
+ *  * private List<MyEntity> dataList;
+ *  * }</pre>
  *
- * @param <T> JSON 对应的 Java 类型
- * @since 2025-07-25
+ * @param <T> 要序列化或反序列化的目标 Java 类型
+ * @author 孔余
+ * @since 2025-07-28
  */
 public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
-    // 存储 Java 对象的目标类型
+    /**
+     * 目标类型的 Class 对象，用于反序列化
+     */
     private final Class<T> type;
 
     /**
-     * 构造方法，初始化目标类型
+     * 构造方法，指定当前处理的对象类型
      *
-     * @param type Java 对象的类型
+     * @param type 要处理的 Java 类型
      */
     public FastjsonTypeHandler(Class<T> type) {
         this.type = type;
     }
 
     /**
-     * 解析 JSON 字符串为 Java 对象
-     * <p>
-     * 通过 Fastjson 库的 JSON.parseObject 方法，将 JSON 字符串转换为指定的 Java 对象。
-     * 同时，配置了自动类型支持、忽略不匹配字段以及支持数组映射为对象等特性。
+     * 将 JSON 字符串解析为 Java 对象
      *
-     * @param json JSON 字符串
-     * @return 转换后的 Java 对象，如果解析失败返回 null
+     * @param json 数据库中的 JSON 字符串
+     * @return Java 对象，解析失败或为空时返回 null
      */
     @Override
     protected T parse(String json) {
         try {
-            // 配置 ParserConfig，设置自动类型支持，并允许包名前缀
-            ParserConfig config = new ParserConfig();
-            config.addAccept("local.ateng.java.");
-
             return JSON.parseObject(
-                    json, this.type,
-                    config,
-                    // 支持 @type 字段进行反序列化（用于多态、自动识别类型）
+                    json,
+                    this.type,
+                    // 支持 "@type" 字段进行自动类型识别（适用于多态反序列化）
                     Feature.SupportAutoType,
-                    // JSON 中有多余字段时忽略，不抛异常
-                    Feature.IgnoreNotMatch,
-                    // 支持将 JSON 数组映射为 Java Bean（按顺序赋值）
-                    Feature.SupportArrayToBean
+                    // 当 JSON 中存在 Java 类中没有的字段时忽略，不抛出异常
+                    Feature.IgnoreNotMatch
             );
         } catch (Exception e) {
-            // 解析失败时，不抛出异常，直接返回 null
+            // 解析失败时返回 null（可视情况记录日志）
             return null;
         }
     }
 
     /**
-     * 将 Java 对象转换为 JSON 字符串
-     * <p>
-     * 使用 Fastjson 序列化对象时，启用了多个序列化特性，包括：
-     * 1. 输出类名（支持多态反序列化）。
-     * 2. 包含 null 值字段。
-     * 3. 关闭循环引用检测以提高性能。
+     * 将 Java 对象序列化为 JSON 字符串，用于写入数据库字段
      *
      * @param obj Java 对象
-     * @return 对象的 JSON 字符串表示
+     * @return JSON 字符串，序列化失败或对象为 null 时返回 null
      */
     @Override
     protected String toJson(T obj) {
@@ -2198,40 +2194,599 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
                 return null;
             }
 
-            // 序列化对象为 JSON 字符串，并启用相关特性
             return JSON.toJSONString(obj,
-                    // 添加 @type 字段（全类名），支持反序列化为原类型
+                    // 添加 "@type" 字段，保留类的全限定名，便于反序列化时识别原类型
                     SerializerFeature.WriteClassName,
-                    // Map 中字段即使为 null 也输出
+                    // Map 类型字段即使为 null 也输出
                     SerializerFeature.WriteMapNullValue,
-                    // 将 null 的 List 序列化为 []
+                    // 将 null 的 List 类型字段序列化为空数组 []
                     SerializerFeature.WriteNullListAsEmpty,
-                    // 将 null 的字符串序列化为 ""
+                    // 将 null 的字符串字段序列化为空字符串 ""
                     SerializerFeature.WriteNullStringAsEmpty,
-                    // null 的数字字段序列化为 0
+                    // 将 null 的数字字段序列化为 0
                     SerializerFeature.WriteNullNumberAsZero,
-                    // null 的布尔字段序列化为 false
+                    // 将 null 的布尔字段序列化为 false
                     SerializerFeature.WriteNullBooleanAsFalse,
-                    // 关闭循环引用检测（性能更高）
+                    // 禁用循环引用检测，提高性能（如果存在对象引用自身需谨慎）
                     SerializerFeature.DisableCircularReferenceDetect
             );
         } catch (Exception e) {
+            // 序列化失败时返回 null（可根据需要记录错误日志）
             return null;
         }
     }
-
 }
 ```
 
 ### Fastjson2TypeHandler
 
+在 `Fastjson1` 在存储 Bean 可以，但 List 会出现类型擦除的问题，原因是 数据库JSON字段存储数据后顺序会变。
+
+在 `Fastjson2` 中 `@type` 字段必须在JSON数据的第一个，不然无法自动解析，并且还需要开启 `AutoTypeFilter` 指定自动解析白名单包路径。
+
+这里有个问题，在 MySQL 中设置的JSON字段存储JSON数据后会自动调整JSON字段的顺序，导致最终查询出来自动解析类型会变成默认的JSONObject，为了解决这个问题可以直接将JSON字段类型改为text或者其他字符串类型，当然这不是最优的方式，最优的方式就是下面的设置 TypeReference 然后每个需要解析的指定具体的类型。
+
 ```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.JSONWriter;
+import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
+
+/**
+ * 通用的 Fastjson2 类型处理器，用于 MyBatis Plus 中将对象以 JSON 格式读写数据库字段。
+ * <p>
+ * 适用于 JSON 字段与自定义 Java 对象之间的转换，
+ * 实现了序列化与反序列化的逻辑，支持自动类型识别和特定的序列化配置。
+ * 通常用于如下场景：
+ * <pre>{@code
+ * @TableField(typeHandler = JacksonTypeHandler.class)
+ * private MyEntity data;
+ * }</pre>
+ *
+ * @param <T> 要序列化或反序列化的目标类型
+ * @author 孔余
+ * @since 2025-07-28
+ */
+public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
+
+    /**
+     * 要处理的目标类型
+     */
+    private final Class<T> type;
+
+    /**
+     * 构造方法，指定处理的 Java 类型
+     *
+     * @param type 目标类类型
+     */
+    public Fastjson2TypeHandler(Class<T> type) {
+        this.type = type;
+    }
+
+    /**
+     * 将 JSON 字符串解析为对象
+     *
+     * @param json 数据库中存储的 JSON 字符串
+     * @return 解析后的 Java 对象，解析失败或为空则返回 null
+     */
+    @Override
+    protected T parse(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return null;
+        }
+
+        return JSON.parseObject(
+                json,
+                type,
+                // 开启自动类型识别，仅允许指定包名
+                JSONReader.autoTypeFilter("local.kongyu.java.", "local.ateng.java"),
+                // 开启智能字段匹配（允许字段名不完全匹配）
+                JSONReader.Feature.SupportSmartMatch
+        );
+    }
+
+    /**
+     * 将对象序列化为 JSON 字符串，用于写入数据库
+     *
+     * @param obj Java 对象
+     * @return 序列化后的 JSON 字符串，失败或为空返回 null
+     */
+    @Override
+    protected String toJson(T obj) {
+        try {
+            if (obj == null) {
+                return null;
+            }
+
+            return JSON.toJSONString(
+                    obj,
+                    // 序列化时输出类型信息（用于反序列化）
+                    JSONWriter.Feature.WriteClassName,
+                    // 不输出数字类型的类名（如 Integer、Long 等）
+                    JSONWriter.Feature.NotWriteNumberClassName,
+                    // 不输出 Set 类型的类名（如 HashSet）
+                    JSONWriter.Feature.NotWriteSetClassName,
+                    // 序列化时包含值为 null 的字段
+                    JSONWriter.Feature.WriteNulls,
+                    // 为兼容 JavaScript，大整数转为字符串输出
+                    JSONWriter.Feature.BrowserCompatible,
+                    // 序列化 BigDecimal 时使用非科学计数法（toPlainString）
+                    JSONWriter.Feature.WriteBigDecimalAsPlain
+            );
+        } catch (Exception e) {
+            // 序列化失败返回 null（可视情况记录日志）
+            return null;
+        }
+    }
+}
 
 ```
+
+### Fastjson2GenericTypeReferenceHandler
+
+用这个的主要原因是List数据或者其他有泛型的数据会出现类型擦除的问题，这里使用TypeReference给每个数据创建一个TypeHandler使用。
+
+#### 创建 Fastjson2GenericTypeReferenceHandler
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.TypeReference;
+import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
+
+import java.lang.reflect.Type;
+
+/**
+ * 通用的 Fastjson2 泛型类型处理器，用于 MyBatis Plus 将复杂泛型结构与 JSON 之间进行序列化/反序列化。
+ * <p>
+ * 相比普通的类型处理器，此类支持 {@link java.util.List}、{@link java.util.Map}、嵌套泛型等复杂类型。
+ * 通过 {@link TypeReference} 保留泛型类型信息。
+ *
+ * @param <T> 要处理的 Java 泛型类型
+ * @author 孔余
+ * @since 2025-07-28
+ */
+public class Fastjson2GenericTypeReferenceHandler<T> extends AbstractJsonTypeHandler<T> {
+
+    /**
+     * 目标泛型类型，使用 Type 而不是 Class 以支持嵌套泛型结构。
+     */
+    private final Type type;
+
+    /**
+     * 构造函数，接收带泛型的类型引用用于保留完整类型信息。
+     *
+     * @param typeReference TypeReference<T> 用于描述泛型类型
+     */
+    public Fastjson2GenericTypeReferenceHandler(TypeReference<T> typeReference) {
+        this.type = typeReference.getType();
+    }
+
+    /**
+     * 解析 JSON 字符串为 Java 泛型对象
+     *
+     * @param json 数据库中的 JSON 字符串
+     * @return 反序列化后的 Java 对象，失败或为空时返回 null
+     */
+    @Override
+    protected T parse(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return JSON.parseObject(
+                    json,
+                    type,
+                    // 支持字段名称的智能匹配，如驼峰与下划线形式自动转换
+                    JSONReader.Feature.SupportSmartMatch
+            );
+        } catch (Exception e) {
+            // 解析异常时返回 null（可视情况添加日志）
+            return null;
+        }
+    }
+
+    /**
+     * 将 Java 泛型对象序列化为 JSON 字符串，用于写入数据库字段
+     *
+     * @param obj Java 对象
+     * @return JSON 字符串，失败或对象为 null 时返回 null
+     */
+    @Override
+    protected String toJson(T obj) {
+        try {
+            if (obj == null) {
+                return null;
+            }
+            return JSON.toJSONString(
+                    obj,
+                    // 不输出数字类型的类名（节省输出）
+                    JSONWriter.Feature.NotWriteNumberClassName,
+                    // 不输出 Set 类型的类名
+                    JSONWriter.Feature.NotWriteSetClassName,
+                    // 序列化时包含 null 字段，保持字段完整性
+                    JSONWriter.Feature.WriteNulls,
+                    // 为兼容 JS，大整数用字符串输出，避免精度丢失
+                    JSONWriter.Feature.BrowserCompatible,
+                    // BigDecimal 用 plain string 输出，避免科学计数法
+                    JSONWriter.Feature.WriteBigDecimalAsPlain
+            );
+        } catch (Exception e) {
+            // 序列化失败时返回 null（可添加日志）
+            return null;
+        }
+    }
+}
+
+```
+
+#### 创建 `List<MyData>` 专用的TypeHandler
+
+对于存储 List 这种有泛型的数据就得专门创建一个TypeHandler来使用
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import com.alibaba.fastjson2.TypeReference;
+import local.ateng.java.mybatisjdk8.entity.MyData;
+
+import java.util.List;
+
+/**
+ * Fastjson2 的自定义类型处理器，用于处理 {@code List<MyData>} 类型与 JSON 字段之间的转换。
+ * <p>
+ * 继承自 {@link Fastjson2GenericTypeReferenceHandler}，通过传入 {@link TypeReference} 保留泛型类型信息，
+ * 实现对嵌套集合类型的正确序列化与反序列化。
+ *
+ * <p>通常在 MyBatis Plus 中用于如下字段：</p>
+ *
+ * <pre>{@code
+ * @TableField(typeHandler = Fastjson2ListMyDataTypeHandler.class)
+ * private List<MyData> dataList;
+ * }</pre>
+ *
+ * @author 孔余
+ * @since 2025-07-28
+ */
+public class Fastjson2ListMyDataTypeHandler extends Fastjson2GenericTypeReferenceHandler<List<MyData>> {
+
+    /**
+     * 默认构造函数，传入 List<MyData> 的类型引用以保留泛型信息。
+     */
+    public Fastjson2ListMyDataTypeHandler() {
+        super(new TypeReference<List<MyData>>() {
+        });
+    }
+
+}
+```
+
+#### 创建 `MyData` 专用的TypeHandler
+
+对于 Bean 这种实体类，没有其他特点的序列化需求使用 Mybatis Plus自带的 Fastjson2TypeHandler 就够用了，或者上面自定义配置的Fastjson2TypeHandler也可以。这里只是给出 Bean 这种的用法，实际根据需求选择。
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import com.alibaba.fastjson2.TypeReference;
+import local.ateng.java.mybatisjdk8.entity.MyData;
+
+/**
+ * Fastjson2 类型处理器，用于将 {@link MyData} 类型与 JSON 字段之间进行序列化与反序列化。
+ * <p>
+ * 继承自 {@link Fastjson2GenericTypeReferenceHandler}，通过 {@link TypeReference} 保留泛型类型信息，
+ * 实现对 MyBatis Plus 字段的自动 JSON 映射。
+ *
+ * <p>典型用法如下：</p>
+ * <pre>{@code
+ * @TableField(typeHandler = Fastjson2MyDataTypeHandler.class)
+ * private MyData data;
+ * }</pre>
+ *
+ * @author 孔余
+ * @since 2025-07-28
+ */
+public class Fastjson2MyDataTypeHandler extends Fastjson2GenericTypeReferenceHandler<MyData> {
+
+    /**
+     * 默认构造方法，传入 MyData 的类型引用，用于保留类型信息以支持反序列化。
+     */
+    public Fastjson2MyDataTypeHandler() {
+        super(new TypeReference<MyData>() {
+        });
+    }
+}
+```
+
+
 
 ### JacksonTypeHandler
 
 ```java
+package local.ateng.java.mybatisjdk8.handler;
 
+
+import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
+import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.TimeZone;
+
+/**
+ * 通用的 Jackson 类型处理器，用于将 JSON 字段与 Java 对象之间互相转换。
+ * <p>
+ * 该处理器基于 Jackson 实现，适用于 MyBatis Plus 的 JSON 类型字段映射。
+ * <p>
+ * 通常用于如下场景：
+ * <pre>{@code
+ * @TableField(typeHandler = JacksonTypeHandler.class)
+ * private MyEntity data;
+ * }</pre>
+ * <pre>{@code
+ *  * @TableField(typeHandler = JacksonTypeHandler.class)
+ *  * private List<MyEntity> dataList;
+ *  * }</pre>
+ *
+ * @param <T> 要序列化或反序列化的目标类型
+ * @author 孔余
+ * @since 2025-07-28
+ */
+public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
+
+    /**
+     * Jackson 的全局 ObjectMapper 实例（懒加载、单例）
+     */
+    private static ObjectMapper OBJECT_MAPPER;
+
+    /**
+     * 目标类型的 Class 对象，用于反序列化
+     */
+    private final Class<T> type;
+
+    /**
+     * 构造函数，指定当前处理的对象类型
+     *
+     * @param type 要处理的 Java 类型
+     */
+    public JacksonTypeHandler(Class<T> type) {
+        this.type = type;
+    }
+
+    /**
+     * 反序列化 JSON 字符串为 Java 对象
+     *
+     * @param json JSON 字符串
+     * @return Java 对象，失败或为空时返回 null
+     */
+    @Override
+    protected T parse(String json) {
+        try {
+            return getObjectMapper().readValue(json, this.type);
+        } catch (Exception e) {
+            // 可按需添加日志记录
+            return null;
+        }
+    }
+
+    /**
+     * 将 Java 对象序列化为 JSON 字符串
+     *
+     * @param obj Java 对象
+     * @return JSON 字符串，失败或对象为 null 时返回 null
+     */
+    @Override
+    protected String toJson(T obj) {
+        try {
+            if (obj == null) {
+                return null;
+            }
+            return getObjectMapper().writeValueAsString(obj);
+        } catch (Exception e) {
+            // 可按需添加日志记录
+            return null;
+        }
+    }
+
+    // 日期与时间格式化
+    public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
+    public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+    public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
+
+    public static ObjectMapper getObjectMapper() {
+        if (OBJECT_MAPPER == null) {
+            synchronized (JacksonTypeHandler.class) {
+                if (OBJECT_MAPPER == null) {
+                    OBJECT_MAPPER = new ObjectMapper();
+                    // 配置日期和时间的序列化与反序列化
+                    customizeJsonDateTime(OBJECT_MAPPER, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT);
+                    // 配置 JSON 序列化相关设置
+                    customizeJsonSerialization(OBJECT_MAPPER);
+                    // 配置 JSON 反序列化相关设置
+                    customizeJsonDeserialization(OBJECT_MAPPER);
+                    // 配置 JSON 解析相关设置
+                    customizeJsonParsing(OBJECT_MAPPER);
+                    // 配置反序列化时自动转换的设置
+                    customizeJsonClassType(OBJECT_MAPPER);
+                }
+            }
+        }
+        return OBJECT_MAPPER;
+    }
+
+    /**
+     * 自定义 Jackson 时间日期的序列化和反序列化规则
+     *
+     * @param objectMapper Jackson 的 ObjectMapper 实例
+     */
+    public static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone, String dateFormat, String dateTimeFormat) {
+        // 设置全局时区，确保 Date 类型数据使用此时区
+        objectMapper.setTimeZone(TimeZone.getTimeZone(timeZone));
+
+        // 关闭默认时间戳序列化，改为标准格式
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        // 避免与 JavaTimeModule 冲突
+        objectMapper.setDateFormat(new SimpleDateFormat(dateTimeFormat));
+
+        // Java 8 时间模块
+        JavaTimeModule javaTimeModule = new JavaTimeModule();
+
+        // LocalDateTime 序列化 & 反序列化
+        javaTimeModule.addSerializer(LocalDateTime.class,
+                new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
+        javaTimeModule.addDeserializer(LocalDateTime.class,
+                new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
+
+        // LocalDate 序列化 & 反序列化
+        javaTimeModule.addSerializer(LocalDate.class,
+                new LocalDateSerializer(DateTimeFormatter.ofPattern(dateFormat)));
+        javaTimeModule.addDeserializer(LocalDate.class,
+                new LocalDateDeserializer(DateTimeFormatter.ofPattern(dateFormat)));
+
+        // 注册 JavaTimeModule
+        objectMapper.registerModule(javaTimeModule);
+    }
+
+    /**
+     * 自定义 Jackson 序列化规则
+     *
+     * @param objectMapper Jackson 的 ObjectMapper 实例
+     */
+    public static void customizeJsonSerialization(ObjectMapper objectMapper) {
+        // 关闭 JSON 美化输出（生产环境建议关闭，提高性能）
+        objectMapper.disable(SerializationFeature.INDENT_OUTPUT);
+
+        // 避免 "No serializer found for class" 异常
+        objectMapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+
+        // 过滤 null 值，减少 JSON 体积
+        //objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
+        // 过滤空集合、空字符串等无效数据，进一步精简 JSON
+        //objectMapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+
+        // 不过滤 null、空集合、空字符串等无效数据值，保持数据的原始状态
+        objectMapper.setSerializationInclusion(JsonInclude.Include.ALWAYS);
+
+        // 枚举类型：使用 `toString()` 方式序列化，而不是默认的 `name()`
+        objectMapper.enable(SerializationFeature.WRITE_ENUMS_USING_TO_STRING);
+
+        // BigDecimal 序列化时不使用科学计数法，确保数据精确
+        objectMapper.enable(SerializationFeature.WRITE_BIGDECIMAL_AS_PLAIN);
+
+        // 排序字段名，保证 JSON 输出的键顺序固定（有助于缓存和数据比对）
+        objectMapper.enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
+
+        // 将 Long 和 BigInteger 序列化为字符串，防止 JavaScript 丢失精度
+        SimpleModule simpleModule = new SimpleModule();
+        ToStringSerializer stringSerializer = ToStringSerializer.instance;
+        simpleModule.addSerializer(BigInteger.class, stringSerializer);
+        simpleModule.addSerializer(BigDecimal.class, stringSerializer);
+        simpleModule.addSerializer(BigInteger.class, stringSerializer);
+        simpleModule.addSerializer(Long.class, stringSerializer);
+        simpleModule.addSerializer(Long.TYPE, stringSerializer);
+        objectMapper.registerModule(simpleModule);
+    }
+
+    /**
+     * 自定义 Jackson 反序列化规则
+     *
+     * @param objectMapper Jackson 的 ObjectMapper 实例
+     */
+    public static void customizeJsonDeserialization(ObjectMapper objectMapper) {
+        // 允许单个值转数组（例如 1 -> [1]）
+        objectMapper.enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY);
+
+        // 忽略未知字段（避免因缺少字段报错，提升兼容性）
+        objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
+        // 处理 原始类型（如 int, long, boolean 等）在反序列化时如果遇到 null 值将其替换为默认值，而不是抛出异常
+        objectMapper.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, false);
+
+        // 使用 BigDecimal 反序列化浮点数，避免精度丢失
+        objectMapper.enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+
+        // 使用枚举的 `toString()` 方法进行反序列化，而不是默认的 `name()`
+        objectMapper.enable(DeserializationFeature.READ_ENUMS_USING_TO_STRING);
+
+        // 允许特殊字符转义
+        objectMapper.enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS);
+        objectMapper.enable(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER);
+
+        // 错误时提供类型检查，增强反序列化稳定性
+        objectMapper.enable(DeserializationFeature.FAIL_ON_INVALID_SUBTYPE);
+    }
+
+    /**
+     * 自定义 Jackson JSON 解析设置
+     *
+     * @param objectMapper Jackson 的 ObjectMapper 实例
+     */
+    public static void customizeJsonParsing(ObjectMapper objectMapper) {
+        // 允许 JSON 中带注释，方便开发阶段使用
+        objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+
+        // 允许字段名不带引号（可处理某些特殊格式的 JSON）
+        objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+
+        // 允许单引号作为 JSON 字符串的定界符（适用于某些特殊格式）
+        objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+
+        // 允许控制字符的转义（例如，`\n` 或 `\t`）
+        objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true);
+
+        // 允许反斜杠转义任何字符（如：`\\`）
+        objectMapper.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER, true);
+
+        // 允许无效的 UTF-8 字符（如果 JSON 编码不完全符合标准）
+        objectMapper.configure(JsonParser.Feature.IGNORE_UNDEFINED, true);
+
+        // 允许 JSON 中无序字段（通常是为了性能优化）
+        objectMapper.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, true);
+    }
+
+    /**
+     * 自定义 ObjectMapper 配置以启用默认类型标记。
+     * 该方法的作用是在 JSON 序列化和反序列化时包含类类型信息，
+     * 以便在反序列化时能够正确地识别对象的具体类型。
+     *
+     * @param objectMapper 要配置的 ObjectMapper 实例
+     */
+    public static void customizeJsonClassType(ObjectMapper objectMapper) {
+        // 启用默认类型标记，使 JSON 中包含对象的类信息
+        objectMapper.activateDefaultTyping(
+                // 允许所有子类型的验证器（最宽松）
+                LaissezFaireSubTypeValidator.instance,
+                // 仅对非 final 类启用类型信息
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                // 以 JSON 属性的形式存储类型信息
+                JsonTypeInfo.As.PROPERTY
+        );
+    }
+
+}
 ```
 

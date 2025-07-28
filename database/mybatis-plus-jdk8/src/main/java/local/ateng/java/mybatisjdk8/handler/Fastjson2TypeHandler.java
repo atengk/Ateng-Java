@@ -1,63 +1,68 @@
 package local.ateng.java.mybatisjdk8.handler;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.JSONWriter;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 
 /**
- * MyBatis Plus 使用 Fastjson2 自定义 TypeHandler
+ * 通用的 Fastjson2 类型处理器，用于 MyBatis Plus 中将对象以 JSON 格式读写数据库字段。
  * <p>
- * 该类用于 JSON 字符串与 Java 对象之间的转换，推荐用于字段存储为 JSON 的场景。
- * 在处理过程中，对 JSON 的解析、序列化做了一些容错处理，比如：
- * 1. JSON 字符串字段有多余属性时不抛出异常。
- * 2. 对 JSON 解析和序列化时的配置进行自定义，以确保兼容性和性能。
+ * 适用于 JSON 字段与自定义 Java 对象之间的转换，
+ * 实现了序列化与反序列化的逻辑，支持自动类型识别和特定的序列化配置。
+ * 通常用于如下场景：
+ * <pre>{@code
+ * @TableField(typeHandler = JacksonTypeHandler.class)
+ * private MyEntity data;
+ * }</pre>
  *
+ * @param <T> 要序列化或反序列化的目标类型
  * @author 孔余
- * @since 2025-07-25
+ * @since 2025-07-28
  */
 public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
+    /**
+     * 要处理的目标类型
+     */
     private final Class<T> type;
 
     /**
-     * 构造方法，初始化目标类型
+     * 构造方法，指定处理的 Java 类型
      *
-     * @param type Java 对象的类型
+     * @param type 目标类类型
      */
     public Fastjson2TypeHandler(Class<T> type) {
         this.type = type;
     }
 
     /**
-     * 解析 JSON 字符串为 Java 对象
-     * <p>
-     * 通过 Fastjson2 库的 JSON.parseObject 方法，将 JSON 字符串转换为指定的 Java 对象。
-     * 同时，配置了自动类型支持、忽略不匹配字段以及支持数组映射为对象等特性。
+     * 将 JSON 字符串解析为对象
      *
-     * @param json JSON 字符串
-     * @return 转换后的 Java 对象，如果解析失败返回 null
+     * @param json 数据库中存储的 JSON 字符串
+     * @return 解析后的 Java 对象，解析失败或为空则返回 null
      */
     @Override
     protected T parse(String json) {
         if (json == null || json.trim().isEmpty()) {
             return null;
         }
-        try {
-            return JSON.parseObject(json, type);
-        } catch (Exception e) {
-            return null;
-        }
+
+        return JSON.parseObject(
+                json,
+                type,
+                // 开启自动类型识别，仅允许指定包名
+                JSONReader.autoTypeFilter("local.kongyu.java.", "local.ateng.java"),
+                // 开启智能字段匹配（允许字段名不完全匹配）
+                JSONReader.Feature.SupportSmartMatch
+        );
     }
 
     /**
-     * 将 Java 对象转换为 JSON 字符串
-     * <p>
-     * 使用 Fastjson2 序列化对象时，启用了多个序列化特性，包括：
-     * 1. 输出类名（支持多态反序列化）。
-     * 2. 包含 null 值字段。
-     * 3. 关闭循环引用检测以提高性能。
+     * 将对象序列化为 JSON 字符串，用于写入数据库
      *
      * @param obj Java 对象
-     * @return 对象的 JSON 字符串表示，序列化失败时返回空 JSON 对象
+     * @return 序列化后的 JSON 字符串，失败或为空返回 null
      */
     @Override
     protected String toJson(T obj) {
@@ -65,9 +70,24 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
             if (obj == null) {
                 return null;
             }
-            // 序列化对象为 JSON 字符串，并启用相关特性
-            return JSON.toJSONString(obj);
+
+            return JSON.toJSONString(
+                    obj,
+                    // 序列化时输出类型信息（用于反序列化）
+                    JSONWriter.Feature.WriteClassName,
+                    // 不输出数字类型的类名（如 Integer、Long 等）
+                    JSONWriter.Feature.NotWriteNumberClassName,
+                    // 不输出 Set 类型的类名（如 HashSet）
+                    JSONWriter.Feature.NotWriteSetClassName,
+                    // 序列化时包含值为 null 的字段
+                    JSONWriter.Feature.WriteNulls,
+                    // 为兼容 JavaScript，大整数转为字符串输出
+                    JSONWriter.Feature.BrowserCompatible,
+                    // 序列化 BigDecimal 时使用非科学计数法（toPlainString）
+                    JSONWriter.Feature.WriteBigDecimalAsPlain
+            );
         } catch (Exception e) {
+            // 序列化失败返回 null（可视情况记录日志）
             return null;
         }
     }
