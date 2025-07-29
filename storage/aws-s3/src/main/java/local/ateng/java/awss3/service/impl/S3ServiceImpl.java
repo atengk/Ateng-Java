@@ -734,6 +734,73 @@ public class S3ServiceImpl implements S3Service {
         return inputStreams;
     }
 
+    @Override
+    public void downloadFolder(String prefix, Path localBaseDir) {
+        List<S3Object> objects = listFiles(prefix);
+        if (objects.isEmpty()) {
+            System.out.println("S3 路径下无文件: " + prefix);
+            return;
+        }
+
+        for (S3Object object : objects) {
+            String key = object.key();
+
+            // 去掉 prefix 得到相对路径（保留目录结构）
+            String relativePath = key.substring(prefix.length());
+            Path localPath = localBaseDir.resolve(relativePath);
+
+            // 判断是否已存在，并且大小一致，若一致则跳过
+            if (Files.exists(localPath)) {
+                try {
+                    long localSize = Files.size(localPath);
+                    long s3Size = object.size();
+
+                    if (localSize == s3Size) {
+                        System.out.println("文件已存在且大小一致，跳过下载：" + localPath);
+                        continue;
+                    } else {
+                        System.out.println("文件已存在但大小不一致，重新下载：" + localPath);
+                    }
+                } catch (IOException e) {
+                    System.err.println("读取本地文件大小失败，强制重新下载：" + localPath);
+                }
+            }
+
+            // 创建父目录
+            try {
+                Files.createDirectories(localPath.getParent());
+            } catch (IOException e) {
+                throw new RuntimeException("创建本地目录失败：" + localPath.getParent(), e);
+            }
+
+            // 下载文件
+            downloadToFile(key, localPath);
+        }
+    }
+
+
+    @Override
+    public void uploadFolder(Path localBaseDir, String prefix) {
+        if (!Files.isDirectory(localBaseDir)) {
+            throw new IllegalArgumentException("指定路径不是目录：" + localBaseDir);
+        }
+
+        try {
+            Files.walk(localBaseDir)
+                    .filter(Files::isRegularFile)
+                    .forEach(path -> {
+                        // 获取相对路径并转为 S3 key
+                        Path relative = localBaseDir.relativize(path);
+                        String s3Key = prefix + (prefix.endsWith("/") ? "" : "/") + relative.toString().replace("\\", "/");
+
+                        // 上传文件
+                        uploadFile(s3Key, path.toFile());
+                    });
+        } catch (IOException e) {
+            throw new RuntimeException("遍历目录失败：" + localBaseDir, e);
+        }
+    }
+
     /**
      * 批量下载多个 S3 文件并返回对应的输入流列表（默认不忽略错误）
      *
@@ -842,11 +909,22 @@ public class S3ServiceImpl implements S3Service {
      * @return 文件列表
      */
     @Override
-    public List<String> listFiles(String prefix) {
+    public List<S3Object> listFiles(String prefix) {
         ListObjectsV2Request request = ListObjectsV2Request.builder().bucket(s3Properties.getBucketName()).prefix(prefix).build();
 
         ListObjectsV2Response response = s3Client.listObjectsV2(request);
-        return response.contents().stream()
+        return response.contents();
+    }
+
+    /**
+     * 列出某个前缀（目录）下的文件
+     *
+     * @param prefix 文件前缀（类似文件夹路径）
+     * @return 文件列表
+     */
+    @Override
+    public List<String> listFilesStr(String prefix) {
+        return listFiles(prefix).stream()
                 .map(S3Object::key)
                 .collect(Collectors.toList());
     }

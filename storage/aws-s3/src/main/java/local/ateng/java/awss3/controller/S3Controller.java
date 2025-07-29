@@ -77,7 +77,7 @@ public class S3Controller {
 
     @GetMapping("/listFiles")
     public ResponseEntity<List<String>> listFiles(String prefix) {
-        List<String> files = s3Service.listFiles(prefix);
+        List<String> files = s3Service.listFilesStr(prefix);
         return ResponseEntity.ok(files);
     }
 
@@ -115,6 +115,17 @@ public class S3Controller {
     public ResponseEntity<Void> zip(HttpServletResponse response) throws IOException {
         List<Path> localPaths = Arrays.asList(Paths.get("D:\\temp\\download\\1.jpg"), Paths.get("D:\\temp\\download\\2.jpg"));
         ZipUtil.zip(localPaths, response, "孔余  asdhasiu 8738&@!*&#(!.zip");
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/downloadFolder")
+    public void downloadFolder(String prefix, String localBaseDir) {
+        s3Service.downloadFolder(prefix, Paths.get(localBaseDir));
+    }
+
+    @PutMapping("/uploadFolder")
+    public ResponseEntity<Void> uploadFolder(String localBaseDir, String prefix) {
+        s3Service.uploadFolder(Paths.get(localBaseDir), prefix);
         return ResponseEntity.noContent().build();
     }
 

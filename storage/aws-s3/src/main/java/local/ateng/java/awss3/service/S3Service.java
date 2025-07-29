@@ -3,6 +3,7 @@ package local.ateng.java.awss3.service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
@@ -255,6 +256,22 @@ public interface S3Service {
     List<InputStream> downloadMultipleToStreamsAsync(List<String> keys, boolean ignoreErrors);
 
     /**
+     * 下载 S3 中指定前缀下的所有文件到本地，并保持目录结构
+     *
+     * @param prefix       S3 目录前缀（如 "folder/sub/"）
+     * @param localBaseDir 本地基础目录（如 "D:/downloads"）
+     */
+    void downloadFolder(String prefix, Path localBaseDir);
+
+    /**
+     * 上传本地目录到 S3 中指定前缀路径下，保留原有目录结构
+     *
+     * @param localBaseDir 本地基础目录（如 "D:/upload"）
+     * @param prefix     S3 中的存储前缀（如 "backup/2025/"）
+     */
+    void uploadFolder(Path localBaseDir, String prefix);
+
+    /**
      * 删除单个文件
      *
      * @param key 文件路径
@@ -289,7 +306,15 @@ public interface S3Service {
      * @param prefix 路径前缀
      * @return S3 文件列表
      */
-    List<String> listFiles(String prefix);
+    List<S3Object> listFiles(String prefix);
+
+    /**
+     * 列出指定前缀下的所有文件
+     *
+     * @param prefix 路径前缀
+     * @return S3 文件列表
+     */
+    List<String> listFilesStr(String prefix);
 
     /**
      * 生成临时访问链接（GET）

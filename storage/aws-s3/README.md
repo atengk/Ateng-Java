@@ -224,6 +224,7 @@ package local.ateng.java.awss3.service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
@@ -476,6 +477,22 @@ public interface S3Service {
     List<InputStream> downloadMultipleToStreamsAsync(List<String> keys, boolean ignoreErrors);
 
     /**
+     * 下载 S3 中指定前缀下的所有文件到本地，并保持目录结构
+     *
+     * @param prefix       S3 目录前缀（如 "folder/sub/"）
+     * @param localBaseDir 本地基础目录（如 "D:/downloads"）
+     */
+    void downloadFolder(String prefix, Path localBaseDir);
+
+    /**
+     * 上传本地目录到 S3 中指定前缀路径下，保留原有目录结构
+     *
+     * @param localBaseDir 本地基础目录（如 "D:/upload"）
+     * @param prefix     S3 中的存储前缀（如 "backup/2025/"）
+     */
+    void uploadFolder(Path localBaseDir, String prefix);
+
+    /**
      * 删除单个文件
      *
      * @param key 文件路径
@@ -510,7 +527,15 @@ public interface S3Service {
      * @param prefix 路径前缀
      * @return S3 文件列表
      */
-    List<String> listFiles(String prefix);
+    List<S3Object> listFiles(String prefix);
+
+    /**
+     * 列出指定前缀下的所有文件
+     *
+     * @param prefix 路径前缀
+     * @return S3 文件列表
+     */
+    List<String> listFilesStr(String prefix);
 
     /**
      * 生成临时访问链接（GET）
@@ -1282,6 +1307,73 @@ public class S3ServiceImpl implements S3Service {
         return inputStreams;
     }
 
+    @Override
+    public void downloadFolder(String prefix, Path localBaseDir) {
+        List<S3Object> objects = listFiles(prefix);
+        if (objects.isEmpty()) {
+            System.out.println("S3 路径下无文件: " + prefix);
+            return;
+        }
+
+        for (S3Object object : objects) {
+            String key = object.key();
+
+            // 去掉 prefix 得到相对路径（保留目录结构）
+            String relativePath = key.substring(prefix.length());
+            Path localPath = localBaseDir.resolve(relativePath);
+
+            // 判断是否已存在，并且大小一致，若一致则跳过
+            if (Files.exists(localPath)) {
+                try {
+                    long localSize = Files.size(localPath);
+                    long s3Size = object.size();
+
+                    if (localSize == s3Size) {
+                        System.out.println("文件已存在且大小一致，跳过下载：" + localPath);
+                        continue;
+                    } else {
+                        System.out.println("文件已存在但大小不一致，重新下载：" + localPath);
+                    }
+                } catch (IOException e) {
+                    System.err.println("读取本地文件大小失败，强制重新下载：" + localPath);
+                }
+            }
+
+            // 创建父目录
+            try {
+                Files.createDirectories(localPath.getParent());
+            } catch (IOException e) {
+                throw new RuntimeException("创建本地目录失败：" + localPath.getParent(), e);
+            }
+
+            // 下载文件
+            downloadToFile(key, localPath);
+        }
+    }
+
+
+    @Override
+    public void uploadFolder(Path localBaseDir, String prefix) {
+        if (!Files.isDirectory(localBaseDir)) {
+            throw new IllegalArgumentException("指定路径不是目录：" + localBaseDir);
+        }
+
+        try {
+            Files.walk(localBaseDir)
+                    .filter(Files::isRegularFile)
+                    .forEach(path -> {
+                        // 获取相对路径并转为 S3 key
+                        Path relative = localBaseDir.relativize(path);
+                        String s3Key = prefix + (prefix.endsWith("/") ? "" : "/") + relative.toString().replace("\\", "/");
+
+                        // 上传文件
+                        uploadFile(s3Key, path.toFile());
+                    });
+        } catch (IOException e) {
+            throw new RuntimeException("遍历目录失败：" + localBaseDir, e);
+        }
+    }
+
     /**
      * 批量下载多个 S3 文件并返回对应的输入流列表（默认不忽略错误）
      *
@@ -1390,11 +1482,22 @@ public class S3ServiceImpl implements S3Service {
      * @return 文件列表
      */
     @Override
-    public List<String> listFiles(String prefix) {
+    public List<S3Object> listFiles(String prefix) {
         ListObjectsV2Request request = ListObjectsV2Request.builder().bucket(s3Properties.getBucketName()).prefix(prefix).build();
 
         ListObjectsV2Response response = s3Client.listObjectsV2(request);
-        return response.contents().stream()
+        return response.contents();
+    }
+
+    /**
+     * 列出某个前缀（目录）下的文件
+     *
+     * @param prefix 文件前缀（类似文件夹路径）
+     * @return 文件列表
+     */
+    @Override
+    public List<String> listFilesStr(String prefix) {
+        return listFiles(prefix).stream()
                 .map(S3Object::key)
                 .collect(Collectors.toList());
     }
@@ -1559,7 +1662,7 @@ public class S3Controller {
 
     @GetMapping("/listFiles")
     public ResponseEntity<List<String>> listFiles(String prefix) {
-        List<String> files = s3Service.listFiles(prefix);
+        List<String> files = s3Service.listFilesStr(prefix);
         return ResponseEntity.ok(files);
     }
 
@@ -1597,6 +1700,17 @@ public class S3Controller {
     public ResponseEntity<Void> zip(HttpServletResponse response) throws IOException {
         List<Path> localPaths = Arrays.asList(Paths.get("D:\\temp\\download\\1.jpg"), Paths.get("D:\\temp\\download\\2.jpg"));
         ZipUtil.zip(localPaths, response, "孔余  asdhasiu 8738&@!*&#(!.zip");
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/downloadFolder")
+    public void downloadFolder(String prefix, String localBaseDir) {
+        s3Service.downloadFolder(prefix, Paths.get(localBaseDir));
+    }
+
+    @PutMapping("/uploadFolder")
+    public ResponseEntity<Void> uploadFolder(String localBaseDir, String prefix) {
+        s3Service.uploadFolder(Paths.get(localBaseDir), prefix);
         return ResponseEntity.noContent().build();
     }
 
