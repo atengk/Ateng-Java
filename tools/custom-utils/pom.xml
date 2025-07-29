@@ -54,6 +54,13 @@
             <version>2.9.4</version>
         </dependency>
 
+        <!-- Spring Boot Validation 数据校验框架 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->
