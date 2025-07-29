@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 /**
  * S3 服务接口
@@ -73,6 +74,26 @@ public interface S3Service {
      * @param multipartFile Multipart 文件对象
      */
     void uploadFile(String key, MultipartFile multipartFile);
+
+    /**
+     * 上传 MultipartFile 文件到 S3
+     *
+     * @param key           S3 路径
+     * @param multipartFile Multipart 文件对象
+     * @param metadata      文件 Metadata 元数据，key 必须以小写英文字母、数字、连字符组成，value 必须是 ASCII 编码
+     */
+    void uploadFile(String key, MultipartFile multipartFile, Map<String, String> metadata);
+
+    /**
+     * 从 S3 中获取指定对象的元数据信息，并自动尝试对值进行 Base64 解码还原原始内容。
+     * <p>
+     * 如果元数据值是上传时经 Base64 编码的内容（如包含中文），则会自动解码为原始字符串；
+     * 否则保留原值。
+     *
+     * @param key S3 对象的键（文件路径）
+     * @return 解码后的元数据映射
+     */
+    Map<String, String> getDecodedMetadata(String key);
 
     /**
      * 上传多个 Multipart 文件到 S3

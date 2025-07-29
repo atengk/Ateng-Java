@@ -232,6 +232,7 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 /**
  * S3 服务接口
@@ -294,6 +295,26 @@ public interface S3Service {
      * @param multipartFile Multipart 文件对象
      */
     void uploadFile(String key, MultipartFile multipartFile);
+
+    /**
+     * 上传 MultipartFile 文件到 S3
+     *
+     * @param key           S3 路径
+     * @param multipartFile Multipart 文件对象
+     * @param metadata      文件 Metadata 元数据，key 必须以小写英文字母、数字、连字符组成，value 必须是 ASCII 编码
+     */
+    void uploadFile(String key, MultipartFile multipartFile, Map<String, String> metadata);
+
+    /**
+     * 从 S3 中获取指定对象的元数据信息，并自动尝试对值进行 Base64 解码还原原始内容。
+     * <p>
+     * 如果元数据值是上传时经 Base64 编码的内容（如包含中文），则会自动解码为原始字符串；
+     * 否则保留原值。
+     *
+     * @param key S3 对象的键（文件路径）
+     * @return 解码后的元数据映射
+     */
+    Map<String, String> getDecodedMetadata(String key);
 
     /**
      * 上传多个 Multipart 文件到 S3
@@ -545,14 +566,13 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.*;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -682,6 +702,118 @@ public class S3ServiceImpl implements S3Service {
         } catch (IOException e) {
             throw new RuntimeException("上传失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 上传 MultipartFile 文件到 S3
+     *
+     * @param key           S3 路径
+     * @param multipartFile Multipart 文件对象
+     * @param metadata      文件 Metadata 元数据，key 必须以小写英文字母、数字、连字符组成，value 必须是 ASCII 编码
+     */
+    @Override
+    public void uploadFile(String key, MultipartFile multipartFile, Map<String, String> metadata) {
+        try {
+            Map<String, String> sanitizeMetadata = sanitizeMetadata(metadata);
+            PutObjectRequest request = PutObjectRequest
+                    .builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .contentType(multipartFile.getContentType())
+                    .metadata(sanitizeMetadata)
+                    .build();
+
+            s3Client.putObject(request, RequestBody.fromInputStream(multipartFile.getInputStream(), multipartFile.getSize()));
+        } catch (IOException e) {
+            throw new RuntimeException("上传失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 对自定义的 S3 元数据进行清洗和编码处理。
+     * <p>
+     * 所有键统一转换为小写，值中若包含非 ASCII 字符（如中文）将使用 Base64 编码，
+     * 以避免签名计算错误导致上传失败。
+     *
+     * @param metadata 原始元数据映射
+     * @return 处理后的安全元数据映射，适用于 S3 上传
+     */
+    private Map<String, String> sanitizeMetadata(Map<String, String> metadata) {
+        Map<String, String> sanitized = new HashMap<>();
+        for (Map.Entry<String, String> entry : metadata.entrySet()) {
+            // 保证 key 为小写
+            String key = entry.getKey().toLowerCase();
+            String value = entry.getValue();
+
+            // 判断 value 是否为 ASCII（英文字符）
+            if (StandardCharsets.US_ASCII.newEncoder().canEncode(value)) {
+                sanitized.put(key, value);
+            } else {
+                // 非 ASCII 的值进行 Base64 编码
+                String encoded = Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+                sanitized.put(key, encoded);
+            }
+        }
+        return sanitized;
+    }
+
+    /**
+     * 从 S3 中获取指定对象的元数据信息，并自动尝试对值进行 Base64 解码还原原始内容。
+     * <p>
+     * 如果元数据值是上传时经 Base64 编码的内容（如包含中文），则会自动解码为原始字符串；
+     * 否则保留原值。
+     *
+     * @param key S3 对象的键（文件路径）
+     * @return 解码后的元数据映射
+     */
+    @Override
+    public Map<String, String> getDecodedMetadata(String key) {
+        HeadObjectRequest headRequest = HeadObjectRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .key(key)
+                .build();
+
+        HeadObjectResponse response = s3Client.headObject(headRequest);
+
+        Map<String, String> originalMetadata = new HashMap<>();
+
+        for (Map.Entry<String, String> entry : response.metadata().entrySet()) {
+            String keyName = entry.getKey();
+            String value = entry.getValue();
+
+            // 尝试 Base64 解码（有些值是英文直接传输的）
+            String decoded;
+            try {
+                byte[] decodedBytes = Base64.getDecoder().decode(value);
+                decoded = new String(decodedBytes, StandardCharsets.UTF_8);
+
+                // 只有在成功解码为有效 UTF-8 后才认为是原始值
+                if (isUtf8(decoded)) {
+                    originalMetadata.put(keyName, decoded);
+                } else {
+                    // 保留原始值
+                    originalMetadata.put(keyName, value);
+                }
+            } catch (IllegalArgumentException e) {
+                // 不是合法的 Base64，说明本来就是 ASCII
+                originalMetadata.put(keyName, value);
+            }
+        }
+
+        return originalMetadata;
+    }
+
+    /**
+     * 判断给定的字符串是否可以用 UTF-8 编码。
+     * <p>
+     * 可用于验证 Base64 解码后的字符串是否是有效的 UTF-8 格式。
+     *
+     * @param text 待验证的字符串
+     * @return 如果是合法的 UTF-8 字符串则返回 true，否则返回 false
+     */
+    private boolean isUtf8(String text) {
+        CharsetEncoder encoder = StandardCharsets.UTF_8.newEncoder();
+        return encoder.canEncode(text);
     }
 
     /**
@@ -1363,7 +1495,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/s3")
@@ -1376,6 +1510,21 @@ public class S3Controller {
     public ResponseEntity<Void> uploadFile(MultipartFile file, String key) {
         s3Service.uploadFile(key, file);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/uploadFileAndMeta")
+    public ResponseEntity<Void> uploadFileAndMeta(MultipartFile file, String key) {
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("original-filename", file.getOriginalFilename());
+        metadata.put("data-name", "test name");
+        metadata.put("data-name2", "test 阿腾");
+        s3Service.uploadFile(key, file, metadata);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/getDecodedMetadata")
+    public ResponseEntity<Map<String, String>> getDecodedMetadata(String key) {
+        return ResponseEntity.ok(s3Service.getDecodedMetadata(key));
     }
 
     @PostMapping("/uploadMultipleFiles")
@@ -1452,5 +1601,6 @@ public class S3Controller {
     }
 
 }
+
 ```
 

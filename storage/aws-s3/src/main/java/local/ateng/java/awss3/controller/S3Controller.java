@@ -13,7 +13,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/s3")
@@ -26,6 +28,21 @@ public class S3Controller {
     public ResponseEntity<Void> uploadFile(MultipartFile file, String key) {
         s3Service.uploadFile(key, file);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/uploadFileAndMeta")
+    public ResponseEntity<Void> uploadFileAndMeta(MultipartFile file, String key) {
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("original-filename", file.getOriginalFilename());
+        metadata.put("data-name", "test name");
+        metadata.put("data-name2", "test 阿腾");
+        s3Service.uploadFile(key, file, metadata);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/getDecodedMetadata")
+    public ResponseEntity<Map<String, String>> getDecodedMetadata(String key) {
+        return ResponseEntity.ok(s3Service.getDecodedMetadata(key));
     }
 
     @PostMapping("/uploadMultipleFiles")
