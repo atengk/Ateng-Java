@@ -2116,6 +2116,8 @@ public class GeometryTypeHandler extends BaseTypeHandler<Geometry> {
 
 在 `Fastjson1` 在存储 Bean、List数据都可以，并且不会出现类型擦除的问题（Fastjson1的反序列化不会受@type顺序的影响，Fastjson2必须在数据第一个才能自动映射）。
 
+注意Fastjson1开启了 `SerializerFeature.WriteClassName` 会使 Double 这类数据序列化后的值带有D后缀，导致JSON数据格式出现问题！！！
+
 ```java
 package local.ateng.java.mybatisjdk8.handler;
 

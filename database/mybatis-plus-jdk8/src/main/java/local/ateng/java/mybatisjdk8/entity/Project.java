@@ -1,5 +1,6 @@
 package local.ateng.java.mybatisjdk8.entity;
 
+import com.alibaba.fastjson2.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -159,19 +160,21 @@ public class Project implements Serializable {
     /**
      * JSON对象类型数据
      */
-    @TableField(value = "json_object", typeHandler = FastjsonTypeHandler.class)
+    @TableField(value = "json_object", typeHandler = Fastjson2TypeHandler.class)
     private MyData jsonObject;
 
     /**
      * JSON数组类型数据
      */
-    @TableField(value = "json_array", typeHandler = FastjsonTypeHandler.class)
+    @TableField(value = "json_array", typeHandler = Fastjson2TypeHandler.class)
     private List<MyData> jsonArray;
 
     /**
      * 地理坐标（经纬度）
      */
     @TableField(value = "location", typeHandler = GeometryTypeHandler.class)
+    @JSONField(serialize = false)
+    @com.alibaba.fastjson.annotation.JSONField(serialize = false)
     private Geometry location;
 
     /**
