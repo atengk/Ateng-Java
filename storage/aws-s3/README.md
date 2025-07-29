@@ -171,7 +171,7 @@ public class S3Config {
 
 #### 忽略证书的配置
 
-如果 `S3Presigner` 也需要，配置是一样的
+`S3Presigner`不会发出 HTTP 请求，所以它不需要 HTTP client
 
 ```java
 /**
