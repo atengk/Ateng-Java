@@ -32,12 +32,27 @@ public final class FileTypeUtil {
      * @return MIME 类型
      */
     public static String getMimeType(File file) {
-        if (file == null || !file.exists()) return null;
+        if (file == null || !file.exists()) {
+            return null;
+        }
         try {
             return tika.detect(file);
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /**
+     * 获取文件 MIME 类型（如：image/png、application/pdf）
+     *
+     * @param path 文件路径
+     * @return MIME 类型
+     */
+    public static String getMimeType(String path) {
+        if (path == null || path.trim().isEmpty()) {
+            return null;
+        }
+        return tika.detect(path);
     }
 
     /**
@@ -47,7 +62,9 @@ public final class FileTypeUtil {
      * @return MIME 类型
      */
     public static String getMimeType(InputStream inputStream) {
-        if (inputStream == null) return null;
+        if (inputStream == null) {
+            return null;
+        }
         try {
             return tika.detect(inputStream);
         } catch (IOException e) {
@@ -63,7 +80,27 @@ public final class FileTypeUtil {
      */
     public static String getExtension(File file) {
         String mimeType = getMimeType(file);
-        if (mimeType == null) return null;
+        if (mimeType == null) {
+            return null;
+        }
+        try {
+            return MimeTypes.getDefaultMimeTypes().forName(mimeType).getExtension();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取文件扩展名（如：.pdf、.png）
+     *
+     * @param path 文件路径
+     * @return 文件扩展名，包含点
+     */
+    public static String getExtension(String path) {
+        String mimeType = getMimeType(path);
+        if (mimeType == null) {
+            return null;
+        }
         try {
             return MimeTypes.getDefaultMimeTypes().forName(mimeType).getExtension();
         } catch (Exception e) {
@@ -79,7 +116,9 @@ public final class FileTypeUtil {
      */
     public static String getFileCategory(File file) {
         String mimeType = getMimeType(file);
-        if (mimeType == null) return "unknown";
+        if (mimeType == null) {
+            return "unknown";
+        }
         return mimeType.split("/")[0].toLowerCase(Locale.ROOT);
     }
 
@@ -105,7 +144,9 @@ public final class FileTypeUtil {
 
     public static boolean isOfficeDocument(File file) {
         String mime = getMimeType(file);
-        if (mime == null) return false;
+        if (mime == null) {
+            return false;
+        }
         return mime.contains("msword") || mime.contains("officedocument");
     }
 
