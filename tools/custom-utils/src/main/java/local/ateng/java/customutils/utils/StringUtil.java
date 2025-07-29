@@ -1071,4 +1071,45 @@ public final class StringUtil {
         return sb.toString().trim();
     }
 
+    /**
+     * 使用 SLF4J 占位符方式格式化字符串
+     * <p>
+     * 示例：
+     * <pre>
+     *     String msg = StringUtil.format("参数1={}, 参数2={}, 参数3={}", "A", "B", "C");
+     *     输出：参数1=A, 参数2=B, 参数3=C
+     * </pre>
+     *
+     * @param template 含 {} 占位符的字符串模板
+     * @param args     替换占位符的参数列表
+     * @return 格式化后的字符串
+     */
+    public static String format(String template, Object... args) {
+        if (template == null || args == null || args.length == 0) {
+            return template;
+        }
+
+        StringBuilder sb = new StringBuilder(template.length() + args.length * 10);
+        int templateLength = template.length();
+        int argIndex = 0;
+        int cursor = 0;
+
+        while (cursor < templateLength) {
+            int placeholderIndex = template.indexOf("{}", cursor);
+            if (placeholderIndex == -1 || argIndex >= args.length) {
+                // 没有更多占位符或参数已用完，追加剩余部分
+                sb.append(template.substring(cursor));
+                break;
+            }
+
+            sb.append(template, cursor, placeholderIndex);
+            sb.append(args[argIndex] != null ? args[argIndex].toString() : "null");
+
+            cursor = placeholderIndex + 2; // 跳过"{}"
+            argIndex++;
+        }
+
+        return sb.toString();
+    }
+
 }
