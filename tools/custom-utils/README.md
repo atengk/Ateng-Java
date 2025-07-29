@@ -63,3 +63,6 @@ JSON 工具类
 
 JavaBean对象工具类
 
+## EnumUtil
+
+枚举工具类
