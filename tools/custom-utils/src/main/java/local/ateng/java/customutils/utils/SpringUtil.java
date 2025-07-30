@@ -219,7 +219,7 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
      * @param name 环境变量名称（如 JAVA_HOME、PATH 等）
      * @return 对应值，若不存在返回 null
      */
-    public static String getEnvironment(String name) {
+    public static String getSystemEnv(String name) {
         return System.getenv(name);
     }
 
@@ -230,7 +230,7 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
      * @param defaultValue 默认值
      * @return 环境变量值或默认值
      */
-    public static String getEnvironment(String name, String defaultValue) {
+    public static String getSystemEnv(String name, String defaultValue) {
         String value = System.getenv(name);
         return value != null ? value : defaultValue;
     }
