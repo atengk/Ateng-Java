@@ -1,4 +1,4 @@
-package local.ateng.java.customutils.Controller;
+package local.ateng.java.customutils.controller;
 
 import local.ateng.java.customutils.utils.SpringUtil;
 import org.springframework.core.env.Environment;
