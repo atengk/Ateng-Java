@@ -1,6 +1,9 @@
 package local.ateng.java.rest.config;
 
+import local.ateng.java.rest.interceptor.AuthInterceptor;
+import local.ateng.java.rest.interceptor.LoggingInterceptor;
 import local.ateng.java.rest.interceptor.MyRequestInterceptor;
+import local.ateng.java.rest.interceptor.RetryInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
@@ -29,6 +32,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RestTemplateConfig {
     private final MyRequestInterceptor myRequestInterceptor;
+    private final LoggingInterceptor loggingInterceptor;
+    private final AuthInterceptor authInterceptor;
+    private final RetryInterceptor retryInterceptor;
 
     /*@Bean
     public RestTemplate restTemplate() {
@@ -42,7 +48,9 @@ public class RestTemplateConfig {
 
         // 创建并注册拦截器
         List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-        interceptors.add(myRequestInterceptor);
+        interceptors.add(authInterceptor);
+        interceptors.add(loggingInterceptor);
+        interceptors.add(retryInterceptor);
 
         restTemplate.setInterceptors(interceptors);
         return restTemplate;
