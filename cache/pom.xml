@@ -19,5 +19,6 @@
         <module>jetcache</module>
         <module>caffeine</module>
         <module>spring-cache</module>
+        <module>redis-template-jdk8</module>
     </modules>
 </project>
