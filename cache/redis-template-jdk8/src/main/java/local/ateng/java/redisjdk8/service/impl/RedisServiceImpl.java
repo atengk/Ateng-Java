@@ -2,10 +2,11 @@ package local.ateng.java.redisjdk8.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import local.ateng.java.redisjdk8.service.RedisService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.DataType;
-import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.*;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
@@ -15,6 +16,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -25,18 +28,12 @@ import java.util.stream.Collectors;
  * @since 2025-07-31
  */
 @Service
+@RequiredArgsConstructor
 public class RedisServiceImpl implements RedisService {
 
+    @Qualifier("redisTemplate")
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
-
-    public RedisServiceImpl(
-            @Qualifier("redisTemplate") RedisTemplate<String, Object> redisTemplate,
-            ObjectMapper objectMapper
-    ) {
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
-    }
 
     /**
      * 设置值（无过期时间）
@@ -221,6 +218,9 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public boolean setIfAbsent(String key, Object value, long timeout, TimeUnit unit) {
+        if (ObjectUtils.isEmpty(key) || ObjectUtils.isEmpty(value) || timeout <= 0) {
+            return false;
+        }
         Boolean result = redisTemplate.opsForValue().setIfAbsent(key, value, timeout, unit);
         return Boolean.TRUE.equals(result);
     }
@@ -1974,7 +1974,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public boolean tryLock(String key, String value, long expire) {
-        return false;
+        return tryLock(key, value, expire, TimeUnit.SECONDS);
     }
 
     /**
@@ -1988,7 +1988,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public boolean tryLock(String key, String value, long timeout, TimeUnit unit) {
-        return false;
+        return setIfAbsent(key, value, timeout, unit);
     }
 
     /**
@@ -2000,7 +2000,24 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public boolean releaseLock(String key, String expectedValue) {
-        return false;
+        if (ObjectUtils.isEmpty(key) || ObjectUtils.isEmpty(expectedValue)) {
+            return false;
+        }
+
+        String lua = "" +
+                "if redis.call('get', KEYS[1]) == ARGV[1] then " +
+                "  return redis.call('del', KEYS[1]) " +
+                "else " +
+                "  return 0 " +
+                "end";
+
+        Long result = redisTemplate.execute(
+                RedisScript.of(lua, Long.class),
+                Collections.singletonList(key),
+                expectedValue
+        );
+
+        return result != null && result > 0;
     }
 
     /**
@@ -2014,7 +2031,27 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public boolean renewLock(String key, String expectedValue, long timeout, TimeUnit unit) {
-        return false;
+        if (ObjectUtils.isEmpty(key) || ObjectUtils.isEmpty(expectedValue) || timeout <= 0) {
+            return false;
+        }
+
+        String lua = "" +
+                "if redis.call('get', KEYS[1]) == ARGV[1] then " +
+                "  return redis.call('pexpire', KEYS[1], ARGV[2]) " +
+                "else " +
+                "  return 0 " +
+                "end";
+
+        long millis = unit.toMillis(timeout);
+        Long result = redisTemplate.execute(
+                RedisScript.of(lua, Long.class),
+                Collections.singletonList(key),
+                expectedValue,
+                // 需要是 int 类型
+                (int) millis
+        );
+
+        return result != null && result > 0;
     }
 
     /**
@@ -2028,7 +2065,44 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public boolean lockWithRetry(String key, String value, int retryTimes, long waitMillis) {
+        while (retryTimes-- > 0) {
+            // 默认锁 30 秒
+            if (tryLock(key, value, 30, TimeUnit.SECONDS)) {
+                return true;
+            }
+            try {
+                Thread.sleep(waitMillis);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
         return false;
+    }
+
+    // ------------------ 计数器操作 ------------------
+
+    /**
+     * 执行递增/递减操作的统一私有方法（支持整数和浮点数）
+     *
+     * @param key   Redis 键
+     * @param delta 步长，可以为负值（表示递减）
+     * @return 增加后的数值（Long 或 Double）
+     */
+    private Number doIncrement(String key, Number delta) {
+        if (ObjectUtils.isEmpty(key) || delta == null || redisTemplate == null) {
+            return 0;
+        }
+
+        ValueOperations<String, Object> ops = redisTemplate.opsForValue();
+
+        if (delta instanceof Long) {
+            return ops.increment(key, delta.longValue());
+        } else if (delta instanceof Double) {
+            return ops.increment(key, delta.doubleValue());
+        }
+
+        throw new IllegalArgumentException("Unsupported increment type: " + delta.getClass());
     }
 
     /**
@@ -2039,7 +2113,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public long incr(String key) {
-        return 0;
+        return doIncrement(key, 1L).longValue();
     }
 
     /**
@@ -2051,7 +2125,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public long incrBy(String key, long delta) {
-        return 0;
+        return (delta <= 0) ? 0L : doIncrement(key, delta).longValue();
     }
 
     /**
@@ -2062,7 +2136,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public long decr(String key) {
-        return 0;
+        return doIncrement(key, -1L).longValue();
     }
 
     /**
@@ -2074,7 +2148,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public long decrBy(String key, long delta) {
-        return 0;
+        return (delta <= 0) ? 0L : doIncrement(key, -delta).longValue();
     }
 
     /**
@@ -2086,7 +2160,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public double incrByFloat(String key, double delta) {
-        return 0;
+        return doIncrement(key, delta).doubleValue();
     }
 
     /**
@@ -2098,7 +2172,22 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public double decrByFloat(String key, double delta) {
-        return 0;
+        return doIncrement(key, -delta).doubleValue();
+    }
+
+    // ------------------ 发布订阅 ------------------
+
+    /**
+     * 实际的消息发布逻辑，支持对象序列化。
+     *
+     * @param channel 发布频道
+     * @param message 消息内容
+     */
+    private void doPublish(String channel, Object message) {
+        if (ObjectUtils.isEmpty(channel) || message == null) {
+            return;
+        }
+        redisTemplate.convertAndSend(channel, message);
     }
 
     /**
@@ -2109,7 +2198,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public void publish(String channel, Object message) {
-
+        doPublish(channel, message);
     }
 
     /**
@@ -2121,7 +2210,12 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public void publish(String channel, Object message, long delayMillis) {
-
+        if (delayMillis <= 0) {
+            doPublish(channel, message);
+        } else {
+            Executors.newSingleThreadScheduledExecutor().schedule(() ->
+                    doPublish(channel, message), delayMillis, TimeUnit.MILLISECONDS);
+        }
     }
 
     /**
@@ -2132,61 +2226,7 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public void publishAsync(String channel, Object message) {
-
+        CompletableFuture.runAsync(() -> doPublish(channel, message));
     }
 
-    /**
-     * 订阅指定频道的消息，listener 负责处理接收到的消息。
-     *
-     * @param channel  频道名
-     * @param listener 消息监听器（实现 MessageListener 接口）
-     */
-    @Override
-    public void subscribe(String channel, MessageListener listener) {
-
-    }
-
-    /**
-     * 订阅指定频道消息，支持是否自动确认机制。
-     *
-     * @param channel  频道名
-     * @param listener 消息监听器
-     * @param autoAck  是否自动确认消息（业务相关）
-     */
-    @Override
-    public void subscribe(String channel, MessageListener listener, boolean autoAck) {
-
-    }
-
-    /**
-     * 订阅多个频道消息。
-     *
-     * @param channels 频道名数组
-     * @param listener 消息监听器
-     */
-    @Override
-    public void subscribeMultiple(String[] channels, MessageListener listener) {
-
-    }
-
-    /**
-     * 取消订阅指定频道。
-     *
-     * @param channel  频道名
-     * @param listener 消息监听器
-     */
-    @Override
-    public void unsubscribe(String channel, MessageListener listener) {
-
-    }
-
-    /**
-     * 取消该监听器的所有订阅。
-     *
-     * @param listener 消息监听器
-     */
-    @Override
-    public void unsubscribeAll(MessageListener listener) {
-
-    }
 }

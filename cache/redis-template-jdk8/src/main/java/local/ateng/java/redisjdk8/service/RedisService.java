@@ -1,10 +1,11 @@
 package local.ateng.java.redisjdk8.service;
 
-import org.springframework.data.redis.connection.MessageListener;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -1195,7 +1196,6 @@ public interface RedisService {
      */
     boolean lockWithRetry(String key, String value, int retryTimes, long waitMillis);
 
-
     // ------------------ 计数器操作 ------------------
 
     /**
@@ -1276,45 +1276,5 @@ public interface RedisService {
      * @param message 消息内容
      */
     void publishAsync(String channel, Object message);
-
-    /**
-     * 订阅指定频道的消息，listener 负责处理接收到的消息。
-     *
-     * @param channel  频道名
-     * @param listener 消息监听器（实现 MessageListener 接口）
-     */
-    void subscribe(String channel, MessageListener listener);
-
-    /**
-     * 订阅指定频道消息，支持是否自动确认机制。
-     *
-     * @param channel  频道名
-     * @param listener 消息监听器
-     * @param autoAck  是否自动确认消息（业务相关）
-     */
-    void subscribe(String channel, MessageListener listener, boolean autoAck);
-
-    /**
-     * 订阅多个频道消息。
-     *
-     * @param channels 频道名数组
-     * @param listener 消息监听器
-     */
-    void subscribeMultiple(String[] channels, MessageListener listener);
-
-    /**
-     * 取消订阅指定频道。
-     *
-     * @param channel  频道名
-     * @param listener 消息监听器
-     */
-    void unsubscribe(String channel, MessageListener listener);
-
-    /**
-     * 取消该监听器的所有订阅。
-     *
-     * @param listener 消息监听器
-     */
-    void unsubscribeAll(MessageListener listener);
 
 }
