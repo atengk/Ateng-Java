@@ -108,6 +108,17 @@ public class MyCustomEvent extends ApplicationEvent {
     }
 ```
 
+3. 发布自定义事件
+
+`source` 参数 Spring 强制要求非空，必须传入一个非 `null` 的对象。建议规范写法为：this
+
+```java
+MyCustomEvent event = new MyCustomEvent(this, message);
+ApplicationContext context = SpringUtil.getApplicationContext();
+context.publishEvent(event);
+```
+
+
 
 ## Bean
 
