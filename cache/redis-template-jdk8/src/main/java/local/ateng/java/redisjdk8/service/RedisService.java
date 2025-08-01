@@ -1,5 +1,7 @@
 package local.ateng.java.redisjdk8.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -72,6 +74,16 @@ public interface RedisService {
      * @return 指定类型的对象，可能为 null
      */
     <T> T get(String key, Class<T> clazz);
+
+    /**
+     * 获取缓存值并自动反序列化为指定泛型类型（支持复杂类型，如 List<T>、Map<String, T> 等）。
+     *
+     * @param key           缓存键
+     * @param typeReference 泛型类型引用，用于指定目标类型
+     * @param <T>           泛型类型
+     * @return 指定类型的对象，可能为 null
+     */
+    <T> T get(String key, TypeReference<T> typeReference);
 
     /**
      * 获取缓存值并反序列化为 List 类型

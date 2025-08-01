@@ -1,5 +1,6 @@
 package local.ateng.java.redisjdk8;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import local.ateng.java.redisjdk8.entity.UserInfoEntity;
 import local.ateng.java.redisjdk8.init.InitData;
 import local.ateng.java.redisjdk8.service.RedisService;
@@ -20,16 +21,21 @@ public class RedisServiceTests {
     @Test
     void set() {
         List<UserInfoEntity> list = new InitData().getList();
-        redisService.set("my:user2", list.get(0));
-        redisService.set("my:userList2", list);
+        redisService.set("my:user", list.get(0));
+        redisService.set("my:userList", list);
     }
 
     @Test
     void get() {
-        List<UserInfoEntity> list = new InitData().getList();
         UserInfoEntity user = redisService.get("my:user", UserInfoEntity.class);
         List<UserInfoEntity> userList = redisService.get("my:userList", List.class);
         System.out.println(user.getClass());
+        System.out.println(userList.get(0).getClass());
+    }
+
+    @Test
+    void getTypeReference() {
+        List<UserInfoEntity> userList = redisService.get("my:userList", new TypeReference<List<UserInfoEntity>>() {});
         System.out.println(userList.get(0).getClass());
     }
 

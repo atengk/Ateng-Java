@@ -1,8 +1,9 @@
 package local.ateng.java.redisjdk8.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import local.ateng.java.redisjdk8.service.RedisService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.DataType;
 import org.springframework.data.redis.core.*;
@@ -28,12 +29,19 @@ import java.util.stream.Collectors;
  * @since 2025-07-31
  */
 @Service
-@RequiredArgsConstructor
 public class RedisServiceImpl implements RedisService {
 
-    @Qualifier("redisTemplate")
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
+
+    public RedisServiceImpl(
+            @Qualifier("jacksonRedisTemplate")
+            RedisTemplate<String, Object> redisTemplate,
+            ObjectMapper objectMapper
+    ) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+    }
 
     /**
      * 设置值（无过期时间）
@@ -92,12 +100,41 @@ public class RedisServiceImpl implements RedisService {
     @Override
     public <T> T get(String key, Class<T> clazz) {
         Object value = redisTemplate.opsForValue().get(key);
-        if (value == null) {
-            return null;
-        }
         return convertValue(value, clazz);
     }
 
+    /**
+     * 获取缓存值并自动反序列化为指定泛型类型（支持复杂类型，如 List<T>、Map<String, T> 等）。
+     *
+     * @param key           缓存键
+     * @param typeReference 泛型类型引用，用于指定目标类型
+     * @param <T>           泛型类型
+     * @return 指定类型的对象，可能为 null
+     */
+    @Override
+    public <T> T get(String key, TypeReference<T> typeReference) {
+        Object rawValue = redisTemplate.opsForValue().get(key);
+        if (rawValue == null) {
+            return null;
+        }
+
+        try {
+            // 尽可能避免类型转换失败，通过中转 JSON 字符串再反序列化为指定类型
+            String json = objectMapper.writeValueAsString(rawValue);
+            return objectMapper.readValue(json, typeReference);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("反序列化 Redis 中 key [" + key + "] 的值失败，原因：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 获取缓存值并反序列化为 List 类型
+     *
+     * @param key   缓存键
+     * @param clazz 列表中元素的类型
+     * @param <T>   泛型类型
+     * @return 列表对象，可能为空
+     */
     @SuppressWarnings("unchecked")
     @Override
     public <T> List<T> getList(String key, Class<T> clazz) {
@@ -155,11 +192,7 @@ public class RedisServiceImpl implements RedisService {
 
         List<T> result = new ArrayList<>(values.size());
         for (Object value : values) {
-            if (value == null) {
-                result.add(null);
-            } else {
-                result.add(convertValue(value, clazz));
-            }
+            result.add(convertValue(value, clazz));
         }
 
         return result;
@@ -188,9 +221,6 @@ public class RedisServiceImpl implements RedisService {
     @Override
     public <T> T getAndSet(String key, Object newValue, Class<T> clazz) {
         Object oldValue = redisTemplate.opsForValue().getAndSet(key, newValue);
-        if (oldValue == null) {
-            return null;
-        }
         return convertValue(oldValue, clazz);
     }
 
@@ -1031,9 +1061,6 @@ public class RedisServiceImpl implements RedisService {
             return null;
         }
         Object value = redisTemplate.opsForList().leftPop(key);
-        if (value == null) {
-            return null;
-        }
         return convertValue(value, clazz);
     }
 
@@ -1064,9 +1091,6 @@ public class RedisServiceImpl implements RedisService {
             return null;
         }
         Object value = redisTemplate.opsForList().rightPop(key);
-        if (value == null) {
-            return null;
-        }
         return convertValue(value, clazz);
     }
 
@@ -1154,9 +1178,6 @@ public class RedisServiceImpl implements RedisService {
             return null;
         }
         Object value = redisTemplate.opsForList().index(key, index);
-        if (value == null) {
-            return null;
-        }
         return convertValue(value, clazz);
     }
 
@@ -1393,13 +1414,7 @@ public class RedisServiceImpl implements RedisService {
             return collection;
         }
         for (Object o : source) {
-            if (o == null) {
-                collection.add(null);
-            } else if (clazz.isInstance(o)) {
-                collection.add(clazz.cast(o));
-            } else {
-                collection.add(convertValue(o, clazz));
-            }
+            collection.add(convertValue(o, clazz));
         }
         return collection;
     }
