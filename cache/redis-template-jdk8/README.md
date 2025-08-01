@@ -37,21 +37,20 @@ RedisTemplate 是 Spring Data Redis 提供的一个核心类，用于操作 Redi
 ---
 # Redis的相关配置
 spring:
-  data:
-    redis:
-      host: 192.168.1.10 # Redis服务器地址
-      database: 102 # Redis数据库索引（默认为0）
-      port: 42784 # Redis服务器连接端口
-      password: Admin@123 # Redis服务器连接密码（默认为空）
-      client-type: lettuce  # 默认使用Lettuce作为Redis客户端
-      lettuce:
-        pool:
-          max-active: 100 # 连接池最大连接数（使用负值表示没有限制）
-          max-wait: -1s # 连接池最大阻塞等待时间（使用负值表示没有限制）
-          max-idle: 100 # 连接池中的最大空闲连接
-          min-idle: 0 # 连接池最小空闲连接数
-          time-between-eviction-runs: 1s # 空闲对象逐出器线程的运行间隔时间.空闲连接线程释放周期时间
-      timeout: 5000ms # 连接超时时间（毫秒）
+  redis:
+    host: 175.178.193.128 # Redis服务器地址
+    database: 1 # Redis数据库索引（默认为0）
+    port: 20045 # Redis服务器连接端口
+    password: Admin@123 # Redis服务器连接密码（默认为空）
+    client-type: lettuce  # 默认使用Lettuce作为Redis客户端
+    lettuce:
+      pool:
+        max-active: 100 # 连接池最大连接数（使用负值表示没有限制）
+        max-wait: -1s # 连接池最大阻塞等待时间（使用负值表示没有限制）
+        max-idle: 100 # 连接池中的最大空闲连接
+        min-idle: 0 # 连接池最小空闲连接数
+        time-between-eviction-runs: 1s # 空闲对象逐出器线程的运行间隔时间.空闲连接线程释放周期时间
+    timeout: 5000ms # 连接超时时间（毫秒）
 ```
 
 
@@ -65,6 +64,53 @@ spring:
 ### 使用 Jackson 序列化
 
 Spring Boot 默认集成的 Jackson 序列化库也可以用来做 Redis 序列化。具体来说，就是可以通过 `Jackson2JsonRedisSerializer` 来进行对象的 JSON 序列化和反序列化。
+
+#### 配置序列化和反序列化（最小化版）
+
+最小化配置序列化， 如需详细的自定义配置序列化参考下面的步骤。
+
+```java
+@Configuration
+public class RedisTemplateConfig {
+
+    @Bean
+    public RedisTemplate<String, Object> jacksonRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        // 设置 Key 序列化器
+        StringRedisSerializer keySerializer = new StringRedisSerializer();
+        template.setKeySerializer(keySerializer);
+        template.setHashKeySerializer(keySerializer);
+
+        // 创建 ObjectMapper 实例，用于 JSON 序列化和反序列化
+        ObjectMapper objectMapper = new ObjectMapper();
+        // 注册 JavaTimeModule 模块，支持 Java 8 日期时间类型（如 LocalDateTime、LocalDate）
+        objectMapper.registerModule(new JavaTimeModule());
+        // 禁用将日期写为时间戳，改为标准 ISO-8601 字符串格式（如 "2025-08-01T15:30:00"）
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        // 启用默认类型信息，解决反序列化时无法恢复原始对象类型的问题（类似 fastjson 的 @type）
+        objectMapper.activateDefaultTyping(
+                // - 使用 LaissezFaireSubTypeValidator：一个宽松的子类型校验器
+                LaissezFaireSubTypeValidator.instance,
+                // - DefaultTyping.NON_FINAL：仅对非 final 类型（如 Object、List、Map、自定义类）启用类型信息
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                // - JsonTypeInfo.As.PROPERTY：将类型信息作为 JSON 属性（字段）存储
+                JsonTypeInfo.As.PROPERTY
+        );
+
+        // 设置 Value 序列化器
+        GenericJackson2JsonRedisSerializer valueSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+        template.setValueSerializer(valueSerializer);
+        template.setHashValueSerializer(valueSerializer);
+
+        template.afterPropertiesSet();
+        return template;
+    }
+}
+```
+
+
 
 #### 配置序列化和反序列化
 
@@ -326,10 +372,43 @@ public class RedisTemplateConfig {
 <!-- Spring 中集成 Fastjson2 -->
 <dependency>
     <groupId>com.alibaba.fastjson2</groupId>
-    <artifactId>fastjson2-extension-spring6</artifactId>
+    <artifactId>fastjson2-extension-spring5</artifactId>
     <version>${fastjson2.version}</version>
 </dependency>
 ```
+
+#### 配置序列化和反序列化（最小化版）
+
+最小化配置序列化， 如需详细的自定义配置序列化参考下面的步骤。
+
+```java
+@Configuration
+public class RedisTemplateConfig {
+
+    @Bean
+    public RedisTemplate<String, Object> fastjson2RedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        // 设置 Key 序列化器
+        StringRedisSerializer keySerializer = new StringRedisSerializer();
+        template.setKeySerializer(keySerializer);
+        template.setHashKeySerializer(keySerializer);
+
+        // 设置 Value 序列化器
+        GenericFastJsonRedisSerializer valueSerializer = new GenericFastJsonRedisSerializer();
+        template.setValueSerializer(valueSerializer);
+        template.setHashValueSerializer(valueSerializer);
+
+        template.afterPropertiesSet();
+        return template;
+    }
+
+
+}
+```
+
+
 
 #### 配置序列化器
 
@@ -493,22 +572,21 @@ public class RedisTemplateConfig {
 ---
 # Redis的相关配置
 spring:
-  data:
-    # ...
-    redis-dev:
-      host: 192.168.1.10 # Redis服务器地址
-      database: 101 # Redis数据库索引（默认为0）
-      port: 42784 # Redis服务器连接端口
-      password: Admin@123 # Redis服务器连接密码（默认为空）
-      client-type: lettuce  # 默认使用Lettuce作为Redis客户端
-      lettuce:
-        pool:
-          max-active: 100 # 连接池最大连接数（使用负值表示没有限制）
-          max-wait: -1s # 连接池最大阻塞等待时间（使用负值表示没有限制）
-          max-idle: 100 # 连接池中的最大空闲连接
-          min-idle: 0 # 连接池最小空闲连接数
-          time-between-eviction-runs: 1s # 空闲对象逐出器线程的运行间隔时间.空闲连接线程释放周期时间
-      timeout: 10000ms # 连接超时时间（毫秒）
+  # ...
+  redis-dev:
+    host: 192.168.1.10 # Redis服务器地址
+    database: 101 # Redis数据库索引（默认为0）
+    port: 42784 # Redis服务器连接端口
+    password: Admin@123 # Redis服务器连接密码（默认为空）
+    client-type: lettuce  # 默认使用Lettuce作为Redis客户端
+    lettuce:
+      pool:
+        max-active: 100 # 连接池最大连接数（使用负值表示没有限制）
+        max-wait: -1s # 连接池最大阻塞等待时间（使用负值表示没有限制）
+        max-idle: 100 # 连接池中的最大空闲连接
+        min-idle: 0 # 连接池最小空闲连接数
+        time-between-eviction-runs: 1s # 空闲对象逐出器线程的运行间隔时间.空闲连接线程释放周期时间
+    timeout: 10000ms # 连接超时时间（毫秒）
 ```
 
 ### 添加配置属性
@@ -520,7 +598,7 @@ spring:
  * @author 孔余
  * @since 2024-01-18 11:02
  */
-@ConfigurationProperties(prefix = "spring.data")
+@ConfigurationProperties(prefix = "spring")
 @Configuration
 @Data
 public class MyRedisProperties {
@@ -1936,5 +2014,16 @@ if redis.call('SCARD', KEYS[1]) > tonumber(ARGV[2]) then
     redis.call('SPOP', KEYS[1])  -- 随机踢出一个
 end
 return added
+```
+
+
+
+## RedisService
+
+提供了常用的服务类，详情见代码：
+
+```
+RedisService：local.ateng.java.redisjdk8.service.RedisService
+RedisServiceImpl:local.ateng.java.redisjdk8.service.impl.RedisServiceImpl
 ```
 
