@@ -58,6 +58,16 @@ public interface RedisService {
     <T> T convertValue(Object value, Class<T> clazz);
 
     /**
+     * 类型转换工具方法：将 Object 转换为指定类型
+     *
+     * @param value         原始对象
+     * @param typeReference 目标类型引用（支持泛型）
+     * @param <T>           目标类型泛型
+     * @return 转换后的对象，失败返回 null
+     */
+    <T> T convertValue(Object value, TypeReference<T> typeReference);
+
+    /**
      * 获取缓存值（Object 原始类型）
      *
      * @param key 缓存键

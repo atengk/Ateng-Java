@@ -1,6 +1,5 @@
 package local.ateng.java.redisjdk8.service.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import local.ateng.java.redisjdk8.service.RedisService;
@@ -113,18 +112,8 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public <T> T get(String key, TypeReference<T> typeReference) {
-        Object rawValue = redisTemplate.opsForValue().get(key);
-        if (rawValue == null) {
-            return null;
-        }
-
-        try {
-            // 尽可能避免类型转换失败，通过中转 JSON 字符串再反序列化为指定类型
-            String json = objectMapper.writeValueAsString(rawValue);
-            return objectMapper.readValue(json, typeReference);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("反序列化 Redis 中 key [" + key + "] 的值失败，原因：" + e.getMessage(), e);
-        }
+        Object value = redisTemplate.opsForValue().get(key);
+        return convertValue(value, typeReference);
     }
 
     /**
@@ -295,13 +284,40 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public <T> T convertValue(Object value, Class<T> clazz) {
-        if (value == null) {
+        if (value == null || clazz == null) {
             return null;
         }
         if (clazz.isInstance(value)) {
             return clazz.cast(value);
         }
         return objectMapper.convertValue(value, clazz);
+    }
+
+    /**
+     * 类型转换工具方法：将 Object 转换为指定类型
+     *
+     * @param value         原始对象
+     * @param typeReference 目标类型引用（支持泛型）
+     * @param <T>           目标类型泛型
+     * @return 转换后的对象，失败返回 null
+     */
+    @Override
+    public <T> T convertValue(Object value, TypeReference<T> typeReference) {
+        if (value == null || typeReference == null || typeReference.getType() == null) {
+            return null;
+        }
+
+        try {
+            @SuppressWarnings("unchecked")
+            T casted = (T) value;
+            return casted;
+        } catch (ClassCastException e) {
+            try {
+                return objectMapper.convertValue(value, typeReference);
+            } catch (IllegalArgumentException ex) {
+                return null;
+            }
+        }
     }
 
     /**
