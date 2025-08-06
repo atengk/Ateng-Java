@@ -22,6 +22,10 @@ public final class FileUtil {
      * 缓冲区大小
      */
     private static final int BUFFER_SIZE = 8192;
+    /**
+     * 扩展名前的点
+     */
+    private static final String EXTENSION_DOT = ".";
 
     /**
      * 禁止实例化工具类
@@ -84,7 +88,9 @@ public final class FileUtil {
      * @return 相对路径（baseDir.relativize(target)）
      */
     public static Path getRelativizeSafely(Path baseDir, Path target) {
-        if (baseDir == null || target == null) return null;
+        if (baseDir == null || target == null) {
+            return null;
+        }
         Path absBase = baseDir.toAbsolutePath().normalize();
         Path absTarget = target.toAbsolutePath().normalize();
 
@@ -103,7 +109,9 @@ public final class FileUtil {
      * @return 文件名
      */
     public static String getFileName(Path path) {
-        if (path == null) return "";
+        if (path == null) {
+            return "";
+        }
         Path fileName = path.getFileName();
         return fileName != null ? fileName.toString() : "";
     }
@@ -115,13 +123,240 @@ public final class FileUtil {
      * @return 扩展名（无点），没有则返回空串
      */
     public static String getFileExtension(Path path) {
-        if (path == null) return "";
-        String fileName = getFileName(path);
-        int index = fileName.lastIndexOf(".");
-        if (index > 0 && index < fileName.length() - 1) {
-            return fileName.substring(index + 1);
+        if (path == null) {
+            return "";
         }
-        return "";
+        String fileName = getFileName(path);
+        return getFileExtension(fileName);
+    }
+
+    /**
+     * 获取文件类型（即扩展名，如 txt、jpg）
+     *
+     * @param path 文件路径
+     * @return 扩展名（不带点），没有则返回空串
+     */
+    public static String getFileExtension(String path) {
+        return getFileExtension(path, false);
+    }
+
+    /**
+     * 获取文件类型（即扩展名，如 txt、jpg 或 .txt、.jpg）
+     *
+     * @param path 文件路径字符串
+     * @param withDot 是否包含“.”前缀
+     * @return 扩展名（根据参数控制是否带点），没有则返回空串
+     */
+    public static String getFileExtension(String path, boolean withDot) {
+        if (path == null || path.trim().isEmpty()) {
+            return "";
+        }
+
+        String fileName = new File(path).getName();
+        int index = fileName.lastIndexOf(EXTENSION_DOT);
+
+        // 没有 . 或 . 在开头（隐藏文件）或 . 是最后一个字符，说明无扩展名
+        if (index <= 0 || index == fileName.length() - 1) {
+            return "";
+        }
+
+        return withDot ? fileName.substring(index) : fileName.substring(index + 1);
+    }
+
+    /**
+     * 根据文件扩展名获取大致文件类型分类（如 image、video、audio、text、application 等）
+     *
+     * @param fileExtension 文件扩展名（可以带点或不带点，大小写不敏感）
+     * @return 文件大类（如 image、video、audio、text、application、archive 等），无法识别则返回 "unknown"
+     */
+    public static String getMimeCategory(String fileExtension) {
+        if (fileExtension == null || fileExtension.trim().isEmpty()) {
+            return "unknown";
+        }
+
+        // 去除开头的点并转换为小写
+        String ext = fileExtension.trim().toLowerCase();
+        if (ext.startsWith(EXTENSION_DOT)) {
+            ext = ext.substring(1);
+        }
+
+        switch (ext) {
+            // 图片
+            case "jpg": case "jpeg": case "png": case "gif": case "bmp":
+            case "webp": case "tiff": case "ico": case "svg":
+                return "image";
+
+            // 视频
+            case "mp4": case "avi": case "mov": case "wmv": case "flv":
+            case "mkv": case "webm": case "3gp": case "mpeg":
+                return "video";
+
+            // 音频
+            case "mp3": case "wav": case "aac": case "flac": case "ogg":
+            case "wma": case "m4a": case "amr":
+                return "audio";
+
+            // 文本
+            case "txt": case "csv": case "log": case "md": case "json":
+            case "xml": case "yaml": case "yml": case "ini":
+                return "text";
+
+            // 文档
+            case "doc": case "docx": case "xls": case "xlsx":
+            case "ppt": case "pptx": case "pdf": case "odt":
+            case "ods": case "odp":
+                return "document";
+
+            // 压缩包
+            case "zip": case "rar": case "7z": case "tar":
+            case "gz": case "bz2": case "xz": case "iso":
+                return "archive";
+
+            // 可执行文件
+            case "exe": case "msi": case "bat": case "sh":
+            case "apk": case "jar": case "bin": case "cmd":
+                return "executable";
+
+            // 编程代码
+            case "java": case "py": case "js": case "ts": case "html":
+            case "css": case "cpp": case "c": case "h": case "go":
+            case "rs": case "php": case "rb": case "sql": case "kt":
+                return "code";
+
+            // 应用类型
+            case "swf": case "xhtml": case "xsd": case "wsdl":
+            case "psd": case "ai": case "sketch":
+                return "application";
+
+            default:
+                return "unknown";
+        }
+    }
+
+    /**
+     * 根据文件扩展名获取 MIME 类型（不含点），不区分大小写
+     *
+     * @param fileExtension 文件扩展名（如 "jpg", "txt"），无需带点
+     * @return MIME 类型，未知类型返回 "application/octet-stream"
+     */
+    public static String getMimeType(String fileExtension) {
+        if (fileExtension == null || fileExtension.trim().isEmpty()) {
+            return "application/octet-stream";
+        }
+
+        String ext = fileExtension.trim().toLowerCase();
+
+        switch (ext) {
+            // 文本
+            case "txt":
+                return "text/plain";
+            case "csv":
+                return "text/csv";
+            case "html":
+            case "htm":
+                return "text/html";
+            case "xml":
+                return "application/xml";
+            case "json":
+                return "application/json";
+
+            // 图片
+            case "jpg":
+            case "jpeg":
+                return "image/jpeg";
+            case "png":
+                return "image/png";
+            case "gif":
+                return "image/gif";
+            case "bmp":
+                return "image/bmp";
+            case "webp":
+                return "image/webp";
+            case "svg":
+                return "image/svg+xml";
+            case "ico":
+                return "image/x-icon";
+
+            // 文档
+            case "pdf":
+                return "application/pdf";
+            case "doc":
+                return "application/msword";
+            case "docx":
+                return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "xls":
+                return "application/vnd.ms-excel";
+            case "xlsx":
+                return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "ppt":
+                return "application/vnd.ms-powerpoint";
+            case "pptx":
+                return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case "rtf":
+                return "application/rtf";
+
+            // 压缩包
+            case "zip":
+                return "application/zip";
+            case "rar":
+                return "application/x-rar-compressed";
+            case "7z":
+                return "application/x-7z-compressed";
+            case "gz":
+                return "application/gzip";
+            case "tar":
+                return "application/x-tar";
+
+            // 音频
+            case "mp3":
+                return "audio/mpeg";
+            case "wav":
+                return "audio/wav";
+            case "ogg":
+                return "audio/ogg";
+            case "m4a":
+                return "audio/mp4";
+
+            // 视频
+            case "mp4":
+                return "video/mp4";
+            case "avi":
+                return "video/x-msvideo";
+            case "mov":
+                return "video/quicktime";
+            case "mkv":
+                return "video/x-matroska";
+            case "webm":
+                return "video/webm";
+            case "flv":
+                return "video/x-flv";
+
+            // 字体
+            case "ttf":
+                return "font/ttf";
+            case "otf":
+                return "font/otf";
+            case "woff":
+                return "font/woff";
+            case "woff2":
+                return "font/woff2";
+
+            // 脚本与代码
+            case "js":
+                return "application/javascript";
+            case "css":
+                return "text/css";
+            case "java":
+                return "text/x-java-source";
+            case "py":
+                return "text/x-python";
+            case "json5":
+                return "application/json";
+
+            // 默认
+            default:
+                return "application/octet-stream";
+        }
     }
 
     /**
@@ -149,7 +384,9 @@ public final class FileUtil {
      * @return true 表示 child 在 parent 内部
      */
     public static boolean isSubPath(Path parent, Path child) {
-        if (parent == null || child == null) return false;
+        if (parent == null || child == null) {
+            return false;
+        }
 
         Path normParent = parent.toAbsolutePath().normalize();
         Path normChild = child.toAbsolutePath().normalize();
@@ -174,7 +411,9 @@ public final class FileUtil {
      * @return 去掉扩展名的路径字符串
      */
     public static String getPathWithoutExtension(Path path) {
-        if (path == null) return "";
+        if (path == null) {
+            return "";
+        }
         String fileName = getFileName(path);
         int index = fileName.lastIndexOf(".");
         return index > 0 ? fileName.substring(0, index) : fileName;
@@ -318,7 +557,8 @@ public final class FileUtil {
         if (!Files.isDirectory(tempDir)) {
             throw new IOException("不是有效的临时目录：" + tempDir);
         }
-        deleteRecursively(tempDir, maxDeleteFileCount); // 复用安全递归删除
+        // 复用安全递归删除
+        deleteRecursively(tempDir, maxDeleteFileCount);
     }
 
     /**
@@ -390,7 +630,8 @@ public final class FileUtil {
 
             // 递归删除
             try (Stream<Path> walk = Files.walk(path)) {
-                walk.sorted((a, b) -> b.compareTo(a)) // 从子目录往上删
+                // 从子目录往上删
+                walk.sorted((a, b) -> b.compareTo(a))
                         .forEach(p -> {
                             try {
                                 Files.deleteIfExists(p);
@@ -756,7 +997,9 @@ public final class FileUtil {
      */
     public static Map<Path, InputStream> openInputStreams(List<Path> paths) throws IOException {
         Map<Path, InputStream> streamMap = new LinkedHashMap<>();
-        if (paths == null || paths.isEmpty()) return streamMap;
+        if (paths == null || paths.isEmpty()) {
+            return streamMap;
+        }
 
         for (Path path : paths) {
             if (Files.exists(path) && Files.isRegularFile(path)) {
@@ -777,7 +1020,9 @@ public final class FileUtil {
      */
     public static Map<Path, OutputStream> openOutputStreams(List<Path> paths) throws IOException {
         Map<Path, OutputStream> streamMap = new LinkedHashMap<>();
-        if (paths == null || paths.isEmpty()) return streamMap;
+        if (paths == null || paths.isEmpty()) {
+            return streamMap;
+        }
 
         for (Path path : paths) {
             streamMap.put(path, openOutputStream(path));
@@ -794,7 +1039,9 @@ public final class FileUtil {
      */
     public static Map<Path, OutputStream> openAppendStreams(List<Path> paths) throws IOException {
         Map<Path, OutputStream> streamMap = new LinkedHashMap<>();
-        if (paths == null || paths.isEmpty()) return streamMap;
+        if (paths == null || paths.isEmpty()) {
+            return streamMap;
+        }
 
         for (Path path : paths) {
             streamMap.put(path, openAppendStream(path));
@@ -808,7 +1055,9 @@ public final class FileUtil {
      * @param streams 输入/输出流集合
      */
     public static void closeStreams(Collection<? extends Closeable> streams) {
-        if (streams == null) return;
+        if (streams == null) {
+            return;
+        }
         for (Closeable stream : streams) {
             if (stream != null) {
                 try {

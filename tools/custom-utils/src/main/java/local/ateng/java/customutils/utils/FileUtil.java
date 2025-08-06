@@ -22,6 +22,10 @@ public final class FileUtil {
      * 缓冲区大小
      */
     private static final int BUFFER_SIZE = 8192;
+    /**
+     * 扩展名前的点
+     */
+    private static final String EXTENSION_DOT = ".";
 
     /**
      * 禁止实例化工具类
@@ -123,21 +127,110 @@ public final class FileUtil {
             return "";
         }
         String fileName = getFileName(path);
-        int index = fileName.lastIndexOf(".");
-        if (index > 0 && index < fileName.length() - 1) {
-            return fileName.substring(index + 1);
-        }
-        return "";
+        return getFileExtension(fileName);
     }
 
     /**
      * 获取文件类型（即扩展名，如 txt、jpg）
      *
      * @param path 文件路径
-     * @return 扩展名（无点），没有则返回空串
+     * @return 扩展名（不带点），没有则返回空串
      */
     public static String getFileExtension(String path) {
-        return getFileExtension(Paths.get(path));
+        return getFileExtension(path, false);
+    }
+
+    /**
+     * 获取文件类型（即扩展名，如 txt、jpg 或 .txt、.jpg）
+     *
+     * @param path 文件路径字符串
+     * @param withDot 是否包含“.”前缀
+     * @return 扩展名（根据参数控制是否带点），没有则返回空串
+     */
+    public static String getFileExtension(String path, boolean withDot) {
+        if (path == null || path.trim().isEmpty()) {
+            return "";
+        }
+
+        String fileName = new File(path).getName();
+        int index = fileName.lastIndexOf(EXTENSION_DOT);
+
+        // 没有 . 或 . 在开头（隐藏文件）或 . 是最后一个字符，说明无扩展名
+        if (index <= 0 || index == fileName.length() - 1) {
+            return "";
+        }
+
+        return withDot ? fileName.substring(index) : fileName.substring(index + 1);
+    }
+
+    /**
+     * 根据文件扩展名获取大致文件类型分类（如 image、video、audio、text、application 等）
+     *
+     * @param fileExtension 文件扩展名（可以带点或不带点，大小写不敏感）
+     * @return 文件大类（如 image、video、audio、text、application、archive 等），无法识别则返回 "unknown"
+     */
+    public static String getMimeCategory(String fileExtension) {
+        if (fileExtension == null || fileExtension.trim().isEmpty()) {
+            return "unknown";
+        }
+
+        // 去除开头的点并转换为小写
+        String ext = fileExtension.trim().toLowerCase();
+        if (ext.startsWith(EXTENSION_DOT)) {
+            ext = ext.substring(1);
+        }
+
+        switch (ext) {
+            // 图片
+            case "jpg": case "jpeg": case "png": case "gif": case "bmp":
+            case "webp": case "tiff": case "ico": case "svg":
+                return "image";
+
+            // 视频
+            case "mp4": case "avi": case "mov": case "wmv": case "flv":
+            case "mkv": case "webm": case "3gp": case "mpeg":
+                return "video";
+
+            // 音频
+            case "mp3": case "wav": case "aac": case "flac": case "ogg":
+            case "wma": case "m4a": case "amr":
+                return "audio";
+
+            // 文本
+            case "txt": case "csv": case "log": case "md": case "json":
+            case "xml": case "yaml": case "yml": case "ini":
+                return "text";
+
+            // 文档
+            case "doc": case "docx": case "xls": case "xlsx":
+            case "ppt": case "pptx": case "pdf": case "odt":
+            case "ods": case "odp":
+                return "document";
+
+            // 压缩包
+            case "zip": case "rar": case "7z": case "tar":
+            case "gz": case "bz2": case "xz": case "iso":
+                return "archive";
+
+            // 可执行文件
+            case "exe": case "msi": case "bat": case "sh":
+            case "apk": case "jar": case "bin": case "cmd":
+                return "executable";
+
+            // 编程代码
+            case "java": case "py": case "js": case "ts": case "html":
+            case "css": case "cpp": case "c": case "h": case "go":
+            case "rs": case "php": case "rb": case "sql": case "kt":
+                return "code";
+
+            // 应用类型
+            case "swf": case "xhtml": case "xsd": case "wsdl":
+            case "psd": case "ai": case "sketch":
+                return "application";
+
+            default:
+                return "unknown";
+        }
     }
 
     /**

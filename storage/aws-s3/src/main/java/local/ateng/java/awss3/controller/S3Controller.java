@@ -26,6 +26,8 @@ public class S3Controller {
 
     @PostMapping("/uploadFile")
     public ResponseEntity<Void> uploadFile(MultipartFile file, String key) {
+        String path = s3Service.generateKey(file.getOriginalFilename());
+        System.out.println(path);
         s3Service.uploadFile(key, file);
         return ResponseEntity.noContent().build();
     }

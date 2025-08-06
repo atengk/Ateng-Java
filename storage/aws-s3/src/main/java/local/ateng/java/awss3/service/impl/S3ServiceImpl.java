@@ -2,6 +2,7 @@ package local.ateng.java.awss3.service.impl;
 
 import local.ateng.java.awss3.config.S3Properties;
 import local.ateng.java.awss3.service.S3Service;
+import local.ateng.java.awss3.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -65,6 +68,27 @@ public class S3ServiceImpl implements S3Service {
             }
             return baos.toByteArray();
         }
+    }
+
+    /**
+     * 根据原始文件名生成唯一的 S3 Key，结构如：
+     * upload/202508/uuid.jpg
+     *
+     * @param originalFilename 原始文件名（如 "test.jpg"）
+     * @return S3 key（如 "upload/202508/1cc2fa37-bdf3-4fbe-a7a4-83c07b803c8e.jpg"）
+     */
+    @Override
+    public String generateKey(String originalFilename) {
+        // 日期路径：202508
+        String datePath = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+
+        // UUID 文件名（保留原后缀）
+        String suffix = FileUtil.getFileExtension(originalFilename, true);
+        String mimeCategory = FileUtil.getMimeCategory(suffix);
+
+        String uuid = UUID.randomUUID().toString();
+
+        return String.format("upload/%s/%s/%s%s", mimeCategory, datePath, uuid, suffix);
     }
 
     /**
@@ -136,6 +160,25 @@ public class S3ServiceImpl implements S3Service {
         PutObjectRequest request = PutObjectRequest.builder().bucket(s3Properties.getBucketName()).key(key).build();
 
         s3Client.putObject(request, RequestBody.fromFile(file));
+    }
+
+    /**
+     * 上传 MultipartFile 文件到 S3，生成默认路径
+     *
+     * @param multipartFile Multipart 文件对象
+     * @return 上传后的地址
+     */
+    @Override
+    public String uploadFile(MultipartFile multipartFile) {
+        String path = generateKey(multipartFile.getOriginalFilename());
+        try {
+            PutObjectRequest request = PutObjectRequest.builder().bucket(s3Properties.getBucketName()).key(path).contentType(multipartFile.getContentType()).build();
+
+            s3Client.putObject(request, RequestBody.fromInputStream(multipartFile.getInputStream(), multipartFile.getSize()));
+        } catch (IOException e) {
+            throw new RuntimeException("上传失败: " + e.getMessage(), e);
+        }
+        return path;
     }
 
     /**

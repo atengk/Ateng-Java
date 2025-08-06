@@ -34,6 +34,15 @@ public interface S3Service {
     byte[] toByteArray(InputStream inputStream) throws IOException;
 
     /**
+     * 根据原始文件名生成唯一的 S3 Key，结构如：
+     * upload/202508/uuid.jpg
+     *
+     * @param originalFilename 原始文件名（如 "test.jpg"）
+     * @return S3 key（如 "upload/202508/1cc2fa37-bdf3-4fbe-a7a4-83c07b803c8e.jpg"）
+     */
+    String generateKey(String originalFilename);
+
+    /**
      * 上传文件到 S3（通过 InputStream）
      *
      * @param key         文件路径
@@ -67,6 +76,14 @@ public interface S3Service {
      * @param file 本地文件对象
      */
     void uploadFile(String key, File file);
+
+    /**
+     * 上传 MultipartFile 文件到 S3，生成默认路径
+     *
+     * @param multipartFile Multipart 文件对象
+     * @return 上传后的地址
+     */
+    String uploadFile(MultipartFile multipartFile);
 
     /**
      * 上传 MultipartFile 文件到 S3
