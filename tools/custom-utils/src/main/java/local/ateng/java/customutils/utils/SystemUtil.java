@@ -18,12 +18,12 @@ import java.util.TimeZone;
  * @author Ateng
  * @since 2025-07-30
  */
-public final class SystemUtils {
+public final class SystemUtil {
 
     /**
      * 禁止实例化工具类
      */
-    private SystemUtils() {
+    private SystemUtil() {
         throw new UnsupportedOperationException("工具类不可实例化");
     }
 
