@@ -310,6 +310,24 @@ public final class JsonUtil {
     }
 
     /**
+     * 将 JSON 字符串转换为 Bean 对象
+     *
+     * @param json JSON 字符串
+     * @param <T>  类型参数
+     * @return 转换后的 Bean，失败返回 null
+     */
+    public static <T> T toBean(String json, Class<T> clazz) {
+        if (json == null || json.isEmpty() || clazz == null) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, clazz);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 将 JSON 字符串转换为 List 对象
      *
      * @param json        JSON 字符串
