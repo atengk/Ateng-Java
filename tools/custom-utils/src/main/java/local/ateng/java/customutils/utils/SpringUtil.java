@@ -7,9 +7,19 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.*;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.env.Environment;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import javax.servlet.ServletContext;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 import java.lang.annotation.Annotation;
+import java.lang.management.ManagementFactory;
 import java.util.Map;
 
 /**
@@ -36,13 +46,18 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
     private static ApplicationEventPublisher publisher;
 
     /**
+     * 未知标识常量
+     */
+    private static final String UNKNOWN = "unknown";
+
+    /**
      * 设置 Spring 上下文（由 Spring 自动调用）
      *
      * @param applicationContext Spring 上下文
      * @throws BeansException 设置异常
      */
     @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+    public void setApplicationContext(@NonNull ApplicationContext applicationContext) throws BeansException {
         if (SpringUtil.context == null) {
             SpringUtil.context = applicationContext;
         }
@@ -57,7 +72,7 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
      * @param applicationEventPublisher Spring 提供的事件发布器
      */
     @Override
-    public void setApplicationEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
+    public void setApplicationEventPublisher(@NonNull ApplicationEventPublisher applicationEventPublisher) {
         if (SpringUtil.publisher == null) {
             SpringUtil.publisher = applicationEventPublisher;
         }
@@ -201,6 +216,71 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
             }
         }
         return false;
+    }
+
+    /**
+     * 获取当前服务端口号（server.port）
+     *
+     * @return 服务端口号，默认为 8080
+     */
+    public static int getServerPort() {
+        return getEnvironment().getProperty("server.port", Integer.class, 8080);
+    }
+
+    /**
+     * 获取上下文路径（server.servlet.context-path）
+     *
+     * @return 上下文路径，未设置则返回空串
+     */
+    public static String getContextPath() {
+        return getEnvironment().getProperty("server.servlet.context-path", "");
+    }
+
+    /**
+     * 获取指定 logger 的日志级别（如 logging.level.com.example=DEBUG）
+     *
+     * @param loggerName 日志名称（如 com.example）
+     * @return 对应日志级别（如 DEBUG、INFO），找不到返回 null
+     */
+    public static String getLogLevel(String loggerName) {
+        return getEnvironment().getProperty("logging.level." + loggerName);
+    }
+
+    /**
+     * 获取当前 Spring Boot 应用的名称（spring.application.name）
+     *
+     * @return 应用名称，若未配置则返回 null
+     */
+    public static String getAppName() {
+        return getEnvironment().getProperty("spring.application.name");
+    }
+
+    /**
+     * 获取 Spring 应用启动时间（时间戳）
+     *
+     * @return 启动时间（毫秒值），若上下文未初始化则返回 -1
+     */
+    public static long getApplicationStartupTime() {
+        ApplicationContext context = getApplicationContext();
+        return context != null ? context.getStartupDate() : -1;
+    }
+
+    /**
+     * 获取当前 Java 进程的 PID（适配 JDK 8）
+     *
+     * @return 当前进程的 PID，失败返回 -1
+     */
+    public static long getPid() {
+        // 分隔符，用于提取 PID
+        final String PID_SEPARATOR = "@";
+        try {
+            String jvmName = ManagementFactory.getRuntimeMXBean().getName();
+            if (jvmName != null && jvmName.contains(PID_SEPARATOR)) {
+                return Long.parseLong(jvmName.split(PID_SEPARATOR)[0]);
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
     }
 
     /**
@@ -410,6 +490,88 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
             return value;
         }
         return context.getEnvironment().resolvePlaceholders(value);
+    }
+
+    /**
+     * 获取当前 ServletContext 对象
+     *
+     * @return ServletContext 对象，若无法获取则返回 null
+     */
+    public static ServletContext getServletContext() {
+        ApplicationContext ctx = getApplicationContext();
+        if (ctx instanceof WebApplicationContext) {
+            return ((WebApplicationContext) ctx).getServletContext();
+        }
+        return null;
+    }
+
+    /**
+     * 获取 ServletRequestAttributes（请求上下文属性对象）
+     *
+     * @return ServletRequestAttributes，若不存在则返回 null
+     */
+    public static ServletRequestAttributes getServletRequestAttributes() {
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        return attributes instanceof ServletRequestAttributes ? (ServletRequestAttributes) attributes : null;
+    }
+
+    /**
+     * 获取当前请求对象（HttpServletRequest）
+     *
+     * @return 当前请求对象，若不存在则返回 null
+     */
+    public static HttpServletRequest getHttpServletRequest() {
+        ServletRequestAttributes attributes = getServletRequestAttributes();
+        return attributes != null ? attributes.getRequest() : null;
+    }
+
+    /**
+     * 获取当前响应对象（HttpServletResponse）
+     *
+     * @return 当前响应对象，若不存在则返回 null
+     */
+    public static HttpServletResponse getHttpServletResponse() {
+        ServletRequestAttributes attributes = getServletRequestAttributes();
+        return attributes != null ? attributes.getResponse() : null;
+    }
+
+    /**
+     * 获取当前会话对象（HttpSession），若无请求上下文或会话返回 null
+     *
+     * @return 当前 HttpSession
+     */
+    public static HttpSession getHttpSession() {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getSession(false) : null;
+    }
+
+    /**
+     * 获取客户端真实 IP 地址（考虑多层代理）
+     *
+     * @return IP 地址
+     */
+    public static String getClientIpAddress() {
+        HttpServletRequest request = getHttpServletRequest();
+        if (request == null) {
+            return null;
+        }
+
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip != null && !ip.isEmpty() && !UNKNOWN.equalsIgnoreCase(ip)) {
+            return ip.split(",")[0];
+        }
+
+        ip = request.getHeader("Proxy-Client-IP");
+        if (ip != null && !ip.isEmpty() && !UNKNOWN.equalsIgnoreCase(ip)) {
+            return ip;
+        }
+
+        ip = request.getHeader("WL-Proxy-Client-IP");
+        if (ip != null && !ip.isEmpty() && !UNKNOWN.equalsIgnoreCase(ip)) {
+            return ip;
+        }
+
+        return request.getRemoteAddr();
     }
 
 }
