@@ -33,4 +33,10 @@ public class DemoController {
         return "ok";
     }
 
+    @GetMapping("/getResourceReadString")
+    public String getResourceReadString() {
+        System.out.println(SpringUtil.getResourceReadString("application.yml"));
+        return "ok";
+    }
+
 }

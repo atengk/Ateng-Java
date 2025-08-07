@@ -7,8 +7,10 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.*;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.Resource;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
+import org.springframework.util.FileCopyUtils;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -18,9 +20,15 @@ import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.annotation.Annotation;
 import java.lang.management.ManagementFactory;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Spring 工具类
@@ -49,6 +57,11 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
      * 未知标识常量
      */
     private static final String UNKNOWN = "unknown";
+
+    /**
+     * 资源路径前缀：classpath
+     */
+    private static final String CLASSPATH_PREFIX = "classpath:";
 
     /**
      * 设置 Spring 上下文（由 Spring 自动调用）
@@ -572,6 +585,87 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
         }
 
         return request.getRemoteAddr();
+    }
+
+    /**
+     * 获取 resources 目录下指定路径的资源
+     *
+     * <p>
+     * 示例：获取 resources/config/app.yml
+     * <pre>{@code
+     * Resource resource = SpringUtil.getResource("config/app.yml");
+     * }</pre>
+     * </p>
+     *
+     * @param path 相对于 resources 的路径
+     * @return Resource 对象
+     */
+    public static Resource getResource(String path) {
+        return getApplicationContext().getResource(CLASSPATH_PREFIX + path);
+    }
+
+    /**
+     * 获取 classpath 文件的输入流
+     *
+     * @param path 文件路径
+     * @return 输入流，未找到时返回 null
+     */
+    public static InputStream getResourceInputStream(String path) {
+        try {
+            return getResource(path).getInputStream();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 读取 classpath 文件内容为字符串
+     *
+     * @param path 文件路径
+     * @return 文件内容字符串，异常时返回 null
+     */
+    public static String getResourceReadString(String path) {
+        try (InputStream in = getResourceInputStream(path)) {
+            if (in == null) {
+                return null;
+            }
+            byte[] bytes = FileCopyUtils.copyToByteArray(in);
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 按行读取 classpath 文件内容
+     *
+     * @param path 文件路径
+     * @return 文件内容行列表，异常时返回 null
+     */
+    public static List<String> getResourceReadLines(String path) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(getResourceInputStream(path), StandardCharsets.UTF_8))) {
+            return reader.lines().collect(Collectors.toList());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 读取 classpath 文件为字节数组
+     *
+     * @param path 文件路径
+     * @return 字节数组，异常时返回 null
+     */
+    public static byte[] getResourceReadBytes(String path) {
+        try (InputStream in = getResourceInputStream(path)) {
+            if (in == null) {
+                return null;
+            }
+            return FileCopyUtils.copyToByteArray(in);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
 }
