@@ -23,5 +23,6 @@
         <module>async</module>
         <module>jackson</module>
         <module>custom-utils</module>
+        <module>fast-excel-jdk8</module>
     </modules>
 </project>
