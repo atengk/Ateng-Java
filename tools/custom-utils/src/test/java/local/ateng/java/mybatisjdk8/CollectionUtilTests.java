@@ -79,8 +79,14 @@ public class CollectionUtilTests {
         );
 
         // 将树结构转换为扁平列表
-        List<Menu> flatList = CollectionUtil.treeToList(tree, Menu::getChildren);
+        List<Menu> flatList = CollectionUtil.treeToList(
+                tree,
+                Menu::getChildren,
+                Menu::setChildren,
+                Comparator.comparing(Menu::getId)
+        );
         flatList.forEach(System.out::println);
+
     }
 
     @Test

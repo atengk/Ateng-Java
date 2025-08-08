@@ -189,7 +189,7 @@ public final class CollectionUtil {
      * @return 分割后的字符串数组
      */
     public static String[] split(String str, String delimiter) {
-        if (isBlank(str) || delimiter == null) {
+        if (str == null || str.trim().isEmpty() || delimiter == null) {
             return new String[0];
         }
         return str.split(Pattern.quote(delimiter));
@@ -212,7 +212,7 @@ public final class CollectionUtil {
     /**
      * 将字符串按分隔符拆分为列表
      *
-     * @param str       原始字符串
+     * @param str 原始字符串
      * @return 拆分后的 List，空字符串返回空列表
      */
     public static List<String> splitToList(String str) {
@@ -1254,9 +1254,9 @@ public final class CollectionUtil {
     }
 
     /**
-     * 将平铺结构的列表转换为树形结构（支持单个根父 ID）
+     * 将平铺结构的列表转换为树形结构（支持单个根父 ID，递归构建，支持循环引用检测）
      *
-     * <p>此方法为便捷版，内部直接调用 ，
+     * <p>此方法为便捷版，内部直接调用 {@link #buildMultiRootTree(List, Function, Function, BiConsumer, Set)}，
      * 适用于只有一个根父 ID 的情况。</p>
      *
      * @param items          原始列表（平铺结构）
@@ -1299,18 +1299,17 @@ public final class CollectionUtil {
                                            Function<T, K> parentGetter,
                                            BiConsumer<T, List<T>> childrenSetter,
                                            K rootParentId) {
-        // 单根 ID 转换为 Set，然后调用多根版本
         return buildMultiRootTree(items, idGetter, parentGetter, childrenSetter, Collections.singleton(rootParentId));
     }
 
     /**
-     * 将平铺结构的列表转换为树形结构（支持多个根父 ID）。
+     * 将平铺结构的列表转换为树形结构（支持多个根父 ID，递归构建，支持循环引用检测）
      *
      * @param items          原始列表（平铺结构）
      * @param idGetter       获取当前节点 ID 的函数，例如：Menu::getId
      * @param parentGetter   获取父节点 ID 的函数，例如：Menu::getParentId
      * @param childrenSetter 设置子节点列表的函数，例如：Menu::setChildren
-     * @param rootParentIds  根节点父 ID 集合（任意一个匹配即为根节点）
+     * @param rootParentIds  根节点父 ID 集合（任意一个匹配即为根节点，例如 0、-1、null）
      * @param <T>            元素类型
      * @param <K>            ID 类型
      * @return 树形结构的根节点列表（可能为空列表）
@@ -1334,7 +1333,7 @@ public final class CollectionUtil {
      * );
      *
      * // 支持多个根父 ID（0 和 -1 都是根节点）
-     * List<Menu> tree = CollectionUtil.buildTree(
+     * List<Menu> tree = CollectionUtil.buildMultiRootTree(
      *     menus,
      *     Menu::getId,
      *     Menu::getParentId,
@@ -1356,36 +1355,23 @@ public final class CollectionUtil {
             return Collections.emptyList();
         }
 
-        // 1. 将所有节点放入 Map，方便快速查找父节点
-        Map<K, T> nodeMap = new HashMap<>(items.size());
+        // 将列表按父ID分组
+        Map<K, List<T>> parentMap = new HashMap<>();
         for (T item : items) {
             if (item != null) {
-                nodeMap.put(idGetter.apply(item), item);
+                K parentId = parentGetter.apply(item);
+                parentMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(item);
             }
         }
 
-        // 2. 子节点缓存（避免反射）
-        Map<T, List<T>> childrenCache = new HashMap<>();
-
-        // 3. 结果集（根节点集合）
+        // 递归构建树（防止循环引用）
         List<T> roots = new ArrayList<>();
-
-        // 4. 构建树
-        for (T item : items) {
-            // 确保 children 不为 null（即使后续无子节点也避免 NPE）
-            childrenSetter.accept(item, childrenCache.computeIfAbsent(item, k -> new ArrayList<>()));
-
-            K parentId = parentGetter.apply(item);
-            if (rootParentIds.contains(parentId)) {
-                // 根节点
-                roots.add(item);
-            } else {
-                // 挂到父节点
-                T parent = nodeMap.get(parentId);
-                if (parent != null) {
-                    List<T> children = childrenCache.computeIfAbsent(parent, k -> new ArrayList<>());
-                    children.add(item);
-                    childrenSetter.accept(parent, children);
+        for (K rootParentId : rootParentIds) {
+            List<T> rootNodes = parentMap.get(rootParentId);
+            if (rootNodes != null) {
+                for (T rootNode : rootNodes) {
+                    buildChildren(rootNode, idGetter, childrenSetter, parentMap, new HashSet<>());
+                    roots.add(rootNode);
                 }
             }
         }
@@ -1394,48 +1380,127 @@ public final class CollectionUtil {
     }
 
     /**
-     * 将树结构展开为扁平列表（深度优先遍历）。
+     * 递归构建子节点（带循环引用检测）
      *
-     * <p>遍历顺序为深度优先，返回的列表中节点顺序与树的遍历顺序一致。</p>
+     * @param parentNode     当前父节点
+     * @param idGetter       获取节点 ID 的方法
+     * @param childrenSetter 设置子节点集合的方法
+     * @param parentMap      父ID → 子节点列表 映射
+     * @param visited        已访问的节点ID集合（用于检测循环引用）
+     */
+    private static <T, K> void buildChildren(T parentNode,
+                                             Function<T, K> idGetter,
+                                             BiConsumer<T, List<T>> childrenSetter,
+                                             Map<K, List<T>> parentMap,
+                                             Set<K> visited) {
+
+        K parentId = idGetter.apply(parentNode);
+
+        // 检测循环引用
+        if (visited.contains(parentId)) {
+            System.err.println("⚠ 检测到循环引用，节点 ID: " + parentId + " 已被跳过以避免死循环");
+            childrenSetter.accept(parentNode, Collections.emptyList());
+            return;
+        }
+        visited.add(parentId);
+
+        List<T> children = parentMap.get(parentId);
+        if (children == null || children.isEmpty()) {
+            childrenSetter.accept(parentNode, Collections.emptyList());
+            return;
+        }
+
+        childrenSetter.accept(parentNode, children);
+        for (T child : children) {
+            buildChildren(child, idGetter, childrenSetter, parentMap, visited);
+        }
+    }
+
+    /**
+     * 将树结构展开为扁平列表，并还原每个节点的子节点为空。
      *
-     * @param rootList       树的根节点集合
-     * @param childrenGetter 获取子节点列表的方法引用
+     * <p>本方法以递归方式遍历树的所有节点，收集成一个列表，
+     * 并且清空每个节点的子节点集合，完全还原成构建树之前的节点状态。
+     * 返回结果会根据指定的比较器进行排序，通常用于按照节点id排序。</p>
+     *
+     * <p>注意：调用时需传入获取子节点的方法引用和设置子节点的方法引用，
+     * 以便遍历和还原操作。排序规则由调用者通过 Comparator 指定。</p>
+     *
+     * @param rootList       树的根节点集合（非空）
+     * @param childrenGetter 获取子节点列表的方法引用，形如 T -> Collection<T>
+     * @param childrenSetter 设置子节点列表的方法引用，形如 (T, List<T>) -> void
+     * @param idComparator   用于节点排序的比较器，通常根据节点id排序，为null就不排序
      * @param <T>            节点类型
-     * @return 扁平化后的节点列表，顺序遵循深度优先遍历
+     * @return 扁平化后且子节点被清空的节点列表，按照传入比较器排序
      *
      * <pre>{@code
      * // 示例实体类
      * public class Menu {
-     *     private Integer id;
-     *     private String name;
-     *     private List<Menu> children;
-     *     // getter/setter 略
+     *     private Integer id;             // 当前节点 ID
+     *     private Integer parentId;       // 父节点 ID
+     *     private String name;            // 节点名称（可选）
+     *     private List<Menu> children;    // 子节点列表
+     *
+     *     // 构造方法、getter、setter 略
      * }
      *
-     * List<Menu> flatList = CollectionUtil.treeToList(rootMenus, Menu::getChildren);
+     * // 使用示例：
+     * List<Menu> flatList = treeToList(
+     *     rootMenus,
+     *     Menu::getChildren,
+     *     Menu::setChildren,
+     *     Comparator.comparing(Menu::getId)
+     * );
      * }</pre>
      */
     public static <T> List<T> treeToList(Collection<T> rootList,
-                                         Function<? super T, Collection<T>> childrenGetter) {
-        if (rootList == null || rootList.isEmpty() || childrenGetter == null) {
+                                         Function<? super T, Collection<T>> childrenGetter,
+                                         BiConsumer<? super T, List<T>> childrenSetter,
+                                         Comparator<? super T> idComparator) {
+        if (rootList == null || rootList.isEmpty() || childrenGetter == null || childrenSetter == null) {
             return Collections.emptyList();
         }
 
         List<T> result = new ArrayList<>();
-        Deque<T> stack = new ArrayDeque<>(rootList);
 
-        while (!stack.isEmpty()) {
-            T current = stack.pop();
-            result.add(current);
-            Collection<T> children = childrenGetter.apply(current);
-            if (children != null && !children.isEmpty()) {
-                // 保持遍历顺序，反转后压栈
-                List<T> childrenList = new ArrayList<>(children);
-                Collections.reverse(childrenList);
-                stack.addAll(childrenList);
-            }
+        // 递归遍历树，扁平化所有节点
+        traverse(rootList, childrenGetter, childrenSetter, result);
+
+        // 按指定比较器排序（一般按id排序）
+        if (idComparator != null) {
+            result.sort(idComparator);
         }
+
         return result;
+    }
+
+    /**
+     * 递归遍历树结构，将所有节点添加到结果列表中，
+     * 并将每个节点的子节点集合清空以还原原始状态。
+     *
+     * @param nodes          当前层节点集合
+     * @param childrenGetter 获取子节点集合的方法引用
+     * @param childrenSetter 设置子节点集合的方法引用（用于清空子节点）
+     * @param result         用于收集所有节点的列表
+     * @param <T>            节点类型
+     */
+    private static <T> void traverse(Collection<T> nodes,
+                                     Function<? super T, Collection<T>> childrenGetter,
+                                     BiConsumer<? super T, List<T>> childrenSetter,
+                                     List<T> result) {
+        for (T node : nodes) {
+            // 添加当前节点
+            result.add(node);
+
+            // 递归遍历子节点
+            Collection<T> children = childrenGetter.apply(node);
+            if (children != null && !children.isEmpty()) {
+                traverse(children, childrenGetter, childrenSetter, result);
+            }
+
+            // 清空当前节点的子节点列表，恢复构建树前的状态
+            childrenSetter.accept(node, Collections.emptyList());
+        }
     }
 
     /**
