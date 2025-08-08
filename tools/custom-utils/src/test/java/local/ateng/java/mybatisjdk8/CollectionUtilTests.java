@@ -5,9 +5,7 @@ import local.ateng.java.customutils.utils.CollectionUtil;
 import local.ateng.java.customutils.utils.JsonUtil;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,6 +31,28 @@ public class CollectionUtilTests {
                 Menu::getParentId,
                 Menu::setChildren,
                 0
+        );
+
+        System.out.println(JsonUtil.toJson(tree));
+    }
+
+    @Test
+    void buildMultiRootTree() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        List<Menu> tree = CollectionUtil.buildMultiRootTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                new HashSet<Integer>(Arrays.asList(0,1))
         );
 
         System.out.println(JsonUtil.toJson(tree));

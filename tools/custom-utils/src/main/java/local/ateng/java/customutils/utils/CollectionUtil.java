@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -14,6 +15,11 @@ import java.util.stream.Collectors;
  * @since 2025-07-30
  */
 public final class CollectionUtil {
+
+    /**
+     * 默认分隔符，逗号
+     */
+    public static final String DEFAULT_DELIMITER = ",";
 
     /**
      * 禁止实例化工具类
@@ -63,20 +69,310 @@ public final class CollectionUtil {
     }
 
     /**
-     * 将集合转换为以分隔符连接的字符串（不含 null 元素）
+     * 使用指定分隔符拼接字符串数组
      *
-     * @param collection 集合
-     * @param delimiter  分隔符
-     * @return 拼接后的字符串，若集合为空返回空串
+     * @param delimiter 分隔符
+     * @param elements  元素数组
+     * @return 拼接结果
      */
-    public static String join(Collection<?> collection, String delimiter) {
-        if (isEmpty(collection)) {
+    public static String join(String delimiter, String... elements) {
+        if (elements == null || elements.length == 0) {
             return "";
         }
-        return collection.stream()
-                .filter(Objects::nonNull)
-                .map(Object::toString)
-                .collect(Collectors.joining(delimiter));
+        return String.join(delimiter, elements);
+    }
+
+    /**
+     * 使用指定分隔符拼接集合中的字符串元素
+     *
+     * @param delimiter 分隔符
+     * @param elements  字符串集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String join(String delimiter, java.util.Collection<String> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return "";
+        }
+        return String.join(delimiter, elements);
+    }
+
+    /**
+     * 使用指定分隔符拼接对象数组，每个对象调用 toString() 方法
+     *
+     * @param delimiter 分隔符
+     * @param elements  对象数组
+     * @return 拼接结果，对象为 null 会被转换为 "null"
+     */
+    public static String joinObjects(String delimiter, Object... elements) {
+        if (elements == null || elements.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < elements.length; i++) {
+            if (i > 0) {
+                sb.append(delimiter);
+            }
+            sb.append(elements[i] == null ? "null" : elements[i].toString());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 使用指定分隔符拼接集合中的对象元素，每个对象调用 toString() 方法
+     *
+     * @param delimiter 分隔符
+     * @param elements  对象集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String joinObjects(String delimiter, java.util.Collection<?> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Object obj : elements) {
+            if (!first) {
+                sb.append(delimiter);
+            } else {
+                first = false;
+            }
+            sb.append(obj == null ? "null" : obj.toString());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 使用默认分隔符拼接字符串数组
+     *
+     * @param elements 字符串数组
+     * @return 拼接结果，数组为空返回空字符串
+     */
+    public static String join(String... elements) {
+        return join(DEFAULT_DELIMITER, elements);
+    }
+
+    /**
+     * 使用默认分隔符拼接字符串集合
+     *
+     * @param elements 字符串集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String join(java.util.Collection<String> elements) {
+        return join(DEFAULT_DELIMITER, elements);
+    }
+
+    /**
+     * 使用默认分隔符拼接对象数组
+     *
+     * @param elements 对象数组
+     * @return 拼接结果，数组为空返回空字符串
+     */
+    public static String joinObjects(Object... elements) {
+        return joinObjects(DEFAULT_DELIMITER, elements);
+    }
+
+    /**
+     * 使用默认分隔符拼接对象集合
+     *
+     * @param elements 对象集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String joinObjects(java.util.Collection<?> elements) {
+        return joinObjects(DEFAULT_DELIMITER, elements);
+    }
+
+    /**
+     * 将字符串按分隔符分割成数组（空字符串或 null 返回空数组）
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @return 分割后的字符串数组
+     */
+    public static String[] split(String str, String delimiter) {
+        if (isBlank(str) || delimiter == null) {
+            return new String[0];
+        }
+        return str.split(Pattern.quote(delimiter));
+    }
+
+    /**
+     * 将字符串按分隔符拆分为列表
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符（如 ","）
+     * @return 拆分后的 List，空字符串返回空列表
+     */
+    public static List<String> splitToList(String str, String delimiter) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return Arrays.asList(str.split(Pattern.quote(delimiter)));
+    }
+
+    /**
+     * 将字符串按分隔符拆分为列表
+     *
+     * @param str       原始字符串
+     * @return 拆分后的 List，空字符串返回空列表
+     */
+    public static List<String> splitToList(String str) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return Arrays.asList(str.split(Pattern.quote(DEFAULT_DELIMITER)));
+    }
+
+    /**
+     * 将字符串按分隔符拆分为 Set，自动去重
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @return 拆分后的 Set
+     */
+    public static Set<String> splitToSet(String str, String delimiter) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return Arrays.stream(str.split(Pattern.quote(delimiter)))
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * 按指定分隔符分割字符串，并转换为指定类型的列表
+     *
+     * @param <T>       目标类型
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @param converter 转换函数，将字符串转为 T 类型
+     * @return 转换成功的 T 类型列表，字符串为空或无有效元素时返回空列表
+     */
+    public static <T> List<T> splitToList(String str, String delimiter, Function<String, T> converter) {
+        List<T> result = new ArrayList<>();
+        if (str == null || delimiter == null || converter == null) {
+            return result;
+        }
+        String[] parts = str.split(Pattern.quote(delimiter));
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                T value = converter.apply(trimmed);
+                if (value != null) {
+                    result.add(value);
+                }
+            } catch (Exception e) {
+                // 转换失败时跳过该元素，防止抛出异常
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 按默认分隔符分割字符串，并转换为指定类型的列表
+     *
+     * @param <T>       目标类型
+     * @param str       原始字符串
+     * @param converter 转换函数，将字符串转为 T 类型
+     * @return 转换成功的 T 类型列表，字符串为空或无有效元素时返回空列表
+     */
+    public static <T> List<T> splitToList(String str, Function<String, T> converter) {
+        return splitToList(str, DEFAULT_DELIMITER, converter);
+    }
+
+    /**
+     * 将字符串按分隔符拆分为指定类型的 List
+     *
+     * @param str         待拆分字符串
+     * @param delimiter   分隔符
+     * @param converter   转换函数，将每个分隔后的字符串转换为目标类型
+     * @param ignoreError 是否忽略转换异常，true 忽略并跳过错误数据，false 抛出异常
+     * @param <T>         目标类型
+     * @return 转换后的 List，输入为空返回空列表
+     */
+    public static <T> List<T> splitToList(String str, String delimiter, Function<String, T> converter, boolean ignoreError) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (delimiter == null || delimiter.isEmpty()) {
+            throw new IllegalArgumentException("分隔符不能为空");
+        }
+        if (converter == null) {
+            throw new IllegalArgumentException("转换函数不能为空");
+        }
+
+        String[] parts = str.split(delimiter);
+        List<T> result = new ArrayList<>(parts.length);
+
+        for (String part : parts) {
+            try {
+                result.add(converter.apply(part));
+            } catch (Exception e) {
+                if (!ignoreError) {
+                    throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
+                }
+                // 忽略错误时跳过该元素
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 按指定分隔符拆分字符串并转换为 Integer 类型列表
+     *
+     * @param str       需要拆分的字符串
+     * @param delimiter 分隔符字符串
+     * @return Integer 类型列表，转换失败的元素会被跳过
+     */
+    public static List<Integer> splitToIntegerList(String str, String delimiter) {
+        return splitToList(str, delimiter, Integer::parseInt);
+    }
+
+    /**
+     * 按指定分隔符拆分字符串并转换为 Long 类型列表
+     *
+     * @param str       需要拆分的字符串
+     * @param delimiter 分隔符字符串
+     * @return Long 类型列表，转换失败的元素会被跳过
+     */
+    public static List<Long> splitToLongList(String str, String delimiter) {
+        return splitToList(str, delimiter, Long::parseLong);
+    }
+
+    /**
+     * 按指定分隔符拆分字符串并转换为 Double 类型列表
+     *
+     * @param str       需要拆分的字符串
+     * @param delimiter 分隔符字符串
+     * @return Double 类型列表，转换失败的元素会被跳过
+     */
+    public static List<Double> splitToDoubleList(String str, String delimiter) {
+        return splitToList(str, delimiter, Double::parseDouble);
+    }
+
+    /**
+     * 按指定分隔符拆分字符串并转换为 Boolean 类型列表
+     *
+     * <p>转换规则为忽略大小写的 true/false，非 true 字符串均为 false。</p>
+     *
+     * @param str       需要拆分的字符串
+     * @param delimiter 分隔符字符串
+     * @return Boolean 类型列表，转换失败的元素会被跳过
+     */
+    public static List<Boolean> splitToBooleanList(String str, String delimiter) {
+        return splitToList(str, delimiter, s -> Boolean.parseBoolean(s.toLowerCase()));
+    }
+
+    /**
+     * 按指定分隔符拆分字符串并转换为去除空白字符串的列表
+     *
+     * @param str       需要拆分的字符串
+     * @param delimiter 分隔符字符串
+     * @return 非空字符串列表
+     */
+    public static List<String> splitToStringList(String str, String delimiter) {
+        return splitToList(str, delimiter, s -> s);
     }
 
     /**
@@ -958,51 +1254,138 @@ public final class CollectionUtil {
     }
 
     /**
-     * 将平铺结构转换为树形结构
+     * 将平铺结构的列表转换为树形结构（支持单个根父 ID）
      *
-     * @param items          原始列表
-     * @param idGetter       获取当前节点 ID 的函数
-     * @param parentGetter   获取父节点 ID 的函数
-     * @param childrenSetter 设置子节点列表的函数
-     * @param rootParentId   根节点的父 ID（通常为 null 或 0）
+     * <p>此方法为便捷版，内部直接调用 ，
+     * 适用于只有一个根父 ID 的情况。</p>
+     *
+     * @param items          原始列表（平铺结构）
+     * @param idGetter       获取当前节点 ID 的函数，例如：Menu::getId
+     * @param parentGetter   获取父节点 ID 的函数，例如：Menu::getParentId
+     * @param childrenSetter 设置子节点列表的函数，例如：Menu::setChildren
+     * @param rootParentId   根节点父 ID（例如 0 或 null）
      * @param <T>            元素类型
      * @param <K>            ID 类型
-     * @return 树结构列表
+     * @return 树形结构的根节点列表（可能为空列表）
+     *
+     * <p><b>示例实体类：</b></p>
+     * <pre>{@code
+     * public class Menu {
+     *     private Integer id;             // 当前节点 ID
+     *     private Integer parentId;       // 父节点 ID
+     *     private String name;            // 节点名称（可选）
+     *     private List<Menu> children;    // 子节点列表
+     *
+     *     // 构造方法、getter、setter 略
+     * }
+     *
+     * List<Menu> menus = Arrays.asList(
+     *     new Menu(1, 0, "系统管理"),
+     *     new Menu(2, 1, "用户管理"),
+     *     new Menu(3, 1, "角色管理")
+     * );
+     *
+     * List<Menu> tree = CollectionUtil.buildTree(
+     *     menus,
+     *     Menu::getId,
+     *     Menu::getParentId,
+     *     Menu::setChildren,
+     *     0
+     * );
+     * }</pre>
      */
     public static <T, K> List<T> buildTree(List<T> items,
                                            Function<T, K> idGetter,
                                            Function<T, K> parentGetter,
                                            BiConsumer<T, List<T>> childrenSetter,
                                            K rootParentId) {
-        if (isEmpty(items) || idGetter == null || parentGetter == null || childrenSetter == null) {
+        // 单根 ID 转换为 Set，然后调用多根版本
+        return buildMultiRootTree(items, idGetter, parentGetter, childrenSetter, Collections.singleton(rootParentId));
+    }
+
+    /**
+     * 将平铺结构的列表转换为树形结构（支持多个根父 ID）。
+     *
+     * @param items          原始列表（平铺结构）
+     * @param idGetter       获取当前节点 ID 的函数，例如：Menu::getId
+     * @param parentGetter   获取父节点 ID 的函数，例如：Menu::getParentId
+     * @param childrenSetter 设置子节点列表的函数，例如：Menu::setChildren
+     * @param rootParentIds  根节点父 ID 集合（任意一个匹配即为根节点）
+     * @param <T>            元素类型
+     * @param <K>            ID 类型
+     * @return 树形结构的根节点列表（可能为空列表）
+     *
+     * <p><b>示例实体类：</b></p>
+     * <pre>{@code
+     * public class Menu {
+     *     private Integer id;             // 当前节点 ID
+     *     private Integer parentId;       // 父节点 ID
+     *     private String name;            // 节点名称（可选）
+     *     private List<Menu> children;    // 子节点列表
+     *
+     *     // 构造方法、getter、setter 略
+     * }
+     *
+     * List<Menu> menus = Arrays.asList(
+     *     new Menu(1, 0, "系统管理"),
+     *     new Menu(2, 1, "用户管理"),
+     *     new Menu(3, 1, "角色管理"),
+     *     new Menu(4, -1, "内容管理")
+     * );
+     *
+     * // 支持多个根父 ID（0 和 -1 都是根节点）
+     * List<Menu> tree = CollectionUtil.buildTree(
+     *     menus,
+     *     Menu::getId,
+     *     Menu::getParentId,
+     *     Menu::setChildren,
+     *     new HashSet<>(Arrays.asList(0, -1))
+     * );
+     * }</pre>
+     */
+    public static <T, K> List<T> buildMultiRootTree(List<T> items,
+                                                    Function<T, K> idGetter,
+                                                    Function<T, K> parentGetter,
+                                                    BiConsumer<T, List<T>> childrenSetter,
+                                                    Set<K> rootParentIds) {
+
+        // 参数校验
+        if (items == null || items.isEmpty()
+                || idGetter == null || parentGetter == null || childrenSetter == null
+                || rootParentIds == null || rootParentIds.isEmpty()) {
             return Collections.emptyList();
         }
 
-        Map<K, T> nodeMap = items.stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toMap(idGetter, Function.identity(), (a, b) -> a));
-
-        List<T> roots = new ArrayList<>();
+        // 1. 将所有节点放入 Map，方便快速查找父节点
+        Map<K, T> nodeMap = new HashMap<>(items.size());
         for (T item : items) {
+            if (item != null) {
+                nodeMap.put(idGetter.apply(item), item);
+            }
+        }
+
+        // 2. 子节点缓存（避免反射）
+        Map<T, List<T>> childrenCache = new HashMap<>();
+
+        // 3. 结果集（根节点集合）
+        List<T> roots = new ArrayList<>();
+
+        // 4. 构建树
+        for (T item : items) {
+            // 确保 children 不为 null（即使后续无子节点也避免 NPE）
+            childrenSetter.accept(item, childrenCache.computeIfAbsent(item, k -> new ArrayList<>()));
+
             K parentId = parentGetter.apply(item);
-            if (Objects.equals(parentId, rootParentId)) {
+            if (rootParentIds.contains(parentId)) {
+                // 根节点
                 roots.add(item);
             } else {
+                // 挂到父节点
                 T parent = nodeMap.get(parentId);
                 if (parent != null) {
-                    List<T> children = new ArrayList<>();
-                    try {
-                        Field childrenField = findChildrenField(parent.getClass(), childrenSetter);
-                        childrenField.setAccessible(true);
-                        Object existing = childrenField.get(parent);
-                        if (existing instanceof List) {
-                            children = (List<T>) existing;
-                        }
-                        children.add(item);
-                        childrenSetter.accept(parent, children);
-                    } catch (Exception e) {
-                        // 忽略设置失败
-                    }
+                    List<T> children = childrenCache.computeIfAbsent(parent, k -> new ArrayList<>());
+                    children.add(item);
+                    childrenSetter.accept(parent, children);
                 }
             }
         }
@@ -1011,21 +1394,48 @@ public final class CollectionUtil {
     }
 
     /**
-     * 通过反射推断 childrenSetter 设置的字段名
+     * 将树结构展开为扁平列表（深度优先遍历）。
      *
-     * @param clazz          类
-     * @param childrenSetter 子节点设置器
-     * @param <T>            类型
-     * @return 子节点字段
-     * @throws NoSuchFieldException 未找到字段
+     * <p>遍历顺序为深度优先，返回的列表中节点顺序与树的遍历顺序一致。</p>
+     *
+     * @param rootList       树的根节点集合
+     * @param childrenGetter 获取子节点列表的方法引用
+     * @param <T>            节点类型
+     * @return 扁平化后的节点列表，顺序遵循深度优先遍历
+     *
+     * <pre>{@code
+     * // 示例实体类
+     * public class Menu {
+     *     private Integer id;
+     *     private String name;
+     *     private List<Menu> children;
+     *     // getter/setter 略
+     * }
+     *
+     * List<Menu> flatList = CollectionUtil.treeToList(rootMenus, Menu::getChildren);
+     * }</pre>
      */
-    private static <T> Field findChildrenField(Class<?> clazz, BiConsumer<T, List<T>> childrenSetter) throws NoSuchFieldException {
-        for (Field field : clazz.getDeclaredFields()) {
-            if (List.class.isAssignableFrom(field.getType())) {
-                return field;
+    public static <T> List<T> treeToList(Collection<T> rootList,
+                                         Function<? super T, Collection<T>> childrenGetter) {
+        if (rootList == null || rootList.isEmpty() || childrenGetter == null) {
+            return Collections.emptyList();
+        }
+
+        List<T> result = new ArrayList<>();
+        Deque<T> stack = new ArrayDeque<>(rootList);
+
+        while (!stack.isEmpty()) {
+            T current = stack.pop();
+            result.add(current);
+            Collection<T> children = childrenGetter.apply(current);
+            if (children != null && !children.isEmpty()) {
+                // 保持遍历顺序，反转后压栈
+                List<T> childrenList = new ArrayList<>(children);
+                Collections.reverse(childrenList);
+                stack.addAll(childrenList);
             }
         }
-        throw new NoSuchFieldException("未能推断 children 字段");
+        return result;
     }
 
     /**
@@ -1141,32 +1551,6 @@ public final class CollectionUtil {
     }
 
     /**
-     * 将树结构展开为扁平列表
-     *
-     * @param rootList       树的根节点集合
-     * @param childrenGetter 获取子节点列表的方法引用
-     * @param <T>            节点类型
-     * @return 扁平化后的节点列表
-     */
-    public static <T> List<T> treeToList(Collection<T> rootList,
-                                         Function<? super T, Collection<T>> childrenGetter) {
-        if (isEmpty(rootList) || childrenGetter == null) {
-            return Collections.emptyList();
-        }
-        List<T> result = new ArrayList<>();
-        Deque<T> stack = new ArrayDeque<>(rootList);
-        while (!stack.isEmpty()) {
-            T current = stack.pop();
-            result.add(current);
-            Collection<T> children = childrenGetter.apply(current);
-            if (children != null && !children.isEmpty()) {
-                stack.addAll(children);
-            }
-        }
-        return result;
-    }
-
-    /**
      * 移除 Map 中 key 为 null 的条目
      *
      * @param map 输入 map
@@ -1254,7 +1638,8 @@ public final class CollectionUtil {
             return Collections.emptyList();
         }
         int size = list.size();
-        int normalizedOffset = ((offset % size) + size) % size; // 保证 offset 在 [0, size) 范围
+        // 保证 offset 在 [0, size) 范围
+        int normalizedOffset = ((offset % size) + size) % size;
         if (normalizedOffset == 0) {
             return new ArrayList<>(list);
         }

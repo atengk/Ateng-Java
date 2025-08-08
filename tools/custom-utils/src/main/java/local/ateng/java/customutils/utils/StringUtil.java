@@ -22,6 +22,11 @@ import java.util.stream.Collectors;
 public final class StringUtil {
 
     /**
+     * 默认分隔符，逗号
+     */
+    public static final String DEFAULT_DELIMITER = ",";
+
+    /**
      * 禁止实例化工具类
      */
     private StringUtil() {
@@ -222,6 +227,48 @@ public final class StringUtil {
     }
 
     /**
+     * 将字符串按分隔符拆分为列表
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符（如 ","）
+     * @return 拆分后的 List，空字符串返回空列表
+     */
+    public static List<String> splitToList(String str, String delimiter) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return Arrays.asList(str.split(Pattern.quote(delimiter)));
+    }
+
+    /**
+     * 将字符串按分隔符拆分为列表
+     *
+     * @param str       原始字符串
+     * @return 拆分后的 List，空字符串返回空列表
+     */
+    public static List<String> splitToList(String str) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return Arrays.asList(str.split(Pattern.quote(DEFAULT_DELIMITER)));
+    }
+
+    /**
+     * 将字符串按分隔符拆分为 Set，自动去重
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @return 拆分后的 Set
+     */
+    public static Set<String> splitToSet(String str, String delimiter) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return Arrays.stream(str.split(Pattern.quote(delimiter)))
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * 按指定分隔符分割字符串，并转换为指定类型的列表
      *
      * @param <T>       目标类型
@@ -253,6 +300,54 @@ public final class StringUtil {
         return result;
     }
 
+    /**
+     * 按默认分隔符分割字符串，并转换为指定类型的列表
+     *
+     * @param <T>       目标类型
+     * @param str       原始字符串
+     * @param converter 转换函数，将字符串转为 T 类型
+     * @return 转换成功的 T 类型列表，字符串为空或无有效元素时返回空列表
+     */
+    public static <T> List<T> splitToList(String str, Function<String, T> converter) {
+        return splitToList(str, DEFAULT_DELIMITER, converter);
+    }
+
+    /**
+     * 将字符串按分隔符拆分为指定类型的 List
+     *
+     * @param str         待拆分字符串
+     * @param delimiter   分隔符
+     * @param converter   转换函数，将每个分隔后的字符串转换为目标类型
+     * @param ignoreError 是否忽略转换异常，true 忽略并跳过错误数据，false 抛出异常
+     * @param <T>         目标类型
+     * @return 转换后的 List，输入为空返回空列表
+     */
+    public static <T> List<T> splitToList(String str, String delimiter, Function<String, T> converter, boolean ignoreError) {
+        if (str == null || str.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (delimiter == null || delimiter.isEmpty()) {
+            throw new IllegalArgumentException("分隔符不能为空");
+        }
+        if (converter == null) {
+            throw new IllegalArgumentException("转换函数不能为空");
+        }
+
+        String[] parts = str.split(delimiter);
+        List<T> result = new ArrayList<>(parts.length);
+
+        for (String part : parts) {
+            try {
+                result.add(converter.apply(part));
+            } catch (Exception e) {
+                if (!ignoreError) {
+                    throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
+                }
+                // 忽略错误时跳过该元素
+            }
+        }
+        return result;
+    }
 
     /**
      * 按指定分隔符拆分字符串并转换为 Integer 类型列表
@@ -388,6 +483,105 @@ public final class StringUtil {
             return "";
         }
         return String.join(delimiter, elements);
+    }
+
+    /**
+     * 使用指定分隔符拼接集合中的字符串元素
+     *
+     * @param delimiter 分隔符
+     * @param elements  字符串集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String join(String delimiter, java.util.Collection<String> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return "";
+        }
+        return String.join(delimiter, elements);
+    }
+
+    /**
+     * 使用指定分隔符拼接对象数组，每个对象调用 toString() 方法
+     *
+     * @param delimiter 分隔符
+     * @param elements  对象数组
+     * @return 拼接结果，对象为 null 会被转换为 "null"
+     */
+    public static String joinObjects(String delimiter, Object... elements) {
+        if (elements == null || elements.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < elements.length; i++) {
+            if (i > 0) {
+                sb.append(delimiter);
+            }
+            sb.append(elements[i] == null ? "null" : elements[i].toString());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 使用指定分隔符拼接集合中的对象元素，每个对象调用 toString() 方法
+     *
+     * @param delimiter 分隔符
+     * @param elements  对象集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String joinObjects(String delimiter, java.util.Collection<?> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Object obj : elements) {
+            if (!first) {
+                sb.append(delimiter);
+            } else {
+                first = false;
+            }
+            sb.append(obj == null ? "null" : obj.toString());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 使用默认分隔符拼接字符串数组
+     *
+     * @param elements 字符串数组
+     * @return 拼接结果，数组为空返回空字符串
+     */
+    public static String join(String... elements) {
+        return join(DEFAULT_DELIMITER, elements);
+    }
+
+    /**
+     * 使用默认分隔符拼接字符串集合
+     *
+     * @param elements 字符串集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String join(java.util.Collection<String> elements) {
+        return join(DEFAULT_DELIMITER, elements);
+    }
+
+    /**
+     * 使用默认分隔符拼接对象数组
+     *
+     * @param elements 对象数组
+     * @return 拼接结果，数组为空返回空字符串
+     */
+    public static String joinObjects(Object... elements) {
+        return joinObjects(DEFAULT_DELIMITER, elements);
+    }
+
+    /**
+     * 使用默认分隔符拼接对象集合
+     *
+     * @param elements 对象集合
+     * @return 拼接结果，集合为空返回空字符串
+     */
+    public static String joinObjects(java.util.Collection<?> elements) {
+        return joinObjects(DEFAULT_DELIMITER, elements);
     }
 
     /**
@@ -566,10 +760,14 @@ public final class StringUtil {
      * @return 脱敏后的手机号，长度不为11时返回原始字符串
      */
     public static String maskPhone(String phone) {
-        final int PHONE_LENGTH = 11;       // 手机号固定长度
-        final int PREFIX_VISIBLE = 3;      // 前面可见位数
-        final int SUFFIX_VISIBLE = 4;      // 后面可见位数
-        final String MASK = "****";        // 中间脱敏符号
+        // 手机号固定长度
+        final int PHONE_LENGTH = 11;
+        // 前面可见位数
+        final int PREFIX_VISIBLE = 3;
+        // 后面可见位数
+        final int SUFFIX_VISIBLE = 4;
+        // 中间脱敏符号
+        final String MASK = "****";
 
         if (phone == null || phone.length() != PHONE_LENGTH) {
             return phone;
@@ -585,9 +783,12 @@ public final class StringUtil {
      * @return 脱敏后的身份证号，长度不足最小限制则返回原始字符串
      */
     public static String maskIdCard(String id) {
-        final int MIN_LENGTH = 8;  // 脱敏最小长度限制
-        final int PREFIX_VISIBLE = 3; // 前面可见长度
-        final int SUFFIX_VISIBLE = 4; // 后面可见长度
+        // 脱敏最小长度限制
+        final int MIN_LENGTH = 8;
+        // 前面可见长度
+        final int PREFIX_VISIBLE = 3;
+        // 后面可见长度
+        final int SUFFIX_VISIBLE = 4;
 
         if (id == null || id.length() < MIN_LENGTH) {
             return id;
@@ -727,7 +928,8 @@ public final class StringUtil {
         if (unicodeStr == null) {
             return null;
         }
-        Pattern pattern = Pattern.compile("\\\\u([0-9a-fA-F]{4})");
+        String regex = "\\\\u([0-9a-fA-F]{4})";
+        Pattern pattern = Pattern.compile(regex);
         Matcher matcher = pattern.matcher(unicodeStr);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
@@ -1105,7 +1307,8 @@ public final class StringUtil {
             sb.append(template, cursor, placeholderIndex);
             sb.append(args[argIndex] != null ? args[argIndex].toString() : "null");
 
-            cursor = placeholderIndex + 2; // 跳过"{}"
+            // 跳过"{}"
+            cursor = placeholderIndex + 2;
             argIndex++;
         }
 
