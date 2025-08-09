@@ -2,11 +2,13 @@ package local.ateng.java.redisjdk8.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import local.ateng.java.redisjdk8.service.RLock;
+import local.ateng.java.redisjdk8.service.RedisLockService;
 import local.ateng.java.redisjdk8.service.RedisService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.DataType;
 import org.springframework.data.redis.core.*;
-import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
@@ -32,14 +34,17 @@ public class RedisServiceImpl implements RedisService {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final RedisLockService redisLockService;
 
     public RedisServiceImpl(
             @Qualifier("jacksonRedisTemplate")
             RedisTemplate<String, Object> redisTemplate,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            RedisLockService redisLockService
     ) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.redisLockService = redisLockService;
     }
 
     /**
@@ -1996,119 +2001,118 @@ public class RedisServiceImpl implements RedisService {
     // ------------------ 分布式锁 ------------------
 
     /**
-     * 尝试获取分布式锁，设置锁的唯一标识和过期时间。
-     *
-     * @param key    锁的 Redis 键
-     * @param value  锁的持有者标识（唯一）
-     * @param expire 过期时间（秒）
-     * @return 获取成功返回 true，失败返回 false
+     * 释放锁的Lua脚本
      */
-    @Override
-    public boolean tryLock(String key, String value, long expire) {
-        return tryLock(key, value, expire, TimeUnit.SECONDS);
+    private static final String UNLOCK_LUA =
+            "if redis.call('get', KEYS[1]) == ARGV[1] " +
+                    "then return redis.call('del', KEYS[1]) else return 0 end";
+    /**
+     * 请求标识（建议使用 UUID，保证释放锁时是自己的锁）
+     */
+    private final ThreadLocal<String> requestIdHolder = new ThreadLocal<>();
+
+    /**
+     * 生成并保存一个请求 id（UUID）到当前线程，用于后续释放锁时验证 ownership。
+     *
+     * @return 请求 id
+     */
+    public String generateRequestId() {
+        String id = UUID.randomUUID().toString();
+        requestIdHolder.set(id);
+        return id;
     }
 
     /**
-     * 尝试获取分布式锁，支持灵活的过期时间单位。
+     * 尝试获取锁（立即返回）
      *
-     * @param key     锁的 Redis 键
-     * @param value   锁的持有者标识（唯一）
-     * @param timeout 过期时间
-     * @param unit    时间单位（如 TimeUnit.SECONDS）
-     * @return 获取成功返回 true，失败返回 false
+     * @param key       锁 key
+     * @param leaseTime 锁的生存时间
+     * @param unit      时间单位
+     * @return true 成功获取锁；false 失败
      */
     @Override
-    public boolean tryLock(String key, String value, long timeout, TimeUnit unit) {
-        return setIfAbsent(key, value, timeout, unit);
-    }
-
-    /**
-     * 释放分布式锁，只有持有锁的客户端（value 匹配）才能释放。
-     *
-     * @param key           锁的 Redis 键
-     * @param expectedValue 期望释放锁的持有者标识
-     * @return 释放成功返回 true，失败返回 false
-     */
-    @Override
-    public boolean releaseLock(String key, String expectedValue) {
-        if (ObjectUtils.isEmpty(key) || ObjectUtils.isEmpty(expectedValue)) {
-            return false;
+    public boolean tryLock(String key, long leaseTime, TimeUnit unit) {
+        String reqId = requestIdHolder.get();
+        if (reqId == null) {
+            reqId = generateRequestId();
         }
-
-        String lua = "" +
-                "if redis.call('get', KEYS[1]) == ARGV[1] then " +
-                "  return redis.call('del', KEYS[1]) " +
-                "else " +
-                "  return 0 " +
-                "end";
-
-        Long result = redisTemplate.execute(
-                RedisScript.of(lua, Long.class),
-                Collections.singletonList(key),
-                expectedValue
-        );
-
-        return result != null && result > 0;
+        Boolean ok = redisTemplate.opsForValue().setIfAbsent(key, reqId, leaseTime, unit);
+        return Boolean.TRUE.equals(ok);
     }
 
     /**
-     * 尝试续期分布式锁，只有持有锁的客户端（value 匹配）才能续期。
+     * 尝试获取锁（支持等待）
      *
-     * @param key           锁的 Redis 键
-     * @param expectedValue 当前锁持有者标识
-     * @param timeout       新的过期时间
-     * @param unit          时间单位
-     * @return 续期成功返回 true，否则 false
+     * @param key       锁 key
+     * @param waitTime  最长等待时间
+     * @param leaseTime 锁的生存时间
+     * @param unit      时间单位
+     * @return true 成功获取锁；false 失败
      */
-    @Override
-    public boolean renewLock(String key, String expectedValue, long timeout, TimeUnit unit) {
-        if (ObjectUtils.isEmpty(key) || ObjectUtils.isEmpty(expectedValue) || timeout <= 0) {
-            return false;
+    public boolean tryLock(String key, long waitTime, long leaseTime, TimeUnit unit) {
+        long endTime = System.nanoTime() + unit.toNanos(waitTime);
+        String reqId = requestIdHolder.get();
+        if (reqId == null) {
+            reqId = generateRequestId();
         }
+        long sleepTime = 50;
 
-        String lua = "" +
-                "if redis.call('get', KEYS[1]) == ARGV[1] then " +
-                "  return redis.call('pexpire', KEYS[1], ARGV[2]) " +
-                "else " +
-                "  return 0 " +
-                "end";
-
-        long millis = unit.toMillis(timeout);
-        Long result = redisTemplate.execute(
-                RedisScript.of(lua, Long.class),
-                Collections.singletonList(key),
-                expectedValue,
-                // 需要是 int 类型
-                (int) millis
-        );
-
-        return result != null && result > 0;
-    }
-
-    /**
-     * 带重试机制的分布式锁，失败后等待指定时间再重试，最多重试次数限制。
-     *
-     * @param key        锁的 Redis 键
-     * @param value      锁的持有者标识（唯一）
-     * @param retryTimes 重试次数
-     * @param waitMillis 重试等待时间（毫秒）
-     * @return 获取成功返回 true，失败返回 false
-     */
-    @Override
-    public boolean lockWithRetry(String key, String value, int retryTimes, long waitMillis) {
-        while (retryTimes-- > 0) {
-            // 默认锁 30 秒
-            if (tryLock(key, value, 30, TimeUnit.SECONDS)) {
+        while (System.nanoTime() < endTime) {
+            Boolean ok = redisTemplate.opsForValue().setIfAbsent(key, reqId, leaseTime, unit);
+            if (Boolean.TRUE.equals(ok)) {
                 return true;
             }
             try {
-                Thread.sleep(waitMillis);
+                // 等待一会再尝试，避免占满 CPU
+                Thread.sleep(sleepTime);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return false;
             }
         }
         return false;
+    }
+
+    /**
+     * 尝试获取锁（一直等待，最多10秒）
+     *
+     * @param key 锁 key
+     * @return true 成功获取锁；false 失败
+     */
+    public boolean tryLock(String key) {
+        long waitTime = 10;
+        long leaseTime = -1;
+        return tryLock(key, waitTime, leaseTime, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 原子释放锁：只有持有相同 requestId 的线程才会成功删除 key
+     *
+     * @param key 锁 key
+     * @return true 释放成功；false 未释放（可能不是当前持有者或锁已过期）
+     */
+    @Override
+    public boolean unlock(String key) {
+        String reqId = requestIdHolder.get();
+        if (reqId == null) {
+            return false;
+        }
+
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>(UNLOCK_LUA, Long.class);
+        Long result = redisTemplate.execute(script, Collections.singletonList(key), reqId);
+        requestIdHolder.remove();
+        return result != null && result > 0;
+    }
+
+    /**
+     * 获取分布式锁对象
+     *
+     * @param name 锁名称
+     * @return RLock 实例
+     */
+    @Override
+    public RLock getLock(String name) {
+        return redisLockService.getLock(name);
     }
 
     // ------------------ 计数器操作 ------------------

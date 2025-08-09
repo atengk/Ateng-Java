@@ -1167,56 +1167,49 @@ public interface RedisService {
     // ------------------ 分布式锁 ------------------
 
     /**
-     * 尝试获取分布式锁，设置锁的唯一标识和过期时间。
+     * 尝试获取锁（立即返回）
      *
-     * @param key    锁的 Redis 键
-     * @param value  锁的持有者标识（唯一）
-     * @param expire 过期时间（秒）
-     * @return 获取成功返回 true，失败返回 false
+     * @param key       锁 key
+     * @param leaseTime 锁的生存时间
+     * @param unit      时间单位
+     * @return true 成功获取锁；false 失败
      */
-    boolean tryLock(String key, String value, long expire);
+    boolean tryLock(String key, long leaseTime, TimeUnit unit);
 
     /**
-     * 尝试获取分布式锁，支持灵活的过期时间单位。
+     * 尝试获取锁（支持等待）
      *
-     * @param key     锁的 Redis 键
-     * @param value   锁的持有者标识（唯一）
-     * @param timeout 过期时间
-     * @param unit    时间单位（如 TimeUnit.SECONDS）
-     * @return 获取成功返回 true，失败返回 false
+     * @param key       锁 key
+     * @param waitTime  最长等待时间
+     * @param leaseTime 锁的生存时间
+     * @param unit      时间单位
+     * @return true 成功获取锁；false 失败
      */
-    boolean tryLock(String key, String value, long timeout, TimeUnit unit);
+    boolean tryLock(String key, long waitTime, long leaseTime, TimeUnit unit);
 
     /**
-     * 释放分布式锁，只有持有锁的客户端（value 匹配）才能释放。
+     * 尝试获取锁（一直等待，最多10秒）
      *
-     * @param key           锁的 Redis 键
-     * @param expectedValue 期望释放锁的持有者标识
-     * @return 释放成功返回 true，失败返回 false
+     * @param key 锁 key
+     * @return true 成功获取锁；false 失败
      */
-    boolean releaseLock(String key, String expectedValue);
+    boolean tryLock(String key);
 
     /**
-     * 尝试续期分布式锁，只有持有锁的客户端（value 匹配）才能续期。
+     * 原子释放锁：只有持有相同 requestId 的线程才会成功删除 key
      *
-     * @param key           锁的 Redis 键
-     * @param expectedValue 当前锁持有者标识
-     * @param timeout       新的过期时间
-     * @param unit          时间单位
-     * @return 续期成功返回 true，否则 false
+     * @param key 锁 key
+     * @return true 释放成功；false 未释放（可能不是当前持有者或锁已过期）
      */
-    boolean renewLock(String key, String expectedValue, long timeout, TimeUnit unit);
+    boolean unlock(String key);
 
     /**
-     * 带重试机制的分布式锁，失败后等待指定时间再重试，最多重试次数限制。
+     * 获取分布式锁对象
      *
-     * @param key        锁的 Redis 键
-     * @param value      锁的持有者标识（唯一）
-     * @param retryTimes 重试次数
-     * @param waitMillis 重试等待时间（毫秒）
-     * @return 获取成功返回 true，失败返回 false
+     * @param name 锁名称
+     * @return RLock 实例
      */
-    boolean lockWithRetry(String key, String value, int retryTimes, long waitMillis);
+    RLock getLock(String name);
 
     // ------------------ 计数器操作 ------------------
 
