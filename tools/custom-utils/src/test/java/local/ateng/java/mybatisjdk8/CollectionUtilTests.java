@@ -161,4 +161,17 @@ public class CollectionUtilTests {
 
     }
 
+
+    @Test
+    void test1111() {
+        List<String> list = new ArrayList<>();
+        list.add("B");
+        list.add("C");
+
+        // 在列表最前面插入一条数据
+        list.add(0, "A");
+
+        System.out.println(list); // 输出: [A, B, C]
+    }
+
 }

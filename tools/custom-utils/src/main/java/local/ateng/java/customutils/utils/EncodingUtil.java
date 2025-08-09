@@ -31,22 +31,41 @@ public final class EncodingUtil {
      * @return 编码后的字符串，编码失败返回原字符串
      */
     public static String urlEncode(String input) {
-        return urlEncode(input, "UTF-8");
+        return urlEncode(input, StandardCharsets.UTF_8.name());
     }
 
     /**
-     * URL 编码
+     * 对输入字符串进行 URL 编码
      *
-     * @param input   需要编码的字符串
-     * @param charset 编码字符集，如 UTF-8
-     * @return 编码后的字符串，编码失败返回原字符串
+     * <p>该方法使用指定的字符集对输入字符串进行 URL 编码。
+     * 编码过程中，空格会被编码为 "%20" 而非默认的 "+"，以更符合 URL 标准。
+     * 如果输入为 null，直接返回 null；如果指定字符集无效或编码失败，返回原字符串。</p>
+     *
+     * @param input   需要编码的字符串，允许为 null
+     * @param charset 编码字符集名称，例如 "UTF-8"；若为 null 或无效，则默认使用 UTF-8
+     * @return 编码后的字符串；若编码失败或输入为 null，则返回原字符串或 null
      */
     public static String urlEncode(String input, String charset) {
+        // 空格编码替换字符
+        final String spaceEncoded = "%20";
+        // URLEncoder默认空格编码字符
+        final String spaceEncodedByURLEncoder = "+";
+
         if (input == null) {
             return null;
         }
+
+        Charset charsetToUse;
         try {
-            return URLEncoder.encode(input, charset);
+            charsetToUse = (charset == null) ? StandardCharsets.UTF_8 : Charset.forName(charset);
+        } catch (Exception e) {
+            charsetToUse = StandardCharsets.UTF_8;
+        }
+
+        try {
+            String encoded = URLEncoder.encode(input, charsetToUse.name());
+            // 将 URLEncoder 编码中默认的 '+' 替换为更标准的 '%20'
+            return encoded.replace(spaceEncodedByURLEncoder, spaceEncoded);
         } catch (UnsupportedEncodingException e) {
             // 编码失败，返回原字符串
             return input;

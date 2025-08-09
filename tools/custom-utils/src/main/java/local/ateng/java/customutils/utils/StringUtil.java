@@ -243,7 +243,7 @@ public final class StringUtil {
     /**
      * 将字符串按分隔符拆分为列表
      *
-     * @param str       原始字符串
+     * @param str 原始字符串
      * @return 拆分后的 List，空字符串返回空列表
      */
     public static List<String> splitToList(String str) {
@@ -740,17 +740,52 @@ public final class StringUtil {
      * HTML 字符转义（如 < 转为 &lt;）
      *
      * @param str 原始字符串
-     * @return 转义后的字符串
+     * @return 转义后的字符串，当传入为空时返回原值
      */
     public static String escapeHtml(String str) {
-        if (str == null) {
-            return null;
+        if (str == null || str.isEmpty()) {
+            return str;
         }
-        return str.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#x27;");
+        StringBuilder sb = new StringBuilder(str.length());
+        for (char c : str.toCharArray()) {
+            switch (c) {
+                case '&':
+                    sb.append("&amp;");
+                    break;
+                case '<':
+                    sb.append("&lt;");
+                    break;
+                case '>':
+                    sb.append("&gt;");
+                    break;
+                case '"':
+                    sb.append("&quot;");
+                    break;
+                case '\'':
+                    sb.append("&#x27;");
+                    break;
+                default:
+                    sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * HTML 字符还原（如 &lt; 还原为 <）
+     *
+     * @param str 转义后的字符串
+     * @return 还原后的字符串，当传入为空时返回原值
+     */
+    public static String unescapeHtml(String str) {
+        if (str == null || str.isEmpty()) {
+            return str;
+        }
+        return str.replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#x27;", "'")
+                .replace("&amp;", "&");
     }
 
     /**
@@ -1177,16 +1212,192 @@ public final class StringUtil {
     }
 
     /**
-     * 验证URL格式（http/https，简单校验）
+     * 验证 URL 格式（http/https，支持域名/IP、端口、路径、查询参数、锚点）
      *
      * @param url URL 字符串
-     * @return 格式正确返回 true
+     * @return 格式正确返回 true，否则返回 false
      */
     public static boolean isUrl(String url) {
-        if (url == null) {
+        if (isEmpty(url)) {
             return false;
         }
-        return url.matches("^(https?://)?([\\w.-]+)(:[0-9]+)?(/[\\w./-]*)?$");
+        String regex =
+                // 协议
+                "^(https?://)"
+                        + "(([\\w-]+\\.)+[\\w-]{2,}|"
+                        // 域名或IP
+                        + "((25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)(\\.(?!$)|$)){4})"
+                        // 端口
+                        + "(:\\d{1,5})?"
+                        // 路径、查询、锚点
+                        + "(/[^\\s]*)?$";
+        Pattern pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(url.trim());
+        return matcher.matches();
+    }
+
+    /**
+     * 判断 URL 是否安全
+     * 1. 不能以危险协议（javascript:, data:, vbscript:）开头
+     * 2. 不能包含 HTML/JS 注入字符
+     * 3. 不能包含非 ASCII 可打印字符
+     *
+     * @param url URL 字符串
+     * @return 安全返回 true，不安全返回 false
+     */
+    public static boolean isSafeUrl(String url) {
+        if (isBlank(url)) {
+            return false;
+        }
+        String cleaned = url.trim().toLowerCase();
+
+        // 危险协议列表
+        String[] dangerousProtocols = { "javascript:", "data:", "vbscript:" };
+        // 注入字符正则
+        String injectionPattern = ".*[<>\"'`()].*";
+        // 非 ASCII 可打印字符正则
+        String nonAsciiPrintablePattern = ".*[^\\x20-\\x7E].*";
+
+        // 危险协议检测
+        for (String protocol : dangerousProtocols) {
+            if (cleaned.startsWith(protocol)) {
+                return false;
+            }
+        }
+
+        // 注入字符检测
+        if (url.matches(injectionPattern)) {
+            return false;
+        }
+
+        // 非 ASCII 可打印字符检测
+        if (url.matches(nonAsciiPrintablePattern)) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+    /**
+     * 修复并安全过滤 URL
+     * 1. 去除首尾空格、换行、控制字符
+     * 2. 阻止危险协议（javascript:, data:, vbscript:）
+     * 3. 移除 HTML/JS 注入字符
+     * 4. 如果缺少协议，补全为 http://
+     * 5. 统一协议和域名部分为小写
+     * 6. 清理路径中多余的连续斜杠
+     *
+     * @param url 原始 URL
+     * @return 修复并安全过滤后的 URL，当传入为空或不安全时返回 null
+     */
+    public static String fixUrl(String url) {
+        if (isBlank(url)) {
+            return null;
+        }
+
+        // 正则表达式变量
+        final String CONTROL_WHITESPACE_PATTERN = "[\\p{Cntrl}\\s]+";
+        final String INJECTION_CHARS_PATTERN = "[<>\"'`()]";
+        final String NON_ASCII_PRINTABLE_PATTERN = "[^\\x20-\\x7E]";
+        final String HTTP_URL_PATTERN = "^(?i)https?://.*";
+
+        // 去掉控制字符和空白符，替换为单个空格并去首尾空格
+        String fixed = url.replaceAll(CONTROL_WHITESPACE_PATTERN, " ").trim();
+
+        // 不安全 URL 直接拒绝
+        if (!isSafeUrl(fixed)) {
+            return null;
+        }
+
+        // 移除 HTML/JS 注入字符
+        fixed = fixed.replaceAll(INJECTION_CHARS_PATTERN, "");
+
+        // 移除非 ASCII 可打印字符
+        fixed = fixed.replaceAll(NON_ASCII_PRINTABLE_PATTERN, "");
+
+        // 如果没有协议，补上 http://
+        if (!fixed.matches(HTTP_URL_PATTERN)) {
+            fixed = "http://" + fixed;
+        }
+
+        try {
+            java.net.URL parsedUrl = new java.net.URL(fixed);
+            String protocol = parsedUrl.getProtocol().toLowerCase();
+            String host = parsedUrl.getHost().toLowerCase();
+            int port = parsedUrl.getPort();
+            String path = parsedUrl.getPath().replaceAll("/{2,}", "/");
+            String query = parsedUrl.getQuery() != null ? "?" + parsedUrl.getQuery() : "";
+            String ref = parsedUrl.getRef() != null ? "#" + parsedUrl.getRef() : "";
+
+            // 组装安全规范化 URL
+            StringBuilder sb = new StringBuilder();
+            sb.append(protocol).append("://").append(host);
+            if (port != -1 && port != parsedUrl.getDefaultPort()) {
+                sb.append(":").append(port);
+            }
+            sb.append(path).append(query).append(ref);
+            return sb.toString();
+        } catch (Exception e) {
+            // 解析失败，认为不安全
+            return null;
+        }
+    }
+
+    /**
+     * 修正和规范路径字符串
+     * 1. 去除前后空格
+     * 2. 统一路径分隔符为 '/'
+     * 3. 去除多余的连续 '/'
+     * 4. 规范处理 '.' 和 '..'
+     *
+     * @param path 输入的路径字符串，可能是文件路径或URL路径
+     * @return 规范后的干净路径字符串
+     */
+    public static String fixPath(String path) {
+        if (path == null || path.trim().isEmpty()) {
+            return "";
+        }
+        // 去除前后空格
+        path = path.trim();
+        // 统一反斜杠为正斜杠
+        path = path.replace('\\', '/');
+        // 去除连续多余的斜杠，比如 /////
+        path = path.replaceAll("/+", "/");
+
+        // 处理相对路径 . 和 ..
+        String[] parts = path.split("/");
+        Deque<String> stack = new LinkedList<>();
+
+        for (String part : parts) {
+            if (part.equals("") || part.equals(".")) {
+                // 空或者当前目录，跳过
+                continue;
+            }
+            if (part.equals("..")) {
+                // 上一级目录，弹出栈顶（如果存在）
+                if (!stack.isEmpty()) {
+                    stack.pollLast();
+                }
+            } else {
+                // 正常目录，压入栈
+                stack.offerLast(part);
+            }
+        }
+
+        // 重新拼接路径
+        StringBuilder cleanPath = new StringBuilder();
+        for (String dir : stack) {
+            cleanPath.append("/").append(dir);
+        }
+
+        // 如果输入是绝对路径（以 '/' 开头），保留开头的 '/'
+        // 否则去掉开头的 '/'，返回相对路径
+        boolean isAbsolute = path.startsWith("/");
+        if (cleanPath.length() == 0) {
+            return isAbsolute ? "/" : "";
+        }
+        return isAbsolute ? cleanPath.toString() : cleanPath.substring(1);
     }
 
     /**

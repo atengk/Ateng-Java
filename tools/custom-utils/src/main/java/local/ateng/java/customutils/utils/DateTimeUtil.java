@@ -400,60 +400,66 @@ public final class DateTimeUtil {
     /**
      * 返回距离当前时间的中文描述（如：刚刚、5分钟前、2天前、3个月前、1年前）
      *
-     * @param time 时间
-     * @return 可读时间描述
+     * @param time 待描述的时间，非空
+     * @return 距离当前时间的可读描述，time为null返回空字符串
      */
     public static String describeDurationFromNow(LocalDateTime time) {
         if (time == null) {
             return "";
         }
 
-        final long SECOND = 1L;
-        final long MINUTE = 60 * SECOND;
-        final long HOUR = 60 * MINUTE;
-        final long DAY = 24 * HOUR;
+        /*
+         * 时间单位换算（单位：秒）
+         */
+        final long second = 1L;
+        final long minute = 60 * second;
+        final long hour = 60 * minute;
+        final long day = 24 * hour;
 
-        // 阈值定义（单位：秒）
-        // 小于60秒，显示“刚刚”
-        final long JUST_NOW_MAX = 59;
-        // 小于59分钟59秒，显示“XX分钟前”
-        final long MINUTES_MAX = HOUR - 1;
-        // 小于23小时59分59秒，显示“XX小时前”
-        final long HOURS_MAX = DAY - 1;
-        // 小于30天，显示“XX天前”
-        final long DAYS_MAX = 30 * DAY - 1;
-        // 小于12月，显示“XX个月前”
-        final long MONTHS_MAX = 30 * DAY - 1;
+        /*
+         * 阈值定义（单位：秒）
+         * 小于等于justNowMaxSeconds秒，返回“刚刚”
+         * 小于等于minutesMaxSeconds秒，返回“XX分钟前”
+         * 小于等于hoursMaxSeconds秒，返回“XX小时前”
+         * 小于等于daysMaxSeconds秒，返回“XX天前”
+         * 小于monthsMaxCount个月，返回“XX个月前”
+         * 其它，返回“XX年前”
+         */
+        final long justNowMaxSeconds = 59;
+        final long minutesMaxSeconds = hour - 1;
+        final long hoursMaxSeconds = day - 1;
+        final long daysMaxSeconds = 30 * day - 1;
+        final long monthsMaxCount = 12;
 
         LocalDateTime now = LocalDateTime.now();
-        long seconds = ChronoUnit.SECONDS.between(time, now);
+        long secondsBetween = ChronoUnit.SECONDS.between(time, now);
 
-        if (seconds <= JUST_NOW_MAX) {
+        if (secondsBetween <= justNowMaxSeconds) {
             return "刚刚";
         }
 
-        if (seconds <= MINUTES_MAX) {
-            long minutes = seconds / MINUTE;
+        if (secondsBetween <= minutesMaxSeconds) {
+            long minutes = secondsBetween / minute;
             return minutes + "分钟前";
         }
 
-        if (seconds <= HOURS_MAX) {
-            long hours = seconds / HOUR;
+        if (secondsBetween <= hoursMaxSeconds) {
+            long hours = secondsBetween / hour;
             return hours + "小时前";
         }
 
-        if (seconds <= DAYS_MAX) {
-            long days = seconds / DAY;
+        if (secondsBetween <= daysMaxSeconds) {
+            long days = secondsBetween / day;
             return days + "天前";
         }
 
-        long months = ChronoUnit.MONTHS.between(time, now);
-        if (months < MONTHS_MAX) {
-            return months + "个月前";
+        long monthsBetween = ChronoUnit.MONTHS.between(time, now);
+        if (monthsBetween < monthsMaxCount) {
+            return monthsBetween + "个月前";
         }
 
-        long years = ChronoUnit.YEARS.between(time, now);
-        return years + "年前";
+        long yearsBetween = ChronoUnit.YEARS.between(time, now);
+        return yearsBetween + "年前";
     }
 
     /**
@@ -678,18 +684,43 @@ public final class DateTimeUtil {
     }
 
     /**
-     * 计算两个日期之间的详细差异：年、月、日
+     * 计算两个日期之间的详细差异：年、月、日，顺序自动调整，结果总为正差异。
+     * 返回格式类似 "2年3个月5天"，且省略值为0的部分。
      *
-     * @param start 起始日期
-     * @param end   结束日期
-     * @return 差异描述（如 "2年3个月5天"）
+     * @param start 起始日期，非空
+     * @param end   结束日期，非空
+     * @return 差异描述字符串，如果参数为空，返回空字符串
      */
     public static String differenceDetail(LocalDate start, LocalDate end) {
         if (start == null || end == null) {
             return "";
         }
+        // 如果起始日期晚于结束日期，则交换，保证start <= end
+        if (start.isAfter(end)) {
+            LocalDate temp = start;
+            start = end;
+            end = temp;
+        }
         Period period = Period.between(start, end);
-        return String.format("%d年%d个月%d天", period.getYears(), period.getMonths(), period.getDays());
+
+        List<String> parts = new ArrayList<>();
+
+        if (period.getYears() != 0) {
+            parts.add(period.getYears() + "年");
+        }
+        if (period.getMonths() != 0) {
+            parts.add(period.getMonths() + "个月");
+        }
+        if (period.getDays() != 0) {
+            parts.add(period.getDays() + "天");
+        }
+
+        // 如果全部为0，则表示同一天
+        if (parts.isEmpty()) {
+            return "0天";
+        }
+
+        return String.join("", parts);
     }
 
     /**
