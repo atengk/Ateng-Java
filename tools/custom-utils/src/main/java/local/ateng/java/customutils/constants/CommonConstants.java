@@ -17,7 +17,7 @@ public final class CommonConstants {
     }
 
     /* ==============================
-       代码规范相关常量
+       常用的编码
        ============================== */
 
     /**
@@ -26,34 +26,54 @@ public final class CommonConstants {
     public static final String UTF_8 = "UTF-8";
 
     /**
-     * GBK 编码
+     * UTF-16 编码
+     */
+    public static final String UTF_16 = "UTF-16";
+
+    /**
+     * UTF-32 编码
+     */
+    public static final String UTF_32 = "UTF-32";
+
+    /**
+     * GBK 编码（中文 Windows 常用）
      */
     public static final String GBK = "GBK";
 
     /**
-     * 默认分页页码
+     * GB2312 编码（简体中文早期标准）
      */
-    public static final int DEFAULT_PAGE_NUM = 1;
+    public static final String GB2312 = "GB2312";
 
     /**
-     * 默认分页大小
+     * ISO-8859-1 编码（Latin-1，西欧字符集）
      */
-    public static final int DEFAULT_PAGE_SIZE = 20;
+    public static final String ISO_8859_1 = "ISO-8859-1";
 
     /**
-     * 最大分页大小（防止一次性查询过多数据）
+     * US-ASCII 编码（基本拉丁字符）
      */
-    public static final int MAX_PAGE_SIZE = 1000;
+    public static final String US_ASCII = "US-ASCII";
 
     /**
-     * 排序：升序
+     * Big5 编码（繁体中文常用，台湾/香港）
      */
-    public static final String ORDER_ASC = "ASC";
+    public static final String BIG5 = "Big5";
 
     /**
-     * 排序：降序
+     * Windows-1252 编码（西欧 Windows 默认）
      */
-    public static final String ORDER_DESC = "DESC";
+    public static final String WINDOWS_1252 = "windows-1252";
+
+    /**
+     * Shift_JIS 编码（日本常用）
+     */
+    public static final String SHIFT_JIS = "Shift_JIS";
+
+    /**
+     * EUC-KR 编码（韩文常用）
+     */
+    public static final String EUC_KR = "EUC-KR";
 
         /* ==============================
        时间格式化常量
@@ -443,6 +463,65 @@ public final class CommonConstants {
      */
     public static final String TAB = "\t";
 
+    /* ==============================
+       空值与占位常量
+       ============================== */
+
+    /**
+     * 空字符串
+     */
+    public static final String EMPTY_STRING = "";
+
+    /**
+     * 换行符（Unix/Linux）
+     */
+    public static final String LF = "\n";
+
+    /**
+     * 回车符（Windows）
+     */
+    public static final String CRLF = "\r\n";
+
+    /**
+     * 字符串 "null"（注意与 null 引用区分）
+     */
+    public static final String NULL_STRING = "null";
+
+    /**
+     * 空 JSON 对象字符串
+     */
+    public static final String EMPTY_JSON_OBJECT = "{}";
+
+    /**
+     * 空 JSON 数组字符串
+     */
+    public static final String EMPTY_JSON_ARRAY = "[]";
+
+    /**
+     * 空 Map 描述字符串
+     */
+    public static final String EMPTY_MAP_STRING = "{}";
+
+    /**
+     * 占位符：连字符 "-"
+     */
+    public static final String PLACEHOLDER_DASH = "-";
+
+    /**
+     * 占位符：下划线 "_"
+     */
+    public static final String PLACEHOLDER_UNDERSCORE = "_";
+
+    /**
+     * 占位符：默认未知值 "UNKNOWN"
+     */
+    public static final String UNKNOWN = "UNKNOWN";
+
+    /**
+     * 占位符：默认未设置值 "UNSET"
+     */
+    public static final String UNSET = "UNSET";
+
         /* ==============================
        常用正则表达式（包含常见输入校验规则）
        ============================== */
@@ -623,7 +702,9 @@ public final class CommonConstants {
        数字常量（系统化生成）
        ============================== */
 
-    // 1 到 99
+    /**
+     * 1 到 99
+     */
     public static final int ZERO = 0;
     public static final int ONE = 1;
     public static final int TWO = 2;
@@ -725,7 +806,9 @@ public final class CommonConstants {
     public static final int NINETY_EIGHT = 98;
     public static final int NINETY_NINE = 99;
 
-    // 100 到 1000
+    /**
+     * 100 到 1000
+     */
     public static final int ONE_HUNDRED = 100;
     public static final int TWO_HUNDRED = 200;
     public static final int THREE_HUNDRED = 300;
@@ -736,7 +819,9 @@ public final class CommonConstants {
     public static final int EIGHT_HUNDRED = 800;
     public static final int NINE_HUNDRED = 900;
 
-    // 1000 到 10000
+    /**
+     * 1000 到 10000
+     */
     public static final int ONE_THOUSAND = 1000;
     public static final int TWO_THOUSAND = 2000;
     public static final int THREE_THOUSAND = 3000;
@@ -791,6 +876,11 @@ public final class CommonConstants {
     public static final String REDIS_KEY_TOKEN = "token";
 
     /**
+     * 默认缓存过期时间（秒） - 10分钟
+     */
+    public static final long CACHE_EXPIRE_10MIN = 10 * 60;
+
+    /**
      * 默认缓存过期时间（秒） - 30分钟
      */
     public static final long CACHE_EXPIRE_30MIN = 30 * 60;
@@ -799,6 +889,11 @@ public final class CommonConstants {
      * 默认缓存过期时间（秒） - 1小时
      */
     public static final long CACHE_EXPIRE_1H = 60 * 60;
+
+    /**
+     * 默认缓存过期时间（秒） - 2小时
+     */
+    public static final long CACHE_EXPIRE_2H = 2 * 60 * 60;
 
     /**
      * 默认缓存过期时间（秒） - 1天
@@ -1568,6 +1663,10 @@ public final class CommonConstants {
      */
     public static final String TIME_23_59 = "23:59";
 
+    /**
+     * 晚上 23:59.999999（精确）
+     */
+    public static final String TIME_23_59_999999 = "23:59.999999";
 
     /* ==============================
        第三方服务相关常量
@@ -1844,6 +1943,176 @@ public final class CommonConstants {
      * 操作成功
      */
     public static final String SUCCESS_OPERATION = "操作成功";
+
+    /* ==============================
+       数据库操作相关常量
+       ============================== */
+
+    /**
+     * 默认分页大小
+     */
+    public static final int DEFAULT_PAGE_SIZE = 20;
+
+    /**
+     * 最大分页大小（防止一次性查询过多数据）
+     */
+    public static final int MAX_PAGE_SIZE = 1000;
+
+    /**
+     * 默认分页页码
+     */
+    public static final int DEFAULT_PAGE_NUM = 1;
+
+    /**
+     * 排序：升序
+     */
+    public static final String ORDER_ASC = "ASC";
+
+    /**
+     * 排序：降序
+     */
+    public static final String ORDER_DESC = "DESC";
+
+    /**
+     * 排序字段分隔符（多字段排序用逗号分隔）
+     */
+    public static final String ORDER_BY_SEPARATOR = ",";
+
+    /**
+     * 数据库通用字段：主键
+     */
+    public static final String FIELD_ID = "id";
+
+    /**
+     * 数据库通用字段：创建时间
+     */
+    public static final String FIELD_CREATE_TIME = "create_time";
+
+    /**
+     * 数据库通用字段：更新时间
+     */
+    public static final String FIELD_UPDATE_TIME = "update_time";
+
+    /**
+     * 数据库通用字段：创建人
+     */
+    public static final String FIELD_CREATE_BY = "create_by";
+
+    /**
+     * 数据库通用字段：更新人
+     */
+    public static final String FIELD_UPDATE_BY = "update_by";
+
+    /**
+     * 数据库通用字段：逻辑删除标志
+     */
+    public static final String FIELD_DELETED = "deleted";
+
+    /**
+     * 逻辑删除：未删除
+     */
+    public static final Integer LOGIC_NOT_DELETED = 0;
+
+    /**
+     * 逻辑删除：已删除
+     */
+    public static final Integer LOGIC_DELETED = 1;
+
+    /**
+     * SQL 通配符：模糊查询（任意字符）
+     */
+    public static final String SQL_LIKE = "%";
+
+    /**
+     * SQL 模糊查询：左匹配
+     */
+    public static final String SQL_LIKE_LEFT = "%s%";
+
+    /**
+     * SQL 模糊查询：右匹配
+     */
+    public static final String SQL_LIKE_RIGHT = "%s%";
+
+    /**
+     * SQL 条件关键字：AND
+     */
+    public static final String SQL_AND = "AND";
+
+    /**
+     * SQL 条件关键字：OR
+     */
+    public static final String SQL_OR = "OR";
+
+    /**
+     * SQL 关键字：NULL
+     */
+    public static final String SQL_NULL = "NULL";
+
+    /**
+     * SQL 关键字：NOT NULL
+     */
+    public static final String SQL_NOT_NULL = "NOT NULL";
+
+    /**
+     * 默认 MyBatis-Plus 主键 ID 生成策略（雪花算法）
+     */
+    public static final String DEFAULT_ID_GENERATOR = "assign_id";
+
+    /**
+     * 默认批量插入大小（防止一次性插入过多导致内存溢出）
+     */
+    public static final int DEFAULT_BATCH_SIZE = 500;
+
+    /**
+     * 分页插件参数：当前页
+     */
+    public static final String PAGE_PARAM_CURRENT = "current";
+
+    /**
+     * 分页插件参数：每页大小
+     */
+    public static final String PAGE_PARAM_SIZE = "size";
+
+    /**
+     * 分页插件参数：排序字段
+     */
+    public static final String PAGE_PARAM_ORDER_BY = "orderBy";
+
+    /**
+     * 分页插件参数：排序规则
+     */
+    public static final String PAGE_PARAM_ORDER_RULE = "orderRule";
+
+    /**
+     * SQL 关键字：LIMIT
+     */
+    public static final String SQL_LIMIT = "LIMIT";
+
+    /**
+     * SQL 关键字：OFFSET
+     */
+    public static final String SQL_OFFSET = "OFFSET";
+
+    /**
+     * SQL 分页占位符（MySQL 用法：LIMIT ?, ?）
+     */
+    public static final String SQL_LIMIT_PLACEHOLDER = "LIMIT %d, %d";
+
+    /**
+     * SQL 分页占位符（PostgreSQL 用法：LIMIT ? OFFSET ?）
+     */
+    public static final String SQL_LIMIT_OFFSET_PLACEHOLDER = "LIMIT %d OFFSET %d";
+
+    /**
+     * 默认 LIMIT 条数（防止无分页条件全表扫描）
+     */
+    public static final int DEFAULT_LIMIT = 100;
+
+    /**
+     * 无限制分页（需谨慎）
+     */
+    public static final int LIMIT_NO_RESTRICTION = -1;
+
 
 }
 

@@ -407,7 +407,7 @@ public final class StringUtil {
     }
 
     /**
-     * 替换字符串中的指定内容（可处理 null）
+     * 替换字符串中的指定内容（可处理 null，只替换一次）
      *
      * @param str         原始字符串
      * @param target      要替换的子串
@@ -419,6 +419,21 @@ public final class StringUtil {
             return str;
         }
         return str.replace(target, replacement);
+    }
+
+    /**
+     * 替换字符串中的指定内容（可处理 null，替换所有）
+     *
+     * @param str         原始字符串
+     * @param target      要替换的子串
+     * @param replacement 替换后的内容
+     * @return 替换后的结果字符串
+     */
+    public static String replaceAll(String str, String target, String replacement) {
+        if (str == null || target == null || replacement == null) {
+            return str;
+        }
+        return str.replaceAll(target, replacement);
     }
 
     /**
