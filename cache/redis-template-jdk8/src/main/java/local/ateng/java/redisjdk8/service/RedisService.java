@@ -1167,6 +1167,14 @@ public interface RedisService {
     // ------------------ 分布式锁 ------------------
 
     /**
+     * 尝试获取锁（一直等待，最多30秒）
+     *
+     * @param key 锁 key
+     * @return true 成功获取锁；false 失败
+     */
+    boolean tryLock(String key);
+
+    /**
      * 尝试获取锁（立即返回）
      *
      * @param key       锁 key
@@ -1188,14 +1196,6 @@ public interface RedisService {
     boolean tryLock(String key, long waitTime, long leaseTime, TimeUnit unit);
 
     /**
-     * 尝试获取锁（一直等待，最多10秒）
-     *
-     * @param key 锁 key
-     * @return true 成功获取锁；false 失败
-     */
-    boolean tryLock(String key);
-
-    /**
      * 原子释放锁：只有持有相同 requestId 的线程才会成功删除 key
      *
      * @param key 锁 key
@@ -1210,6 +1210,14 @@ public interface RedisService {
      * @return RLock 实例
      */
     RLock getLock(String name);
+
+    /**
+     * 获取分布式锁对象（加强版，支持自动锁续期）
+     *
+     * @param name 锁名称
+     * @return RLock 实例
+     */
+    RLock getLockPlus(String name);
 
     // ------------------ 计数器操作 ------------------
 

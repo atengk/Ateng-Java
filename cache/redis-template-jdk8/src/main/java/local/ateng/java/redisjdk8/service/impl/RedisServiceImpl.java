@@ -2016,10 +2016,23 @@ public class RedisServiceImpl implements RedisService {
      *
      * @return 请求 id
      */
-    public String generateRequestId() {
+    private String generateRequestId() {
         String id = UUID.randomUUID().toString();
         requestIdHolder.set(id);
         return id;
+    }
+
+    /**
+     * 尝试获取锁（一直等待，最多30秒）
+     *
+     * @param key 锁 key
+     * @return true 成功获取锁；false 失败
+     */
+    @Override
+    public boolean tryLock(String key) {
+        long waitTime = 30;
+        long leaseTime = waitTime * 2;
+        return tryLock(key, waitTime, leaseTime, TimeUnit.SECONDS);
     }
 
     /**
@@ -2049,6 +2062,7 @@ public class RedisServiceImpl implements RedisService {
      * @param unit      时间单位
      * @return true 成功获取锁；false 失败
      */
+    @Override
     public boolean tryLock(String key, long waitTime, long leaseTime, TimeUnit unit) {
         long endTime = System.nanoTime() + unit.toNanos(waitTime);
         String reqId = requestIdHolder.get();
@@ -2071,18 +2085,6 @@ public class RedisServiceImpl implements RedisService {
             }
         }
         return false;
-    }
-
-    /**
-     * 尝试获取锁（一直等待，最多10秒）
-     *
-     * @param key 锁 key
-     * @return true 成功获取锁；false 失败
-     */
-    public boolean tryLock(String key) {
-        long waitTime = 10;
-        long leaseTime = -1;
-        return tryLock(key, waitTime, leaseTime, TimeUnit.SECONDS);
     }
 
     /**
@@ -2112,6 +2114,62 @@ public class RedisServiceImpl implements RedisService {
      */
     @Override
     public RLock getLock(String name) {
+        class RLockImpl implements RLock {
+            private final String key;
+            private final RedisService redisService;
+
+            RLockImpl(String key, RedisService redisService) {
+                this.key = key;
+                this.redisService = redisService;
+            }
+
+            @Override
+            public void lock() {
+                redisService.tryLock(key);
+            }
+
+            @Override
+            public void lock(long leaseTime, TimeUnit unit) {
+                redisService.tryLock(key, leaseTime, unit);
+            }
+
+            @Override
+            public boolean tryLock(long waitTime, long leaseTime, TimeUnit unit) {
+                return redisService.tryLock(key, waitTime, leaseTime, unit);
+            }
+
+            @Override
+            public boolean tryLock(long leaseTime, TimeUnit unit) {
+                return redisService.tryLock(key, leaseTime, unit);
+            }
+
+            @Override
+            public CompletableFuture<Boolean> tryLockAsync(long waitTime, long leaseTime, TimeUnit unit) {
+                return CompletableFuture.supplyAsync(() -> tryLock(waitTime, leaseTime, unit));
+            }
+
+            @Override
+            public boolean unlock() {
+                return redisService.unlock(key);
+            }
+
+            @Override
+            public void forceUnlock() {
+                redisService.delete(key);
+            }
+        }
+
+        return new RLockImpl(name, this);
+    }
+
+    /**
+     * 获取分布式锁对象（加强版，支持自动锁续期）
+     *
+     * @param name 锁名称
+     * @return RLock 实例
+     */
+    @Override
+    public RLock getLockPlus(String name) {
         return redisLockService.getLock(name);
     }
 

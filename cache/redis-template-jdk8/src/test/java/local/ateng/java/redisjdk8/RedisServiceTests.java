@@ -113,11 +113,31 @@ public class RedisServiceTests {
         final String lockKey = "lock:my";
         final RLock lock = redisService.getLock(lockKey);
 
+        // 阻塞式加锁，租期 60 秒
+        lock.lock();
+
+        try {
+            // 模拟长时间业务（例如 30 秒）
+            System.out.println("获取锁成功，执行任务...");
+            Thread.sleep(Duration.ofSeconds(30).toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Test
+    void lockPlus() {
+        final String lockKey = "lock:my";
+        final RLock lock = redisService.getLockPlus(lockKey);
+
         // 阻塞式加锁，租期 30 秒（watchdog 会自动续期）
         lock.lock(10, TimeUnit.SECONDS);
 
         try {
             // 模拟长时间业务（例如 3 分钟）
+            System.out.println("获取锁失败，稍后重试...");
             Thread.sleep(Duration.ofMinutes(3).toMillis());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
