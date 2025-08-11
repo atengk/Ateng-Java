@@ -1,6 +1,8 @@
 package local.ateng.java.excel;
 
+import cn.idev.excel.EasyExcel;
 import local.ateng.java.excel.entity.MyUser;
+import local.ateng.java.excel.handler.AutoMergeStrategy;
 import local.ateng.java.excel.init.InitData;
 import local.ateng.java.excel.utils.ExcelStyleUtil;
 import local.ateng.java.excel.utils.ExcelUtil;
@@ -11,7 +13,10 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 public class ExcelUtilTests {
 
@@ -49,7 +54,7 @@ public class ExcelUtilTests {
         List<MyUser> dataList = InitData.getDataList();
 
         try (OutputStream out = Files.newOutputStream(Paths.get("D:/Temp/excel/test13.xlsx"))) {
-            ExcelUtil.writeToOutputStream(dataList, MyUser.class, out, null);
+            ExcelUtil.writeToOutputStream(dataList, MyUser.class, out, ExcelStyleUtil.getDefaultStyleStrategy());
         }
 
     }
@@ -282,5 +287,34 @@ public class ExcelUtilTests {
         }
     }
 
+    @Test
+    void test20250811_02() throws IOException {
+        List<List<String>> headerList = Arrays.asList(
+                Arrays.asList("人员信息", "姓名"),
+                Arrays.asList("人员信息", "年龄")
+        );
+
+        List<List<String>> dataList = Arrays.asList(
+                Arrays.asList("张三", "25"),
+                Arrays.asList("李四", "30"),
+                Arrays.asList("李四", "31"),
+                Arrays.asList("张三", "25"),
+                Arrays.asList("李四", "30"),
+                Arrays.asList("李四", "李四"),
+                Arrays.asList("李四", "李四"),
+                Arrays.asList("王五", "31")
+        );
+
+        int headerRows = headerList.get(0).size(); // 这里为 2（多级表头高度）
+        int[] mergeCols = new int[]{0}; // 合并第一列（姓名）
+
+        try (OutputStream out = Files.newOutputStream(Paths.get("D:/Temp/excel/test20250811_01_fixed.xlsx"))) {
+            EasyExcel.write(out)
+                    .head(headerList)
+                    .registerWriteHandler(new AutoMergeStrategy(mergeCols, headerRows, dataList))
+                    .sheet("Sheet1")
+                    .doWrite(dataList);
+        }
+    }
 
 }

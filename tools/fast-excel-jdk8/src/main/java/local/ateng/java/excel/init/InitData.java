@@ -37,6 +37,7 @@ public class InitData {
             user.setRatio(faker.number().randomDouble(5, 0, 1));
             user.setBirthday(LocalDate.now());
             user.setProvince(faker.address().state());
+            user.setProvince2(faker.address().state());
             user.setCity(faker.address().cityName());
             user.setCreateTime(LocalDateTime.now());
             userList.add(user);

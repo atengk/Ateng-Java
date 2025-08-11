@@ -4,6 +4,7 @@ import cn.idev.excel.annotation.ExcelProperty;
 import cn.idev.excel.annotation.format.DateTimeFormat;
 import cn.idev.excel.annotation.format.NumberFormat;
 import cn.idev.excel.annotation.write.style.ColumnWidth;
+import cn.idev.excel.annotation.write.style.ContentLoopMerge;
 import cn.idev.excel.annotation.write.style.ContentRowHeight;
 import cn.idev.excel.annotation.write.style.HeadRowHeight;
 import lombok.AllArgsConstructor;
@@ -86,6 +87,13 @@ public class MyUser implements Serializable {
      */
     @ExcelProperty("所在省份")
     private String province;
+
+    /**
+     * 所在省份2
+     */
+    @ExcelProperty("所在省份2")
+    @ContentLoopMerge(eachRow = 2, columnExtend = 2)
+    private String province2;
 
     /**
      * 所在城市

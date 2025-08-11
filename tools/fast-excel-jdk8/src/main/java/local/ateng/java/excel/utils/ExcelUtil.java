@@ -324,6 +324,110 @@ public final class ExcelUtil {
     }
 
     /**
+     * 写入 Excel 到指定的输出流，适用于写入结构化的对象列表，支持多样式策略设置。
+     * 适合输出到文件、网络响应流等。
+     *
+     * <p>使用说明：
+     * <pre>
+     * // 例如传入多个样式处理器
+     * List<WriteHandler> handlers = Arrays.asList(
+     *     ExcelStyleUtil.getDefaultStyleStrategy(),
+     *     ExcelStyleUtil.autoMergeStrategy(Arrays.asList(0, 1)),
+     *     new CustomCellStyleHandler()
+     * );
+     * ExcelUtil.writeToOutputStream(dataList, MyData.class, outputStream, handlers);
+     * </pre>
+     *
+     * @param <T>           泛型对象类型
+     * @param dataList      待写入的数据列表，不得为 null 或空
+     * @param clazz         数据对应的类类型，不能为空
+     * @param outputStream  目标输出流，不能为空
+     * @param writeHandlers 多个样式策略处理器，可为 null 或空，若为空则使用默认样式策略
+     * @throws IllegalArgumentException 如果参数不合法
+     */
+    public static <T> void writeToOutputStream(List<T> dataList,
+                                               Class<T> clazz,
+                                               OutputStream outputStream,
+                                               List<WriteHandler> writeHandlers) {
+        if (outputStream == null) {
+            throw new IllegalArgumentException("输出流(outputStream)不能为空");
+        }
+        if (clazz == null) {
+            throw new IllegalArgumentException("数据类型(clazz)不能为空");
+        }
+        if (dataList == null || dataList.isEmpty()) {
+            throw new IllegalArgumentException("数据列表(dataList)不能为空或空列表");
+        }
+
+        ExcelWriterSheetBuilder builder = EasyExcel.write(outputStream, clazz)
+                .sheet(DEFAULT_SHEET_NAME);
+
+        if (writeHandlers != null && !writeHandlers.isEmpty()) {
+            // 依次注册所有样式处理器
+            for (WriteHandler handler : writeHandlers) {
+                if (handler != null) {
+                    builder.registerWriteHandler(handler);
+                }
+            }
+        } else {
+            // 若无传入样式处理器，注册默认样式策略
+            builder.registerWriteHandler(ExcelStyleUtil.getDefaultStyleStrategy());
+        }
+
+        builder.doWrite(dataList);
+    }
+
+    /**
+     * 写入 Excel 到指定的输出流，适用于写入结构化的对象列表，支持多样式策略设置。
+     * 适合输出到文件、网络响应流等。
+     *
+     * <p>使用说明：
+     * <pre>
+     * // 传入多个样式处理器
+     * ExcelUtil.writeToOutputStream(dataList, MyData.class, outputStream,
+     *     ExcelStyleUtil.getDefaultStyleStrategy(),
+     *     ExcelStyleUtil.autoMergeStrategy(Arrays.asList(0, 1)),
+     *     new CustomCellStyleHandler());
+     * </pre>
+     *
+     * @param <T>           泛型对象类型
+     * @param dataList      待写入的数据列表，不得为 null 或空
+     * @param clazz         数据对应的类类型，不能为空
+     * @param outputStream  目标输出流，不能为空
+     * @param writeHandlers 可变参数样式策略处理器，允许不传或传空，默认使用默认样式策略
+     * @throws IllegalArgumentException 如果参数不合法
+     */
+    public static <T> void writeToOutputStream(List<T> dataList,
+                                               Class<T> clazz,
+                                               OutputStream outputStream,
+                                               WriteHandler... writeHandlers) {
+        if (outputStream == null) {
+            throw new IllegalArgumentException("输出流(outputStream)不能为空");
+        }
+        if (clazz == null) {
+            throw new IllegalArgumentException("数据类型(clazz)不能为空");
+        }
+        if (dataList == null || dataList.isEmpty()) {
+            throw new IllegalArgumentException("数据列表(dataList)不能为空或空列表");
+        }
+
+        ExcelWriterSheetBuilder builder = EasyExcel.write(outputStream, clazz)
+                .sheet(DEFAULT_SHEET_NAME);
+
+        if (writeHandlers != null && writeHandlers.length > 0) {
+            for (WriteHandler handler : writeHandlers) {
+                if (handler != null) {
+                    builder.registerWriteHandler(handler);
+                }
+            }
+        } else {
+            builder.registerWriteHandler(ExcelStyleUtil.getDefaultStyleStrategy());
+        }
+
+        builder.doWrite(dataList);
+    }
+
+    /**
      * 写入多个 Sheet 到 Excel（每个 Sheet 一组数据）。
      * 用于多个同类或异类对象写入不同 Sheet。
      *
@@ -601,6 +705,42 @@ public final class ExcelUtil {
         // 执行写入
         writeWithHeader(outputStream, headerList, dataList);
     }
+
+    /**
+     * 写入 Excel：多级表头 + 多行数据
+     * <p>
+     * 表头横纵重复的会自动合并
+     *
+     * <p>使用场景：表头结构为多级 List，如 [["人员信息", "姓名"], ["人员信息", "年龄"]]</p>
+     *
+     * @param outputStream  输出流（如响应流或文件流）
+     * @param headerList    多级表头结构
+     * @param dataList      数据内容，如 [["张三", "25"], ["李四", "30"]]
+     * @param writeHandlers 可变参数样式策略处理器，允许不传或传空，默认使用默认样式策略
+     */
+    public static void writeWithMultiLevelHeader(OutputStream outputStream,
+                                                 List<List<String>> headerList,
+                                                 List<List<String>> dataList,
+                                                 WriteHandler... writeHandlers) {
+        // 参数校验
+        validateHeader(headerList);
+
+        ExcelWriterSheetBuilder builder = EasyExcel.write(outputStream)
+                .head(headerList)
+                .autoCloseStream(false)
+                .sheet(DEFAULT_SHEET_NAME);
+
+        if (writeHandlers != null && writeHandlers.length > 0) {
+            for (WriteHandler handler : writeHandlers) {
+                if (handler != null) {
+                    builder.registerWriteHandler(handler);
+                }
+            }
+        }
+
+        builder.doWrite(dataList);
+    }
+
 
     /**
      * 通用写入方法（供单级/多级表头方法复用）

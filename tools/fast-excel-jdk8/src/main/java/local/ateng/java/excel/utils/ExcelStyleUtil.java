@@ -16,12 +16,11 @@ import cn.idev.excel.write.style.HorizontalCellStyleStrategy;
 import cn.idev.excel.write.style.column.AbstractColumnWidthStyleStrategy;
 import cn.idev.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import cn.idev.excel.write.style.row.SimpleRowHeightStyleStrategy;
+import local.ateng.java.excel.handler.AutoMergeStrategy;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.ss.util.CellRangeAddress;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Excel 样式工具类，基于 FastExcel 实现。
@@ -423,174 +422,29 @@ public final class ExcelStyleUtil {
         builder.registerWriteHandler(freezeAndHiddenStrategy(1, null));
     }
 
-
-
     /**
-     * 合并指定行列区域（静态范围）
+     * 按列自动合并连续相同内容的单元格的 WriteHandler。
      *
-     * @param firstRow 起始行（从0开始）
-     * @param lastRow  结束行（包含）
-     * @param firstCol 起始列
-     * @param lastCol  结束列
-     * @return WriteHandler 合并策略
-     */
-    public static WriteHandler mergeFixedRegion(int firstRow, int lastRow, int firstCol, int lastCol) {
-        return new SheetWriteHandler() {
-
-            @Override
-            public void beforeSheetCreate(WriteWorkbookHolder writeWorkbookHolder, WriteSheetHolder writeSheetHolder) {
-                // 空实现，满足接口要求
-            }
-
-            @Override
-            public void afterSheetCreate(WriteWorkbookHolder writeWorkbookHolder, WriteSheetHolder writeSheetHolder) {
-                Sheet sheet = writeSheetHolder.getSheet();
-                sheet.addMergedRegion(new CellRangeAddress(firstRow, lastRow, firstCol, lastCol));
-            }
-        };
-    }
-
-    /**
-     * 多行表头相同内容横向 + 纵向 合并（仅表头区域）
+     * <p>示例用法：
+     * <pre>
+     * List<List<String>> dataList = ...; // 你的数据（不含表头）
+     * int headerRows = 1; // 表头占用行数
+     * int[] mergeCols = new int[]{0, 1}; // 需要合并的列索引
      *
-     * @param firstRowIndex 表头起始行索引（包含，0开始）
-     * @param lastRowIndex  表头结束行索引（包含）
-     * @param firstColIndex 表头起始列索引（包含）
-     * @param lastColIndex  表头结束列索引（包含）
-     * @return 表头合并处理器
-     */
-    public static SheetWriteHandler mergeSameHeaderCells(int firstRowIndex, int lastRowIndex,
-                                                         int firstColIndex, int lastColIndex) {
-        return new AbstractSheetWriteHandler() {
-            @Override
-            public void afterSheetCreate(WriteWorkbookHolder writeWorkbookHolder, WriteSheetHolder writeSheetHolder) {
-                Sheet sheet = writeSheetHolder.getSheet();
-                if (sheet == null || firstRowIndex > lastRowIndex || firstColIndex > lastColIndex) {
-                    return;
-                }
-
-                // 横向合并：对每一行，处理指定列范围
-                for (int rowIndex = firstRowIndex; rowIndex <= lastRowIndex; rowIndex++) {
-                    Row row = sheet.getRow(rowIndex);
-                    if (row == null) {
-                        continue;
-                    }
-
-                    int mergeStartCol = firstColIndex;
-                    String prevValue = getCellStringValue(row.getCell(firstColIndex));
-
-                    for (int colIndex = firstColIndex + 1; colIndex <= lastColIndex + 1; colIndex++) {
-                        String currentValue = (colIndex <= lastColIndex)
-                                ? getCellStringValue(row.getCell(colIndex)) : null;
-
-                        if (Objects.equals(prevValue, currentValue)) {
-                            // continue
-                        } else {
-                            if (mergeStartCol < colIndex - 1 && prevValue != null) {
-                                sheet.addMergedRegion(new CellRangeAddress(rowIndex, rowIndex, mergeStartCol, colIndex - 1));
-                            }
-                            mergeStartCol = colIndex;
-                            prevValue = currentValue;
-                        }
-                    }
-                }
-
-                // 纵向合并：对每一列，处理指定行范围
-                for (int colIndex = firstColIndex; colIndex <= lastColIndex; colIndex++) {
-                    int mergeStartRow = firstRowIndex;
-                    String prevValue = getCellStringValue(getCell(sheet, firstRowIndex, colIndex));
-
-                    for (int rowIndex = firstRowIndex + 1; rowIndex <= lastRowIndex + 1; rowIndex++) {
-                        String currentValue = (rowIndex <= lastRowIndex)
-                                ? getCellStringValue(getCell(sheet, rowIndex, colIndex)) : null;
-
-                        if (Objects.equals(prevValue, currentValue)) {
-                            // continue
-                        } else {
-                            if (mergeStartRow < rowIndex - 1 && prevValue != null) {
-                                sheet.addMergedRegion(new CellRangeAddress(mergeStartRow, rowIndex - 1, colIndex, colIndex));
-                            }
-                            mergeStartRow = rowIndex;
-                            prevValue = currentValue;
-                        }
-                    }
-                }
-            }
-
-            private String getCellStringValue(Cell cell) {
-                if (cell == null) {
-                    return null;
-                }
-                cell.setCellType(CellType.STRING);
-                return cell.getStringCellValue().trim();
-            }
-
-            private Cell getCell(Sheet sheet, int rowIndex, int colIndex) {
-                Row row = sheet.getRow(rowIndex);
-                return row == null ? null : row.getCell(colIndex);
-            }
-        };
-    }
-
-    /**
-     * 构建通用 CellStyle 样式（支持传参设置）
+     * EasyExcel.write(outputStream)
+     *     .head(headerList)
+     *     .registerWriteHandler(ExcelStyleUtil.autoMergeArrayStrategy(mergeCols, headerRows, dataList))
+     *     .sheet("Sheet1")
+     *     .doWrite(dataList);
+     * </pre>
      *
-     * @param workbook       工作簿对象（必传）
-     * @param fontName       字体名称（如 "微软雅黑"）
-     * @param fontSize       字体大小（单位：磅）
-     * @param bold           是否加粗
-     * @param wrapText       是否自动换行
-     * @param centerAlign    是否水平居中
-     * @param verticalCenter 是否垂直居中
-     * @param border         是否启用边框
-     * @param bgColor        背景色（IndexedColors 枚举，null 表示不设置）
-     * @return 样式对象 CellStyle
+     * @param mergeCols 需要合并的列索引数组，不能为null或空
+     * @param headerRows 表头占用行数，>=0
+     * @param dataList 实际写入的数据（不含表头），不能为空
+     * @return WriteHandler 实现列自动合并功能
      */
-    public static CellStyle createCustomCellStyle(Workbook workbook,
-                                                  String fontName,
-                                                  short fontSize,
-                                                  boolean bold,
-                                                  boolean wrapText,
-                                                  boolean centerAlign,
-                                                  boolean verticalCenter,
-                                                  boolean border,
-                                                  IndexedColors bgColor) {
-        CellStyle style = workbook.createCellStyle();
-
-        // 字体设置
-        Font font = workbook.createFont();
-        font.setFontName(fontName != null ? fontName : "微软雅黑");
-        font.setFontHeightInPoints(fontSize > 0 ? fontSize : 11);
-        font.setBold(bold);
-        style.setFont(font);
-
-        // 自动换行
-        style.setWrapText(wrapText);
-
-        // 对齐方式
-        if (centerAlign) {
-            style.setAlignment(HorizontalAlignment.CENTER);
-        }
-        if (verticalCenter) {
-            style.setVerticalAlignment(VerticalAlignment.CENTER);
-        }
-
-        // 设置边框
-        if (border) {
-            style.setBorderTop(BorderStyle.THIN);
-            style.setBorderBottom(BorderStyle.THIN);
-            style.setBorderLeft(BorderStyle.THIN);
-            style.setBorderRight(BorderStyle.THIN);
-        }
-
-        // 背景填充
-        if (bgColor != null) {
-            style.setFillForegroundColor(bgColor.getIndex());
-            style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        }
-
-        return style;
+    public static WriteHandler autoMergeStrategy(int[] mergeCols, int headerRows, List<List<String>> dataList) {
+        return new AutoMergeStrategy(mergeCols, headerRows, dataList);
     }
-
 
 }
