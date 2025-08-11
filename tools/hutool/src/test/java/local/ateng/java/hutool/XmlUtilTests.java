@@ -75,6 +75,9 @@ public class XmlUtilTests {
     void test04() {
         String str = JSONUtil.toXmlStr(new JSONObject(jsonStr));
         System.out.println(str);
+        String json = "{\"name\":\"Tom\",\"age\":18}";
+        System.out.println(JSONUtil.toXmlStr(new JSONObject(json)));
+
     }
 
     /**
