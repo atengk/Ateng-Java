@@ -44,4 +44,21 @@ public class BeanUtilTests {
         return myUser1;
     }
 
+    @Test
+    void getProperty() {
+        MyUser1 myUser1 = createMyUser1Sample();
+        String userName = BeanUtil.getProperty(myUser1, "userName");
+        System.out.println(userName);
+        System.out.println(userName.getClass());
+    }
+
+    @Test
+    void setProperty() {
+        MyUser1 myUser1 = createMyUser1Sample();
+        BeanUtil.setProperty(myUser1, "userName", "alice");
+        String userName = BeanUtil.getProperty(myUser1, "userName");
+        System.out.println(userName);
+        System.out.println(userName.getClass());
+    }
+
 }
