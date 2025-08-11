@@ -767,7 +767,8 @@ public final class BeanUtil {
      */
     public static List<String> getAllFieldNames(Class<?> clazz) {
         List<String> fieldNames = new ArrayList<>();
-        Set<String> nameSet = new HashSet<>(); // 去重，子类优先
+        // 去重，子类优先
+        Set<String> nameSet = new HashSet<>();
 
         while (clazz != null && clazz != Object.class) {
             Field[] fields = clazz.getDeclaredFields();

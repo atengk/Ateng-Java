@@ -494,6 +494,22 @@ public final class CollectionUtil {
     }
 
     /**
+     * 将任意类型的 List 转换为 List<String>，null 元素转换为空字符串
+     *
+     * @param list 待转换列表
+     * @param <T>  原列表元素类型
+     * @return 转换后的字符串列表，输入为 null 返回空列表
+     */
+    public static <T> List<String> toStringList(List<T> list) {
+        if (list == null) {
+            return Collections.emptyList();
+        }
+        return list.stream()
+                .map(item -> item == null ? "" : item.toString())
+                .collect(Collectors.toList());
+    }
+
+    /**
      * 判断集合中是否存在满足条件的元素
      *
      * @param collection 输入集合
