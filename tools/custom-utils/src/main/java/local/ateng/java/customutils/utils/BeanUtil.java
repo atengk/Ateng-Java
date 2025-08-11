@@ -6,6 +6,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.lang.reflect.Field;
 import java.util.*;
 
 /**
@@ -753,6 +754,32 @@ public final class BeanUtil {
             throw new RuntimeException("Bean 对比失败", e);
         }
         return changes;
+    }
+
+    /**
+     * 获取指定类（包含父类）的所有字段名。
+     * <p>
+     * 默认会递归向上查找父类字段，直到 Object 为止。
+     * 子类中如果有与父类同名的字段，将覆盖父类的同名字段。
+     *
+     * @param clazz 要获取字段的类
+     * @return 字段名列表（List<String>），不会返回 null
+     */
+    public static List<String> getAllFieldNames(Class<?> clazz) {
+        List<String> fieldNames = new ArrayList<>();
+        Set<String> nameSet = new HashSet<>(); // 去重，子类优先
+
+        while (clazz != null && clazz != Object.class) {
+            Field[] fields = clazz.getDeclaredFields();
+            for (Field field : fields) {
+                if (!nameSet.contains(field.getName())) {
+                    fieldNames.add(field.getName());
+                    nameSet.add(field.getName());
+                }
+            }
+            clazz = clazz.getSuperclass();
+        }
+        return fieldNames;
     }
 
 }

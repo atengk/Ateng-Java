@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.List;
 
 public class BeanUtilTests {
 
@@ -59,6 +60,12 @@ public class BeanUtilTests {
         String userName = BeanUtil.getProperty(myUser1, "userName");
         System.out.println(userName);
         System.out.println(userName.getClass());
+    }
+
+    @Test
+    void getAllFieldNames() {
+        List<String> allFieldNames = BeanUtil.getAllFieldNames(MyUser1.class);
+        System.out.println(allFieldNames);
     }
 
 }
