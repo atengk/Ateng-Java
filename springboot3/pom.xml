@@ -30,5 +30,6 @@
         <module>serialize-jackson</module>
         <module>docker</module>
         <module>email</module>
+        <module>email-jdk8</module>
     </modules>
 </project>
