@@ -834,11 +834,117 @@ public final class CommonConstants {
     public static final int TEN_THOUSAND = 10000;
 
     /* ==============================
-       布尔与数字常量
+       数字常量（系统化生成）
        ============================== */
 
+    /**
+     * 数字 0（字符串）
+     */
     public static final String STR_ZERO = "0";
+
+    /**
+     * 数字 1（字符串）
+     */
     public static final String STR_ONE = "1";
+
+    /**
+     * 数字 2（字符串）
+     */
+    public static final String STR_TWO = "2";
+
+    /**
+     * 数字 3（字符串）
+     */
+    public static final String STR_THREE = "3";
+
+    /**
+     * 数字 4（字符串）
+     */
+    public static final String STR_FOUR = "4";
+
+    /**
+     * 数字 5（字符串）
+     */
+    public static final String STR_FIVE = "5";
+
+    /**
+     * 数字 6（字符串）
+     */
+    public static final String STR_SIX = "6";
+
+    /**
+     * 数字 7（字符串）
+     */
+    public static final String STR_SEVEN = "7";
+
+    /**
+     * 数字 8（字符串）
+     */
+    public static final String STR_EIGHT = "8";
+
+    /**
+     * 数字 9（字符串）
+     */
+    public static final String STR_NINE = "9";
+
+    /**
+     * 数字 10（字符串）
+     */
+    public static final String STR_TEN = "10";
+
+    /**
+     * 数字 11（字符串）
+     */
+    public static final String STR_ELEVEN = "11";
+
+    /**
+     * 数字 12（字符串）
+     */
+    public static final String STR_TWELVE = "12";
+
+    /**
+     * 数字 13（字符串）
+     */
+    public static final String STR_THIRTEEN = "13";
+
+    /**
+     * 数字 14（字符串）
+     */
+    public static final String STR_FOURTEEN = "14";
+
+    /**
+     * 数字 15（字符串）
+     */
+    public static final String STR_FIFTEEN = "15";
+
+    /**
+     * 数字 16（字符串）
+     */
+    public static final String STR_SIXTEEN = "16";
+
+    /**
+     * 数字 17（字符串）
+     */
+    public static final String STR_SEVENTEEN = "17";
+
+    /**
+     * 数字 18（字符串）
+     */
+    public static final String STR_EIGHTEEN = "18";
+
+    /**
+     * 数字 19（字符串）
+     */
+    public static final String STR_NINETEEN = "19";
+
+    /**
+     * 数字 20（字符串）
+     */
+    public static final String STR_TWENTY = "20";
+
+    /* ==============================
+       布尔与数字常量
+       ============================== */
 
     public static final boolean TRUE = true;
     public static final boolean FALSE = false;
@@ -2087,6 +2193,16 @@ public final class CommonConstants {
      * SQL 关键字：LIMIT
      */
     public static final String SQL_LIMIT = "LIMIT";
+
+    /**
+     * SQL 关键字：LIMIT 1（用于仅查询一条记录）
+     */
+    public static final String SQL_LIMIT_1 = "LIMIT 1";
+
+    /**
+     * SQL 分页占位符（LIMIT n）
+     */
+    public static final String SQL_LIMIT_N = "LIMIT %d";
 
     /**
      * SQL 关键字：OFFSET
