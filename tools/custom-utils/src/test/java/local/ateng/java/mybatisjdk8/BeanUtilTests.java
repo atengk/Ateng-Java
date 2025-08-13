@@ -1,6 +1,6 @@
 package local.ateng.java.mybatisjdk8;
 
-import local.ateng.java.customutils.entity.MyUser;
+import local.ateng.java.customutils.entity.MyUser0;
 import local.ateng.java.customutils.entity.MyUser1;
 import local.ateng.java.customutils.entity.MyUser2;
 import local.ateng.java.customutils.utils.BeanUtil;
@@ -19,17 +19,17 @@ public class BeanUtilTests {
         BeanUtil.copyProperties(createMyUser1Sample(), myUser2);
         System.out.println(myUser2);
         System.out.println(myUser2.getUserName());
-        System.out.println(myUser2.getMyUserList().get(0).getId());
+        System.out.println(myUser2.getMyUser0List().get(0).getId());
     }
 
     public static MyUser1 createMyUser1Sample() {
-        MyUser user1 = new MyUser();
+        MyUser0 user1 = new MyUser0();
         user1.setId(1001L);
         user1.setUserName("alice");
         user1.setToday(LocalDate.now());
         user1.setCreateTime(LocalDateTime.now().minusDays(1));
 
-        MyUser user2 = new MyUser();
+        MyUser0 user2 = new MyUser0();
         user2.setId(1002L);
         user2.setUserName("bob");
         user2.setToday(LocalDate.now().minusDays(2));
@@ -40,7 +40,7 @@ public class BeanUtilTests {
         myUser1.setUserName("admin");
         myUser1.setToday(LocalDate.now());
         myUser1.setCreateTime(LocalDateTime.now());
-        myUser1.setMyUserList(Arrays.asList(user1, user2));
+        myUser1.setMyUser0List(Arrays.asList(user1, user2));
 
         return myUser1;
     }

@@ -33,7 +33,7 @@ public class CollectionUtilTests {
                 0
         );
 
-        System.out.println(JsonUtil.toJson(tree));
+        System.out.println(JsonUtil.toJsonString(tree));
     }
 
     @Test
@@ -55,7 +55,7 @@ public class CollectionUtilTests {
                 new HashSet<Integer>(Arrays.asList(0,1))
         );
 
-        System.out.println(JsonUtil.toJson(tree));
+        System.out.println(JsonUtil.toJsonString(tree));
     }
 
     @Test

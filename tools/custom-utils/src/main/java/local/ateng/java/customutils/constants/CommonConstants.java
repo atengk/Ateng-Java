@@ -2200,6 +2200,81 @@ public final class CommonConstants {
     public static final String SQL_LIMIT_1 = "LIMIT 1";
 
     /**
+     * SQL 关键字：LIMIT 2
+     */
+    public static final String SQL_LIMIT_2 = "LIMIT 2";
+
+    /**
+     * SQL 关键字：LIMIT 3
+     */
+    public static final String SQL_LIMIT_3 = "LIMIT 3";
+
+    /**
+     * SQL 关键字：LIMIT 4
+     */
+    public static final String SQL_LIMIT_4 = "LIMIT 4";
+
+    /**
+     * SQL 关键字：LIMIT 5
+     */
+    public static final String SQL_LIMIT_5 = "LIMIT 5";
+
+    /**
+     * SQL 关键字：LIMIT 6
+     */
+    public static final String SQL_LIMIT_6 = "LIMIT 6";
+
+    /**
+     * SQL 关键字：LIMIT 7
+     */
+    public static final String SQL_LIMIT_7 = "LIMIT 7";
+
+    /**
+     * SQL 关键字：LIMIT 8
+     */
+    public static final String SQL_LIMIT_8 = "LIMIT 8";
+
+    /**
+     * SQL 关键字：LIMIT 9
+     */
+    public static final String SQL_LIMIT_9 = "LIMIT 9";
+
+    /**
+     * SQL 关键字：LIMIT 10（常用于限制查询返回的结果数）
+     */
+    public static final String SQL_LIMIT_10 = "LIMIT 10";
+
+    /**
+     * SQL 关键字：LIMIT 20
+     */
+    public static final String SQL_LIMIT_20 = "LIMIT 20";
+
+    /**
+     * SQL 关键字：LIMIT 50
+     */
+    public static final String SQL_LIMIT_50 = "LIMIT 50";
+
+    /**
+     * SQL 关键字：LIMIT 100
+     */
+    public static final String SQL_LIMIT_100 = "LIMIT 100";
+
+    /**
+     * SQL 关键字：LIMIT 200
+     */
+    public static final String SQL_LIMIT_200 = "LIMIT 200";
+
+    /**
+     * SQL 关键字：LIMIT 500
+     */
+    public static final String SQL_LIMIT_500 = "LIMIT 500";
+
+    /**
+     * SQL 关键字：LIMIT 1000
+     */
+    public static final String SQL_LIMIT_1000 = "LIMIT 1000";
+
+    /**
      * SQL 分页占位符（LIMIT n）
      */
     public static final String SQL_LIMIT_N = "LIMIT %d";

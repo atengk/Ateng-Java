@@ -72,6 +72,13 @@
             <artifactId>jackson-dataformat-xml</artifactId>
         </dependency>
 
+        <!-- JavaFaker: 用于生成虚假数据的Java库 -->
+        <dependency>
+            <groupId>com.github.javafaker</groupId>
+            <artifactId>javafaker</artifactId>
+            <version>1.0.2</version>
+        </dependency>
+
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->

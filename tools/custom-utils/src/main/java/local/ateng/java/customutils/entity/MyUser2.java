@@ -8,5 +8,5 @@ import java.util.List;
 public class MyUser2 {
     private Long id;
     private String userName;
-    private List<MyUser> myUserList;
+    private List<MyUser0> myUser0List;
 }

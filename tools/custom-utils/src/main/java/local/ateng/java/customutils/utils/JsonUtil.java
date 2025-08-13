@@ -11,14 +11,17 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+import com.fasterxml.jackson.datatype.jsr310.ser.LocalTimeSerializer;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
@@ -40,15 +43,18 @@ public final class JsonUtil {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    // 日期与时间格式化
+    /**
+     * 日期与时间格式化
+     */
     private static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
     private static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     private static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
+    private static String DEFAULT_TIME_FORMAT = "HH:mm:ss.SSS";
 
 
     static {
         // 配置日期和时间的序列化与反序列化
-        customizeJsonDateTime(OBJECT_MAPPER, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT);
+        customizeJsonDateTime(OBJECT_MAPPER, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT, DEFAULT_TIME_FORMAT);
         // 配置 JSON 序列化相关设置
         customizeJsonSerialization(OBJECT_MAPPER);
         // 配置 JSON 反序列化相关设置
@@ -62,7 +68,7 @@ public final class JsonUtil {
      *
      * @param objectMapper Jackson 的 ObjectMapper 实例
      */
-    private static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone, String dateFormat, String dateTimeFormat) {
+    private static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone, String dateFormat, String dateTimeFormat, String timeFormat) {
         // 设置全局时区，确保 Date 类型数据使用此时区
         objectMapper.setTimeZone(TimeZone.getTimeZone(timeZone));
 
@@ -75,19 +81,25 @@ public final class JsonUtil {
         // Java 8 时间模块
         JavaTimeModule javaTimeModule = new JavaTimeModule();
 
-        // LocalDateTime 序列化 & 反序列化
+        // LocalDateTime
         javaTimeModule.addSerializer(LocalDateTime.class,
                 new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
         javaTimeModule.addDeserializer(LocalDateTime.class,
                 new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
 
-        // LocalDate 序列化 & 反序列化
+        // LocalDate
         javaTimeModule.addSerializer(LocalDate.class,
                 new LocalDateSerializer(DateTimeFormatter.ofPattern(dateFormat)));
         javaTimeModule.addDeserializer(LocalDate.class,
                 new LocalDateDeserializer(DateTimeFormatter.ofPattern(dateFormat)));
 
-        // 注册 JavaTimeModule
+        // LocalTime
+        javaTimeModule.addSerializer(LocalTime.class,
+                new LocalTimeSerializer(DateTimeFormatter.ofPattern(timeFormat)));
+        javaTimeModule.addDeserializer(LocalTime.class,
+                new LocalTimeDeserializer(DateTimeFormatter.ofPattern(timeFormat)));
+
+        // 注册模块
         objectMapper.registerModule(javaTimeModule);
     }
 
@@ -199,13 +211,13 @@ public final class JsonUtil {
     /**
      * 对象转 JSON 字符串
      * 使用示例：
-     * JsonUtil.toJson(myUser)
-     * JsonUtil.toJson(list)
+     * JsonUtil.toJsonString(myUser)
+     * JsonUtil.toJsonString(list)
      *
      * @param obj 待序列化的对象
      * @return JSON 字符串，失败时返回 null
      */
-    public static String toJson(Object obj) {
+    public static String toJsonString(Object obj) {
         if (obj == null) {
             return null;
         }
@@ -222,7 +234,7 @@ public final class JsonUtil {
      * @param obj 待序列化的对象
      * @return 格式化后的 JSON 字符串，失败时返回 null
      */
-    public static String toPrettyJson(Object obj) {
+    public static String toPrettyJsonString(Object obj) {
         if (obj == null) {
             return null;
         }
@@ -235,14 +247,14 @@ public final class JsonUtil {
 
     /**
      * JSON 字符串转对象
-     * 使用示例：JsonUtil.fromJson(json, MyUser.class);
+     * 使用示例：JsonUtil.parseObject(json, MyUser0.class);
      *
      * @param json  JSON 字符串
      * @param clazz 目标类
      * @param <T>   类型参数
      * @return 转换后的对象，失败时返回 null
      */
-    public static <T> T fromJson(String json, Class<T> clazz) {
+    public static <T> T parseObject(String json, Class<T> clazz) {
         if (json == null || clazz == null) {
             return null;
         }
@@ -255,14 +267,14 @@ public final class JsonUtil {
 
     /**
      * JSON 字符串转复杂泛型对象，如 List、Map 等
-     * 使用示例：JsonUtil.fromJson(json, new TypeReference<List<MyUser>>() {});
+     * 使用示例：JsonUtil.parseObject(json, new TypeReference<List<MyUser0>>() {});
      *
      * @param json    JSON 字符串
      * @param typeRef 类型引用
      * @param <T>     类型参数
      * @return 转换后的对象，失败时返回 null
      */
-    public static <T> T fromJson(String json, TypeReference<T> typeRef) {
+    public static <T> T parseObject(String json, TypeReference<T> typeRef) {
         if (json == null || typeRef == null) {
             return null;
         }
@@ -270,6 +282,44 @@ public final class JsonUtil {
             return OBJECT_MAPPER.readValue(json, typeRef);
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    /**
+     * 将 JSON 字符串转换为 Map 对象
+     *
+     * @param json JSON 字符串
+     * @return 转换后的 Map，失败时返回空 Map
+     */
+    public static Map<String, Object> parseMap(String json) {
+        if (json == null) {
+            return Collections.emptyMap();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {
+            });
+        } catch (Exception e) {
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
+     * 将 JSON 字符串转换为 List 对象
+     *
+     * @param json        JSON 字符串
+     * @param elementType 列表中元素类型
+     * @param <T>         类型参数
+     * @return 转换后的 List，失败时返回空列表
+     */
+    public static <T> List<T> parseList(String json, Class<T> elementType) {
+        if (json == null || elementType == null) {
+            return Collections.emptyList();
+        }
+        try {
+            JavaType javaType = OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, elementType);
+            return OBJECT_MAPPER.readValue(json, javaType);
+        } catch (Exception e) {
+            return Collections.emptyList();
         }
     }
 
@@ -292,62 +342,6 @@ public final class JsonUtil {
     }
 
     /**
-     * 将 JSON 字符串转换为 Map 对象
-     *
-     * @param json JSON 字符串
-     * @return 转换后的 Map，失败时返回空 Map
-     */
-    public static Map<String, Object> toMap(String json) {
-        if (json == null) {
-            return Collections.emptyMap();
-        }
-        try {
-            return OBJECT_MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {
-            });
-        } catch (Exception e) {
-            return Collections.emptyMap();
-        }
-    }
-
-    /**
-     * 将 JSON 字符串转换为 Bean 对象
-     *
-     * @param json JSON 字符串
-     * @param <T>  类型参数
-     * @return 转换后的 Bean，失败返回 null
-     */
-    public static <T> T toBean(String json, Class<T> clazz) {
-        if (json == null || json.isEmpty() || clazz == null) {
-            return null;
-        }
-        try {
-            return OBJECT_MAPPER.readValue(json, clazz);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * 将 JSON 字符串转换为 List 对象
-     *
-     * @param json        JSON 字符串
-     * @param elementType 列表中元素类型
-     * @param <T>         类型参数
-     * @return 转换后的 List，失败时返回空列表
-     */
-    public static <T> List<T> toList(String json, Class<T> elementType) {
-        if (json == null || elementType == null) {
-            return Collections.emptyList();
-        }
-        try {
-            JavaType javaType = OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, elementType);
-            return OBJECT_MAPPER.readValue(json, javaType);
-        } catch (Exception e) {
-            return Collections.emptyList();
-        }
-    }
-
-    /**
      * 将对象进行深拷贝（基于 JSON 序列化与反序列化）
      *
      * @param obj   原始对象
@@ -355,11 +349,11 @@ public final class JsonUtil {
      * @param <T>   类型参数
      * @return 拷贝后的新对象，失败时返回 null
      */
-    public static <T> T clone(T obj, Class<T> clazz) {
+    public static <T> T copy(T obj, Class<T> clazz) {
         if (obj == null || clazz == null) {
             return null;
         }
-        return fromJson(toJson(obj), clazz);
+        return parseObject(toJsonString(obj), clazz);
     }
 
     /**
@@ -386,8 +380,8 @@ public final class JsonUtil {
      * @param fieldName 字段名称
      * @return 字段值字符串，失败时返回 null
      */
-    public static String extract(String json, String fieldName) {
-        return extract(json, fieldName, String.class);
+    public static String get(String json, String fieldName) {
+        return get(json, fieldName, String.class);
     }
 
     /**
@@ -399,7 +393,7 @@ public final class JsonUtil {
      * @param <T>       类型参数
      * @return 转换后的字段值，失败时返回 null
      */
-    public static <T> T extract(String json, String fieldName, Class<T> clazz) {
+    public static <T> T get(String json, String fieldName, Class<T> clazz) {
         JsonNode node = readTree(json);
         if (node != null && node.has(fieldName)) {
             try {
@@ -420,7 +414,7 @@ public final class JsonUtil {
      * @param <T>       类型参数
      * @return 转换后的字段值，失败时返回 null
      */
-    public static <T> T extract(String json, String fieldName, TypeReference<T> typeRef) {
+    public static <T> T get(String json, String fieldName, TypeReference<T> typeRef) {
         JsonNode node = readTree(json);
         if (node != null && node.has(fieldName)) {
             try {
@@ -440,7 +434,7 @@ public final class JsonUtil {
      * @param <T>         类型参数
      * @return 转换后的对象，失败返回 null
      */
-    public static <T> T convertValue(Object fromValue, Class<T> toValueType) {
+    public static <T> T convert(Object fromValue, Class<T> toValueType) {
         if (fromValue == null || toValueType == null) {
             return null;
         }
@@ -459,7 +453,7 @@ public final class JsonUtil {
      * @param <T>            类型参数
      * @return 转换后的对象，失败返回 null
      */
-    public static <T> T convertValue(Object fromValue, TypeReference<T> toValueTypeRef) {
+    public static <T> T convert(Object fromValue, TypeReference<T> toValueTypeRef) {
         if (fromValue == null || toValueTypeRef == null) {
             return null;
         }
@@ -478,7 +472,7 @@ public final class JsonUtil {
      * @param newValue 新字段值，支持任意类型
      * @return 修改后的 JSON 字符串，失败返回原 JSON
      */
-    public static String updateField(String json, String path, Object newValue) {
+    public static String put(String json, String path, Object newValue) {
         if (json == null || path == null || path.isEmpty()) {
             return json;
         }
@@ -519,7 +513,7 @@ public final class JsonUtil {
      * @param path 点分割路径
      * @return 修改后的 JSON 字符串，失败返回原 JSON
      */
-    public static String removeField(String json, String path) {
+    public static String remove(String json, String path) {
         if (json == null || path == null || path.isEmpty()) {
             return json;
         }
@@ -535,7 +529,8 @@ public final class JsonUtil {
             for (int i = 0; i < keys.length - 1; i++) {
                 JsonNode child = currentNode.get(keys[i]);
                 if (child == null || !child.isObject()) {
-                    return json; // 路径不存在，直接返回原 json
+                    // 路径不存在，直接返回原 json
+                    return json;
                 }
                 currentNode = (ObjectNode) child;
             }
