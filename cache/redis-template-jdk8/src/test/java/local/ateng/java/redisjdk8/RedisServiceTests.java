@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -146,5 +147,97 @@ public class RedisServiceTests {
         }
     }
 
+    /**
+     * 测试 eval 方法（返回整数）
+     */
+    @Test
+    void testEval() {
+        String script = "return tonumber(ARGV[1]) + tonumber(ARGV[2])";
+        Long result = redisService.eval(script, Long.class, Collections.emptyList(), 5, 7);
+        System.out.println(result);
+    }
 
+    @Test
+    void testEval_LockScript() {
+        String script = "if redis.call('SETNX', KEYS[1], ARGV[1]) == 1 then\n" +
+                "    redis.call('EXPIRE', KEYS[1], ARGV[2])\n" +
+                "    return 1\n" +
+                "else\n" +
+                "    return 0\n" +
+                "end";
+
+        String lockKey = "lock:test";
+        String lockValue = "uuid-12345"; // 可以是唯一标识，比如 UUID
+        int expireSeconds = 30;          // 锁过期时间 30 秒
+
+        Long result = redisService.eval(script, Long.class,
+                Collections.singletonList(lockKey),
+                lockValue, expireSeconds);
+
+        if (result != null && result == 1) {
+            System.out.println("获取锁成功");
+        } else {
+            System.out.println("获取锁失败");
+        }
+    }
+
+
+    /**
+     * 测试 evalNoResult 方法（无返回值）
+     */
+    @Test
+    void testEvalNoResult() {
+        String script = "redis.call('SET', KEYS[1], ARGV[1])";
+        redisService.evalNoResult(script, Collections.singletonList("test:key"), "hello");
+        String value = redisService.eval("return redis.call('GET', KEYS[1])", String.class, Collections.singletonList("test:key"));
+        System.out.println(value);
+    }
+
+    /**
+     * 测试 evalNoResult 方法：JSON.SET + JSON.GET
+     */
+    @Test
+    void testEvalNoResult_JsonSetGet() {
+        String setScript = "redis.call('JSON.SET', KEYS[1], '$', ARGV[1])";
+        String jsonData = "{\"title\":\"Developer\",\"skills\":[\"Java\",\"Vue\"]}";
+        redisService.evalNoResult(setScript,
+                Collections.singletonList("user:1002"), jsonData);
+
+        String getScript = "return redis.call('JSON.GET', KEYS[1], '$.title')";
+        String title = redisService.eval(getScript, String.class,
+                Collections.singletonList("user:1002"));
+
+        System.out.println(title);
+    }
+
+
+    /**
+     * 测试 evalNoResult() — 执行 Lua 脚本无返回值
+     */
+    @Test
+    void testEvalNoResult2() {
+        String script = "redis.call('JSON.SET', KEYS[1], '$', ARGV[1])";
+        redisService.evalNoResult(script,
+                Collections.singletonList("json:test:user2"),
+                "{\"name\":\"Blair\",\"age\":30}");
+        Object verify = redisService.eval("return redis.call('JSON.GET', KEYS[1], '$')",
+                Object.class, Collections.singletonList("user:1002"));
+        System.out.println(verify);
+    }
+
+    /**
+     * 测试 loadScript() + evalBySha()
+     */
+    @Test
+    void testEvalBySha() {
+        String script = "redis.call('JSON.SET', KEYS[1], '$', ARGV[1]) " +
+                "return redis.call('JSON.GET', KEYS[1], '$')";
+        String sha1 = redisService.loadScript(script);
+
+        String result = redisService.evalBySha(sha1, String.class,
+                Collections.singletonList("json:test:user3"),
+                "{\"name\":\"Alice\",\"age\":28}");
+        System.out.println(result);
+    }
+    
 }
