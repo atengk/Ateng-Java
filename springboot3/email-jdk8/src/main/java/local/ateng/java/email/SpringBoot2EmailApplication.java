@@ -2,12 +2,14 @@ package local.ateng.java.email;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
-public class SpringBoot3EmailApplication {
+@EnableAsync
+public class SpringBoot2EmailApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SpringBoot3EmailApplication.class, args);
+        SpringApplication.run(SpringBoot2EmailApplication.class, args);
     }
 
 }

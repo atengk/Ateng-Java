@@ -7,11 +7,11 @@
 **添加依赖**
 
 ```xml
-        <!-- Spring Boot 的邮件启动器依赖，用于发送邮件功能 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-mail</artifactId>
-        </dependency>
+<!-- Spring Boot 的邮件启动器依赖，用于发送邮件功能 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-mail</artifactId>
+</dependency>
 ```
 
 **编辑配置文件**
@@ -24,10 +24,11 @@
 # 邮箱配置
 spring:
   mail:
-    host: smtp.163.com
+    host: smtp.qq.com
     port: 465
-    username: your_email@163.com
-    password: your_email_authorization_code
+    username: 2385569970@qq.com
+    password: "***********"
+    protocol: smtps
     properties:
       mail:
         smtp:
@@ -39,105 +40,681 @@ spring:
 
 
 
-## 发送邮箱
+## 创建服务
 
-### 简单消息
-
-**创建service**
+### 创建Service
 
 ```java
+package local.ateng.java.email.service;
+
+import org.springframework.scheduling.annotation.Async;
+
+import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 邮件服务接口
+ *
+ * @author 孔余
+ * @since 2025-08-09
+ */
+public interface MailService {
+
+    /**
+     * 发送纯文本邮件
+     *
+     * @param to       收件人邮箱地址
+     * @param subject  邮件主题
+     * @param content  邮件正文（纯文本格式）
+     */
+    void sendTextMail(String to, String subject, String content);
+
+    /**
+     * 发送 HTML 格式的邮件
+     *
+     * @param to       收件人邮箱地址
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    void sendHtmlMail(String to, String subject, String html);
+
+    /**
+     * 发送带附件的邮件（支持多个附件）
+     *
+     * @param to            收件人邮箱地址
+     * @param subject       邮件主题
+     * @param html          邮件正文（HTML 格式）
+     * @param attachments   附件集合
+     *                      key   为附件文件名
+     *                      value 为附件的输入流
+     */
+    void sendMailWithAttachments(String to, String subject, String html, Map<String, InputStream> attachments);
+
+    /**
+     * 发送带图片的 HTML 邮件
+     *
+     * @param to         收件人邮箱地址
+     * @param subject    邮件主题
+     * @param html       邮件正文（HTML 格式）
+     * @param images     图片集合
+     *                   key   为图片 contentId（HTML 中引用时使用 cid:contentId）
+     *                   value 为图片的输入流
+     */
+    void sendMailWithImages(String to, String subject, String html, Map<String, InputStream> images);
+
+    /**
+     * 批量发送纯文本邮件
+     *
+     * @param toList   收件人邮箱地址列表
+     * @param subject  邮件主题
+     * @param content  邮件正文（纯文本格式）
+     */
+    void sendBatchTextMail(List<String> toList, String subject, String content);
+
+    /**
+     * 批量发送 HTML 邮件
+     *
+     * @param toList   收件人邮箱地址列表
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    void sendBatchHtmlMail(List<String> toList, String subject, String html);
+
+    /**
+     * 异步发送邮件（适用于耗时的发送场景）
+     *
+     * @param to       收件人邮箱地址
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    @Async
+    void sendHtmlMailAsync(String to, String subject, String html);
+
+    /**
+     * 批量异步发送 HTML 邮件
+     *
+     * <p>每封邮件都是异步发送，不阻塞调用线程。</p>
+     *
+     * @param toList   收件人邮箱地址列表
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    @Async
+    void sendBatchHtmlMailAsync(List<String> toList, String subject, String html);
+
+    /**
+     * 发送 HTML 邮件，支持抄送（Cc）和密送（Bcc），可为空
+     *
+     * @param to       收件人邮箱地址
+     * @param ccList   抄送邮箱地址列表，可为空
+     * @param bccList  密送邮箱地址列表，可为空
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    void sendHtmlMailWithCcBcc(String to, List<String> ccList, List<String> bccList, String subject, String html);
+
+    /**
+     * 异步发送 HTML 邮件，支持抄送（Cc）和密送（Bcc）
+     *
+     * @param to       收件人邮箱地址
+     * @param ccList   抄送邮箱地址列表，可为空
+     * @param bccList  密送邮箱地址列表，可为空
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    @Async
+    void sendHtmlMailWithCcBccAsync(String to, List<String> ccList, List<String> bccList, String subject, String html);
+
+    /**
+     * 发送全功能邮件（HTML + 可选抄送/密送 + 附件 + 内嵌图片）
+     *
+     * @param to          收件人邮箱地址
+     * @param ccList      抄送邮箱列表，可为空
+     * @param bccList     密送邮箱列表，可为空
+     * @param subject     邮件主题
+     * @param html        邮件正文（HTML 格式）
+     * @param attachments 附件集合，key=附件名，value=InputStream，可为空
+     * @param images      图片集合，key=contentId，value=InputStream，可为空
+     */
+    void sendMail(String to,
+                      List<String> ccList,
+                      List<String> bccList,
+                      String subject,
+                      String html,
+                      Map<String, InputStream> attachments,
+                      Map<String, InputStream> images);
+
+}
+```
+
+### 创建ServiceImpl
+
+```java
+package local.ateng.java.email.service.impl;
+
+import local.ateng.java.email.service.MailService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.InputStreamSource;
+import org.springframework.mail.MailException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.stereotype.Service;
+
+import javax.mail.MessagingException;
+import javax.mail.internet.MimeMessage;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 邮件服务接口实现
+ *
+ * @author 孔余
+ * @since 2025-08-09
+ */
 @Service
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class MailService {
+public class MailServiceImpl implements MailService {
+
+    private static final Logger log = LoggerFactory.getLogger(MailServiceImpl.class);
+
+    /**
+     * 邮件发送器
+     */
     private final JavaMailSender mailSender;
 
-    // 发送 普通 邮件
-    public void sendSimpleMail(String to, String subject, String content) {
+    public MailServiceImpl(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
+
+    /**
+     * 发件人邮箱地址
+     */
+    @Value("${spring.mail.username}")
+    private String from;
+
+    @Override
+    public void sendTextMail(String to, String subject, String content) {
         SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(SpringUtil.getProperty("spring.mail.username")); // 发件人邮箱，要和配置一致
-        message.setTo(to);                     // 收件人邮箱
-        message.setSubject(subject);           // 邮件标题
-        message.setText(content);              // 邮件内容
-        mailSender.send(message);
+        message.setFrom(from);
+        message.setTo(to);
+        message.setSubject(subject);
+        message.setText(content);
+        try {
+            mailSender.send(message);
+            log.info("纯文本邮件发送成功，收件人：{}", to);
+        } catch (MailException e) {
+            log.error("纯文本邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+        }
     }
+
+    @Override
+    public void sendHtmlMail(String to, String subject, String html) {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            mailSender.send(mimeMessage);
+            log.info("HTML 邮件发送成功，收件人：{}", to);
+        } catch (MessagingException | MailException e) {
+            log.error("HTML 邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendMailWithAttachments(String to, String subject, String html, Map<String, InputStream> attachments) {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            if (attachments != null && !attachments.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : attachments.entrySet()) {
+                    String fileName = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addAttachment(fileName, reusable);
+                }
+            }
+
+            mailSender.send(mimeMessage);
+            log.info("带附件的邮件发送成功，收件人：{}", to);
+        } catch (MessagingException | MailException e) {
+            log.error("带附件的邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendMailWithImages(String to, String subject, String html, Map<String, InputStream> images) {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            if (images != null && !images.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : images.entrySet()) {
+                    String contentId = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    String contentType = sniffImageContentType(data);
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addInline(contentId, reusable, contentType);
+                }
+            }
+
+            mailSender.send(mimeMessage);
+            log.info("带图片的 HTML 邮件发送成功，收件人：{}", to);
+        } catch (MessagingException | MailException e) {
+            log.error("带图片的 HTML 邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendBatchTextMail(List<String> toList, String subject, String content) {
+        if (toList == null || toList.isEmpty()) {
+            log.warn("批量发送纯文本邮件失败：收件人列表为空");
+            return;
+        }
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(toList.toArray(new String[0]));
+        message.setSubject(subject);
+        message.setText(content);
+        try {
+            mailSender.send(message);
+            log.info("批量纯文本邮件发送成功，收件人数：{}", toList.size());
+        } catch (MailException e) {
+            log.error("批量纯文本邮件发送失败，错误信息：{}", e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendBatchHtmlMail(List<String> toList, String subject, String html) {
+        if (toList == null || toList.isEmpty()) {
+            log.warn("批量发送 HTML 邮件失败：收件人列表为空");
+            return;
+        }
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(toList.toArray(new String[0]));
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            mailSender.send(mimeMessage);
+            log.info("批量 HTML 邮件发送成功，收件人数：{}", toList.size());
+        } catch (MessagingException | MailException e) {
+            log.error("批量 HTML 邮件发送失败，错误信息：{}", e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendHtmlMailAsync(String to, String subject, String html) {
+        log.info("异步 HTML 邮件发送任务已提交，收件人：{}", to);
+        sendHtmlMail(to, subject, html);
+    }
+
+    @Override
+    public void sendBatchHtmlMailAsync(List<String> toList, String subject, String html) {
+        if (toList == null || toList.isEmpty()) {
+            log.warn("批量异步发送 HTML 邮件失败：收件人列表为空");
+            return;
+        }
+
+        for (String to : toList) {
+            // 每个收件人都调用异步发送方法
+            sendHtmlMailAsync(to, subject, html);
+        }
+
+        log.info("批量异步 HTML 邮件发送任务已提交，收件人数：{}", toList.size());
+    }
+
+    @Override
+    public void sendHtmlMailWithCcBcc(String to, List<String> ccList, List<String> bccList, String subject, String html) {
+        if (to == null || to.isEmpty()) {
+            log.warn("发送邮件失败：收件人为空");
+            return;
+        }
+
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+
+            if (ccList != null && !ccList.isEmpty()) {
+                helper.setCc(ccList.toArray(new String[0]));
+            }
+
+            if (bccList != null && !bccList.isEmpty()) {
+                helper.setBcc(bccList.toArray(new String[0]));
+            }
+
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            mailSender.send(mimeMessage);
+            log.info("邮件发送成功，收件人：{}，抄送：{}，密送：{}", to, ccList, bccList);
+        } catch (MessagingException | MailException e) {
+            log.error("邮件发送失败，收件人：{}，抄送：{}，密送：{}，错误信息：{}", to, ccList, bccList, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendHtmlMailWithCcBccAsync(String to, List<String> ccList, List<String> bccList, String subject, String html) {
+        log.info("异步发送邮件任务提交，线程：{}", Thread.currentThread().getName());
+        sendHtmlMailWithCcBcc(to, ccList, bccList, subject, html);
+    }
+
+    @Override
+    public void sendMail(String to,
+                         List<String> ccList,
+                         List<String> bccList,
+                         String subject,
+                         String html,
+                         Map<String, InputStream> attachments,
+                         Map<String, InputStream> images) {
+        if (to == null || to.isEmpty()) {
+            log.warn("发送邮件失败：收件人为空");
+            return;
+        }
+
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+
+            if (ccList != null && !ccList.isEmpty()) {
+                helper.setCc(ccList.toArray(new String[0]));
+            }
+
+            if (bccList != null && !bccList.isEmpty()) {
+                helper.setBcc(bccList.toArray(new String[0]));
+            }
+
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            // 附件处理
+            if (attachments != null && !attachments.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : attachments.entrySet()) {
+                    String fileName = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addAttachment(fileName, reusable);
+                }
+            }
+
+            // 内嵌图片处理
+            if (images != null && !images.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : images.entrySet()) {
+                    String contentId = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    String contentType = sniffImageContentType(data);
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addInline(contentId, reusable, contentType);
+                }
+            }
+
+            mailSender.send(mimeMessage);
+            log.info("邮件发送成功，收件人：{}，抄送：{}，密送：{}", to, ccList, bccList);
+        } catch (MessagingException | MailException e) {
+            log.error("邮件发送失败，收件人：{}，抄送：{}，密送：{}，错误信息：{}",
+                    to, ccList, bccList, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 将输入流完整读取为字节数组并关闭输入流
+     *
+     * @param input 输入流
+     * @return 字节数组
+     */
+    private byte[] toByteArrayAndClose(InputStream input) {
+        final int bufferSize = 8192;
+        if (input == null) {
+            return new byte[0];
+        }
+        try (InputStream in = input; java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[bufferSize];
+            int n;
+            while ((n = in.read(buffer)) != -1) {
+                out.write(buffer, 0, n);
+            }
+            return out.toByteArray();
+        } catch (Exception e) {
+            log.error("读取输入流失败，错误信息：{}", e.getMessage(), e);
+            return new byte[0];
+        }
+    }
+
+    /**
+     * 构造可重复读取的 InputStreamSource
+     *
+     * @param data 原始字节数组
+     * @return 可重复读取的 InputStreamSource
+     */
+    private org.springframework.core.io.InputStreamSource reusableSource(byte[] data) {
+        final byte[] copied = (data == null) ? new byte[0] : data.clone();
+        return () -> new java.io.ByteArrayInputStream(copied);
+    }
+
+    /**
+     * 简单嗅探图片 MIME 类型
+     *
+     * @param data 图片字节数组
+     * @return MIME 类型字符串
+     */
+    private String sniffImageContentType(byte[] data) {
+        // 内部常量定义
+        final int MIN_LENGTH = 12;
+        final byte[] JPEG_PREFIX = {(byte) 0xFF, (byte) 0xD8};
+        final byte[] PNG_PREFIX = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+        final byte[] GIF_PREFIX = {'G', 'I', 'F'};
+        final byte[] BMP_PREFIX = {'B', 'M'};
+        final byte[] WEBP_PREFIX = {'R', 'I', 'F', 'F'};
+        final int WEBP_SUFFIX_OFFSET = 8;
+        final byte[] WEBP_SUFFIX = {'W', 'E', 'B', 'P'};
+        final String DEFAULT_MIME = "application/octet-stream";
+
+        if (data == null || data.length < MIN_LENGTH) {
+            return DEFAULT_MIME;
+        }
+
+        // 工具函数判断前缀
+        final java.util.function.BiPredicate<byte[], byte[]> startsWith = (d, prefix) -> {
+            if (d.length < prefix.length) {
+                return false;
+            }
+            for (int i = 0; i < prefix.length; i++) {
+                if (d[i] != prefix[i]) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        if (startsWith.test(data, JPEG_PREFIX)) {
+            return "image/jpeg";
+        }
+
+        if (startsWith.test(data, PNG_PREFIX)) {
+            return "image/png";
+        }
+
+        if (startsWith.test(data, GIF_PREFIX)) {
+            return "image/gif";
+        }
+
+        if (startsWith.test(data, BMP_PREFIX)) {
+            return "image/bmp";
+        }
+
+        // WEBP 特殊处理
+        boolean webpPrefixMatch = startsWith.test(java.util.Arrays.copyOfRange(data, 0, WEBP_PREFIX.length), WEBP_PREFIX);
+        boolean webpSuffixMatch = startsWith.test(java.util.Arrays.copyOfRange(data, WEBP_SUFFIX_OFFSET, WEBP_SUFFIX_OFFSET + WEBP_SUFFIX.length), WEBP_SUFFIX);
+        if (webpPrefixMatch && webpSuffixMatch) {
+            return "image/webp";
+        }
+
+        return DEFAULT_MIME;
+    }
+
 
 }
 ```
 
-**创建接口**
+## 使用测试
 
 ```java
-@RestController
-@RequestMapping("/mail")
-public class MailController {
+package local.ateng.java.email;
 
-    @Autowired
-    private MailService mailService;
+import local.ateng.java.email.service.MailService;
+import lombok.RequiredArgsConstructor;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
-    @GetMapping("/send")
-    public String sendMail(@RequestParam String to) {
-        mailService.sendSimpleMail(to, "测试邮件", "这是一封测试邮件！");
-        return "邮件发送成功！";
-    }
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-}
-```
 
-**发送消息**
-
-```
-curl http://127.0.0.1:12015/mail/send?to=2385569970@qq.com
-```
-
-### HTML消息
-
-**创建service**
-
-```java
-@Service
+@SpringBootTest
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class MailService {
-    private final JavaMailSender mailSender;
+public class MailServiceTests {
+    private final MailService mailService;
+    private static final String TEST_EMAIL = "2385569970@qq.com";
 
-    // 发送 HTML 邮件
-    public void sendHtmlMail(String to, String subject, String htmlContent) throws MessagingException {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true); // 第二个参数 true 表示支持 multipart
 
-        helper.setFrom(SpringUtil.getProperty("spring.mail.username"));
-        helper.setTo(to);
-        helper.setSubject(subject);
-        helper.setText(htmlContent, true); // true 表示 HTML 格式
-
-        mailSender.send(message);
+    @Test
+    public void testSendTextMail() {
+        mailService.sendTextMail(TEST_EMAIL, "纯文本邮件测试", "这是一个纯文本邮件内容示例。");
     }
 
-}
-```
-
-**创建接口**
-
-```java
-@RestController
-@RequestMapping("/mail")
-public class MailController {
-
-    @Autowired
-    private MailService mailService;
-
-    @GetMapping("/send-html")
-    public String sendHTMLMail(@RequestParam String to) throws MessagingException {
-        mailService.sendHtmlMail(to, "HTML 邮件测试",
-                "<h2 style='color:blue'>这是一封 HTML 格式的测试邮件</h2><p>内容支持 <b>HTML</b> 标签。</p>");
-        return "邮件发送成功！";
+    @Test
+    public void testSendHtmlMail() {
+        String html = "<h1 style='color:blue'>HTML 邮件测试</h1><p>这是一封测试 HTML 邮件。</p>";
+        mailService.sendHtmlMail(TEST_EMAIL, "HTML 邮件测试", html);
     }
 
+    @Test
+    public void testSendMailWithAttachments() {
+        String html = "<p>请查收附件。</p>";
+
+        // 模拟生成一个文件流
+        byte[] fileBytes = "这是附件的内容".getBytes(StandardCharsets.UTF_8);
+        InputStream fileStream = new ByteArrayInputStream(fileBytes);
+
+        Map<String, InputStream> attachments = new HashMap<>();
+        attachments.put("测试附件.txt", fileStream);
+
+        mailService.sendMailWithAttachments(TEST_EMAIL, "带附件邮件测试", html, attachments);
+    }
+
+    @Test
+    public void testSendMailWithAttachments2() throws IOException {
+        String html = "<p>请查收附件：demo.xlsx</p>";
+
+        // 附件路径
+        File file = new File("D:\\Temp\\demo.xlsx");
+        if (!file.exists()) {
+            throw new FileNotFoundException("附件文件不存在：" + file.getAbsolutePath());
+        }
+
+        // 将文件读成 InputStream
+        InputStream fileStream = new FileInputStream(file);
+
+        // 组装附件集合
+        Map<String, InputStream> attachments = new HashMap<>();
+        attachments.put(file.getName(), fileStream);
+
+        // 调用发送方法
+        mailService.sendMailWithAttachments(TEST_EMAIL, "带本地附件邮件测试", html, attachments);
+
+        fileStream.close();
+    }
+
+    @Test
+    public void testSendMailWithImages() {
+        String html = "<h1>带图片的邮件</h1><img src='cid:testImage'/>";
+
+        // 模拟一张图片流（这里用文字代替图片，实际应读取图片二进制）
+        byte[] imageBytes = "FakeImageContent".getBytes(StandardCharsets.UTF_8);
+        InputStream imageStream = new ByteArrayInputStream(imageBytes);
+
+        Map<String, InputStream> images = new HashMap<>();
+        images.put("testImage", imageStream);
+
+        mailService.sendMailWithImages(TEST_EMAIL, "带图片的邮件测试", html, images);
+    }
+
+    @Test
+    public void testSendMailWithImages2() throws IOException {
+        String html = "<h1>带图片的邮件</h1><p>下面是内嵌图片：</p><img src='cid:testImage'/>";
+
+        // 从本地文件读取图片为 InputStream
+        try (InputStream imageStream = new FileInputStream("D:\\Temp\\flower-9453062_1280.jpg")) {
+
+            Map<String, InputStream> images = new HashMap<>();
+            images.put("testImage", imageStream);
+
+            mailService.sendMailWithImages(TEST_EMAIL, "带图片的邮件测试", html, images);
+        }
+    }
+
+    @Test
+    public void testSendBatchTextMail() {
+        List<String> recipients = Arrays.asList(TEST_EMAIL, "another@example.com");
+        mailService.sendBatchTextMail(recipients, "批量纯文本邮件测试", "这是一封批量纯文本邮件。");
+    }
+
+    @Test
+    public void testSendBatchHtmlMail() {
+        List<String> recipients = Arrays.asList(TEST_EMAIL, "another@example.com");
+        String html = "<h1>批量 HTML 邮件测试</h1><p>这是一封批量 HTML 邮件。</p>";
+        mailService.sendBatchHtmlMail(recipients, "批量 HTML 邮件测试", html);
+    }
+
+    @Test
+    public void testSendHtmlMailAsync() {
+        String html = "<h1>异步 HTML 邮件测试</h1><p>这是异步发送的 HTML 邮件。</p>";
+        mailService.sendHtmlMailAsync(TEST_EMAIL, "异步 HTML 邮件测试", html);
+    }
+
+    @Test
+    public void testSendHtmlMailWithCcBcc() {
+        String html = "<h1>邮件测试</h1><p>这封邮件带可选抄送和密送。</p>";
+
+        List<String> ccList = Arrays.asList("cc@example.com");
+        List<String> bccList = Arrays.asList("bcc@example.com");
+
+        mailService.sendHtmlMailWithCcBcc(
+                TEST_EMAIL,
+                ccList,
+                bccList,
+                "带抄送和密送邮件测试",
+                html
+        );
+    }
+
+
 }
-```
 
-**发送消息**
-
-```
-curl http://127.0.0.1:12015/mail/send-html?to=2385569970@qq.com
 ```
 
