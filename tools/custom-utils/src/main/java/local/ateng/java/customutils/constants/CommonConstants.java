@@ -639,6 +639,11 @@ public final class CommonConstants {
     public static final String REGEX_MAC =
             "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$";
 
+    /**
+     * 正则表达式：匹配字符串开头的一个或多个斜杠（/ 或 \）
+     */
+    public static final String REGEX_START_SLASHES = "^[\\\\/]+";
+
     /* ==============================
        业务通用状态码（可结合枚举使用）
        ============================== */
@@ -698,7 +703,7 @@ public final class CommonConstants {
      */
     public static final int TOO_MANY_REQUESTS = 1003;
 
-        /* ==============================
+     /* ==============================
        数字常量（系统化生成）
        ============================== */
 
@@ -833,8 +838,58 @@ public final class CommonConstants {
     public static final int NINE_THOUSAND = 9000;
     public static final int TEN_THOUSAND = 10000;
 
+    /**
+     * 整数常量：负一
+     */
+    public static final int NEGATIVE_ONE = -1;
+
+    /**
+     * 整数常量：负二
+     */
+    public static final int NEGATIVE_TWO = -2;
+
+    /**
+     * 整数常量：负三
+     */
+    public static final int NEGATIVE_THREE = -3;
+
+    /**
+     * 整数常量：负四
+     */
+    public static final int NEGATIVE_FOUR = -4;
+
+    /**
+     * 整数常量：负五
+     */
+    public static final int NEGATIVE_FIVE = -5;
+
+    /**
+     * 整数常量：负六
+     */
+    public static final int NEGATIVE_SIX = -6;
+
+    /**
+     * 整数常量：负七
+     */
+    public static final int NEGATIVE_SEVEN = -7;
+
+    /**
+     * 整数常量：负八
+     */
+    public static final int NEGATIVE_EIGHT = -8;
+
+    /**
+     * 整数常量：负九
+     */
+    public static final int NEGATIVE_NINE = -9;
+
+    /**
+     * 整数常量：负十
+     */
+    public static final int NEGATIVE_TEN = -10;
+
     /* ==============================
-       数字常量（系统化生成）
+       数字字符串常量（系统化生成）
        ============================== */
 
     /**
@@ -942,8 +997,58 @@ public final class CommonConstants {
      */
     public static final String STR_TWENTY = "20";
 
+    /**
+     * 数字 -1（字符串）
+     */
+    public static final String STR_NEGATIVE_ONE = "-1";
+
+    /**
+     * 数字 -2（字符串）
+     */
+    public static final String STR_NEGATIVE_TWO = "-2";
+
+    /**
+     * 数字 -3（字符串）
+     */
+    public static final String STR_NEGATIVE_THREE = "-3";
+
+    /**
+     * 数字 -4（字符串）
+     */
+    public static final String STR_NEGATIVE_FOUR = "-4";
+
+    /**
+     * 数字 -5（字符串）
+     */
+    public static final String STR_NEGATIVE_FIVE = "-5";
+
+    /**
+     * 数字 -6（字符串）
+     */
+    public static final String STR_NEGATIVE_SIX = "-6";
+
+    /**
+     * 数字 -7（字符串）
+     */
+    public static final String STR_NEGATIVE_SEVEN = "-7";
+
+    /**
+     * 数字 -8（字符串）
+     */
+    public static final String STR_NEGATIVE_EIGHT = "-8";
+
+    /**
+     * 数字 -9（字符串）
+     */
+    public static final String STR_NEGATIVE_NINE = "-9";
+
+    /**
+     * 数字 -10（字符串）
+     */
+    public static final String STR_NEGATIVE_TEN = "-10";
+
     /* ==============================
-       布尔与数字常量
+       布尔常量
        ============================== */
 
     public static final boolean TRUE = true;
