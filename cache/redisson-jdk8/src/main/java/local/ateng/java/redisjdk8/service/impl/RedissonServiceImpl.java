@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import local.ateng.java.redisjdk8.service.RedissonService;
 import org.redisson.api.*;
+import org.redisson.client.codec.StringCodec;
 import org.redisson.client.protocol.ScoredEntry;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -2447,6 +2448,84 @@ public class RedissonServiceImpl implements RedissonService {
             RTopic topic = redissonClient.getTopic(channel);
             topic.removeListener(listenerId);
         }
+    }
+
+    // --------------------- Lua 脚本操作 ---------------------
+
+    /**
+     * 在 Redis 中执行 Lua 脚本（返回单一结果）。
+     *
+     * @param script     Lua 脚本内容（例如 "return redis.call('set', KEYS[1], ARGV[1])"）
+     * @param keys       脚本中需要用到的 KEYS 参数（如 KEYS[1]、KEYS[2]）
+     * @param args       脚本中需要用到的 ARGV 参数（如 ARGV[1]、ARGV[2]）
+     * @param returnType 返回值类型（用于指定 Redis 返回的数据类型，如 Boolean、Long、String、List 等）
+     * @param <T>        返回值类型（根据 Redis 返回的类型自动转换，例如 String、Long、Boolean 等）
+     * @return 执行结果
+     * <p>
+     * 核心逻辑：
+     * 1. 使用 RScript 对象执行 Lua 脚本
+     * 2. RScript.Mode.READ_WRITE 表示既能读也能写（一般 Lua 脚本会修改数据）
+     * 3. StringCodec 用于将 Redis 数据以字符串方式编码/解码
+     * 4. RScript.ReturnType.VALUE 表示返回单一值（也可以改为 MULTI、BOOLEAN 等）
+     * 5. keys 是脚本的 KEYS 数组，args 是 ARGV 数组
+     */
+    @Override
+    public <T> T eval(String script, Class<T> returnType, List<Object> keys, Object... args) {
+        return redissonClient.getScript(StringCodec.INSTANCE)
+                .eval(RScript.Mode.READ_WRITE, script, RScript.ReturnType.VALUE, keys, args);
+    }
+
+    /**
+     * 执行 Lua 脚本但不返回结果。
+     *
+     * @param script Lua 脚本内容
+     * @param keys   脚本中的 KEYS
+     * @param args   脚本中的 ARGV
+     *               <p>
+     *               核心逻辑：
+     *               1. 使用 RScript.eval 执行 Lua 脚本
+     *               2. RScript.ReturnType.VALUE 用于兼容调用，但结果不保存
+     *               3. 常用于只修改 Redis 数据但不关心返回值的场景
+     */
+    @Override
+    public void evalNoResult(String script, List<Object> keys, Object... args) {
+        redissonClient.getScript(StringCodec.INSTANCE)
+                .eval(RScript.Mode.READ_WRITE, script, RScript.ReturnType.VALUE, keys, args);
+    }
+
+    /**
+     * 通过 SHA1 执行已加载的 Lua 脚本，并返回指定类型结果。
+     *
+     * @param sha1       Lua 脚本的 SHA1
+     * @param returnType 返回类型 Class
+     * @param keys       脚本中的 KEYS
+     * @param values     脚本中的 ARGV
+     * @param <T>        返回值泛型
+     * @return 脚本执行结果
+     * <p>
+     * 核心逻辑：
+     * 1. 使用 RScript.evalSha 执行 Redis 缓存的 Lua 脚本
+     * 2. 避免重复传输脚本内容，提高性能
+     */
+    @Override
+    public <T> T evalBySha(String sha1, Class<T> returnType, List<Object> keys, Object... values) {
+        return redissonClient.getScript(StringCodec.INSTANCE)
+                .evalSha(RScript.Mode.READ_WRITE, sha1, RScript.ReturnType.VALUE, keys, values);
+    }
+
+    /**
+     * 将 Lua 脚本加载到 Redis 并返回 SHA1。
+     *
+     * @param script Lua 脚本内容
+     * @return Lua 脚本在 Redis 中的 SHA1
+     * <p>
+     * 核心逻辑：
+     * 1. 脚本不会立即执行，只是加载到 Redis
+     * 2. 返回 SHA1 后可通过 evalBySha 执行，减少网络传输
+     */
+    @Override
+    public String loadScript(String script) {
+        return redissonClient.getScript(StringCodec.INSTANCE).scriptLoad(script);
     }
 
 }

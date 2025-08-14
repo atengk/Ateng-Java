@@ -813,8 +813,8 @@ public interface RedissonService {
     /**
      * 批量添加元素及其分数到有序集合中。
      *
-     * @param key       有序集合的 key
-     * @param scoreMap  元素与对应分数的映射
+     * @param key      有序集合的 key
+     * @param scoreMap 元素与对应分数的映射
      * @return 成功添加的元素数量（不包括更新）
      */
     int zAddAll(String key, Map<Object, Double> scoreMap);
@@ -961,9 +961,9 @@ public interface RedissonService {
     /**
      * 为有序集合中指定元素的分数增加指定值。
      *
-     * @param key    有序集合的 key
-     * @param value  指定元素
-     * @param delta  要增加的分数（可为负）
+     * @param key   有序集合的 key
+     * @param value 指定元素
+     * @param delta 要增加的分数（可为负）
      * @return 增加后的新分数
      */
     Double zIncrBy(String key, Object value, double delta);
@@ -1196,7 +1196,7 @@ public interface RedissonService {
     /**
      * 初始化布隆过滤器，设置预期插入元素数量和误判率。
      *
-     * @param key           布隆过滤器对应的 Redis 键
+     * @param key                布隆过滤器对应的 Redis 键
      * @param expectedInsertions 预期插入的元素数量（用于计算位数组大小）
      * @param falseProbability   期望的误判率（一般建议0.03或更小）
      */
@@ -1312,11 +1312,11 @@ public interface RedissonService {
     /**
      * 初始化分布式限流器（令牌桶算法）
      *
-     * @param key       限流器的 Redis Key（唯一标识）
-     * @param rateType  限流模式：OVERALL（全局限流）或 PER_CLIENT（每客户端限流）
-     * @param rate      每个时间间隔允许的最大请求数
-     * @param interval  时间间隔值
-     * @param unit      时间单位（秒、分钟等）
+     * @param key      限流器的 Redis Key（唯一标识）
+     * @param rateType 限流模式：OVERALL（全局限流）或 PER_CLIENT（每客户端限流）
+     * @param rate     每个时间间隔允许的最大请求数
+     * @param interval 时间间隔值
+     * @param unit     时间单位（秒、分钟等）
      * @return true 表示设置成功；false 表示限流器已存在
      */
     boolean rateLimiterInit(String key, RateType rateType, long rate, long interval, RateIntervalUnit unit);
@@ -1368,7 +1368,7 @@ public interface RedissonService {
     /**
      * 订阅指定频道，异步接收消息。
      *
-     * @param channel      频道名称
+     * @param channel         频道名称
      * @param messageConsumer 消息回调函数，接收到消息时执行
      */
     void subscribe(String channel, java.util.function.Consumer<Object> messageConsumer);
@@ -1380,5 +1380,71 @@ public interface RedissonService {
      */
     void unsubscribe(String channel);
 
+    // --------------------- Lua 脚本操作 ---------------------
+
+    /**
+     * 在 Redis 中执行 Lua 脚本（返回单一结果）。
+     *
+     * @param script     Lua 脚本内容（例如 "return redis.call('set', KEYS[1], ARGV[1])"）
+     * @param keys       脚本中需要用到的 KEYS 参数（如 KEYS[1]、KEYS[2]）
+     * @param args       脚本中需要用到的 ARGV 参数（如 ARGV[1]、ARGV[2]）
+     * @param returnType 返回值类型（用于指定 Redis 返回的数据类型，如 Boolean、Long、String、List 等）
+     * @param <T>        返回值类型（根据 Redis 返回的类型自动转换，例如 String、Long、Boolean 等）
+     * @return 执行结果
+     * <p>
+     * 核心逻辑：
+     * 1. 使用 RScript 对象执行 Lua 脚本
+     * 2. RScript.Mode.READ_WRITE 表示既能读也能写（一般 Lua 脚本会修改数据）
+     * 3. StringCodec 用于将 Redis 数据以字符串方式编码/解码
+     * 4. RScript.ReturnType.VALUE 表示返回单一值（也可以改为 MULTI、BOOLEAN 等）
+     * 5. keys 是脚本的 KEYS 数组，args 是 ARGV 数组
+     */
+    <T> T eval(String script, Class<T> returnType, List<Object> keys, Object... args);
+
+    /**
+     * 执行 Lua 脚本但不返回结果。
+     *
+     * @param script Lua 脚本内容
+     * @param keys   脚本中的 KEYS
+     * @param args   脚本中的 ARGV
+     *               <p>
+     *               核心逻辑：
+     *               1. 使用 RScript.eval 执行 Lua 脚本
+     *               2. RScript.ReturnType.VALUE 用于兼容调用，但结果不保存
+     *               3. 常用于只修改 Redis 数据但不关心返回值的场景
+     */
+    void evalNoResult(String script, List<Object> keys, Object... args);
+
+    /**
+     * 通过 SHA1 执行已加载的 Lua 脚本，并返回指定类型结果。
+     *
+     * @param sha1       Lua 脚本的 SHA1
+     * @param returnType 返回类型 Class
+     * @param keys       脚本中的 KEYS
+     * @param values     脚本中的 ARGV
+     * @param <T>        返回值泛型
+     * @return 脚本执行结果
+     * <p>
+     * 核心逻辑：
+     * 1. 使用 RScript.evalSha 执行 Redis 缓存的 Lua 脚本
+     * 2. 避免重复传输脚本内容，提高性能
+     */
+    <T> T evalBySha(String sha1, Class<T> returnType, List<Object> keys, Object... values);
+
+    /**
+     * 将 Lua 脚本加载到 Redis，并返回脚本的 SHA1 值。
+     *
+     * <p>适用于需要多次执行同一脚本的场景，结合 {@link #evalBySha(String, Class, List, Object...)} 可减少传输和解析开销。</p>
+     *
+     * @param script Lua 脚本内容
+     * @return 脚本在 Redis 中的 SHA1 摘要
+     *
+     * <p>关键代码说明：</p>
+     * <ul>
+     *     <li>底层执行 {@code SCRIPT LOAD} 命令，将脚本缓存到 Redis 端</li>
+     *     <li>返回 SHA1 值可直接用于后续的 {@code EVALSHA} 调用</li>
+     * </ul>
+     */
+    String loadScript(String script);
 
 }

@@ -11,6 +11,7 @@ import org.redisson.api.RLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -130,5 +131,83 @@ public class RedisServiceTests {
         long addedCount2 = redissonService.bloomAddAll("test:bloomfilter", java.util.Arrays.asList("a", "b", "c", "d"));
         System.out.println(addedCount2);
     }
+
+    /**
+     * 测试 eval 方法（返回整数）
+     */
+    @Test
+    void testEval() {
+        String script = "return tonumber(ARGV[1]) + tonumber(ARGV[2])";
+        Long result = redissonService.eval(script, Long.class, Collections.emptyList(), 5, 7);
+        System.out.println(result);
+    }
+
+    /**
+     * 测试 evalNoResult 方法（无返回值）
+     */
+    @Test
+    void testEvalNoResult() {
+        String script = "redis.call('SET', KEYS[1], ARGV[1])";
+        redissonService.evalNoResult(script, Collections.singletonList("test:key"), "hello");
+        String value = redissonService.eval("return redis.call('GET', KEYS[1])", String.class, Collections.singletonList("test:key"));
+        System.out.println(value);
+    }
+
+    /**
+     * 测试 loadScript + evalBySha
+     */
+    @Test
+    void testEvalBySha() {
+        String script = "return tonumber(ARGV[1]) * tonumber(ARGV[2])";
+        String sha1 = redissonService.loadScript(script);
+        Long result = redissonService.evalBySha(sha1, Long.class, Collections.emptyList(), 3, 4);
+        System.out.println(result);
+    }
+
+    /**
+     * 测试 eval 获取 Redis key 的值
+     */
+    @Test
+    void testEvalGetKey() {
+        // 先写一个 key
+        redissonService.evalNoResult("redis.call('SET', KEYS[1], ARGV[1])",
+                Collections.singletonList("user:1:name"), "blair");
+
+        // 再读取这个 key
+        String value = redissonService.eval("return redis.call('GET', KEYS[1])",
+                String.class, Collections.singletonList("user:1:name"));
+
+        System.out.println(value);
+    }
+
+    /**
+     * 测试 eval 方法：JSON.SET
+     */
+    @Test
+    void testEval_JsonSet() {
+        String script = "return redis.call('JSON.SET', KEYS[1], '$', ARGV[1])";
+        String jsonData = "{\"name\":\"blair\",\"age\":25}";
+        String result = redissonService.eval(script, String.class,
+                Collections.singletonList("user:1001"), jsonData);
+        System.out.println(result);
+    }
+
+    /**
+     * 测试 evalNoResult 方法：JSON.SET + JSON.GET
+     */
+    @Test
+    void testEvalNoResult_JsonSetGet() {
+        String setScript = "redis.call('JSON.SET', KEYS[1], '$', ARGV[1])";
+        String jsonData = "{\"title\":\"Developer\",\"skills\":[\"Java\",\"Vue\"]}";
+        redissonService.evalNoResult(setScript,
+                Collections.singletonList("user:1002"), jsonData);
+
+        String getScript = "return redis.call('JSON.GET', KEYS[1], '$.title')";
+        String title = redissonService.eval(getScript, String.class,
+                Collections.singletonList("user:1002"));
+
+        System.out.println(title);
+    }
+
 
 }
