@@ -4,6 +4,8 @@ import local.ateng.java.awss3.config.S3Properties;
 import local.ateng.java.awss3.service.S3Service;
 import local.ateng.java.awss3.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,6 +34,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * S3 服务类
@@ -42,6 +45,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class S3ServiceImpl implements S3Service {
+
+    private static final Logger log = LoggerFactory.getLogger(S3ServiceImpl.class);
+
     /**
      * 缓冲区大小
      */
@@ -112,13 +118,16 @@ public class S3ServiceImpl implements S3Service {
                     .bucket(s3Properties.getBucketName())
                     .key(key)
                     .contentType(MediaType.APPLICATION_OCTET_STREAM_VALUE)
-                    .contentLength((long) data.length).build();
+                    .contentLength((long) data.length)
+                    .build();
 
             s3Client.putObject(request, RequestBody.fromBytes(data));
-        } catch (IOException e) {
-            throw new RuntimeException("读取上传文件失败", e);
+        } catch (Exception e) {
+            log.error("S3文件上传失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件上传失败", e);
         }
     }
+
 
     /**
      * 上传文件到 S3（通过 InputStream）
@@ -130,9 +139,18 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public void uploadFile(String key, InputStream inputStream, long contentLength, String contentType) {
-        PutObjectRequest request = PutObjectRequest.builder().bucket(s3Properties.getBucketName()).key(key).contentType(contentType).build();
+        try {
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .contentType(contentType)
+                    .build();
 
-        s3Client.putObject(request, RequestBody.fromInputStream(inputStream, contentLength));
+            s3Client.putObject(request, RequestBody.fromInputStream(inputStream, contentLength));
+        } catch (Exception e) {
+            log.error("S3文件上传失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件上传失败", e);
+        }
     }
 
     /**
@@ -144,9 +162,18 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public void uploadFile(String key, byte[] data, String contentType) {
-        PutObjectRequest request = PutObjectRequest.builder().bucket(s3Properties.getBucketName()).key(key).contentType(contentType).build();
+        try {
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .contentType(contentType)
+                    .build();
 
-        s3Client.putObject(request, RequestBody.fromBytes(data));
+            s3Client.putObject(request, RequestBody.fromBytes(data));
+        } catch (Exception e) {
+            log.error("S3文件上传失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件上传失败", e);
+        }
     }
 
     /**
@@ -157,9 +184,17 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public void uploadFile(String key, File file) {
-        PutObjectRequest request = PutObjectRequest.builder().bucket(s3Properties.getBucketName()).key(key).build();
+        try {
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .build();
 
-        s3Client.putObject(request, RequestBody.fromFile(file));
+            s3Client.putObject(request, RequestBody.fromFile(file));
+        } catch (Exception e) {
+            log.error("S3文件上传失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件上传失败", e);
+        }
     }
 
     /**
@@ -172,11 +207,16 @@ public class S3ServiceImpl implements S3Service {
     public String uploadFile(MultipartFile multipartFile) {
         String path = generateKey(multipartFile.getOriginalFilename());
         try {
-            PutObjectRequest request = PutObjectRequest.builder().bucket(s3Properties.getBucketName()).key(path).contentType(multipartFile.getContentType()).build();
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(path)
+                    .contentType(multipartFile.getContentType())
+                    .build();
 
             s3Client.putObject(request, RequestBody.fromInputStream(multipartFile.getInputStream(), multipartFile.getSize()));
-        } catch (IOException e) {
-            throw new RuntimeException("上传失败: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("S3文件上传失败，bucket={}, key={}", s3Properties.getBucketName(), path, e);
+            throw new RuntimeException("S3文件上传失败", e);
         }
         return path;
     }
@@ -191,11 +231,16 @@ public class S3ServiceImpl implements S3Service {
     @Override
     public void uploadFile(String key, MultipartFile multipartFile) {
         try {
-            PutObjectRequest request = PutObjectRequest.builder().bucket(s3Properties.getBucketName()).key(key).contentType(multipartFile.getContentType()).build();
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .contentType(multipartFile.getContentType())
+                    .build();
 
             s3Client.putObject(request, RequestBody.fromInputStream(multipartFile.getInputStream(), multipartFile.getSize()));
-        } catch (IOException e) {
-            throw new RuntimeException("上传失败: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("S3文件上传失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件上传失败", e);
         }
     }
 
@@ -210,8 +255,7 @@ public class S3ServiceImpl implements S3Service {
     public void uploadFile(String key, MultipartFile multipartFile, Map<String, String> metadata) {
         try {
             Map<String, String> sanitizeMetadata = sanitizeMetadata(metadata);
-            PutObjectRequest request = PutObjectRequest
-                    .builder()
+            PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(s3Properties.getBucketName())
                     .key(key)
                     .contentType(multipartFile.getContentType())
@@ -219,8 +263,9 @@ public class S3ServiceImpl implements S3Service {
                     .build();
 
             s3Client.putObject(request, RequestBody.fromInputStream(multipartFile.getInputStream(), multipartFile.getSize()));
-        } catch (IOException e) {
-            throw new RuntimeException("上传失败: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("S3文件上传失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件上传失败", e);
         }
     }
 
@@ -464,12 +509,17 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public ResponseInputStream<GetObjectResponse> downloadFile(String key) {
-        GetObjectRequest request = GetObjectRequest.builder()
-                .bucket(s3Properties.getBucketName())
-                .key(key)
-                .build();
+        try {
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .build();
 
-        return s3Client.getObject(request);
+            return s3Client.getObject(request);
+        } catch (Exception e) {
+            log.error("S3文件下载失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件下载失败", e);
+        }
     }
 
     /**
@@ -483,8 +533,9 @@ public class S3ServiceImpl implements S3Service {
         try (ResponseInputStream<GetObjectResponse> s3Stream = downloadFile(key)) {
             byte[] bytes = toByteArray(s3Stream);
             return Base64.getEncoder().encodeToString(bytes);
-        } catch (IOException e) {
-            throw new RuntimeException("下载或转换文件为 Base64 失败：" + key, e);
+        } catch (Exception e) {
+            log.error("S3文件下载或转换为Base64失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件下载或转换为Base64失败", e);
         }
     }
 
@@ -500,8 +551,9 @@ public class S3ServiceImpl implements S3Service {
             byte[] bytes = toByteArray(s3Stream);
             String contentType = s3Stream.response().contentType();
             return "data:" + contentType + ";base64," + Base64.getEncoder().encodeToString(bytes);
-        } catch (IOException e) {
-            throw new RuntimeException("下载或转换文件为 Base64 URI 失败：" + key, e);
+        } catch (Exception e) {
+            log.error("S3文件下载或转换为Base64 URI失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件下载或转换为Base64 URI失败", e);
         }
     }
 
@@ -520,7 +572,7 @@ public class S3ServiceImpl implements S3Service {
             GetObjectResponse objectResponse = s3Stream.response();
 
             response.setContentType(objectResponse.contentType() != null ? objectResponse.contentType() : MediaType.APPLICATION_OCTET_STREAM_VALUE);
-            response.setHeader("Content-Disposition", "attachment; filename=\"" + URLEncoder.encode(fileName, StandardCharsets.UTF_8.toString()) + "\"");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + URLEncoder.encode(fileName, StandardCharsets.UTF_8.toString()).replaceAll("\\+", "%20") + "\"");
             response.setHeader("Content-Length", String.valueOf(objectResponse.contentLength()));
 
             byte[] buffer = new byte[BUFFER_SIZE];
@@ -530,10 +582,12 @@ public class S3ServiceImpl implements S3Service {
             }
 
             out.flush();
-        } catch (IOException e) {
-            throw new RuntimeException("文件下载失败: " + key, e);
+        } catch (Exception e) {
+            log.error("S3文件下载到响应失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件下载到响应失败", e);
         }
     }
+
 
     /**
      * 下载文件并保存到本地路径
@@ -544,16 +598,15 @@ public class S3ServiceImpl implements S3Service {
     @Override
     public void downloadToFile(String key, Path localPath) {
         try (ResponseInputStream<GetObjectResponse> s3Stream = downloadFile(key)) {
-            // 确保父目录存在
             Path parentDir = localPath.getParent();
             if (parentDir != null && !Files.exists(parentDir)) {
                 Files.createDirectories(parentDir);
             }
 
-            // 写入文件
             Files.copy(s3Stream, localPath, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            throw new RuntimeException("下载文件失败并保存到本地: " + key, e);
+        } catch (Exception e) {
+            log.error("S3文件下载到本地失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件下载到本地失败", e);
         }
     }
 
@@ -567,7 +620,7 @@ public class S3ServiceImpl implements S3Service {
     @Override
     public void downloadMultipleToFiles(List<String> keys, List<Path> localPaths, boolean ignoreErrors) {
         if (keys.size() != localPaths.size()) {
-            throw new IllegalArgumentException("S3 路径数量和本地路径数量不一致！");
+            throw new IllegalArgumentException("S3对象数量与本地路径数量不匹配");
         }
 
         List<Path> downloaded = new CopyOnWriteArrayList<>();
@@ -585,12 +638,14 @@ public class S3ServiceImpl implements S3Service {
                     for (Path path : downloaded) {
                         try {
                             Files.deleteIfExists(path);
-                        } catch (IOException ignored) {
+                        } catch (Exception ex) {
+                            log.warn("清理已下载文件失败，path={}", path, ex);
                         }
                     }
-                    throw new RuntimeException("下载文件失败：" + key, e);
+                    log.error("S3批量下载中出现错误，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+                    throw new RuntimeException("S3批量下载失败，已回滚已下载文件", e);
                 } else {
-                    System.err.println("下载失败（已忽略）：" + key + "，原因：" + e.getMessage());
+                    log.warn("下载失败（已忽略），bucket={}, key={}, 原因={}", s3Properties.getBucketName(), key, e.getMessage());
                 }
             }
         }
@@ -632,7 +687,7 @@ public class S3ServiceImpl implements S3Service {
     @Override
     public void downloadMultipleToFilesAsync(List<String> keys, List<Path> localPaths, boolean ignoreErrors) {
         if (keys.size() != localPaths.size()) {
-            throw new IllegalArgumentException("S3 路径数量和本地路径数量不一致！");
+            throw new IllegalArgumentException("S3对象数量与本地路径数量不匹配");
         }
 
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
@@ -653,7 +708,8 @@ public class S3ServiceImpl implements S3Service {
                         throw e;
                     } else {
                         // 如果忽略错误，则打印错误并继续其他任务
-                        System.err.println("下载失败（已忽略）: " + key + " -> " + path + ", 错误: " + e.getMessage());
+                        log.warn("异步下载失败（已忽略），bucket={}, key={}, path={}, 原因={}",
+                                s3Properties.getBucketName(), key, path, e.getMessage());
                     }
                 }
             });
@@ -669,10 +725,12 @@ public class S3ServiceImpl implements S3Service {
             for (Path path : downloaded) {
                 try {
                     Files.deleteIfExists(path);
-                } catch (IOException ignored) {
+                } catch (Exception ex) {
+                    log.warn("清理已下载文件失败，path={}", path, ex);
                 }
             }
-            throw new RuntimeException("批量文件下载失败，已清理已下载的文件。", e);
+            log.error("S3批量异步下载失败，bucket={}", s3Properties.getBucketName(), e);
+            throw new RuntimeException("S3批量异步下载失败，已回滚已下载文件", e);
         }
     }
 
@@ -697,13 +755,14 @@ public class S3ServiceImpl implements S3Service {
                     for (InputStream opened : inputStreams) {
                         try {
                             opened.close();
-                        } catch (IOException ignored) {
+                        } catch (Exception ex) {
+                            log.warn("关闭已打开流失败", ex);
                         }
                     }
-                    throw new RuntimeException("下载文件失败：" + key, e);
+                    log.error("S3批量下载流失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+                    throw new RuntimeException("S3批量下载流失败", e);
                 } else {
-                    // 如果忽略错误，则打印错误
-                    System.err.println("下载失败: " + key + ", 错误: " + e.getMessage());
+                    log.warn("下载失败（已忽略），bucket={}, key={}, 原因={}", s3Properties.getBucketName(), key, e.getMessage());
                 }
             }
         }
@@ -742,11 +801,11 @@ public class S3ServiceImpl implements S3Service {
                     return downloadFile(key);  // 假设 downloadFile 方法返回文件的 InputStream
                 } catch (Exception e) {
                     if (!ignoreErrors) {
-                        // 如果不忽略错误，抛出异常以终止任务
-                        throw new RuntimeException("下载文件失败：" + key, e);
+                        log.error("异步下载失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+                        throw new RuntimeException("S3异步下载失败", e);
                     } else {
-                        System.err.println("下载失败（已忽略）: " + key + ", 错误: " + e.getMessage());
-                        return null;  // 返回 null 表示下载失败，忽略该文件
+                        log.warn("异步下载失败（已忽略），bucket={}, key={}, 原因={}", s3Properties.getBucketName(), key, e.getMessage());
+                        return null;
                     }
                 }
             });
@@ -766,10 +825,11 @@ public class S3ServiceImpl implements S3Service {
             } catch (CompletionException e) {
                 if (!ignoreErrors) {
                     // 如果抛出异常，并且没有忽略错误，重新抛出异常中断任务
-                    throw new RuntimeException("任务执行失败", e.getCause());
+                    log.error("异步任务执行失败，bucket={}", s3Properties.getBucketName(), e.getCause());
+                    throw new RuntimeException("S3异步任务执行失败", e.getCause());
                 } else {
                     // 如果忽略错误，则打印错误
-                    System.err.println("任务执行失败（已忽略）: " + e.getCause().getMessage());
+                    log.warn("异步任务执行失败（已忽略），bucket={}, 原因={}", s3Properties.getBucketName(), e.getCause().getMessage());
                 }
             }
         }
@@ -781,7 +841,7 @@ public class S3ServiceImpl implements S3Service {
     public void downloadFolder(String prefix, Path localBaseDir) {
         List<S3Object> objects = listFiles(prefix);
         if (objects.isEmpty()) {
-            System.out.println("S3 路径下无文件: " + prefix);
+            log.info("S3路径下无文件，bucket={}, prefix={}", s3Properties.getBucketName(), prefix);
             return;
         }
 
@@ -799,21 +859,22 @@ public class S3ServiceImpl implements S3Service {
                     long s3Size = object.size();
 
                     if (localSize == s3Size) {
-                        System.out.println("文件已存在且大小一致，跳过下载：" + localPath);
+                        log.info("文件已存在且大小一致，跳过下载，path={}", localPath);
                         continue;
                     } else {
-                        System.out.println("文件已存在但大小不一致，重新下载：" + localPath);
+                        log.info("文件已存在但大小不一致，重新下载，path={}", localPath);
                     }
-                } catch (IOException e) {
-                    System.err.println("读取本地文件大小失败，强制重新下载：" + localPath);
+                } catch (Exception e) {
+                    log.warn("读取本地文件大小失败，强制重新下载，path={}", localPath, e);
                 }
             }
 
             // 创建父目录
             try {
                 Files.createDirectories(localPath.getParent());
-            } catch (IOException e) {
-                throw new RuntimeException("创建本地目录失败：" + localPath.getParent(), e);
+            } catch (Exception e) {
+                log.error("创建本地目录失败，path={}", localPath.getParent(), e);
+                throw new RuntimeException("创建本地目录失败", e);
             }
 
             // 下载文件
@@ -821,15 +882,14 @@ public class S3ServiceImpl implements S3Service {
         }
     }
 
-
     @Override
     public void uploadFolder(Path localBaseDir, String prefix) {
         if (!Files.isDirectory(localBaseDir)) {
             throw new IllegalArgumentException("指定路径不是目录：" + localBaseDir);
         }
 
-        try {
-            Files.walk(localBaseDir)
+        try (Stream<Path> stream = Files.walk(localBaseDir)) {
+            stream.filter(Files::isRegularFile)
                     .filter(Files::isRegularFile)
                     .forEach(path -> {
                         // 获取相对路径并转为 S3 key
@@ -839,8 +899,9 @@ public class S3ServiceImpl implements S3Service {
                         // 上传文件
                         uploadFile(s3Key, path.toFile());
                     });
-        } catch (IOException e) {
-            throw new RuntimeException("遍历目录失败：" + localBaseDir, e);
+        } catch (Exception e) {
+            log.error("遍历本地目录失败，path={}", localBaseDir, e);
+            throw new RuntimeException("遍历本地目录失败", e);
         }
     }
 
@@ -863,9 +924,18 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public void deleteFile(String key) {
-        DeleteObjectRequest request = DeleteObjectRequest.builder().bucket(s3Properties.getBucketName()).key(key).build();
+        try {
+            DeleteObjectRequest request = DeleteObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .build();
 
-        s3Client.deleteObject(request);
+            s3Client.deleteObject(request);
+            log.info("S3文件删除成功，bucket={}, key={}", s3Properties.getBucketName(), key);
+        } catch (Exception e) {
+            log.error("S3文件删除失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3文件删除失败", e);
+        }
     }
 
     /**
@@ -879,11 +949,22 @@ public class S3ServiceImpl implements S3Service {
             return;
         }
 
-        List<ObjectIdentifier> objects = keys.stream().map(k -> ObjectIdentifier.builder().key(k).build()).collect(Collectors.toList());
+        List<ObjectIdentifier> objects = keys.stream()
+                .map(k -> ObjectIdentifier.builder().key(k).build())
+                .collect(Collectors.toList());
 
-        DeleteObjectsRequest request = DeleteObjectsRequest.builder().bucket(s3Properties.getBucketName()).delete(Delete.builder().objects(objects).build()).build();
+        DeleteObjectsRequest request = DeleteObjectsRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .delete(Delete.builder().objects(objects).build())
+                .build();
 
-        s3Client.deleteObjects(request);
+        try {
+            s3Client.deleteObjects(request);
+            log.info("S3批量文件删除成功，bucket={}, keys={}", s3Properties.getBucketName(), keys);
+        } catch (Exception e) {
+            log.error("S3批量文件删除失败，bucket={}, keys={}", s3Properties.getBucketName(), keys, e);
+            throw new RuntimeException("S3批量文件删除失败", e);
+        }
     }
 
     /**
@@ -894,38 +975,43 @@ public class S3ServiceImpl implements S3Service {
     @Override
     public void deleteFolderRecursively(String prefix) {
         String bucket = s3Properties.getBucketName();
-
         String continuationToken = null;
 
-        do {
-            ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
-                    .bucket(bucket)
-                    .prefix(prefix)
-                    .continuationToken(continuationToken)
-                    .build();
+        try {
+            do {
+                ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
+                        .bucket(bucket)
+                        .prefix(prefix)
+                        .continuationToken(continuationToken)
+                        .build();
 
-            ListObjectsV2Response listResponse = s3Client.listObjectsV2(listRequest);
+                ListObjectsV2Response listResponse = s3Client.listObjectsV2(listRequest);
+                List<S3Object> objects = listResponse.contents();
 
-            List<S3Object> objects = listResponse.contents();
+                if (objects.isEmpty()) {
+                    log.info("S3路径下无文件需要删除，bucket={}, prefix={}", bucket, prefix);
+                    break;
+                }
 
-            if (objects.isEmpty()) {
-                break;
-            }
+                List<ObjectIdentifier> toDelete = objects.stream()
+                        .map(obj -> ObjectIdentifier.builder().key(obj.key()).build())
+                        .collect(Collectors.toList());
 
-            List<ObjectIdentifier> toDelete = objects.stream()
-                    .map(obj -> ObjectIdentifier.builder().key(obj.key()).build())
-                    .collect(Collectors.toList());
+                DeleteObjectsRequest deleteRequest = DeleteObjectsRequest.builder()
+                        .bucket(bucket)
+                        .delete(Delete.builder().objects(toDelete).build())
+                        .build();
 
-            DeleteObjectsRequest deleteRequest = DeleteObjectsRequest.builder()
-                    .bucket(bucket)
-                    .delete(Delete.builder().objects(toDelete).build())
-                    .build();
+                s3Client.deleteObjects(deleteRequest);
+                log.info("已删除S3文件，bucket={}, keys={}", bucket,
+                        toDelete.stream().map(ObjectIdentifier::key).collect(Collectors.toList()));
 
-            s3Client.deleteObjects(deleteRequest);
-
-            continuationToken = listResponse.nextContinuationToken();
-
-        } while (continuationToken != null);
+                continuationToken = listResponse.nextContinuationToken();
+            } while (continuationToken != null);
+        } catch (Exception e) {
+            log.error("递归删除S3文件失败，bucket={}, prefix={}", bucket, prefix, e);
+            throw new RuntimeException("S3递归删除失败", e);
+        }
     }
 
     /**
@@ -936,11 +1022,22 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public boolean doesObjectExist(String key) {
+        int notFoundStatus = 404;
+
         try {
-            HeadObjectRequest request = HeadObjectRequest.builder().bucket(s3Properties.getBucketName()).key(key).build();
+            HeadObjectRequest request = HeadObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .build();
             s3Client.headObject(request);
             return true;
         } catch (S3Exception e) {
+            if (e.statusCode() != notFoundStatus) {
+                log.warn("检查S3对象存在性时发生异常，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            }
+            return false;
+        } catch (Exception e) {
+            log.error("检查S3对象存在性失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
             return false;
         }
     }
@@ -953,10 +1050,18 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public List<S3Object> listFiles(String prefix) {
-        ListObjectsV2Request request = ListObjectsV2Request.builder().bucket(s3Properties.getBucketName()).prefix(prefix).build();
+        try {
+            ListObjectsV2Request request = ListObjectsV2Request.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .prefix(prefix)
+                    .build();
 
-        ListObjectsV2Response response = s3Client.listObjectsV2(request);
-        return response.contents();
+            ListObjectsV2Response response = s3Client.listObjectsV2(request);
+            return response.contents();
+        } catch (Exception e) {
+            log.error("列出S3文件失败，bucket={}, prefix={}", s3Properties.getBucketName(), prefix, e);
+            throw new RuntimeException("S3列出文件失败", e);
+        }
     }
 
     /**
@@ -982,19 +1087,23 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public String generatePresignedUrl(String key, Duration duration) {
-        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                .bucket(s3Properties.getBucketName())
-                .key(key)
-                .build();
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .build();
 
-        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(duration)
-                .getObjectRequest(getObjectRequest)
-                .build();
+            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                    .signatureDuration(duration)
+                    .getObjectRequest(getObjectRequest)
+                    .build();
 
-        URL url = s3Presigner.presignGetObject(presignRequest).url();
-
-        return url.toString();
+            URL url = s3Presigner.presignGetObject(presignRequest).url();
+            return url.toString();
+        } catch (Exception e) {
+            log.error("生成S3预签名URL失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3生成预签名URL失败", e);
+        }
     }
 
     /**
@@ -1006,19 +1115,23 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public String generatePresignedUploadUrl(String key, Duration duration) {
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(s3Properties.getBucketName())
-                .key(key)
-                .build();
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(key)
+                    .build();
 
-        PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-                .signatureDuration(duration)
-                .putObjectRequest(putObjectRequest)
-                .build();
+            PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
+                    .signatureDuration(duration)
+                    .putObjectRequest(putObjectRequest)
+                    .build();
 
-        URL url = s3Presigner.presignPutObject(presignRequest).url();
-
-        return url.toString();
+            URL url = s3Presigner.presignPutObject(presignRequest).url();
+            return url.toString();
+        } catch (Exception e) {
+            log.error("生成S3上传预签名URL失败，bucket={}, key={}", s3Properties.getBucketName(), key, e);
+            throw new RuntimeException("S3生成上传预签名URL失败", e);
+        }
     }
 
     /**
@@ -1029,17 +1142,40 @@ public class S3ServiceImpl implements S3Service {
      */
     @Override
     public String generatePublicUrl(String key) {
+        if (key == null || key.trim().isEmpty()) {
+            throw new IllegalArgumentException("S3对象键不能为空");
+        }
+
+        if (!doesObjectExist(key)) {
+            throw new IllegalStateException("S3对象不存在，key=" + key);
+        }
+
         String endpoint = s3Properties.getEndpoint();
         String bucket = s3Properties.getBucketName();
 
-        // 简单拼接，先去掉末尾和开头的斜杠，最后统一拼接
-        endpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
-        bucket = bucket.startsWith("/") ? bucket.substring(1) : bucket;
-        bucket = bucket.endsWith("/") ? bucket.substring(0, bucket.length() - 1) : bucket;
-        key = key.startsWith("/") ? key.substring(1) : key;
+        String slash = "/";
+        int startIndex = 0;
+        int removeOne = 1;
 
-        return endpoint + "/" + bucket + "/" + key;
+        // 去掉 endpoint 末尾的斜杠
+        if (endpoint.endsWith(slash)) {
+            endpoint = endpoint.substring(startIndex, endpoint.length() - removeOne);
+        }
+
+        // 去掉 bucket 首尾的斜杠
+        if (bucket.startsWith(slash)) {
+            bucket = bucket.substring(startIndex + removeOne);
+        }
+        if (bucket.endsWith(slash)) {
+            bucket = bucket.substring(startIndex, bucket.length() - removeOne);
+        }
+
+        // 去掉 key 开头的斜杠
+        if (key.startsWith(slash)) {
+            key = key.substring(startIndex + removeOne);
+        }
+
+        return endpoint + slash + bucket + slash + key;
     }
-
 
 }
