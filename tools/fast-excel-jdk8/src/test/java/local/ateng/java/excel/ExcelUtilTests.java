@@ -6,7 +6,7 @@ import local.ateng.java.excel.entity.DemoData2;
 import local.ateng.java.excel.entity.MyUser;
 import local.ateng.java.excel.handler.AutoMergeStrategy;
 import local.ateng.java.excel.handler.CellMergeStrategy;
-import local.ateng.java.excel.handler.MultiColumnRangeMergeHandler;
+import local.ateng.java.excel.handler.RowColMergeStrategy;
 import local.ateng.java.excel.init.InitData;
 import local.ateng.java.excel.utils.ExcelStyleUtil;
 import local.ateng.java.excel.utils.ExcelUtil;
@@ -365,14 +365,9 @@ public class ExcelUtilTests {
                 new DemoData2("上海", "徐汇区", "家电", "冰箱", 700, "钱七")
         );
 
-        // 假设你要合并前四列（省市-品类-产品）
-        MultiColumnRangeMergeHandler mergeHandler = new MultiColumnRangeMergeHandler(
-                Arrays.asList(new int[]{0, 1}) // 列索引 0~3 参与合并
-        );
-
         String fileName = "D:\\temp\\202508\\销售数据报表.xlsx";
         EasyExcel.write(fileName, DemoData2.class)
-                .registerWriteHandler(mergeHandler)
+                .registerWriteHandler(new RowColMergeStrategy(1, 10, 0, 3))
                 .sheet("销售数据")
                 .doWrite(dataList);
 
