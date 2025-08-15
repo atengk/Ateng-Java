@@ -52,9 +52,10 @@ public class MailServiceImpl implements MailService {
         message.setText(content);
         try {
             mailSender.send(message);
-            log.info("纯文本邮件发送成功，收件人：{}", to);
+            log.info("邮件发送成功，收件人：{}", to);
         } catch (MailException e) {
-            log.error("纯文本邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            log.error("邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
         }
     }
 
@@ -68,9 +69,10 @@ public class MailServiceImpl implements MailService {
             helper.setSubject(subject);
             helper.setText(html, true);
             mailSender.send(mimeMessage);
-            log.info("HTML 邮件发送成功，收件人：{}", to);
+            log.info("邮件发送成功，收件人：{}", to);
         } catch (MessagingException | MailException e) {
-            log.error("HTML 邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            log.error("邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
         }
     }
 
@@ -94,9 +96,10 @@ public class MailServiceImpl implements MailService {
             }
 
             mailSender.send(mimeMessage);
-            log.info("带附件的邮件发送成功，收件人：{}", to);
+            log.info("邮件发送成功，收件人：{}", to);
         } catch (MessagingException | MailException e) {
-            log.error("带附件的邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            log.error("邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
         }
     }
 
@@ -121,37 +124,42 @@ public class MailServiceImpl implements MailService {
             }
 
             mailSender.send(mimeMessage);
-            log.info("带图片的 HTML 邮件发送成功，收件人：{}", to);
+            log.info("邮件发送成功，收件人：{}", to);
         } catch (MessagingException | MailException e) {
-            log.error("带图片的 HTML 邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            log.error("邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
         }
     }
 
     @Override
     public void sendBatchTextMail(List<String> toList, String subject, String content) {
         if (toList == null || toList.isEmpty()) {
-            log.warn("批量发送纯文本邮件失败：收件人列表为空");
+            log.warn("批量邮件发送失败：收件人列表为空");
             return;
         }
+
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(toList.toArray(new String[0]));
         message.setSubject(subject);
         message.setText(content);
+
         try {
             mailSender.send(message);
-            log.info("批量纯文本邮件发送成功，收件人数：{}", toList.size());
+            log.info("批量邮件发送成功，收件人数：{}", toList.size());
         } catch (MailException e) {
-            log.error("批量纯文本邮件发送失败，错误信息：{}", e.getMessage(), e);
+            log.error("批量邮件发送失败，收件人数：{}，错误信息：{}", toList.size(), e.getMessage(), e);
+            throw new RuntimeException("批量邮件发送失败", e);
         }
     }
 
     @Override
     public void sendBatchHtmlMail(List<String> toList, String subject, String html) {
         if (toList == null || toList.isEmpty()) {
-            log.warn("批量发送 HTML 邮件失败：收件人列表为空");
+            log.warn("批量邮件发送失败：收件人列表为空");
             return;
         }
+
         MimeMessage mimeMessage = mailSender.createMimeMessage();
         try {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
@@ -160,22 +168,23 @@ public class MailServiceImpl implements MailService {
             helper.setSubject(subject);
             helper.setText(html, true);
             mailSender.send(mimeMessage);
-            log.info("批量 HTML 邮件发送成功，收件人数：{}", toList.size());
+            log.info("批量邮件发送成功，收件人数：{}", toList.size());
         } catch (MessagingException | MailException e) {
-            log.error("批量 HTML 邮件发送失败，错误信息：{}", e.getMessage(), e);
+            log.error("批量邮件发送失败，收件人数：{}，错误信息：{}", toList.size(), e.getMessage(), e);
+            throw new RuntimeException("批量邮件发送失败", e);
         }
     }
 
     @Override
     public void sendHtmlMailAsync(String to, String subject, String html) {
-        log.info("异步 HTML 邮件发送任务已提交，收件人：{}", to);
+        log.info("异步邮件发送任务已提交，收件人：{}", to);
         sendHtmlMail(to, subject, html);
     }
 
     @Override
     public void sendBatchHtmlMailAsync(List<String> toList, String subject, String html) {
         if (toList == null || toList.isEmpty()) {
-            log.warn("批量异步发送 HTML 邮件失败：收件人列表为空");
+            log.warn("批量异步邮件发送失败：收件人列表为空");
             return;
         }
 
@@ -184,13 +193,13 @@ public class MailServiceImpl implements MailService {
             sendHtmlMailAsync(to, subject, html);
         }
 
-        log.info("批量异步 HTML 邮件发送任务已提交，收件人数：{}", toList.size());
+        log.info("批量异步邮件发送任务已提交，收件人数：{}", toList.size());
     }
 
     @Override
     public void sendHtmlMailWithCcBcc(String to, List<String> ccList, List<String> bccList, String subject, String html) {
         if (to == null || to.isEmpty()) {
-            log.warn("发送邮件失败：收件人为空");
+            log.warn("邮件发送失败：收件人为空");
             return;
         }
 
@@ -215,12 +224,13 @@ public class MailServiceImpl implements MailService {
             log.info("邮件发送成功，收件人：{}，抄送：{}，密送：{}", to, ccList, bccList);
         } catch (MessagingException | MailException e) {
             log.error("邮件发送失败，收件人：{}，抄送：{}，密送：{}，错误信息：{}", to, ccList, bccList, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
         }
     }
 
     @Override
     public void sendHtmlMailWithCcBccAsync(String to, List<String> ccList, List<String> bccList, String subject, String html) {
-        log.info("异步发送邮件任务提交，线程：{}", Thread.currentThread().getName());
+        log.info("异步邮件发送任务已提交，线程：{}", Thread.currentThread().getName());
         sendHtmlMailWithCcBcc(to, ccList, bccList, subject, html);
     }
 
@@ -233,7 +243,7 @@ public class MailServiceImpl implements MailService {
                          Map<String, InputStream> attachments,
                          Map<String, InputStream> images) {
         if (to == null || to.isEmpty()) {
-            log.warn("发送邮件失败：收件人为空");
+            log.warn("邮件发送失败：收件人为空");
             return;
         }
 
@@ -278,8 +288,8 @@ public class MailServiceImpl implements MailService {
             mailSender.send(mimeMessage);
             log.info("邮件发送成功，收件人：{}，抄送：{}，密送：{}", to, ccList, bccList);
         } catch (MessagingException | MailException e) {
-            log.error("邮件发送失败，收件人：{}，抄送：{}，密送：{}，错误信息：{}",
-                    to, ccList, bccList, e.getMessage(), e);
+            log.error("邮件发送失败，收件人：{}，抄送：{}，密送：{}，错误信息：{}", to, ccList, bccList, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
         }
     }
 
@@ -326,18 +336,18 @@ public class MailServiceImpl implements MailService {
      */
     private String sniffImageContentType(byte[] data) {
         // 内部常量定义
-        final int MIN_LENGTH = 12;
-        final byte[] JPEG_PREFIX = {(byte) 0xFF, (byte) 0xD8};
-        final byte[] PNG_PREFIX = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
-        final byte[] GIF_PREFIX = {'G', 'I', 'F'};
-        final byte[] BMP_PREFIX = {'B', 'M'};
-        final byte[] WEBP_PREFIX = {'R', 'I', 'F', 'F'};
-        final int WEBP_SUFFIX_OFFSET = 8;
-        final byte[] WEBP_SUFFIX = {'W', 'E', 'B', 'P'};
-        final String DEFAULT_MIME = "application/octet-stream";
+        final int minLength = 12;
+        final byte[] jpegPrefix = {(byte) 0xFF, (byte) 0xD8};
+        final byte[] pngPrefix = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+        final byte[] gifPrefix = {'G', 'I', 'F'};
+        final byte[] bmpPrefix = {'B', 'M'};
+        final byte[] webpPrefix = {'R', 'I', 'F', 'F'};
+        final int webpSuffixOffset = 8;
+        final byte[] webpSuffix = {'W', 'E', 'B', 'P'};
+        final String defaultMime = "application/octet-stream";
 
-        if (data == null || data.length < MIN_LENGTH) {
-            return DEFAULT_MIME;
+        if (data == null || data.length < minLength) {
+            return defaultMime;
         }
 
         // 工具函数判断前缀
@@ -353,31 +363,30 @@ public class MailServiceImpl implements MailService {
             return true;
         };
 
-        if (startsWith.test(data, JPEG_PREFIX)) {
+        if (startsWith.test(data, jpegPrefix)) {
             return "image/jpeg";
         }
 
-        if (startsWith.test(data, PNG_PREFIX)) {
+        if (startsWith.test(data, pngPrefix)) {
             return "image/png";
         }
 
-        if (startsWith.test(data, GIF_PREFIX)) {
+        if (startsWith.test(data, gifPrefix)) {
             return "image/gif";
         }
 
-        if (startsWith.test(data, BMP_PREFIX)) {
+        if (startsWith.test(data, bmpPrefix)) {
             return "image/bmp";
         }
 
         // WEBP 特殊处理
-        boolean webpPrefixMatch = startsWith.test(java.util.Arrays.copyOfRange(data, 0, WEBP_PREFIX.length), WEBP_PREFIX);
-        boolean webpSuffixMatch = startsWith.test(java.util.Arrays.copyOfRange(data, WEBP_SUFFIX_OFFSET, WEBP_SUFFIX_OFFSET + WEBP_SUFFIX.length), WEBP_SUFFIX);
+        boolean webpPrefixMatch = startsWith.test(java.util.Arrays.copyOfRange(data, 0, webpPrefix.length), webpPrefix);
+        boolean webpSuffixMatch = startsWith.test(java.util.Arrays.copyOfRange(data, webpSuffixOffset, webpSuffixOffset + webpSuffix.length), webpSuffix);
         if (webpPrefixMatch && webpSuffixMatch) {
             return "image/webp";
         }
 
-        return DEFAULT_MIME;
+        return defaultMime;
     }
-
 
 }
