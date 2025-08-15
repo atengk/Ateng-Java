@@ -164,14 +164,39 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
     }
 
     /**
-     * 获取指定类型的所有 Bean（包括泛型集合）
+     * 获取指定类型的第一个 Bean（按 Spring 容器注册顺序）
      *
-     * @param type 类型
+     * <p>
+     * 如果指定类型在容器中存在多个实现类，将返回第一个注册的 Bean。
+     * 如果不存在该类型的 Bean，则返回 null。
+     * </p>
+     *
+     * <p><b>示例：</b></p>
+     * <pre>{@code
+     * MyService service = SpringUtil.getFirstBean(MyService.class);
+     * if (service != null) {
+     *     service.doSomething();
+     * }
+     * }</pre>
+     *
+     * @param type Bean 类型
      * @param <T>  泛型
-     * @return 类型对应的所有 Bean Map（BeanName -> Bean）
+     * @return 指定类型的第一个 Bean 实例，如果不存在返回 null
      */
-    public static <T> Map<String, T> getBeansOfType(Class<T> type) {
-        return context.getBeansOfType(type);
+    public static <T> T getFirstBean(Class<T> type) {
+        Map<String, T> beans = getAllBeans(type);
+        return beans.isEmpty() ? null : beans.values().iterator().next();
+    }
+
+    /**
+     * 获取指定类型的所有 Bean
+     *
+     * @param type Bean 类型
+     * @param <T>  泛型
+     * @return Bean 名称与实例映射，如果不存在返回空 Map
+     */
+    public static <T> Map<String, T> getAllBeans(Class<T> type) {
+        return getApplicationContext().getBeansOfType(type);
     }
 
     /**
