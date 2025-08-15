@@ -406,34 +406,190 @@ public final class StringUtil {
         return splitToList(str, delimiter, s -> s);
     }
 
+    // ======================== 基础替换（Regex / Simple） ========================
+
     /**
-     * 替换字符串中的指定内容（可处理 null，只替换一次）
+     * 替换第一个匹配的子串（正则语义，等价于 {@link String#replaceFirst(String, String)}）。
+     * <p><b>注意：</b>本方法把 {@code target} 当作正则表达式解析；{@code replacement}
+     * 中的 {@code $}、{@code \} 等也遵循正则替换规则（如需安全替换请用 {@link #replaceSafeFirst(String, String, String)}）。</p>
      *
-     * @param str         原始字符串
-     * @param target      要替换的子串
-     * @param replacement 替换后的内容
-     * @return 替换后的结果字符串
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的<strong>正则</strong>模式
+     * @param replacement 替换内容（按正则替换语义解释）
+     * @return 替换后的字符串；若任一参数为 null，则返回原始 {@code str}
+     * @since 2025-08-15
      */
-    public static String replace(String str, String target, String replacement) {
+    public static String replaceFirst(String str, String target, String replacement) {
+        if (str == null || target == null || replacement == null) {
+            return str;
+        }
+        return str.replaceFirst(target, replacement);
+    }
+
+    /**
+     * 替换所有匹配的子串（正则语义，等价于 {@link String#replaceAll(String, String)}）。
+     * <p><b>注意：</b>本方法把 {@code target} 当作正则表达式解析；{@code replacement}
+     * 中的 {@code $}、{@code \} 等也遵循正则替换规则（如需安全替换请用 {@link #replaceSafeAll(String, String, String)}）。</p>
+     *
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的<strong>正则</strong>模式
+     * @param replacement 替换内容（按正则替换语义解释）
+     * @return 替换后的字符串；若任一参数为 null，则返回原始 {@code str}
+     * @since 2025-08-15
+     */
+    public static String replaceAllRegex(String str, String target, String replacement) {
+        if (str == null || target == null || replacement == null) {
+            return str;
+        }
+        return str.replaceAll(target, replacement);
+    }
+
+    /**
+     * 替换所有匹配的子串（<b>简单模式</b>，不使用正则；等价于 {@link String#replace(CharSequence, CharSequence)}）。
+     * <p>当你确认 {@code target} 只是普通文本（非正则）时，推荐使用该方法，效率更直接且无正则歧义。</p>
+     *
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的普通文本（非正则）
+     * @param replacement 替换内容（普通文本，不解析 $、\）
+     * @return 替换后的字符串；若任一参数为 null，则返回原始 {@code str}
+     * @since 2025-08-15
+     */
+    public static String replaceAllSimple(String str, String target, String replacement) {
         if (str == null || target == null || replacement == null) {
             return str;
         }
         return str.replace(target, replacement);
     }
 
+    // ======================== 安全替换（自动转义 target & replacement） ========================
+
     /**
-     * 替换字符串中的指定内容（可处理 null，替换所有）
+     * 安全地替换第一个匹配：对 {@code target} 做 {@link Pattern#quote(String)}，对 {@code replacement}
+     * 做 {@link Matcher#quoteReplacement(String)}，避免正则与替换串的特殊含义（如 {@code . * $ \}）。
+     *
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的文本（将被安全转义为字面量）
+     * @param replacement 替换内容（将被安全转义为字面量）
+     * @return 替换后的字符串；若任一参数为 null，则返回原始 {@code str}
+     * @since 2025-08-15
+     */
+    public static String replaceSafeFirst(String str, String target, String replacement) {
+        return replaceSafeInternal(str, target, replacement, false);
+    }
+
+    /**
+     * 安全地替换所有匹配：对 {@code target} 做 {@link Pattern#quote(String)}，对 {@code replacement}
+     * 做 {@link Matcher#quoteReplacement(String)}，避免正则与替换串的特殊含义（如 {@code . * $ \}）。
+     *
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的文本（将被安全转义为字面量）
+     * @param replacement 替换内容（将被安全转义为字面量）
+     * @return 替换后的字符串；若任一参数为 null，则返回原始 {@code str}
+     * @since 2025-08-15
+     */
+    public static String replaceSafeAll(String str, String target, String replacement) {
+        return replaceSafeInternal(str, target, replacement, true);
+    }
+
+    /**
+     * 安全替换（内部复用）：封装了正则与替换串的双重转义。
      *
      * @param str         原始字符串
-     * @param target      要替换的子串
-     * @param replacement 替换后的内容
-     * @return 替换后的结果字符串
+     * @param target      目标文本（按字面量处理）
+     * @param replacement 替换文本（按字面量处理）
+     * @param replaceAll  {@code true} 替换全部；{@code false} 仅替换第一个
+     * @return 替换结果或原样返回
      */
-    public static String replaceAll(String str, String target, String replacement) {
+    private static String replaceSafeInternal(String str, String target, String replacement, boolean replaceAll) {
         if (str == null || target == null || replacement == null) {
             return str;
         }
-        return str.replaceAll(target, replacement);
+        String quotedTarget = Pattern.quote(target);
+        String quotedReplacement = Matcher.quoteReplacement(replacement);
+        return replaceAll ? str.replaceAll(quotedTarget, quotedReplacement)
+                : str.replaceFirst(quotedTarget, quotedReplacement);
+    }
+
+    // ======================== 安全替换（忽略大小写） ========================
+
+    /**
+     * 安全地替换第一个匹配（忽略大小写）：目标按字面量匹配（安全转义），不区分大小写。
+     *
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的文本（按字面量处理，不区分大小写）
+     * @param replacement 替换内容（按字面量处理，自动转义 $、\）
+     * @return 替换后的字符串；若任一参数为 null，则返回原始 {@code str}
+     * @since 2025-08-15
+     */
+    public static String replaceSafeIgnoreCaseFirst(String str, String target, String replacement) {
+        return replaceSafeIgnoreCaseInternal(str, target, replacement, false);
+    }
+
+    /**
+     * 安全地替换所有匹配（忽略大小写）：目标按字面量匹配（安全转义），不区分大小写。
+     *
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的文本（按字面量处理，不区分大小写）
+     * @param replacement 替换内容（按字面量处理，自动转义 $、\）
+     * @return 替换后的字符串；若任一参数为 null，则返回原始 {@code str}
+     * @since 2025-08-15
+     */
+    public static String replaceSafeIgnoreCaseAll(String str, String target, String replacement) {
+        return replaceSafeIgnoreCaseInternal(str, target, replacement, true);
+    }
+
+    /**
+     * 安全忽略大小写替换（内部复用）。
+     *
+     * @param str         原始字符串
+     * @param target      目标文本（字面量匹配）
+     * @param replacement 替换文本（字面量替换）
+     * @param replaceAll  {@code true} 替换全部；{@code false} 仅替换第一个
+     * @return 替换结果或原样返回
+     */
+    private static String replaceSafeIgnoreCaseInternal(String str, String target, String replacement, boolean replaceAll) {
+        if (str == null || target == null || replacement == null) {
+            return str;
+        }
+        String regex = "(?i)" + Pattern.quote(target); // (?i) 忽略大小写
+        String quotedReplacement = Matcher.quoteReplacement(replacement);
+        return replaceAll ? str.replaceAll(regex, quotedReplacement)
+                : str.replaceFirst(regex, quotedReplacement);
+    }
+
+    // ======================== 安全替换（限制次数） ========================
+
+    /**
+     * 安全地按次数限制进行替换：目标与替换文本均按字面量处理，内部使用正则匹配并逐次替换。
+     * <p>
+     * 用于“只替换前 N 次”的场景。若 {@code limit} ≤ 0，原样返回 {@code str}。
+     * </p>
+     *
+     * @param str         原始字符串（null 将直接返回 null）
+     * @param target      要替换的文本（按字面量处理）
+     * @param replacement 替换内容（按字面量处理，自动转义 $、\）
+     * @param limit       替换次数上限（≤ 0 表示不替换；&gt; 匹配数时等价于替换全部）
+     * @return 替换后的字符串；若任一参数为 null 或 {@code limit} ≤ 0，则返回原始 {@code str}
+     * @since 2025-08-15
+     */
+    public static String replaceSafeLimit(String str, String target, String replacement, int limit) {
+        if (str == null || target == null || replacement == null || limit <= 0) {
+            return str;
+        }
+        String quotedTarget = Pattern.quote(target);
+        String quotedReplacement = Matcher.quoteReplacement(replacement);
+
+        Matcher matcher = Pattern.compile(quotedTarget).matcher(str);
+        StringBuffer sb = new StringBuffer();
+        int count = 0;
+        while (matcher.find()) {
+            if (++count > limit) {
+                break; // 超出限制，停止追加替换，后续保持原样
+            }
+            matcher.appendReplacement(sb, quotedReplacement);
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 
     /**
@@ -442,7 +598,7 @@ public final class StringUtil {
      * @param str 原始字符串
      * @return 移除空白字符后的字符串
      */
-    public static String removeWhitespace(String str) {
+    public static String remove(String str) {
         if (isBlank(str)) {
             return "";
         }
@@ -456,7 +612,7 @@ public final class StringUtil {
      * @param charsToDel 要删除的字符（如",."）
      * @return 删除后的字符串
      */
-    public static String removeChars(String str, String charsToDel) {
+    public static String remove(String str, String charsToDel) {
         if (str == null || charsToDel == null) {
             return str;
         }
