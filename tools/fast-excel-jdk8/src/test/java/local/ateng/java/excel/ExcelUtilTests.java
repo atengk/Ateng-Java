@@ -1,8 +1,12 @@
 package local.ateng.java.excel;
 
 import cn.idev.excel.EasyExcel;
+import local.ateng.java.excel.entity.DemoData;
+import local.ateng.java.excel.entity.DemoData2;
 import local.ateng.java.excel.entity.MyUser;
 import local.ateng.java.excel.handler.AutoMergeStrategy;
+import local.ateng.java.excel.handler.CellMergeStrategy;
+import local.ateng.java.excel.handler.MultiColumnRangeMergeHandler;
 import local.ateng.java.excel.init.InitData;
 import local.ateng.java.excel.utils.ExcelStyleUtil;
 import local.ateng.java.excel.utils.ExcelUtil;
@@ -316,5 +320,64 @@ public class ExcelUtilTests {
                     .doWrite(dataList);
         }
     }
+
+    @Test
+    void cellMerge() {
+        // 1. 准备数据
+        List<DemoData> dataList = Arrays.asList(
+                new DemoData("研发部", "研发部", 100),
+                new DemoData("研发部", "研发部", 200),
+                new DemoData("市场部", "王五", 150),
+                new DemoData("市场部", "赵六", 300)
+        );
+
+        // 2. 创建合并策略（自动识别表头，合并第0,1,2列）
+        CellMergeStrategy mergeStrategy = new CellMergeStrategy(0, 1, 2);
+
+        // 3. 执行导出
+        EasyExcel.write("D:\\temp\\202508\\部门业绩表.xlsx", DemoData.class)
+                .registerWriteHandler(mergeStrategy)
+                .sheet("部门业绩")
+                .doWrite(dataList);
+    }
+
+    @Test
+    void testMultiColumnMerge() {
+        List<DemoData2> dataList = Arrays.asList(
+                // 北京-朝阳区-电子产品-手机，连续两行完全相同，姓名不同
+                new DemoData2("北京", "北京", "电子产品", "手机", 1200, "张三"),
+                new DemoData2("北京", "北京", "电子产品", "手机", 800, "李四"),
+
+                // 北京-朝阳区-电子产品-平板，连续两行完全相同
+                new DemoData2("北京", "北京", "电子产品", "平板", 500, "李四"),
+                new DemoData2("北京", "朝阳区", "电子产品", "平板", 600, "李四"),
+
+                // 北京-海淀区-电子产品-手机，连续两行完全相同
+                new DemoData2("北京", "海淀区", "电子产品", "手机", 900, "王五"),
+                new DemoData2("北京", "海淀区", "电子产品", "手机", 1100, "王五"),
+
+                // 上海-浦东新区-家电-电视，连续两行完全相同
+                new DemoData2("上海", "浦东新区", "家电", "电视", 1500, "赵六"),
+                new DemoData2("上海", "浦东新区", "家电", "电视", 1200, "赵六"),
+
+                // 上海-徐汇区-家电-冰箱，连续两行完全相同
+                new DemoData2("上海", "徐汇区", "家电", "冰箱", 800, "钱七"),
+                new DemoData2("上海", "徐汇区", "家电", "冰箱", 700, "钱七")
+        );
+
+        // 假设你要合并前四列（省市-品类-产品）
+        MultiColumnRangeMergeHandler mergeHandler = new MultiColumnRangeMergeHandler(
+                Arrays.asList(new int[]{0, 1}) // 列索引 0~3 参与合并
+        );
+
+        String fileName = "D:\\temp\\202508\\销售数据报表.xlsx";
+        EasyExcel.write(fileName, DemoData2.class)
+                .registerWriteHandler(mergeHandler)
+                .sheet("销售数据")
+                .doWrite(dataList);
+
+        System.out.println("Excel导出完成：" + fileName);
+    }
+
 
 }
