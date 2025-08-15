@@ -82,5 +82,27 @@
             ${ew.sqlSegment}
         </where>
     </select>
+    <select id="selectUsersWithOrderPageWrapperQuery" resultType="com.alibaba.fastjson2.JSONObject">
+        with my_table as (
+            SELECT
+                u.id as id,
+                u.name,
+                u.age,
+                u.score,
+                u.birthday,
+                u.province,
+                u.city,
+                u.create_time,
+                o.id as order_id,
+                o.date as order_date,
+                o.total_amount as order_total_amount
+            FROM my_user u
+                LEFT JOIN my_order o ON u.id = o.user_id
+            <if test="query._id != null">
+                and u.id = #{query._id}
+            </if>
+        ) select * from my_table
+        ${ew.customSqlSegment}
+    </select>
 
 </mapper>

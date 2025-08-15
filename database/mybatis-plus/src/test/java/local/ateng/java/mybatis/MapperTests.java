@@ -15,7 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @SpringBootTest
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
@@ -57,20 +59,31 @@ public class MapperTests {
     void test06() {
         QueryWrapper<MyUser> wrapper = new QueryWrapper<>();
         wrapper.like("city", "重");
-        wrapper.eq("id", 1);
+        wrapper.eq("u.id", 1);
         wrapper.orderByAsc("u.id");
-        Page<JSONObject> page = new Page(1, 3);
-        IPage<JSONObject> pageList = myUserMapper.selectUsersWithOrderPageWrapper(page, wrapper);
-        System.out.println(pageList);
+        IPage page = new Page(1, 3);
+        page = myUserMapper.selectUsersWithOrderPageWrapper(page, wrapper);
+        System.out.println(page);
     }
 
     @Test
     void test07() {
         LambdaQueryWrapper<MyUser> wrapper = Wrappers.lambdaQuery();
         wrapper.like(MyUser::getCity, "重");
-        Page<JSONObject> page = new Page(1, 3);
-        IPage<JSONObject> pageList = myUserMapper.selectUsersWithOrderPageWrapper(page, wrapper);
-        System.out.println(pageList);
+        IPage<JSONObject> page = new Page(1, 3);
+        page = myUserMapper.selectUsersWithOrderPageWrapper(page, wrapper);
+        System.out.println(page);
+    }
+
+    @Test
+    void test08() {
+        LambdaQueryWrapper<MyUser> wrapper = Wrappers.lambdaQuery();
+        wrapper.like(MyUser::getCity, "重");
+        IPage<JSONObject> page = new Page(1, 3);
+        Map<String, Object> map = new HashMap<>();
+        map.put("_id", 1);
+        page = myUserMapper.selectUsersWithOrderPageWrapperQuery(page, wrapper, map);
+        System.out.println(page);
     }
 
 }

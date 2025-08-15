@@ -5,11 +5,11 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Constants;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import local.ateng.java.mybatis.entity.MyUser;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -30,8 +30,11 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
     List<JSONObject> selectUsersWithOrders(@Param("orderId") Long orderId);
 
     // 分页查询
-    IPage<JSONObject> selectUsersWithOrderPage(Page page, @Param("city") String city);
+    IPage<JSONObject> selectUsersWithOrderPage(IPage page, @Param("city") String city);
 
     // 分页查询，传入wrapper
-    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param(Constants.WRAPPER) Wrapper wrapper);
+    IPage<JSONObject> selectUsersWithOrderPageWrapper(IPage page, @Param(Constants.WRAPPER) Wrapper wrapper);
+
+    // 分页查询，传入wrapper、自定义查询条件
+    IPage<JSONObject> selectUsersWithOrderPageWrapperQuery(IPage page, @Param(Constants.WRAPPER) Wrapper wrapper, @Param("query") Map<String, Object> query);
 }

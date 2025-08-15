@@ -737,6 +737,22 @@ public class UserServiceImpl implements UserService {
 
 ## 使用Mapper XML
 
+### 开始
+
+#### ${ew.sqlSegment} 和 ${ew.customSqlSegment} 区别
+
+- **普通 XML 自定义分页、多条件查询** → 用 `${ew.customSqlSegment}`（简单、省心）
+- **复杂 SQL、JOIN 场景中部分条件需要自己控制位置** → 用 `${ew.sqlSegment}`（更灵活）
+
+| 特性                   | `ew.sqlSegment`       | `ew.customSqlSegment` |
+| ---------------------- | --------------------- | --------------------- |
+| 是否包含 `WHERE`/`AND` | ❌ 否                  | ✅ 自动加              |
+| 是否包含排序、分组     | ❌ 一般不包含          | ✅ 包含                |
+| 是否包含逻辑删除条件   | ✅ 包含                | ✅ 包含                |
+| 适用场景               | 自己完全控制 SQL 结构 | 快速接在 FROM 后面    |
+
+
+
 ### 基本使用
 
 #### 创建Mapper
@@ -1320,6 +1336,123 @@ SELECT
          WHERE 0 = 0 and
             (city LIKE '%重%' AND u.id = 1) ORDER BY u.id ASC LIMIT 3;
 Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":542,"order_date":"2007-05-08","order_total_amount":398.58}, {"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":973,"order_date":"2008-10-27","order_total_amount":830.81}], total=2, size=3, current=1, orders=[], optimizeCountSql=true, searchCount=true, optimizeJoinOfCountSql=true, maxLimit=null, countId='selectUsersWithOrderPageWrapperCount'}
+```
+
+### 使用Wrapper+自定义查询条件
+
+使用 LambdaQueryWrapper 比 QueryWrapper 的好处是，能将实体类字段名称自动映射为数据库表字段名称。
+
+#### 创建Mapper
+
+**重点：** 参数名仍然必须是 `"ew"`，MyBatis-Plus 才能识别并自动拼接条件。
+
+```java
+public interface MyUserMapper extends BaseMapper<MyUser> {
+
+    // 分页查询，传入wrapper、自定义查询条件
+    IPage<JSONObject> selectUsersWithOrderPageWrapperQuery(IPage page, @Param(Constants.WRAPPER) Wrapper wrapper, @Param("query") Map<String, Object> query);
+
+}
+```
+
+#### 创建Mapper.xml
+
+传 `wrapper` 给自定义 SQL 时，在where条件中加 `${ew.sqlSegment}`。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="local.ateng.java.mybatisjdk8.mapper.MyUserMapper">
+
+   <select id="selectUsersWithOrderPageWrapperQuery" resultType="com.alibaba.fastjson2.JSONObject">
+        with my_table as (
+            SELECT
+                u.id as id,
+                u.name,
+                u.age,
+                u.score,
+                u.birthday,
+                u.province,
+                u.city,
+                u.create_time,
+                o.id as order_id,
+                o.date as order_date,
+                o.total_amount as order_total_amount
+            FROM my_user u
+                LEFT JOIN my_order o ON u.id = o.user_id
+            <if test="query._id != null">
+                and u.id = #{query._id}
+            </if>
+        ) select * from my_table
+        ${ew.customSqlSegment}
+    </select>
+
+</mapper>
+```
+
+#### 测试使用
+
+```java
+    @Test
+    void test08() {
+        LambdaQueryWrapper<MyUser> wrapper = Wrappers.lambdaQuery();
+        wrapper.like(MyUser::getCity, "重");
+        IPage<JSONObject> page = new Page(1, 3);
+        Map<String, Object> map = new HashMap<>();
+        map.put("_id", 1);
+        page = myUserMapper.selectUsersWithOrderPageWrapperQuery(page, wrapper, map);
+        System.out.println(page);
+    }
+```
+
+输出内容
+
+```
+2025-08-15T17:46:56.304+08:00  INFO 13076 --- [mybatis-plus] [           main] p6spy                                    : #1755251216304 | took 40ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+WITH my_table AS (SELECT u.id AS id, u.name, u.age, u.score, u.birthday, u.province, u.city, u.create_time, o.id AS order_id, o.date AS order_date, o.total_amount AS order_total_amount FROM my_user u LEFT JOIN my_order o ON u.id = o.user_id AND u.id = ?) SELECT COUNT(*) AS total FROM my_table WHERE (city LIKE ?)
+WITH my_table AS (SELECT u.id AS id, u.name, u.age, u.score, u.birthday, u.province, u.city, u.create_time, o.id AS order_id, o.date AS order_date, o.total_amount AS order_total_amount FROM my_user u LEFT JOIN my_order o ON u.id = o.user_id AND u.id = 1) SELECT COUNT(*) AS total FROM my_table WHERE (city LIKE '%重%');
+2025-08-15T17:46:56.354+08:00  INFO 13076 --- [mybatis-plus] [           main] p6spy                                    : #1755251216354 | took 33ms | statement | connection 0| url jdbc:mysql://192.168.1.10:35725/kongyu
+with my_table as (
+            SELECT
+                u.id as id,
+                u.name,
+                u.age,
+                u.score,
+                u.birthday,
+                u.province,
+                u.city,
+                u.create_time,
+                o.id as order_id,
+                o.date as order_date,
+                o.total_amount as order_total_amount
+            FROM my_user u
+                LEFT JOIN my_order o ON u.id = o.user_id
+             
+                and u.id = ?
+             
+        ) select * from my_table
+        WHERE (city LIKE ?) LIMIT ?
+with my_table as (
+            SELECT
+                u.id as id,
+                u.name,
+                u.age,
+                u.score,
+                u.birthday,
+                u.province,
+                u.city,
+                u.create_time,
+                o.id as order_id,
+                o.date as order_date,
+                o.total_amount as order_total_amount
+            FROM my_user u
+                LEFT JOIN my_order o ON u.id = o.user_id
+             
+                and u.id = 1
+             
+        ) select * from my_table
+        WHERE (city LIKE '%重%') LIMIT 3;
+Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":542,"order_date":"2007-05-08","order_total_amount":398.58}, {"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆","create_time":"2025-01-24 22:33:08.822","order_id":973,"order_date":"2008-10-27","order_total_amount":830.81}, {"id":2,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01-24 00:00:00","province":"重庆","city":"重庆"}], total=86, size=3, current=1, orders=[], optimizeCountSql=true, searchCount=true, optimizeJoinOfCountSql=true, maxLimit=null, countId='null'}
 ```
 
 
