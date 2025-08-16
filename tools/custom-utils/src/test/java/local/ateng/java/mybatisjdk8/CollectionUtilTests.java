@@ -59,6 +59,61 @@ public class CollectionUtilTests {
     }
 
     @Test
+    void test111() {
+        Set<Object> singleton = Collections.singleton(null);
+        System.out.println(singleton.contains(null));
+    }
+
+    @Test
+    void buildTreeComparator() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        List<Menu> tree = CollectionUtil.buildTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                Menu::getChildren,
+                0,
+                Comparator.comparing(Menu::getId).reversed()
+        );
+
+        System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+    @Test
+    void buildMultiRootTreeComparator() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        List<Menu> tree = CollectionUtil.buildMultiRootTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                Menu::getChildren,
+                new HashSet<>(Arrays.asList(0)),
+                Comparator.comparing(Menu::getId, Comparator.reverseOrder())
+                        .thenComparing(Menu::getName)
+        );
+
+        System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+    @Test
     void treeToList() {
         List<Menu> menus = Arrays.asList(
                 new Menu(1, 0, "系统管理"),

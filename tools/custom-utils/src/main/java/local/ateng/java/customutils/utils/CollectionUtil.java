@@ -1364,71 +1364,312 @@ public final class CollectionUtil {
                                                     BiConsumer<T, List<T>> childrenSetter,
                                                     Set<K> rootParentIds) {
 
-        // 参数校验
         if (items == null || items.isEmpty()
                 || idGetter == null || parentGetter == null || childrenSetter == null
                 || rootParentIds == null || rootParentIds.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // 将列表按父ID分组
-        Map<K, List<T>> parentMap = new HashMap<>();
+        // 1) 建立 id -> 节点 映射（使用 LinkedHashMap 保序；遇到重复 id 保留第一个）
+        Map<K, T> idMap = new LinkedHashMap<>();
         for (T item : items) {
-            if (item != null) {
-                K parentId = parentGetter.apply(item);
-                parentMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(item);
+            if (item == null) {
+                continue;
+            }
+            K id = idGetter.apply(item);
+            idMap.putIfAbsent(id, item);
+        }
+
+        // 2) 建立 parentId -> 子节点 桶
+        Map<K, List<T>> bucket = new HashMap<>();
+        for (T item : items) {
+            if (item == null) {
+                continue;
+            }
+            K p = parentGetter.apply(item);
+            bucket.computeIfAbsent(p, k -> new ArrayList<>()).add(item);
+        }
+
+        // 3) 为每个节点设置 children（无则设空列表；顺带规避“自指向”造成的显式自循环）
+        for (T item : items) {
+            if (item == null) {
+                continue;
+            }
+            K id = idGetter.apply(item);
+            List<T> raw = bucket.get(id);
+            if (raw == null || raw.isEmpty()) {
+                childrenSetter.accept(item, new ArrayList<>());
+            } else {
+                List<T> filtered = new ArrayList<>(raw.size());
+                for (T child : raw) {
+                    if (child == null) {
+                        continue;
+                    }
+                    // 过滤掉 parentId == id 且 child.id == id 的“自作为子”的场景
+                    K childId = idGetter.apply(child);
+                    if (!Objects.equals(childId, id)) {
+                        filtered.add(child);
+                    }
+                }
+                childrenSetter.accept(item, filtered.isEmpty() ? new ArrayList<>() : filtered);
             }
         }
 
-        // 递归构建树（防止循环引用）
+        // 4) 选出根：parentId ∈ rootParentIds 或 parentId 不在 idMap 中（孤儿挂根）
         List<T> roots = new ArrayList<>();
-        for (K rootParentId : rootParentIds) {
-            List<T> rootNodes = parentMap.get(rootParentId);
-            if (rootNodes != null) {
-                for (T rootNode : rootNodes) {
-                    buildChildren(rootNode, idGetter, childrenSetter, parentMap, new HashSet<>());
-                    roots.add(rootNode);
+        for (T item : items) {
+            if (item == null) {
+                continue;
+            }
+            K p = parentGetter.apply(item);
+            if (rootParentIds.contains(p) || !idMap.containsKey(p)) {
+                roots.add(item);
+            }
+        }
+        return roots;
+    }
+
+    /**
+     * 将平铺结构的列表转换为树形结构（单根父 ID，递归构建，支持循环引用检测，并可对同级节点排序）
+     *
+     * <p>此方法是 {@link #buildMultiRootTree(List, Function, Function, BiConsumer, Function, Set, Comparator)}
+     * 的便捷版本，适用于只有一个根父 ID 的情况。</p>
+     *
+     * <p>特点：</p>
+     * <ul>
+     *     <li>支持单个根 parentId</li>
+     *     <li>孤儿节点挂在根层</li>
+     *     <li>children 永不为 null</li>
+     *     <li>避免自循环造成死循环</li>
+     *     <li>可传入 Comparator 对同级节点排序，支持多字段排序</li>
+     * </ul>
+     *
+     * @param items           原始列表（平铺结构）
+     * @param idGetter        获取节点 ID 的函数，例如：Menu::getId
+     * @param parentGetter    获取父节点 ID 的函数，例如：Menu::getParentId
+     * @param childrenSetter  设置子节点列表的函数，例如：Menu::setChildren
+     * @param childrenGetter  获取子节点列表的函数，例如：Menu::getChildren
+     * @param rootParentId    根节点父 ID（例如 0 或 null）
+     * @param comparator      同级节点排序规则，支持多字段排序，可为 null 表示不排序
+     * @param <T>             元素类型
+     * @param <K>             ID 类型
+     * @return 树形结构根节点列表，如果没有数据返回空列表
+     *
+     * <p><b>示例实体类：</b></p>
+     * <pre>{@code
+     * public class Menu {
+     *     private Integer id;
+     *     private Integer parentId;
+     *     private String name;
+     *     private List<Menu> children;
+     *
+     *     // 构造方法、getter、setter 略
+     * }
+     *
+     * List<Menu> menus = Arrays.asList(
+     *     new Menu(1, 0, "系统管理"),
+     *     new Menu(2, 1, "用户管理"),
+     *     new Menu(3, 1, "角色管理"),
+     *     new Menu(4, 2, "用户列表"),
+     *     new Menu(5, 0, "首页")
+     * );
+     *
+     * Comparator<Menu> comparator = Comparator.comparing(Menu::getId).reversed();
+     *
+     * List<Menu> tree = CollectionUtil.buildTree(
+     *     menus,
+     *     Menu::getId,
+     *     Menu::getParentId,
+     *     Menu::setChildren,
+     *     Menu::getChildren,
+     *     0,
+     *     comparator
+     * );
+     * }</pre>
+     */
+    public static <T, K> List<T> buildTree(
+            List<T> items,
+            Function<T, K> idGetter,
+            Function<T, K> parentGetter,
+            BiConsumer<T, List<T>> childrenSetter,
+            Function<T, List<T>> childrenGetter,
+            K rootParentId,
+            Comparator<T> comparator) {
+
+        if (items == null || items.isEmpty() || idGetter == null || parentGetter == null
+                || childrenSetter == null || childrenGetter == null) {
+            return Collections.emptyList();
+        }
+
+        // 调用多根版本，包装单根为集合
+        return buildMultiRootTree(items, idGetter, parentGetter, childrenSetter, childrenGetter,
+                Collections.singleton(rootParentId), comparator);
+    }
+
+    /**
+     * 将平铺结构的列表转换为树形结构（支持多个根父 ID，递归构建，支持循环引用检测，并可对同级节点排序）
+     *
+     * <p>此方法可将任意平铺列表根据父子关系构建成树形结构，同时支持：</p>
+     * <ul>
+     *     <li>多个根父 ID</li>
+     *     <li>孤儿节点挂在根层</li>
+     *     <li>children 永不为 null</li>
+     *     <li>避免自循环造成死循环</li>
+     *     <li>可传入 Comparator 对同级节点排序，支持多字段排序</li>
+     * </ul>
+     *
+     * @param items           原始列表（平铺结构）
+     * @param idGetter        获取节点 ID 的函数，例如：Menu::getId
+     * @param parentGetter    获取父节点 ID 的函数，例如：Menu::getParentId
+     * @param childrenSetter  设置子节点列表的函数，例如：Menu::setChildren
+     * @param childrenGetter  获取子节点列表的函数，例如：Menu::getChildren
+     * @param rootParentIds   根节点父 ID 集合（任意一个匹配即为根节点，例如 0、-1、null）
+     * @param comparator      同级节点排序规则，支持多字段排序，可为 null 表示不排序
+     * @param <T>             元素类型
+     * @param <K>             ID 类型
+     * @return 树形结构根节点列表，如果没有数据返回空列表
+     *
+     * <p><b>示例实体类：</b></p>
+     * <pre>{@code
+     * public class Menu {
+     *     private Integer id;             // 当前节点 ID
+     *     private Integer parentId;       // 父节点 ID
+     *     private String name;            // 节点名称（可选）
+     *     private List<Menu> children;    // 子节点列表
+     *
+     *     // 构造方法、getter、setter 略
+     * }
+     *
+     * List<Menu> menus = Arrays.asList(
+     *     new Menu(1, 0, "系统管理"),
+     *     new Menu(2, 1, "用户管理"),
+     *     new Menu(3, 1, "角色管理"),
+     *     new Menu(4, 2, "用户列表"),
+     *     new Menu(5, 0, "首页"),
+     *     new Menu(6, 3, "权限设置")
+     * );
+     *
+     * // 支持多个根父 ID，并对同级节点按 ID 倒序排序
+     * Comparator<Menu> comparator = Comparator.comparing(Menu::getId, Comparator.reverseOrder())
+     *                                        .thenComparing(Menu::getName, Comparator.reverseOrder());
+     *
+     * List<Menu> tree = CollectionUtil.buildMultiRootTree(
+     *     menus,
+     *     Menu::getId,
+     *     Menu::getParentId,
+     *     Menu::setChildren,
+     *     Menu::getChildren,
+     *     new HashSet<>(Arrays.asList(0, null)),
+     *     comparator
+     * );
+     * }</pre>
+     */
+    public static <T, K> List<T> buildMultiRootTree(
+            List<T> items,
+            Function<T, K> idGetter,
+            Function<T, K> parentGetter,
+            BiConsumer<T, List<T>> childrenSetter,
+            Function<T, List<T>> childrenGetter,
+            Set<K> rootParentIds,
+            Comparator<T> comparator) {
+
+        if (items == null || items.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        if (idGetter == null || parentGetter == null || childrenSetter == null || childrenGetter == null) {
+            return Collections.emptyList();
+        }
+
+        if (rootParentIds == null || rootParentIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 1. 建立 ID -> 节点 映射，使用 LinkedHashMap 保序，遇到重复 ID 保留第一个
+        Map<K, T> idMap = new LinkedHashMap<>();
+        for (T item : items) {
+            if (item != null) {
+                K id = idGetter.apply(item);
+                idMap.putIfAbsent(id, item);
+            }
+        }
+
+        // 2. 建立 parentId -> 子节点 列表映射
+        Map<K, List<T>> bucket = new HashMap<>();
+        for (T item : items) {
+            if (item != null) {
+                K parentId = parentGetter.apply(item);
+                bucket.computeIfAbsent(parentId, k -> new ArrayList<>()).add(item);
+            }
+        }
+
+        // 3. 为每个节点设置 children，过滤自循环，children 永不为 null
+        for (T item : items) {
+            if (item != null) {
+                K id = idGetter.apply(item);
+                List<T> rawChildren = bucket.get(id);
+                if (rawChildren == null || rawChildren.isEmpty()) {
+                    childrenSetter.accept(item, new ArrayList<>());
+                } else {
+                    List<T> filteredChildren = new ArrayList<>();
+                    for (T child : rawChildren) {
+                        if (child != null) {
+                            K childId = idGetter.apply(child);
+                            if (!Objects.equals(childId, id)) {
+                                filteredChildren.add(child);
+                            }
+                        }
+                    }
+                    childrenSetter.accept(item, filteredChildren.isEmpty() ? new ArrayList<>() : filteredChildren);
                 }
             }
+        }
+
+        // 4. 选出根节点，根节点条件：parentId ∈ rootParentIds 或 parentId 不在 idMap 中
+        List<T> roots = new ArrayList<>();
+        for (T item : items) {
+            if (item != null) {
+                K parentId = parentGetter.apply(item);
+                if (rootParentIds.contains(parentId) || !idMap.containsKey(parentId)) {
+                    roots.add(item);
+                }
+            }
+        }
+
+        // 5. 对根节点及所有子节点递归排序
+        if (comparator != null && !roots.isEmpty()) {
+            sortRecursively(roots, childrenSetter, childrenGetter, comparator);
         }
 
         return roots;
     }
 
     /**
-     * 递归构建子节点（带循环引用检测）
+     * 递归对子节点排序
      *
-     * @param parentNode     当前父节点
-     * @param idGetter       获取节点 ID 的方法
-     * @param childrenSetter 设置子节点集合的方法
-     * @param parentMap      父ID → 子节点列表 映射
-     * @param visited        已访问的节点ID集合（用于检测循环引用）
+     * @param nodes           当前节点列表
+     * @param childrenSetter  设置子节点列表的方法
+     * @param childrenGetter  获取子节点列表的方法
+     * @param comparator      排序规则
+     * @param <T>             元素类型
      */
-    private static <T, K> void buildChildren(T parentNode,
-                                             Function<T, K> idGetter,
-                                             BiConsumer<T, List<T>> childrenSetter,
-                                             Map<K, List<T>> parentMap,
-                                             Set<K> visited) {
+    private static <T> void sortRecursively(
+            List<T> nodes,
+            BiConsumer<T, List<T>> childrenSetter,
+            Function<T, List<T>> childrenGetter,
+            Comparator<T> comparator) {
 
-        K parentId = idGetter.apply(parentNode);
-
-        // 检测循环引用
-        if (visited.contains(parentId)) {
-            System.err.println("⚠ 检测到循环引用，节点 ID: " + parentId + " 已被跳过以避免死循环");
-            childrenSetter.accept(parentNode, Collections.emptyList());
-            return;
-        }
-        visited.add(parentId);
-
-        List<T> children = parentMap.get(parentId);
-        if (children == null || children.isEmpty()) {
-            childrenSetter.accept(parentNode, Collections.emptyList());
+        if (nodes == null || nodes.isEmpty()) {
             return;
         }
 
-        childrenSetter.accept(parentNode, children);
-        for (T child : children) {
-            buildChildren(child, idGetter, childrenSetter, parentMap, visited);
+        nodes.sort(comparator);
+
+        for (T node : nodes) {
+            List<T> children = childrenGetter.apply(node);
+            if (children != null && !children.isEmpty()) {
+                sortRecursively(children, childrenSetter, childrenGetter, comparator);
+            }
         }
     }
 
