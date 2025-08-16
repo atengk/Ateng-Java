@@ -33,8 +33,6 @@ import java.util.Map;
  */
 public class RowColMergeStrategy implements CellWriteHandler {
 
-    private final int startRow;
-    private final int endRow;
     private final int startCol;
     private final int endCol;
 
@@ -42,11 +40,14 @@ public class RowColMergeStrategy implements CellWriteHandler {
     private FormulaEvaluator evaluator;
     private final Map<CellStyle, CellStyle> styleCache = new HashMap<>();
 
-    public RowColMergeStrategy(int startRow, int endRow, int startCol, int endCol) {
-        this.startRow = startRow;
-        this.endRow = endRow;
-        this.startCol = startCol;
-        this.endCol = endCol;
+    public RowColMergeStrategy(int startCol, int endCol) {
+        if (startCol <= endCol) {
+            this.startCol = startCol;
+            this.endCol = endCol;
+        } else {
+            this.startCol = endCol;
+            this.endCol = startCol;
+        }
     }
 
     @Override
@@ -73,8 +74,8 @@ public class RowColMergeStrategy implements CellWriteHandler {
         int rowIndex = cell.getRowIndex();
         int colIndex = cell.getColumnIndex();
 
-        // 限制在指定行列范围内
-        if (rowIndex < startRow || rowIndex > endRow || colIndex < startCol || colIndex > endCol) {
+        // 只限制列范围（适用于所有行）
+        if (colIndex < startCol || colIndex > endCol) {
             return;
         }
 
@@ -91,8 +92,8 @@ public class RowColMergeStrategy implements CellWriteHandler {
             }
         }
 
-        // 纵向合并（与上一行同列单元格相同）
-        if (rowIndex > startRow) {
+        // 纵向合并（与上一行同列单元格相同） —— 现在以第0行为边界（即适用于“所有行”）
+        if (rowIndex > 0) {
             Cell aboveCell = getCell(sheet, rowIndex - 1, colIndex);
             if (aboveCell != null && currentVal.equals(getCellText(aboveCell))) {
                 mergeRegion(sheet, rowIndex - 1, rowIndex, colIndex, colIndex);
@@ -120,7 +121,7 @@ public class RowColMergeStrategy implements CellWriteHandler {
     }
 
     /**
-     * 查找已存在的合并区域
+     * 查找已存在的合并区域（任意重叠则返回该区域）
      */
     private CellRangeAddress findMergedRegion(Sheet sheet, int firstRow, int lastRow, int firstCol, int lastCol) {
         for (int i = 0; i < sheet.getNumMergedRegions(); i++) {
@@ -134,7 +135,7 @@ public class RowColMergeStrategy implements CellWriteHandler {
     }
 
     /**
-     * 删除指定合并区域
+     * 删除指定合并区域（精确 match）
      */
     private void removeRegion(Sheet sheet, CellRangeAddress target) {
         for (int i = sheet.getNumMergedRegions() - 1; i >= 0; i--) {
@@ -147,7 +148,7 @@ public class RowColMergeStrategy implements CellWriteHandler {
     }
 
     /**
-     * 设置区域样式为居中
+     * 设置区域样式为居中（保留原样式并缓存）
      */
     private void setRegionCenterStyle(Sheet sheet, CellRangeAddress region) {
         Workbook wb = sheet.getWorkbook();
@@ -174,7 +175,7 @@ public class RowColMergeStrategy implements CellWriteHandler {
     }
 
     /**
-     * 获取单元格文本
+     * 获取单元格文本（支持公式显示值）
      */
     private String getCellText(Cell cell) {
         if (cell == null) {

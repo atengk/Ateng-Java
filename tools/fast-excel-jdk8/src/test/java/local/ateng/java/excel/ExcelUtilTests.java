@@ -367,7 +367,7 @@ public class ExcelUtilTests {
 
         String fileName = "D:\\temp\\202508\\销售数据报表.xlsx";
         EasyExcel.write(fileName, DemoData2.class)
-                .registerWriteHandler(new RowColMergeStrategy(1, 10, 0, 3))
+                .registerWriteHandler(new RowColMergeStrategy(0, 5))
                 .sheet("销售数据")
                 .doWrite(dataList);
 

@@ -16,7 +16,7 @@ import cn.idev.excel.write.style.HorizontalCellStyleStrategy;
 import cn.idev.excel.write.style.column.AbstractColumnWidthStyleStrategy;
 import cn.idev.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import cn.idev.excel.write.style.row.SimpleRowHeightStyleStrategy;
-import local.ateng.java.excel.handler.AutoMergeStrategy;
+import local.ateng.java.excel.handler.CellMergeStrategy;
 import org.apache.poi.ss.usermodel.*;
 
 import java.util.ArrayList;
@@ -423,28 +423,13 @@ public final class ExcelStyleUtil {
     }
 
     /**
-     * 按列自动合并连续相同内容的单元格的 WriteHandler。
+     * 按列自动合并连续相同内容的单元格的 WriteHandler
      *
-     * <p>示例用法：
-     * <pre>
-     * List<List<String>> dataList = ...; // 你的数据（不含表头）
-     * int headerRows = 1; // 表头占用行数
-     * int[] mergeCols = new int[]{0, 1}; // 需要合并的列索引
-     *
-     * EasyExcel.write(outputStream)
-     *     .head(headerList)
-     *     .registerWriteHandler(ExcelStyleUtil.autoMergeArrayStrategy(mergeCols, headerRows, dataList))
-     *     .sheet("Sheet1")
-     *     .doWrite(dataList);
-     * </pre>
-     *
-     * @param mergeCols 需要合并的列索引数组，不能为null或空
-     * @param headerRows 表头占用行数，>=0
-     * @param dataList 实际写入的数据（不含表头），不能为空
+     * @param mergeColumns 列索引（从 0 开始）；null 或空表示合并所有列
      * @return WriteHandler 实现列自动合并功能
      */
-    public static WriteHandler autoMergeStrategy(int[] mergeCols, int headerRows, List<List<String>> dataList) {
-        return new AutoMergeStrategy(mergeCols, headerRows, dataList);
+    public static WriteHandler autoMergeStrategy(int... mergeColumns) {
+        return new CellMergeStrategy(mergeColumns);
     }
 
 }
