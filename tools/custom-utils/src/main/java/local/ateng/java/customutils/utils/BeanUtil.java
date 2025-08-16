@@ -338,12 +338,226 @@ public final class BeanUtil {
     }
 
     /**
+     * 将 JavaBean 对象转换为 Map
+     * <p>
+     * 可通过 ignoreProperties 参数指定要忽略的属性，不会加入到 Map 中
+     *
+     * @param bean             JavaBean 对象
+     * @param ignoreProperties 要忽略的属性名称列表
+     * @return 属性名-属性值 Map
+     */
+    public static Map<String, Object> beanToMap(Object bean, String... ignoreProperties) {
+        Map<String, Object> map = new HashMap<>();
+        if (bean == null) {
+            return map;
+        }
+
+        Set<String> ignoreSet = new HashSet<>();
+        if (ignoreProperties != null) {
+            ignoreSet.addAll(Arrays.asList(ignoreProperties));
+        }
+
+        try {
+            java.beans.BeanInfo beanInfo = java.beans.Introspector.getBeanInfo(bean.getClass(), Object.class);
+            for (java.beans.PropertyDescriptor pd : beanInfo.getPropertyDescriptors()) {
+                String name = pd.getName();
+                if (ignoreSet.contains(name)) {
+                    continue;
+                }
+                Object value = pd.getReadMethod().invoke(bean);
+                map.put(name, value);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Bean 转换为 Map 失败", e);
+        }
+
+        return map;
+    }
+
+    /**
+     * 将 JavaBean 对象转换为 Map，并对指定字段进行值映射
+     * <p>
+     * ignoreProperties 用于忽略不转换的字段
+     * valueMapping 用于对特定字段进行值转换，例如：
+     * <pre>
+     *   Map<String, Map<Object, Object>> valueMapping = new HashMap<>();
+     *   Map<Object, Object> statusMap = new HashMap<>();
+     *   statusMap.put(1, "未开始");
+     *   statusMap.put(2, "进行中");
+     *   statusMap.put(3, "已完成");
+     *   valueMapping.put("status", statusMap);
+     * </pre>
+     *
+     * @param bean             JavaBean 对象
+     * @param ignoreProperties 要忽略的属性名称
+     * @param valueMapping     字段值映射表
+     * @return 转换后的 Map
+     */
+    public static Map<String, Object> beanToMap(Object bean,
+                                                String[] ignoreProperties,
+                                                Map<String, Map<Object, Object>> valueMapping) {
+        Map<String, Object> map = new HashMap<>();
+        if (bean == null) {
+            return map;
+        }
+
+        Set<String> ignoreSet = new HashSet<>();
+        if (ignoreProperties != null) {
+            ignoreSet.addAll(Arrays.asList(ignoreProperties));
+        }
+
+        try {
+            java.beans.BeanInfo beanInfo = java.beans.Introspector.getBeanInfo(bean.getClass(), Object.class);
+            for (java.beans.PropertyDescriptor pd : beanInfo.getPropertyDescriptors()) {
+                String name = pd.getName();
+                if (ignoreSet.contains(name)) {
+                    continue;
+                }
+                Object value = pd.getReadMethod().invoke(bean);
+
+                // 如果有映射表则替换值
+                if (valueMapping != null && valueMapping.containsKey(name)) {
+                    Map<Object, Object> mapping = valueMapping.get(name);
+                    if (mapping.containsKey(value)) {
+                        value = mapping.get(value);
+                    }
+                }
+
+                map.put(name, value);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Bean 转换为 Map 失败", e);
+        }
+
+        return map;
+    }
+
+    /**
+     * 将 JavaBean 列表转换为 Map 列表，并对指定字段进行值映射
+     * <p>
+     * ignoreProperties 用于忽略不转换的字段
+     * valueMapping 用于对特定字段进行值转换，例如：
+     * <pre>
+     *   Map<String, Map<Object, Object>> valueMapping = new HashMap<>();
+     *   Map<Object, Object> statusMap = new HashMap<>();
+     *   statusMap.put(1, "未开始");
+     *   statusMap.put(2, "进行中");
+     *   statusMap.put(3, "已完成");
+     *   valueMapping.put("status", statusMap);
+     * </pre>
+     *
+     * @param beanList         JavaBean 列表
+     * @param ignoreProperties 要忽略的属性名称
+     * @param valueMapping     字段值映射表
+     * @return Map 列表
+     */
+    public static List<Map<String, Object>> beanToMapList(List<?> beanList,
+                                                          String[] ignoreProperties,
+                                                          Map<String, Map<Object, Object>> valueMapping) {
+        if (beanList == null || beanList.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object bean : beanList) {
+            Map<String, Object> map = beanToMap(bean, ignoreProperties, valueMapping);
+            result.add(map);
+        }
+        return result;
+    }
+
+    /**
+     * 将 JavaBean 列表转换为 Map 列表，并对指定字段进行枚举映射（code → name）
+     * <p>
+     * ignoreProperties 用于忽略不转换的字段
+     * enumMapping 用于将字段值对应枚举实例映射为描述字符串
+     * 枚举要求有两个字段：int/Integer code 和 String name
+     *
+     * @param beanList         JavaBean 列表
+     * @param ignoreProperties 要忽略的属性名称
+     * @param enumMapping      字段枚举映射表（字段名 → 枚举 Class）
+     * @return Map 列表
+     */
+    public static List<Map<String, Object>> beanToMapListWithEnum(List<?> beanList,
+                                                                  String[] ignoreProperties,
+                                                                  Map<String, Class<? extends Enum<?>>> enumMapping) {
+        if (beanList == null || beanList.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object bean : beanList) {
+            Map<String, Object> map = beanToMapWithEnum(bean, ignoreProperties, enumMapping);
+            result.add(map);
+        }
+        return result;
+    }
+
+
+    /**
+     * 将 JavaBean 对象转换为 Map，并对指定字段进行枚举映射（code → name）
+     * <p>
+     * ignoreProperties 用于忽略不转换的字段
+     * enumMapping 用于将字段值对应枚举实例映射为描述字符串
+     * 枚举要求有两个字段：int/Integer code 和 String name
+     *
+     * @param bean             JavaBean 对象
+     * @param ignoreProperties 要忽略的属性名称
+     * @param enumMapping      字段枚举映射表（字段名 → 枚举 Class）
+     * @return 转换后的 Map
+     */
+    public static Map<String, Object> beanToMapWithEnum(Object bean,
+                                                        String[] ignoreProperties,
+                                                        Map<String, Class<? extends Enum<?>>> enumMapping) {
+        Map<String, Object> map = new HashMap<>();
+        if (bean == null) {
+            return map;
+        }
+
+        Set<String> ignoreSet = new HashSet<>();
+        if (ignoreProperties != null) {
+            ignoreSet.addAll(Arrays.asList(ignoreProperties));
+        }
+
+        try {
+            java.beans.BeanInfo beanInfo = java.beans.Introspector.getBeanInfo(bean.getClass(), Object.class);
+            for (java.beans.PropertyDescriptor pd : beanInfo.getPropertyDescriptors()) {
+                String name = pd.getName();
+                if (ignoreSet.contains(name)) {
+                    continue;
+                }
+
+                Object value = pd.getReadMethod().invoke(bean);
+
+                // 枚举映射处理 (code → name)
+                if (enumMapping != null && enumMapping.containsKey(name) && value != null) {
+                    Class<? extends Enum<?>> enumClass = enumMapping.get(name);
+                    for (Enum<?> e : enumClass.getEnumConstants()) {
+                        Integer code = (Integer) e.getClass().getMethod("getCode").invoke(e);
+                        String label = (String) e.getClass().getMethod("getName").invoke(e);
+                        if (code.equals(value)) {
+                            value = label;
+                            break;
+                        }
+                    }
+                }
+
+                map.put(name, value);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Bean 转换为 Map（枚举 code→name）失败", e);
+        }
+
+        return map;
+    }
+
+    /**
      * 将 JavaBean 列表转换为 Map 列表
      *
      * @param sourceList JavaBean 列表
      * @return Map 列表
      */
-    public static List<Map<String, Object>> toMapList(List<?> sourceList) {
+    public static List<Map<String, Object>> beanToMapList(List<?> sourceList) {
         if (sourceList == null || sourceList.isEmpty()) {
             return Collections.emptyList();
         }
@@ -352,6 +566,28 @@ public final class BeanUtil {
         for (Object source : sourceList) {
             Map<String, Object> map = new HashMap<>();
             copyProperties(source, map);
+            result.add(map);
+        }
+        return result;
+    }
+
+    /**
+     * 将 JavaBean 列表转换为 Map 列表
+     * <p>
+     * 可通过 ignoreProperties 参数指定要忽略的属性，不会加入到 Map 中
+     *
+     * @param sourceList       JavaBean 列表
+     * @param ignoreProperties 要忽略的属性名称列表
+     * @return Map 列表
+     */
+    public static List<Map<String, Object>> beanToMapList(List<?> sourceList, String... ignoreProperties) {
+        if (sourceList == null || sourceList.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object source : sourceList) {
+            Map<String, Object> map = beanToMap(source, ignoreProperties);
             result.add(map);
         }
         return result;

@@ -1,14 +1,17 @@
 package local.ateng.java.customutils.utils;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 通用枚举工具类（字段名不固定）
  * 通过反射按指定字段提取枚举值，适配任意结构枚举类
- *
+ * <p>
  * 使用场景：字段名不统一，例如 code/value/id，name/label/text 等
  *
  * @author Ateng
@@ -23,10 +26,10 @@ public final class EnumUtil {
     /**
      * 根据字段值获取枚举实例
      *
-     * @param enumClass 枚举类
-     * @param fieldName 要匹配的字段名（如 code、value、key）
+     * @param enumClass   枚举类
+     * @param fieldName   要匹配的字段名（如 code、value、key）
      * @param targetValue 目标值
-     * @param <E> 枚举类型
+     * @param <E>         枚举类型
      * @return 匹配的枚举实例，未找到返回 null
      */
     public static <E extends Enum<E>> E getByFieldValue(Class<E> enumClass, String fieldName, Object targetValue) {
@@ -58,10 +61,10 @@ public final class EnumUtil {
     /**
      * 枚举字段映射（如：code -> name，或者 id -> label）
      *
-     * @param enumClass 枚举类
-     * @param keyField  key 字段名
+     * @param enumClass  枚举类
+     * @param keyField   key 字段名
      * @param valueField value 字段名
-     * @param <E> 枚举类型
+     * @param <E>        枚举类型
      * @return 映射表（keyField 对应值 -> valueField 对应值）
      */
     public static <E extends Enum<E>> Map<Object, Object> mapFieldToField(Class<E> enumClass, String keyField, String valueField) {
@@ -90,7 +93,7 @@ public final class EnumUtil {
      *
      * @param enumClass 枚举类
      * @param fieldName 字段名（如 value、code、label）
-     * @param <E> 枚举类型
+     * @param <E>       枚举类型
      * @return 字段值列表
      */
     public static <E extends Enum<E>> java.util.List<Object> getFieldValueList(Class<E> enumClass, String fieldName) {
@@ -114,7 +117,7 @@ public final class EnumUtil {
      *
      * @param enumClass 枚举类
      * @param fieldName 字段名（如 label、text、desc）
-     * @param <E> 枚举类型
+     * @param <E>       枚举类型
      * @return 映射表（枚举名 -> 字段值）
      */
     public static <E extends Enum<E>> Map<String, Object> nameToFieldValueMap(Class<E> enumClass, String fieldName) {
@@ -138,7 +141,7 @@ public final class EnumUtil {
      *
      * @param enumClass 枚举类
      * @param fields    字段名数组（如 {"value", "label"}）
-     * @param <E> 枚举类型
+     * @param <E>       枚举类型
      * @return List<Map> 格式数据，每个 Map 表示一个枚举项的字段值
      */
     public static <E extends Enum<E>> java.util.List<Map<String, Object>> toListMap(Class<E> enumClass, String... fields) {
@@ -259,13 +262,57 @@ public final class EnumUtil {
             for (E e : enumClass.getEnumConstants()) {
                 Object val = field.get(e);
                 if (!seen.add(val)) {
-                    return false; // 出现重复
+                    // 出现重复
+                    return false;
                 }
             }
             return true;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * 将枚举类转换为 Map，指定枚举中的两个字段作为 key 和 value
+     *
+     * @param enumClass  枚举类
+     * @param keyField   作为 key 的字段名（对应 getter 方法）
+     * @param valueField 作为 value 的字段名（对应 getter 方法）
+     * @param <E>        枚举类型
+     * @param <K>        Map 的 key 类型
+     * @param <V>        Map 的 value 类型
+     * @return 枚举转 Map
+     */
+    public static <E extends Enum<E>, K, V> Map<K, V> toMap(Class<E> enumClass, String keyField, String valueField) {
+        try {
+            // 通过反射获取 getter 方法
+            Method keyMethod = enumClass.getMethod("get" + capitalize(keyField));
+            Method valueMethod = enumClass.getMethod("get" + capitalize(valueField));
+
+            return Arrays.stream(enumClass.getEnumConstants())
+                    .collect(Collectors.toMap(
+                            e -> invokeMethod(e, keyMethod),
+                            e -> invokeMethod(e, valueMethod)
+                    ));
+        } catch (Exception e) {
+            throw new IllegalArgumentException("枚举转 Map 失败，请检查字段是否存在对应 getter 方法", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T invokeMethod(Object target, Method method) {
+        try {
+            return (T) method.invoke(target);
+        } catch (Exception e) {
+            throw new RuntimeException("反射调用方法失败: " + method.getName(), e);
+        }
+    }
+
+    private static String capitalize(String fieldName) {
+        if (fieldName == null || fieldName.isEmpty()) {
+            return fieldName;
+        }
+        return Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
     }
 
 }

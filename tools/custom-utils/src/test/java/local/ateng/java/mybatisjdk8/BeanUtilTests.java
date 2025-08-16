@@ -1,5 +1,6 @@
 package local.ateng.java.mybatisjdk8;
 
+import local.ateng.java.customutils.entity.MyTask;
 import local.ateng.java.customutils.entity.MyUser0;
 import local.ateng.java.customutils.entity.MyUser1;
 import local.ateng.java.customutils.entity.MyUser2;
@@ -9,7 +10,9 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BeanUtilTests {
 
@@ -67,5 +70,25 @@ public class BeanUtilTests {
         List<String> allFieldNames = BeanUtil.getAllFieldNames(MyUser1.class);
         System.out.println(allFieldNames);
     }
+
+    @Test
+    void beanToMapMapping() {
+        MyTask task = new MyTask();
+        task.setId(1L);
+        task.setStatus(2); // 原始值是 2
+
+        // 构建字段映射表
+        Map<String, Map<Object, Object>> valueMapping = new HashMap<>();
+        Map<Object, Object> statusMap = new HashMap<>();
+        statusMap.put(1, "未开始");
+        statusMap.put(2, "进行中");
+        statusMap.put(3, "已完成");
+        valueMapping.put("status", statusMap);
+
+        Map<String, Object> result = BeanUtil.beanToMap(task, new String[]{}, valueMapping);
+        System.out.println(result); // 输出：进行中
+
+    }
+
 
 }
