@@ -9,20 +9,21 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class BeanUtilTests {
 
     @Test
     void testBeanUtil() {
         MyUser2 myUser2 = new MyUser2();
-        BeanUtil.copyProperties(createMyUser1Sample(), myUser2);
+        MyUser1 myUser1 = createMyUser1Sample();
+        BeanUtil.copy(myUser1, myUser2);
         System.out.println(myUser2);
         System.out.println(myUser2.getUserName());
         System.out.println(myUser2.getMyUser0List().get(0).getId());
+        myUser2.setId(0L);
+        System.out.println(myUser1);
+        System.out.println(myUser2);
     }
 
     public static MyUser1 createMyUser1Sample() {
@@ -85,10 +86,11 @@ public class BeanUtilTests {
         statusMap.put(3, "已完成");
         valueMapping.put("status", statusMap);
 
-        Map<String, Object> result = BeanUtil.beanToMap(task, new String[]{}, valueMapping);
+        Map<String, Object> result = BeanUtil.toMap(task, new String[]{}, valueMapping);
         System.out.println(result); // 输出：进行中
 
     }
 
-
 }
+
+

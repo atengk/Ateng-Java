@@ -8,5 +8,6 @@ import java.util.List;
 public class MyUser2 {
     private Long id;
     private String userName;
+    private String tmp;
     private List<MyUser0> myUser0List;
 }
