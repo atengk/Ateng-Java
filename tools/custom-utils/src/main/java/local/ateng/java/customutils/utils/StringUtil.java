@@ -461,6 +461,45 @@ public final class StringUtil {
         return str.replace(target, replacement);
     }
 
+    /**
+     * 批量替换字符串中的内容。
+     * <p>根据传入的 Map，将字符串中出现的 key 替换为对应的 value。</p>
+     *
+     * <pre>
+     * 示例：
+     * String text = "Hello ${name}, welcome to ${place}!";
+     * Map<String, Object> map = new HashMap<>();
+     * map.put("${name}", "Tony");
+     * map.put("${place}", "Beijing");
+     *
+     * String result = replaceByMap(text, map);
+     * // result = "Hello Tony, welcome to Beijing!"
+     * </pre>
+     *
+     * @param text   原始字符串
+     * @param values 替换规则，key 为要替换的内容，value 为替换结果
+     * @return 替换后的字符串；如果 text 或 values 为空则返回原字符串
+     */
+    public static String replaceByMap(String text, Map<String, Object> values) {
+        if (text == null || values == null || values.isEmpty()) {
+            return text;
+        }
+
+        String result = text;
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+
+            if (key == null) {
+                continue;
+            }
+            // 确保特殊字符不会被当成正则处理
+            String regex = Pattern.quote(key);
+            result = result.replaceAll(regex, value == null ? "" : value.toString());
+        }
+        return result;
+    }
+
     // ======================== 安全替换（自动转义 target & replacement） ========================
 
     /**
@@ -551,7 +590,8 @@ public final class StringUtil {
         if (str == null || target == null || replacement == null) {
             return str;
         }
-        String regex = "(?i)" + Pattern.quote(target); // (?i) 忽略大小写
+        // (?i) 忽略大小写
+        String regex = "(?i)" + Pattern.quote(target);
         String quotedReplacement = Matcher.quoteReplacement(replacement);
         return replaceAll ? str.replaceAll(regex, quotedReplacement)
                 : str.replaceFirst(regex, quotedReplacement);

@@ -86,7 +86,7 @@ public class BeanUtilTests {
         statusMap.put(3, "已完成");
         valueMapping.put("status", statusMap);
 
-        Map<String, Object> result = BeanUtil.toMap(task, new String[]{}, valueMapping);
+        Map<String, Object> result = BeanUtil.toMapWithValueMapping(task, valueMapping);
         System.out.println(result); // 输出：进行中
 
     }
