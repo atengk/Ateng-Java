@@ -644,6 +644,13 @@ public final class CommonConstants {
      */
     public static final String REGEX_START_SLASHES = "^[\\\\/]+";
 
+    /**
+     * 正则表达式：匹配逗号两边的零个或多个空白字符
+     * <p>
+     * 例如："a , b" -> ["a", "b"]
+     */
+    public static final String REGEX_COMMA_TRIM_WHITESPACE = "\\s*,\\s*";
+
     /* ==============================
        业务通用状态码（可结合枚举使用）
        ============================== */
@@ -1635,6 +1642,16 @@ public final class CommonConstants {
      * 数据库通用排序字段：降序
      */
     public static final String DB_ORDER_DESC = "DESC";
+
+    /**
+     * 数据库通用排序字段：升序（小写）
+     */
+    public static final String DB_ORDER_ASC_LOWER = "asc";
+
+    /**
+     * 数据库通用排序字段：降序（小写）
+     */
+    public static final String DB_ORDER_DESC_LOWER = "desc";
 
     /**
      * MyBatis 分页参数：offset
