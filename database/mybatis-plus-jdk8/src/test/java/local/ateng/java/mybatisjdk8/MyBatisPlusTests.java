@@ -4,6 +4,7 @@ import cn.hutool.core.util.RandomUtil;
 import com.github.javafaker.Faker;
 import local.ateng.java.mybatisjdk8.entity.MyData;
 import local.ateng.java.mybatisjdk8.entity.Project;
+import local.ateng.java.mybatisjdk8.enums.StatusEnum;
 import local.ateng.java.mybatisjdk8.service.IProjectService;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ public class MyBatisPlusTests {
             p.setBalance(faker.number().numberBetween(10000L, 1_000_000L));
             p.setTags(generateTags());
             p.setPriority(faker.options().option("low", "medium", "high"));
-            p.setStatus(faker.number().numberBetween(0, 3));
+            //p.setStatus(faker.number().numberBetween(0, 3));
             p.setIsActive(faker.bool().bool());
             p.setIsDeleted(faker.bool().bool());
             p.setVersion(faker.number().numberBetween(1, 10));
@@ -105,7 +106,28 @@ public class MyBatisPlusTests {
             } catch (Exception e) {
             }
         }
+    }
 
+    @Test
+    public void count() {
+        long count = projectService.count();
+        System.out.println(count);
+    }
+
+    @Test
+    public void getOne() {
+        Project project = projectService.getById(1);
+        System.out.println(project);
+    }
+
+    @Test
+    public void saveEnum() {
+        Project project = Project.builder()
+                .name("阿腾")
+                .status(StatusEnum.OFFLINE)
+                .build();
+        projectService.save(project);
+        System.out.println(project);
     }
 
 }

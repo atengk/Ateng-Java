@@ -37,6 +37,7 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
                 SerializerFeature.WriteNullNumberAsZero,        // Number null -> 0
                 SerializerFeature.WriteNullListAsEmpty,         // List null -> []
                 SerializerFeature.BrowserCompatible,            // 大数转字符串
+                SerializerFeature.WriteEnumUsingToString,            // 大数转字符串
                 SerializerFeature.BrowserSecure                 // < > ( ) 转义
         );
 

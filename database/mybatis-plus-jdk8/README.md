@@ -632,6 +632,183 @@ create table my_json
 </mapper>
 ```
 
+## 枚举字段
+
+### 创建枚举
+
+根据框架使用的序列化来选择：
+
+- Jackson 版本
+- Fastjson1 版本
+
+- Fastjson2 版本
+
+```java
+import com.alibaba.fastjson.annotation.JSONField;
+import com.baomidou.mybatisplus.annotation.EnumValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+@AllArgsConstructor
+@Getter
+public enum StatusEnum {
+
+    OFFLINE(0, "离线"),
+    ONLINE(1, "在线");
+
+    @EnumValue
+    private final int code;
+    //@JsonValue // Jackson
+    //@JSONField(value = true) // Fastjson2
+    private final String name;
+
+    @JSONField // Fastjson1
+    public String getValue() {
+        return this.name;
+    }
+
+}
+```
+
+#### Jackson 版本
+
+```java
+import com.baomidou.mybatisplus.annotation.EnumValue;
+import com.fasterxml.jackson.annotation.JsonValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+/**
+ * 状态枚举（Jackson 序列化版本）
+ * <p>
+ * Jackson 序列化会将枚举输出为 name 字符串，数据库存储使用 code。
+ */
+@AllArgsConstructor
+@Getter
+public enum StatusEnumJackson {
+
+    OFFLINE(0, "离线"),
+    ONLINE(1, "在线");
+
+    /**
+     * 数据库存储字段：状态编码
+     */
+    @EnumValue
+    private final int code;
+
+    /**
+     * 前端展示字段：状态名称
+     * <p>
+     * Jackson 序列化使用此字段
+     */
+    @JsonValue
+    private final String name;
+}
+
+```
+
+#### Fastjson1 版本
+
+```java
+import com.alibaba.fastjson.annotation.JSONField;
+import com.baomidou.mybatisplus.annotation.EnumValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+/**
+ * 状态枚举（Fastjson1 序列化版本）
+ * <p>
+ * Fastjson1 不支持字段注解序列化，需要通过 getter 方法标记 {@link JSONField}。
+ */
+@AllArgsConstructor
+@Getter
+public enum StatusEnumFastjson1 {
+
+    OFFLINE(0, "离线"),
+    ONLINE(1, "在线");
+
+    /**
+     * 数据库存储字段：状态编码
+     */
+    @EnumValue
+    private final int code;
+
+    /**
+     * 前端展示字段：状态名称
+     */
+    private final String name;
+
+    /**
+     * Fastjson1 序列化使用 getter
+     */
+    @JSONField
+    public String getValue() {
+        return this.name;
+    }
+}
+
+```
+
+#### Fastjson2 版本
+
+```java
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.baomidou.mybatisplus.annotation.EnumValue;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+/**
+ * 状态枚举（Fastjson2 序列化版本）
+ * <p>
+ * Fastjson2 支持字段上使用 {@link JSONField(value = true)} 来序列化枚举为 name。
+ */
+@AllArgsConstructor
+@Getter
+public enum StatusEnumFastjson2 {
+
+    OFFLINE(0, "离线"),
+    ONLINE(1, "在线");
+
+    /**
+     * 数据库存储字段：状态编码
+     */
+    @EnumValue
+    private final int code;
+
+    /**
+     * 前端展示字段：状态名称
+     * <p>
+     * Fastjson2 序列化使用此字段
+     */
+    @JSONField(value = true)
+    private final String name;
+}
+
+```
+
+### 数据库实体字段
+
+直接将枚举字段的类型修改为相关的枚举，这样新增到数据库时，实际存入的是枚举的code，通过接口将数据序列化出去返回的事枚举的name。
+
+```java
+@TableField("status")
+private StatusEnum status;
+```
+
+### 枚举字典
+
+通过 `EnumUtil.getAllBaseEnumMap()` 方法获取到相关枚举的字典，返回给前端
+
+### 数据流总结
+
+| 流程            | 数据类型       | 说明                      |
+| --------------- | -------------- | ------------------------- |
+| 后端 → 前端展示 | name（字符串） | 用户看到可读标签          |
+| 前端下拉选择    | code（整数）   | 用户选择后，前端提交 code |
+| 前端 → 后端提交 | code（整数）   | MyBatis-Plus 存入数据库   |
+| 数据库存储      | code（整数）   | 枚举在 DB 中存 code       |
+| GET 接口返回    | name（字符串） | 方便展示                  |
+
 
 
 ## 多数据源

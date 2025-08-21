@@ -1,12 +1,16 @@
 package local.ateng.java.mybatisjdk8.entity;
 
-import com.alibaba.fastjson2.annotation.JSONField;
+import com.alibaba.fastjson.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import local.ateng.java.mybatisjdk8.enums.StatusEnum;
 import local.ateng.java.mybatisjdk8.handler.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.locationtech.jts.geom.Geometry;
 
 import java.io.Serializable;
@@ -26,7 +30,10 @@ import java.util.UUID;
  * @since 2025-07-17
  */
 @Data
-@TableName(value = "project", autoResultMap = true)
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+@TableName(value = "project_mini", autoResultMap = true)
 public class Project implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -95,7 +102,7 @@ public class Project implements Serializable {
      * 状态：0=草稿, 1=进行中, 2=已完成, 3=已取消
      */
     @TableField("status")
-    private Integer status;
+    private StatusEnum status;
 
     /**
      * 是否激活
@@ -174,7 +181,6 @@ public class Project implements Serializable {
      */
     @TableField(value = "location", typeHandler = GeometryTypeHandler.class)
     @JSONField(serialize = false)
-    @com.alibaba.fastjson.annotation.JSONField(serialize = false)
     private Geometry location;
 
     /**

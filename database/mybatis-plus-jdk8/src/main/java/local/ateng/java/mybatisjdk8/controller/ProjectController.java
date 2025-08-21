@@ -1,7 +1,10 @@
 package local.ateng.java.mybatisjdk8.controller;
 
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import local.ateng.java.mybatisjdk8.entity.Project;
+import local.ateng.java.mybatisjdk8.service.IProjectService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * <p>
@@ -13,6 +16,22 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/project")
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class ProjectController {
+    private final IProjectService projectService;
+
+    @GetMapping("/one")
+    public Project getOne() {
+        Project project = projectService.lambdaQuery()
+                .orderByDesc(Project::getId)
+                .last("limit 1")
+                .one();
+        return project;
+    }
+
+    @PostMapping("/add")
+    public Boolean add(@RequestBody Project project) {
+        return projectService.save(project);
+    }
 
 }
