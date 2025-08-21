@@ -493,6 +493,18 @@ public final class EnumUtil {
     }
 
     /**
+     * 扫描默认包（Spring Boot 启动类所在包）下的 BaseEnum 枚举类，并转换为前端 Map
+     *
+     * @param mainClazz 启动类 Class 对象
+     * @return Map，key 为枚举类名，value 为对应 label/value 列表
+     */
+    public static Map<String, List<Map<String, Object>>> getAllBaseEnumMap(Class<?> mainClazz) {
+        // 获取 Spring Boot 启动类所在包
+        String basePackage = SpringUtil.getMainApplicationPackage(mainClazz);
+        return getAllBaseEnumMap(basePackage);
+    }
+
+    /**
      * 根据枚举类名获取对应的前端 label/value 列表
      *
      * <p>内部复用 {@link #getAllBaseEnumMap()}，不需要额外扫描包路径。
@@ -520,6 +532,39 @@ public final class EnumUtil {
 
         // 获取所有 BaseEnum 枚举映射
         Map<String, List<Map<String, Object>>> allEnums = getAllBaseEnumMap();
+
+        return allEnums.getOrDefault(enumSimpleName, Collections.emptyList());
+    }
+
+    /**
+     * 根据枚举类名获取对应的前端 label/value 列表
+     *
+     * <p>内部复用 {@link #getAllBaseEnumMap()}，不需要额外扫描包路径。
+     *
+     * <p>示例：
+     * <pre>
+     *     List<Map<String, Object>> list = EnumUtil.getLabelValueListByEnumName("StatusEnum");
+     * </pre>
+     *
+     * <p>返回值格式：
+     * <pre>
+     *     [
+     *       {"value": 0, "label": "离线"},
+     *       {"value": 1, "label": "在线"}
+     *     ]
+     * </pre>
+     *
+     * @param enumSimpleName 枚举类简单名，例如 "StatusEnum"
+     * @param mainClazz      启动类 Class 对象
+     * @return 前端 label/value 列表，如果未找到对应枚举类，返回空列表
+     */
+    public static List<Map<String, Object>> getLabelValueListByEnumName(String enumSimpleName, Class<?> mainClazz) {
+        if (enumSimpleName == null || enumSimpleName.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 获取所有 BaseEnum 枚举映射
+        Map<String, List<Map<String, Object>>> allEnums = getAllBaseEnumMap(mainClazz);
 
         return allEnums.getOrDefault(enumSimpleName, Collections.emptyList());
     }
