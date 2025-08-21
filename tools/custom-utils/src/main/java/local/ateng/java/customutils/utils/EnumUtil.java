@@ -559,12 +559,45 @@ public final class EnumUtil {
      * @return 前端 label/value 列表，如果未找到对应枚举类，返回空列表
      */
     public static List<Map<String, Object>> getLabelValueListByEnumName(String enumSimpleName, Class<?> mainClazz) {
-        if (enumSimpleName == null || enumSimpleName.trim().isEmpty()) {
+        if (enumSimpleName == null || enumSimpleName.trim().isEmpty() || mainClazz == null) {
             return Collections.emptyList();
         }
 
         // 获取所有 BaseEnum 枚举映射
         Map<String, List<Map<String, Object>>> allEnums = getAllBaseEnumMap(mainClazz);
+
+        return allEnums.getOrDefault(enumSimpleName, Collections.emptyList());
+    }
+
+    /**
+     * 根据枚举类名获取对应的前端 label/value 列表
+     *
+     * <p>内部复用 {@link #getAllBaseEnumMap()}，不需要额外扫描包路径。
+     *
+     * <p>示例：
+     * <pre>
+     *     List<Map<String, Object>> list = EnumUtil.getLabelValueListByEnumName("StatusEnum");
+     * </pre>
+     *
+     * <p>返回值格式：
+     * <pre>
+     *     [
+     *       {"value": 0, "label": "离线"},
+     *       {"value": 1, "label": "在线"}
+     *     ]
+     * </pre>
+     *
+     * @param enumSimpleName 枚举类简单名，例如 "StatusEnum"
+     * @param basePackage    扫描的包名，例如 "com.example.enums"
+     * @return 前端 label/value 列表，如果未找到对应枚举类，返回空列表
+     */
+    public static List<Map<String, Object>> getLabelValueListByEnumName(String enumSimpleName, String basePackage) {
+        if (enumSimpleName == null || enumSimpleName.trim().isEmpty() || basePackage == null || basePackage.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 获取所有 BaseEnum 枚举映射
+        Map<String, List<Map<String, Object>>> allEnums = getAllBaseEnumMap(basePackage);
 
         return allEnums.getOrDefault(enumSimpleName, Collections.emptyList());
     }
