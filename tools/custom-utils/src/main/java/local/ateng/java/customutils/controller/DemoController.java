@@ -1,5 +1,6 @@
 package local.ateng.java.customutils.controller;
 
+import local.ateng.java.customutils.ToolsCustomUtilsApplication;
 import local.ateng.java.customutils.event.UserRegisterEvent;
 import local.ateng.java.customutils.utils.EnumUtil;
 import local.ateng.java.customutils.utils.SpringUtil;
@@ -49,6 +50,8 @@ public class DemoController {
 
     @GetMapping("/getLabelValueListByEnumName")
     public List<Map<String, Object>> getLabelValueListByEnumName(String name) throws ClassNotFoundException {
+        String mainApplicationPackage = SpringUtil.getMainApplicationPackage(ToolsCustomUtilsApplication.class);
+        System.out.println(mainApplicationPackage);
         return EnumUtil.getLabelValueListByEnumName(name);
     }
 

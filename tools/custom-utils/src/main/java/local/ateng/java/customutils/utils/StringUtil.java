@@ -1061,19 +1061,19 @@ public final class StringUtil {
      */
     public static String maskPhone(String phone) {
         // 手机号固定长度
-        final int PHONE_LENGTH = 11;
+        final int phoneLength = 11;
         // 前面可见位数
-        final int PREFIX_VISIBLE = 3;
+        final int prefixVisible = 3;
         // 后面可见位数
-        final int SUFFIX_VISIBLE = 4;
+        final int suffixVisible = 4;
         // 中间脱敏符号
-        final String MASK = "****";
+        final String mask = "****";
 
-        if (phone == null || phone.length() != PHONE_LENGTH) {
+        if (phone == null || phone.length() != phoneLength) {
             return phone;
         }
 
-        return phone.substring(0, PREFIX_VISIBLE) + MASK + phone.substring(PHONE_LENGTH - SUFFIX_VISIBLE);
+        return phone.substring(0, prefixVisible) + mask + phone.substring(phoneLength - suffixVisible);
     }
 
     /**
@@ -1084,22 +1084,22 @@ public final class StringUtil {
      */
     public static String maskIdCard(String id) {
         // 脱敏最小长度限制
-        final int MIN_LENGTH = 8;
+        final int minLength = 8;
         // 前面可见长度
-        final int PREFIX_VISIBLE = 3;
+        final int prefixVisible = 3;
         // 后面可见长度
-        final int SUFFIX_VISIBLE = 4;
+        final int suffixVisible = 4;
 
-        if (id == null || id.length() < MIN_LENGTH) {
+        if (id == null || id.length() < minLength) {
             return id;
         }
         int length = id.length();
-        int maskLength = length - PREFIX_VISIBLE - SUFFIX_VISIBLE;
+        int maskLength = length - prefixVisible - suffixVisible;
         StringBuilder maskBuilder = new StringBuilder();
         for (int i = 0; i < maskLength; i++) {
             maskBuilder.append('*');
         }
-        return id.substring(0, PREFIX_VISIBLE) + maskBuilder.toString() + id.substring(length - SUFFIX_VISIBLE);
+        return id.substring(0, prefixVisible) + maskBuilder.toString() + id.substring(length - suffixVisible);
     }
 
     /**
@@ -1562,13 +1562,13 @@ public final class StringUtil {
         }
 
         // 正则表达式变量
-        final String CONTROL_WHITESPACE_PATTERN = "[\\p{Cntrl}\\s]+";
-        final String INJECTION_CHARS_PATTERN = "[<>\"'`()]";
-        final String NON_ASCII_PRINTABLE_PATTERN = "[^\\x20-\\x7E]";
-        final String HTTP_URL_PATTERN = "^(?i)https?://.*";
+        final String controlWhitespacePattern = "[\\p{Cntrl}\\s]+";
+        final String injectionCharsPattern = "[<>\"'`()]";
+        final String nonAsciiPrintablePattern = "[^\\x20-\\x7E]";
+        final String httpUrlPattern = "^(?i)https?://.*";
 
         // 去掉控制字符和空白符，替换为单个空格并去首尾空格
-        String fixed = url.replaceAll(CONTROL_WHITESPACE_PATTERN, " ").trim();
+        String fixed = url.replaceAll(controlWhitespacePattern, " ").trim();
 
         // 不安全 URL 直接拒绝
         if (!isSafeUrl(fixed)) {
@@ -1576,14 +1576,15 @@ public final class StringUtil {
         }
 
         // 移除 HTML/JS 注入字符
-        fixed = fixed.replaceAll(INJECTION_CHARS_PATTERN, "");
+        fixed = fixed.replaceAll(injectionCharsPattern, "");
 
         // 移除非 ASCII 可打印字符
-        fixed = fixed.replaceAll(NON_ASCII_PRINTABLE_PATTERN, "");
+        fixed = fixed.replaceAll(nonAsciiPrintablePattern, "");
 
         // 如果没有协议，补上 http://
-        if (!fixed.matches(HTTP_URL_PATTERN)) {
-            fixed = "http://" + fixed;
+        final String httpPrefix = "http://";
+        if (!fixed.matches(httpUrlPattern)) {
+            fixed = httpPrefix + fixed;
         }
 
         try {
@@ -1620,26 +1621,34 @@ public final class StringUtil {
      * @return 规范后的干净路径字符串
      */
     public static String fixPath(String path) {
+        // 魔法值常量
+        final char backslashChar = '\\';
+        final char slashChar = '/';
+        final String multipleSlashPattern = "/+";
+        final String currentDir = ".";
+        final String parentDir = "..";
+        final String emptyString = "";
+
         if (path == null || path.trim().isEmpty()) {
-            return "";
+            return emptyString;
         }
         // 去除前后空格
         path = path.trim();
         // 统一反斜杠为正斜杠
-        path = path.replace('\\', '/');
+        path = path.replace(backslashChar, slashChar);
         // 去除连续多余的斜杠，比如 /////
-        path = path.replaceAll("/+", "/");
+        path = path.replaceAll(multipleSlashPattern, String.valueOf(slashChar));
 
         // 处理相对路径 . 和 ..
-        String[] parts = path.split("/");
+        String[] parts = path.split(String.valueOf(slashChar));
         Deque<String> stack = new LinkedList<>();
 
         for (String part : parts) {
-            if (part.equals("") || part.equals(".")) {
+            if (part.equals(emptyString) || part.equals(currentDir)) {
                 // 空或者当前目录，跳过
                 continue;
             }
-            if (part.equals("..")) {
+            if (part.equals(parentDir)) {
                 // 上一级目录，弹出栈顶（如果存在）
                 if (!stack.isEmpty()) {
                     stack.pollLast();
@@ -1653,14 +1662,14 @@ public final class StringUtil {
         // 重新拼接路径
         StringBuilder cleanPath = new StringBuilder();
         for (String dir : stack) {
-            cleanPath.append("/").append(dir);
+            cleanPath.append(slashChar).append(dir);
         }
 
         // 如果输入是绝对路径（以 '/' 开头），保留开头的 '/'
         // 否则去掉开头的 '/'，返回相对路径
-        boolean isAbsolute = path.startsWith("/");
+        boolean isAbsolute = path.startsWith(String.valueOf(slashChar));
         if (cleanPath.length() == 0) {
-            return isAbsolute ? "/" : "";
+            return isAbsolute ? String.valueOf(slashChar) : emptyString;
         }
         return isAbsolute ? cleanPath.toString() : cleanPath.substring(1);
     }

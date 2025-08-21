@@ -351,10 +351,14 @@ public final class EnumUtil {
     public static <E extends Enum<E>> List<Map<String, Object>> toLabelValueList(String valueField, String labelField, Class<E> enumClass) {
         Map<Object, Object> map = toMap(valueField, labelField, enumClass);
         List<Map<String, Object>> list = new ArrayList<>();
+        String valueKey = "value";
+        String labelKey = "label";
         for (Map.Entry<Object, Object> entry : map.entrySet()) {
             Map<String, Object> item = new HashMap<>();
-            item.put("value", entry.getKey());
-            item.put("label", entry.getValue());
+
+            item.put(valueKey, entry.getKey());
+            item.put(labelKey, entry.getValue());
+
             list.add(item);
         }
         return list;
@@ -436,12 +440,16 @@ public final class EnumUtil {
     @SuppressWarnings("unchecked")
     public static Set<Class<? extends BaseEnum<?, ?>>> scanAllBaseEnums(String basePackage) {
         Set<Class<? extends BaseEnum<?, ?>>> result = new HashSet<>();
+        char dotChar = '.';
+        char slashChar = '/';
+        String classPattern = "/**/*.class";
+        String classpathAllPrefix = "classpath*:";
         try {
-            String pattern = basePackage.replace('.', '/') + "/**/*.class";
+            String pattern = basePackage.replace(dotChar, slashChar) + classPattern;
             PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
             SimpleMetadataReaderFactory factory = new SimpleMetadataReaderFactory();
 
-            for (Resource resource : resolver.getResources("classpath*:" + pattern)) {
+            for (Resource resource : resolver.getResources(classpathAllPrefix + pattern)) {
                 if (resource.isReadable()) {
                     MetadataReader reader = factory.getMetadataReader(resource);
                     String className = reader.getClassMetadata().getClassName();
@@ -468,7 +476,9 @@ public final class EnumUtil {
         Set<Class<? extends BaseEnum<?, ?>>> enumClasses = scanAllBaseEnums(basePackage);
 
         // 2. 转换成前端需要的 Map<String, List<Map<String,Object>>>
-        return toMultiLabelValueMap("code", "name", enumClasses.toArray(new Class[0]));
+        String codeKey = "code";
+        String nameKey = "name";
+        return toMultiLabelValueMap(codeKey, nameKey, enumClasses.toArray(new Class[0]));
     }
 
     /**
@@ -478,7 +488,7 @@ public final class EnumUtil {
      */
     public static Map<String, List<Map<String, Object>>> getAllBaseEnumMap() {
         // 获取 Spring Boot 启动类所在包
-        String basePackage = SpringUtil.getMainPackage();
+        String basePackage = SpringUtil.getMainApplicationPackage();
         return getAllBaseEnumMap(basePackage);
     }
 

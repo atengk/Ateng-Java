@@ -702,9 +702,14 @@ public final class NumberUtil {
      * @throws IllegalArgumentException radix非法时抛出异常
      */
     public static String toRadixString(long number, int radix) {
-        if (radix < 2 || radix > 36) {
-            throw new IllegalArgumentException("进制范围必须是2~36");
+        int minRadix = 2;
+        int maxRadix = 36;
+        String radixRangeMsg = "进制范围必须是2~36";
+
+        if (radix < minRadix || radix > maxRadix) {
+            throw new IllegalArgumentException(radixRangeMsg);
         }
+
         return Long.toString(number, radix);
     }
 
@@ -717,12 +722,18 @@ public final class NumberUtil {
      * @throws NumberFormatException 输入格式非法时抛出异常
      */
     public static long fromRadixString(String str, int radix) {
+        String stringNullMsg = "字符串为null";
+        int minRadix = 2;
+        int maxRadix = 36;
+        String radixRangeMsg = "进制范围必须是2~36";
+
         if (str == null) {
-            throw new NumberFormatException("字符串为null");
+            throw new NumberFormatException(stringNullMsg);
         }
-        if (radix < 2 || radix > 36) {
-            throw new IllegalArgumentException("进制范围必须是2~36");
+        if (radix < minRadix || radix > maxRadix) {
+            throw new IllegalArgumentException(radixRangeMsg);
         }
+
         return Long.parseLong(str, radix);
     }
 

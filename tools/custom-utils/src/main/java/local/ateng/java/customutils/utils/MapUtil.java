@@ -116,11 +116,15 @@ public final class MapUtil {
      * @throws IllegalArgumentException 如果参数个数不是偶数
      */
     public static Map<String, String> of(String... entries) {
-        if (entries == null || entries.length % 2 != 0) {
-            throw new IllegalArgumentException("参数个数必须为偶数");
+        int stepTwo = 2;
+        String entriesMustBeEvenMsg = "参数个数必须为偶数";
+
+        if (entries == null || entries.length % stepTwo != 0) {
+            throw new IllegalArgumentException(entriesMustBeEvenMsg);
         }
+
         Map<String, String> map = new HashMap<>();
-        for (int i = 0; i < entries.length; i += 2) {
+        for (int i = 0; i < entries.length; i += stepTwo) {
             map.put(entries[i], entries[i + 1]);
         }
         return map;
