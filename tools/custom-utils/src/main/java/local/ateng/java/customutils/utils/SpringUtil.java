@@ -1,7 +1,9 @@
 package local.ateng.java.customutils.utils;
 
+import local.ateng.java.customutils.enums.BaseEnum;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.*;
@@ -692,5 +694,46 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
             return null;
         }
     }
+
+    /**
+     * 获取 Spring Boot 启动类所在的基础包名。
+     *
+     * <p>在 Spring Boot 项目中，通常启动类使用 {@link SpringBootApplication} 注解，并放在根包下。
+     * 本方法通过 Spring 上下文扫描带有 {@link SpringBootApplication} 注解的 Bean，
+     * 获取其对应类的包名，从而确定项目基础包。
+     *
+     * <p>用途：
+     * <ul>
+     *     <li>作为默认扫描包，用于扫描实现 {@link BaseEnum} 的枚举类</li>
+     *     <li>在自动注册、自动扫描等功能中确定根包路径</li>
+     * </ul>
+     *
+     * <p>注意事项：
+     * <ul>
+     *     <li>本方法依赖 Spring 容器，必须在 Spring 上下文初始化完成后调用</li>
+     *     <li>如果项目中存在多个 {@link SpringBootApplication} 注解的类，方法只会返回第一个扫描到的类的包名</li>
+     *     <li>若没有找到任何带 {@link SpringBootApplication} 注解的类，将抛出 {@link ArrayIndexOutOfBoundsException}</li>
+     * </ul>
+     *
+     * @return 启动类所在的根包名，例如 "com.example.project"
+     */
+    public static String getMainPackage() {
+        try {
+            // 遍历 ApplicationContext 中的所有 Bean，找到带 @SpringBootApplication 注解的类
+            ApplicationContext context = getApplicationContext();
+            if (context != null) {
+                String[] beanNames = context.getBeanDefinitionNames();
+                for (String beanName : beanNames) {
+                    Class<?> beanClass = context.getType(beanName);
+                    if (beanClass != null && beanClass.isAnnotationPresent(SpringBootApplication.class)) {
+                        return beanClass.getPackage().getName();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
 
 }

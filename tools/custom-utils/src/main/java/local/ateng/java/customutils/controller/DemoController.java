@@ -1,6 +1,7 @@
 package local.ateng.java.customutils.controller;
 
 import local.ateng.java.customutils.event.UserRegisterEvent;
+import local.ateng.java.customutils.utils.EnumUtil;
 import local.ateng.java.customutils.utils.SpringUtil;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
@@ -9,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/demo")
@@ -37,6 +40,16 @@ public class DemoController {
     public String getResourceReadString() {
         System.out.println(SpringUtil.getResourceReadString("application.yml"));
         return "ok";
+    }
+
+    @GetMapping("/getAllBaseEnumMap")
+    public Map<String, List<Map<String, Object>>> getAllEnums() {
+        return EnumUtil.getAllBaseEnumMap();
+    }
+
+    @GetMapping("/getLabelValueListByEnumName")
+    public List<Map<String, Object>> getLabelValueListByEnumName(String name) throws ClassNotFoundException {
+        return EnumUtil.getLabelValueListByEnumName(name);
     }
 
 }
