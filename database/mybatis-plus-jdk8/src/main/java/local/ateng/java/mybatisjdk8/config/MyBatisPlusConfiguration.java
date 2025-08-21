@@ -1,8 +1,12 @@
 package local.ateng.java.mybatisjdk8.config;
 
 import com.baomidou.mybatisplus.annotation.DbType;
+import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import local.ateng.java.mybatisjdk8.handler.GeometryTypeHandler;
+import local.ateng.java.mybatisjdk8.handler.JacksonTypeHandler;
+import local.ateng.java.mybatisjdk8.handler.UUIDTypeHandler;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,6 +14,19 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @MapperScan("local.ateng.java.mybatisjdk8.**.mapper")
 public class MyBatisPlusConfiguration {
+
+    @Bean
+    public ConfigurationCustomizer configurationCustomizer() {
+        return configuration -> {
+            // 方式一：逐个注册
+            configuration.getTypeHandlerRegistry().register(GeometryTypeHandler.class);
+            configuration.getTypeHandlerRegistry().register(JacksonTypeHandler.class);
+            configuration.getTypeHandlerRegistry().register(UUIDTypeHandler.class);
+
+            // 方式二：包扫描（推荐）
+            //configuration.getTypeHandlerRegistry().register("local.ateng.java.mybatisjdk8.handler");
+        };
+    }
 
     /**
      * 添加分页插件

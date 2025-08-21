@@ -1,9 +1,17 @@
 package local.ateng.java.mybatisjdk8.handler;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
+import org.apache.ibatis.type.JdbcType;
+import org.apache.ibatis.type.MappedJdbcTypes;
+import org.apache.ibatis.type.MappedTypes;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * 通用的 Fastjson 类型处理器，用于 MyBatis Plus 中将 Java 对象与 JSON 字段互相转换。
@@ -23,6 +31,8 @@ import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
  * @author 孔余
  * @since 2025-07-28
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({Map.class, List.class, JSONObject.class, JSONArray.class})     // Java 类型
 public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
     /**

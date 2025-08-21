@@ -1166,7 +1166,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 public interface MyUserMapper extends BaseMapper<MyUser> {
 
     // 分页查询，传入wrapper
-    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param("ew") QueryWrapper<MyUser> wrapper);
+    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param(Constants.WRAPPER) QueryWrapper<MyUser> wrapper);
 }
 ```
 
@@ -1404,7 +1404,7 @@ CTE 的SQL示例
 public interface MyUserMapper extends BaseMapper<MyUser> {
 
     // 分页查询，传入wrapper
-    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param("ew") QueryWrapper<MyUser> wrapper);
+    IPage<JSONObject> selectUsersWithOrderPageWrapper(Page page, @Param(Constants.WRAPPER) QueryWrapper<MyUser> wrapper);
 }
 ```
 
@@ -1534,7 +1534,7 @@ public interface MyUserMapper extends BaseMapper<MyUser> {
 
 #### 创建Mapper.xml
 
-传 `wrapper` 给自定义 SQL 时，在where条件中加 `${ew.sqlSegment}`。
+传 `wrapper` 给自定义 SQL 时，在where条件中加 `${ew.customSqlSegment}`。
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1919,6 +1919,8 @@ import java.util.UUID;
  * @author 孔余
  * @since 2025-07-27
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.VARBINARY, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes(UUID.class)           // Java 类型
 public class UUIDTypeHandler extends BaseTypeHandler<UUID> {
 
     /**
@@ -2312,6 +2314,8 @@ import java.util.Arrays;
  * @author 孔余
  * @since 2025-07-27
  */
+@MappedJdbcTypes({JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes(Geometry.class)           // Java 类型
 public class GeometryTypeHandler extends BaseTypeHandler<Geometry> {
 
     /**
@@ -2454,6 +2458,8 @@ import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
  * @author 孔余
  * @since 2025-07-28
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({Map.class, List.class, JSONObject.class, JSONArray.class})     // Java 类型
 public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
     /**
@@ -2561,6 +2567,8 @@ import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
  * @author 孔余
  * @since 2025-07-28
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({Map.class, List.class, JSONObject.class, JSONArray.class})     // Java 类型
 public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
     /**
@@ -2765,6 +2773,8 @@ import java.util.List;
  * @author 孔余
  * @since 2025-07-28
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({List.class})     // Java 类型
 public class Fastjson2ListMyDataTypeHandler extends Fastjson2GenericTypeReferenceHandler<List<MyData>> {
 
     /**
@@ -2803,6 +2813,8 @@ import local.ateng.java.mybatisjdk8.entity.MyData;
  * @author 孔余
  * @since 2025-07-28
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({MyData.class})     // Java 类型
 public class Fastjson2MyDataTypeHandler extends Fastjson2GenericTypeReferenceHandler<MyData> {
 
     /**
@@ -2866,6 +2878,8 @@ import java.util.TimeZone;
  * @author 孔余
  * @since 2025-07-28
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({Map.class, List.class, JsonNode.class, ObjectNode.class, ArrayNode.class})     // Java 类型
 public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
     /**
@@ -3099,6 +3113,30 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
         );
     }
 
+}
+```
+
+### 注册全局TypeHandler
+
+注册后，MyBatis 会自动根据 `@MappedJdbcTypes` 和 `@MappedTypes` 匹配，几乎不用额外写 `typeHandler`。
+
+```java
+@Configuration
+@MapperScan("local.ateng.java.mybatisjdk8.**.mapper")
+public class MyBatisPlusConfiguration {
+
+    @Bean
+    public ConfigurationCustomizer configurationCustomizer() {
+        return configuration -> {
+            // 方式一：逐个注册
+            configuration.getTypeHandlerRegistry().register(GeometryTypeHandler.class);
+            configuration.getTypeHandlerRegistry().register(JacksonTypeHandler.class);
+            configuration.getTypeHandlerRegistry().register(UUIDTypeHandler.class);
+
+            // 方式二：包扫描（推荐）
+            //configuration.getTypeHandlerRegistry().register("local.ateng.java.mybatisjdk8.handler");
+        };
+    }
 }
 ```
 

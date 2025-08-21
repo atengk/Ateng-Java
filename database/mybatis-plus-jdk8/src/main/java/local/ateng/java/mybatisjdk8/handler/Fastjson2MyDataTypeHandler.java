@@ -2,6 +2,9 @@ package local.ateng.java.mybatisjdk8.handler;
 
 import com.alibaba.fastjson2.TypeReference;
 import local.ateng.java.mybatisjdk8.entity.MyData;
+import org.apache.ibatis.type.JdbcType;
+import org.apache.ibatis.type.MappedJdbcTypes;
+import org.apache.ibatis.type.MappedTypes;
 
 /**
  * Fastjson2 类型处理器，用于将 {@link MyData} 类型与 JSON 字段之间进行序列化与反序列化。
@@ -18,6 +21,8 @@ import local.ateng.java.mybatisjdk8.entity.MyData;
  * @author 孔余
  * @since 2025-07-28
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({MyData.class})     // Java 类型
 public class Fastjson2MyDataTypeHandler extends Fastjson2GenericTypeReferenceHandler<MyData> {
 
     /**

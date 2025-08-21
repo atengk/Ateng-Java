@@ -2,6 +2,8 @@ package local.ateng.java.mybatisjdk8.handler;
 
 import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.JdbcType;
+import org.apache.ibatis.type.MappedJdbcTypes;
+import org.apache.ibatis.type.MappedTypes;
 
 import java.nio.ByteBuffer;
 import java.sql.*;
@@ -30,6 +32,8 @@ import java.util.UUID;
  * @author 孔余
  * @since 2025-07-27
  */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.VARBINARY, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes(UUID.class)           // Java 类型
 public class UUIDTypeHandler extends BaseTypeHandler<UUID> {
 
     /**

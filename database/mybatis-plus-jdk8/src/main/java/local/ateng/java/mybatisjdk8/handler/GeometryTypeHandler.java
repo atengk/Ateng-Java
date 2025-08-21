@@ -2,6 +2,8 @@ package local.ateng.java.mybatisjdk8.handler;
 
 import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.JdbcType;
+import org.apache.ibatis.type.MappedJdbcTypes;
+import org.apache.ibatis.type.MappedTypes;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.ByteOrderValues;
 import org.locationtech.jts.io.WKBReader;
@@ -27,6 +29,8 @@ import java.util.Arrays;
  * @author 孔余
  * @since 2025-07-27
  */
+@MappedJdbcTypes({JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes(Geometry.class)           // Java 类型
 public class GeometryTypeHandler extends BaseTypeHandler<Geometry> {
 
     /**
