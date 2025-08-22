@@ -12,6 +12,23 @@ import java.util.Map;
 public class EnumUtilTests {
 
     @Test
+    void test00() {
+        StatusEnum statusEnum = EnumUtil.getByFieldValue(StatusEnum.class, "code", 1);
+        System.out.println(statusEnum.getName());
+        System.out.println(statusEnum.getCode());
+    }
+
+    @Test
+    void test001() {
+        String name = EnumUtil.getNameByCode(StatusEnum.class, 1);
+        System.out.println(name);
+        // 输出: "启用"
+        Integer code = EnumUtil.getCodeByName(StatusEnum.class, "禁用");
+        System.out.println(code);
+        // 输出: 0
+    }
+
+    @Test
     void test01() {
         Map<Integer, String> map = EnumUtil.toMap("code", "name", StatusEnum.class);
         System.out.println(map); // {1=启用, 0=禁用}

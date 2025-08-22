@@ -28,13 +28,23 @@ public final class EnumUtil {
     }
 
     /**
-     * 根据字段值获取枚举实例
+     * 根据枚举类中指定字段的值获取对应的枚举实例。
+     * <p>
+     * 使用反射获取枚举类中的字段，并逐一对比枚举常量的字段值是否等于目标值，
+     * 如果找到匹配项则返回该枚举实例，否则返回 {@code null}。
+     * <p>
+     * ⚠ 注意事项：
+     * <ul>
+     *   <li>此方法基于反射，性能上比直接调用枚举方法略低，不适合高频调用场景。</li>
+     *   <li>如果字段不存在或类型不匹配，不会抛出异常，而是返回 {@code null}。</li>
+     *   <li>常见字段示例：{@code code}、{@code value}、{@code key}、{@code name} 等。</li>
+     * </ul>
      *
-     * @param enumClass   枚举类
-     * @param fieldName   要匹配的字段名（如 code、value、key）
-     * @param targetValue 目标值
-     * @param <E>         枚举类型
-     * @return 匹配的枚举实例，未找到返回 null
+     * @param enumClass   枚举类的 {@link Class} 对象，例如 {@code StatusEnum.class}
+     * @param fieldName   要匹配的字段名，例如 {@code "code"} 或 {@code "name"}
+     * @param targetValue 目标值，例如 {@code 0} 或 {@code "在线"}
+     * @param <E>         枚举类型，需继承 {@link Enum}
+     * @return 匹配的枚举实例；如果未找到或发生异常，返回 {@code null}
      */
     public static <E extends Enum<E>> E getByFieldValue(Class<E> enumClass, String fieldName, Object targetValue) {
         if (enumClass == null || fieldName == null || targetValue == null) {
@@ -60,6 +70,92 @@ public final class EnumUtil {
      */
     public static <E extends Enum<E>> boolean containsFieldValue(Class<E> enumClass, String fieldName, Object value) {
         return getByFieldValue(enumClass, fieldName, value) != null;
+    }
+
+    /**
+     * 根据某个字段值获取同一枚举中的另一个字段值。
+     *
+     * @param enumClass   枚举类，例如 {@code StatusEnum.class}
+     * @param matchField  用于匹配的字段名（如 "code"）
+     * @param matchValue  匹配字段对应的值
+     * @param targetField 需要返回的字段名（如 "name"）
+     * @param <E>         枚举类型
+     * @param <T>         返回值类型
+     * @return 匹配到的目标字段值，未找到时返回 null
+     */
+    @SuppressWarnings("unchecked")
+    public static <E extends Enum<E>, T> T getFieldValueByOtherField(
+            Class<E> enumClass,
+            String matchField,
+            Object matchValue,
+            String targetField) {
+
+        E e = getByFieldValue(enumClass, matchField, matchValue);
+        if (e == null) {
+            return null;
+        }
+        try {
+            Field field = enumClass.getDeclaredField(targetField);
+            field.setAccessible(true);
+            return (T) field.get(e);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 根据枚举中的 code 字段值获取对应的 name 字段值。
+     *
+     * <p>要求枚举类中必须包含 {@code code} 和 {@code name} 字段，例如：</p>
+     * <pre>
+     * {@code
+     * @AllArgsConstructor
+     * @Getter
+     * public enum StatusEnum {
+     *     OFFLINE(0, "离线"),
+     *     ONLINE(1, "在线");
+     *
+     *     private final int code;
+     *     private final String name;
+     * }
+     * }
+     * </pre>
+     *
+     * @param enumClass 枚举类类型，例如 {@code StatusEnum.class}
+     * @param code      枚举中的 code 值
+     * @param <E>       枚举类型
+     * @return 匹配到的 name 值，未找到时返回 {@code null}
+     */
+    public static <E extends Enum<E>> String getNameByCode(Class<E> enumClass, Object code) {
+        return getFieldValueByOtherField(enumClass, "code", code, "name");
+    }
+
+    /**
+     * 根据枚举中的 name 字段值获取对应的 code 字段值。
+     *
+     * <p>要求枚举类中必须包含 {@code code} 和 {@code name} 字段，例如：</p>
+     * <pre>
+     * {@code
+     * @AllArgsConstructor
+     * @Getter
+     * public enum StatusEnum {
+     *     OFFLINE(0, "离线"),
+     *     ONLINE(1, "在线");
+     *
+     *     private final int code;
+     *     private final String name;
+     * }
+     * }
+     * </pre>
+     *
+     * @param enumClass 枚举类类型，例如 {@code StatusEnum.class}
+     * @param name      枚举中的 name 值
+     * @param <E>       枚举类型
+     * @param <T>       返回值类型（取决于枚举中 code 字段的类型，如 Integer、String 等）
+     * @return 匹配到的 code 值，未找到时返回 {@code null}
+     */
+    public static <E extends Enum<E>, T> T getCodeByName(Class<E> enumClass, String name) {
+        return getFieldValueByOtherField(enumClass, "name", name, "code");
     }
 
     /**
