@@ -7,7 +7,9 @@ import java.io.*;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Bean 工具类
@@ -21,7 +23,7 @@ public final class BeanUtil {
     /**
      * PropertyDescriptor 缓存，避免每次调用都使用 Introspector
      */
-    private static final Map<Class<?>, Map<String, PropertyDescriptor>> CACHE = new HashMap<>();
+    private static final Map<Class<?>, Map<String, PropertyDescriptor>> CACHE = new ConcurrentHashMap<>();
 
     /**
      * 禁止实例化工具类
@@ -183,15 +185,36 @@ public final class BeanUtil {
             return CACHE.get(clazz);
         }
 
+        // 先拿所有属性描述符
         BeanInfo beanInfo = Introspector.getBeanInfo(clazz, Object.class);
         PropertyDescriptor[] pds = beanInfo.getPropertyDescriptors();
-        Map<String, PropertyDescriptor> map = new HashMap<>();
+        Map<String, PropertyDescriptor> pdMap = new HashMap<>();
         for (PropertyDescriptor pd : pds) {
-            map.put(pd.getName(), pd);
+            pdMap.put(pd.getName(), pd);
         }
 
-        CACHE.put(clazz, map);
-        return map;
+        // 按字段声明顺序重新排列
+        Map<String, PropertyDescriptor> ordered = new LinkedHashMap<>();
+        for (Field field : clazz.getDeclaredFields()) {
+            int mod = field.getModifiers();
+            if (Modifier.isStatic(mod) || Modifier.isTransient(mod) || field.isSynthetic()) {
+                continue;
+            }
+            PropertyDescriptor pd = pdMap.get(field.getName());
+            if (pd != null) {
+                ordered.put(field.getName(), pd);
+            }
+        }
+
+        // 补充没有对应字段的 getter/setter 属性（例如 isXxx 或 getClass）
+        for (PropertyDescriptor pd : pds) {
+            if (!ordered.containsKey(pd.getName())) {
+                ordered.put(pd.getName(), pd);
+            }
+        }
+
+        CACHE.put(clazz, ordered);
+        return ordered;
     }
 
     /**

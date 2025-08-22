@@ -50,6 +50,14 @@ public class BeanUtilTests {
     }
 
     @Test
+    void toMap() {
+        MyUser1 myUser1 = createMyUser1Sample();
+        Map<String, Object> map = BeanUtil.toMap(myUser1);
+        System.out.println(myUser1);
+        System.out.println(map);
+    }
+
+    @Test
     void getProperty() {
         MyUser1 myUser1 = createMyUser1Sample();
         String userName = BeanUtil.getProperty(myUser1, "userName");
