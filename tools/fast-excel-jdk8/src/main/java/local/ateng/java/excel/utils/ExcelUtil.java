@@ -1060,6 +1060,39 @@ public final class ExcelUtil {
     }
 
     /**
+     * 构建 EasyExcel 所需格式的多级表头
+     *
+     * @param headerRows 多行表头数据，每个子 List 代表一行表头
+     *                   例如：
+     *                   [
+     *                     ["人员信息", "人员信息"],
+     *                     ["姓名", "年龄"]
+     *                   ]
+     *                   表示两列：第一列 "人员信息-姓名"，第二列 "人员信息-年龄"
+     * @return EasyExcel 需要的表头格式（List<List<String>>）
+     */
+    public static List<List<String>> buildMultiLevelHeader(List<List<String>> headerRows) {
+        if (headerRows == null || headerRows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        int columnCount = headerRows.get(0).size();
+        List<List<String>> result = new ArrayList<>();
+
+        for (int col = 0; col < columnCount; col++) {
+            List<String> columnHeaders = new ArrayList<>();
+            for (List<String> row : headerRows) {
+                if (col < row.size()) {
+                    columnHeaders.add(row.get(col));
+                }
+            }
+            result.add(columnHeaders);
+        }
+
+        return result;
+    }
+
+    /**
      * 表头参数校验（单级或多级）
      *
      * @param header 表头
