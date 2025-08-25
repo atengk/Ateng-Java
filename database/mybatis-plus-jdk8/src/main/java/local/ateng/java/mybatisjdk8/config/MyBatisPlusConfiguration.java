@@ -1,6 +1,5 @@
 package local.ateng.java.mybatisjdk8.config;
 
-import cn.hutool.db.sql.SqlUtil;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
@@ -61,6 +60,7 @@ public class MyBatisPlusConfiguration {
 
         // 自定义插件（先注册）
         interceptor.addInnerInterceptor(new MyCustomInterceptor());
+//        interceptor.addInnerInterceptor(new SqlPrintInterceptor());
 
 
         // 分页插件配置

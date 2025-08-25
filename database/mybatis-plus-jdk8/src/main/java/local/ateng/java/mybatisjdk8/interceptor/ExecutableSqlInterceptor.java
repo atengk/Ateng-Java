@@ -13,6 +13,8 @@ import org.apache.ibatis.session.ResultHandler;
 import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.type.TypeHandler;
 import org.apache.ibatis.type.TypeHandlerRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -23,21 +25,28 @@ import java.util.Locale;
 import java.util.Properties;
 
 /**
- * 自定义 MyBatis-Plus 内置拦截器示例，实现了 InnerInterceptor 接口的全部方法。
- * <p>
- * 该拦截器可以在 SQL 执行的各个阶段获取 SQL 信息，包括查询、更新、插入、删除等操作。
- * 适用于 SQL 日志打印、性能监控、动态 SQL 修改等场景。
- * </p>
+ * MyBatis-Plus 自定义拦截器：打印最终可执行 SQL（含参数替换）。
  *
- * @author 孔余
- * @since 2025-08-22
+ * <p>该拦截器在 SQL 执行前将 {@link BoundSql} 中的参数替换到占位符中，
+ * 输出完整可执行 SQL 日志，适用于 SQL 调试、慢查询分析、审计日志记录等场景。</p>
+ *
+ * <p>注意：
+ * <ul>
+ *     <li>仅用于日志打印，不影响 SQL 执行。</li>
+ *     <li>对于复杂自定义 TypeHandler，输出为 {@code toString()} 结果。</li>
+ * </ul>
+ * </p>
  */
-public class MyCustomInterceptor implements InnerInterceptor {
+public class ExecutableSqlInterceptor implements InnerInterceptor {
+
+    private static final Logger log = LoggerFactory.getLogger(ExecutableSqlInterceptor.class);
+
+    // ==================== 查询拦截 ====================
 
     /**
-     * 查询执行前是否继续执行 beforeQuery。
+     * 查询执行前判断是否继续执行 {@link #beforeQuery}。
      *
-     * @param executor      执行器
+     * @param executor      MyBatis 执行器
      * @param ms            映射语句对象
      * @param parameter     方法入参
      * @param rowBounds     分页参数
@@ -47,16 +56,16 @@ public class MyCustomInterceptor implements InnerInterceptor {
      * @throws SQLException SQL 异常
      */
     @Override
-    public boolean willDoQuery(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds,
-                               ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
-        // 可在这里根据需求动态决定是否执行查询
-        return true;
+    public boolean willDoQuery(Executor executor, MappedStatement ms, Object parameter,
+                               RowBounds rowBounds, ResultHandler resultHandler,
+                               BoundSql boundSql) throws SQLException {
+        return true; // 始终允许查询执行
     }
 
     /**
-     * 查询执行前回调方法，可获取 BoundSql。
+     * 查询执行前回调方法，用于打印最终可执行 SQL。
      *
-     * @param executor      执行器
+     * @param executor      MyBatis 执行器
      * @param ms            映射语句对象
      * @param parameter     方法入参
      * @param rowBounds     分页参数
@@ -65,55 +74,80 @@ public class MyCustomInterceptor implements InnerInterceptor {
      * @throws SQLException SQL 异常
      */
     @Override
-    public void beforeQuery(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds,
-                            ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
-        String executableSql = getExecutableSql(ms.getConfiguration(), boundSql);
-        System.out.println("[查询 SQL] " + executableSql);
+    public void beforeQuery(Executor executor, MappedStatement ms, Object parameter,
+                            RowBounds rowBounds, ResultHandler resultHandler,
+                            BoundSql boundSql) throws SQLException {
+        String sql = getExecutableSql(ms.getConfiguration(), boundSql);
+        log.info("[MyBatis-Plus SQL][QUERY] {}", sql);
     }
 
+    // ==================== 更新/插入/删除拦截 ====================
+
     /**
-     * 更新执行前是否继续执行 beforeUpdate。
+     * 更新执行前判断是否继续执行 {@link #beforeUpdate}。
      *
-     * @param executor  执行器
+     * @param executor  MyBatis 执行器
      * @param ms        映射语句对象
      * @param parameter 方法入参
      * @return true 继续执行 beforeUpdate，false 跳过
      * @throws SQLException SQL 异常
      */
     @Override
-    public boolean willDoUpdate(Executor executor, MappedStatement ms, Object parameter) throws SQLException {
+    public boolean willDoUpdate(Executor executor, MappedStatement ms, Object parameter)
+            throws SQLException {
         return true;
     }
 
     /**
-     * 更新执行前回调方法，可获取 BoundSql 或 MappedStatement 信息。
+     * 更新/插入/删除执行前回调方法，用于打印最终可执行 SQL。
      *
-     * @param executor  执行器
+     * @param executor  MyBatis 执行器
      * @param ms        映射语句对象
      * @param parameter 方法入参
      * @throws SQLException SQL 异常
      */
     @Override
-    public void beforeUpdate(Executor executor, MappedStatement ms, Object parameter) throws SQLException {
+    public void beforeUpdate(Executor executor, MappedStatement ms, Object parameter)
+            throws SQLException {
         BoundSql boundSql = ms.getSqlSource().getBoundSql(parameter);
-        String executableSql = getExecutableSql(ms.getConfiguration(), boundSql);
-        System.out.println("[更新/插入/删除 SQL] " + executableSql + "，类型: " + ms.getSqlCommandType());
+        String sql = getExecutableSql(ms.getConfiguration(), boundSql);
+        log.info("[MyBatis-Plus SQL][{}] {}", ms.getSqlCommandType(), sql);
     }
+
+    // ==================== StatementHandler 预处理 ====================
 
     /**
      * SQL 预处理阶段回调，可获取 StatementHandler 和 Connection。
-     * <p>
-     * 该方法可用于统一获取所有类型 SQL，或对 SQL 进行修改。
-     * </p>
+     * <p>可用于统一拦截或修改 SQL，但生产环境一般仅用于打印。</p>
      *
-     * @param sh                 StatementHandler
+     * @param sh                 StatementHandler 对象
      * @param connection         数据库连接
      * @param transactionTimeout 事务超时时间
      */
     @Override
     public void beforePrepare(StatementHandler sh, Connection connection, Integer transactionTimeout) {
+        // 预留扩展点
     }
 
+    /**
+     * 获取 BoundSql 前回调方法，可用于最后阶段修改 SQL。
+     *
+     * @param sh StatementHandler 对象
+     */
+    @Override
+    public void beforeGetBoundSql(StatementHandler sh) {
+        // 预留扩展点
+    }
+
+    // ==================== 核心方法：拼接最终 SQL ====================
+
+    /**
+     * 将 BoundSql 中的占位符替换为参数值，生成最终可执行 SQL。
+     *
+     * @param configuration MyBatis 配置对象
+     * @param boundSql      SQL 绑定对象
+     * @return 可执行 SQL 字符串
+     */
     public static String getExecutableSql(Configuration configuration, BoundSql boundSql) {
         Object parameterObject = boundSql.getParameterObject();
         List<ParameterMapping> parameterMappings = boundSql.getParameterMappings();
@@ -125,13 +159,13 @@ public class MyCustomInterceptor implements InnerInterceptor {
 
             for (ParameterMapping parameterMapping : parameterMappings) {
                 if (parameterMapping.getMode() == ParameterMode.OUT) {
-                    continue;
+                    continue; // 跳过输出参数
                 }
 
                 String propertyName = parameterMapping.getProperty();
                 Object value;
+
                 if (boundSql.hasAdditionalParameter(propertyName)) {
-                    // 动态 SQL 中的参数（例如 foreach）
                     value = boundSql.getAdditionalParameter(propertyName);
                 } else if (metaObject.hasGetter(propertyName)) {
                     value = metaObject.getValue(propertyName);
@@ -139,18 +173,21 @@ public class MyCustomInterceptor implements InnerInterceptor {
                     value = parameterObject;
                 }
 
-                // 使用 TypeHandler 来获取展示值（避免枚举、JSON 等丢失）
                 String valueStr = getParameterValue(value, parameterMapping, typeHandlerRegistry);
-
-                // 注意替换第一个 ?，防止正则错误
                 sql = sql.replaceFirst("\\?", valueStr.replace("$", "\\$"));
             }
         }
+
         return sql;
     }
 
     /**
-     * 获取参数值的字符串表示，优先使用 TypeHandler
+     * 获取参数字符串表示，兼容枚举、日期、String、自定义 TypeHandler。
+     *
+     * @param value               参数值
+     * @param parameterMapping    参数映射
+     * @param typeHandlerRegistry TypeHandler 注册表
+     * @return 可替换 SQL 的字符串
      */
     private static String getParameterValue(Object value, ParameterMapping parameterMapping,
                                             TypeHandlerRegistry typeHandlerRegistry) {
@@ -161,9 +198,7 @@ public class MyCustomInterceptor implements InnerInterceptor {
         Class<?> javaType = parameterMapping.getJavaType();
         TypeHandler<?> typeHandler = typeHandlerRegistry.getTypeHandler(javaType);
 
-        // 如果有自定义 TypeHandler，调用它的逻辑
         if (typeHandler != null && !(value instanceof String)) {
-            // 简化展示，不实际调用 setParameter（否则要构造 PreparedStatement）
             return "'" + value.toString() + "'";
         }
 
@@ -171,34 +206,27 @@ public class MyCustomInterceptor implements InnerInterceptor {
             return "'" + value + "'";
         }
         if (value instanceof Date) {
-            DateFormat formatter = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.DEFAULT, Locale.CHINA);
+            DateFormat formatter = DateFormat.getDateTimeInstance(DateFormat.DEFAULT,
+                    DateFormat.DEFAULT, Locale.CHINA);
             return "'" + formatter.format((Date) value) + "'";
         }
         if (value instanceof Enum<?>) {
-            // 枚举：打印枚举名，或者可根据需求打印枚举的 code
             return "'" + ((Enum<?>) value).name() + "'";
         }
 
         return value.toString();
     }
 
-    /**
-     * 获取 BoundSql 前的回调，可用于最后阶段修改 SQL。
-     *
-     * @param sh StatementHandler
-     */
-    @Override
-    public void beforeGetBoundSql(StatementHandler sh) {
-    }
+    // ==================== 扩展配置 ====================
 
     /**
-     * 设置自定义配置属性，可通过配置文件注入参数。
+     * 设置自定义属性，可通过配置文件注入，如日志开关。
      *
      * @param properties 属性集合
      */
     @Override
     public void setProperties(Properties properties) {
-        // 可读取配置参数，例如日志开关、SQL 修改规则等
+        // 可用于读取配置参数，例如 SQL 日志开关
     }
-
 }
+
