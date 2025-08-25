@@ -23,6 +23,7 @@ public class ProjectController {
     @GetMapping("/one")
     public Project getOne() {
         Project project = projectService.lambdaQuery()
+//                .eq(Project::getId, 1)
                 .orderByDesc(Project::getId)
                 .last("limit 1")
                 .one();

@@ -234,14 +234,34 @@ import org.springframework.context.annotation.Configuration;
 public class MyBatisPlusConfiguration {
 
     /**
-     * 添加分页插件
-     * https://baomidou.com/plugins/pagination/
+     * 注册 MyBatis-Plus 拦截器。
+     * <p>
+     * 该拦截器支持分页、乐观锁、防全表更新删除等功能。
+     * 当前仅启用分页插件。
+     * </p>
+     * <p>
+     * ⚠️ 注意：MyBatis-Plus 3.5 中，多个 InnerInterceptor 的执行顺序
+     * 与注册顺序一致。分页插件会修改 SQL 以实现分页功能，
+     * 因此建议分页插件 **最后注册**，以保证其他自定义或内置插件
+     * 能在原始 SQL 上执行操作，避免分页逻辑被提前应用导致异常。
+     * </p>
+     *
+     * @return MybatisPlusInterceptor 拦截器实例
      */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL)); // 如果配置多个插件, 切记分页最后添加
-        // 如果有多数据源可以不配具体类型, 否则都建议配上具体的 DbType
+
+        // 分页插件配置
+        PaginationInnerInterceptor paginationInterceptor = new PaginationInnerInterceptor();
+        // 设置数据库类型（推荐明确指定，避免推断错误）
+        paginationInterceptor.setDbType(DbType.MYSQL);
+        // 溢出总页数后是否进行处理，true 返回首页，false 继续请求
+        paginationInterceptor.setOverflow(false);
+        // 单页最大记录数，-1 表示不受限制
+        paginationInterceptor.setMaxLimit(1000L);
+
+        interceptor.addInnerInterceptor(paginationInterceptor);
         return interceptor;
     }
 }
@@ -673,117 +693,378 @@ public enum StatusEnum {
 #### Jackson 版本
 
 ```java
+package local.ateng.java.mybatisjdk8.enums;
+
 import com.baomidou.mybatisplus.annotation.EnumValue;
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 
 /**
- * 状态枚举（Jackson 序列化版本）
- * <p>
- * Jackson 序列化会将枚举输出为 name 字符串，数据库存储使用 code。
+ * 状态枚举（支持 MyBatis-Plus 与 Jackson 序列化、反序列化）。
+ *
+ * <p>主要功能：
+ * <ul>
+ *     <li>通过 {@link EnumValue} 注解，支持 MyBatis-Plus 将枚举存储到数据库时使用 {@code code} 字段。</li>
+ *     <li>通过 {@link JsonValue} 注解，支持 Jackson 在序列化枚举时输出 {@code name} 字段。</li>
+ *     <li>通过 {@link JsonCreator} 注解，支持 Jackson 在反序列化时根据 {@code code} 自动映射枚举。</li>
+ * </ul>
+ *
+ * <p>适用场景：
+ * <ul>
+ *     <li>数据库中存储数值型状态码。</li>
+ *     <li>接口返回时需要输出中文或自定义描述。</li>
+ * </ul>
+ * </p>
+ *
+ * @author 孔余
+ * @since 2025-08-25
  */
-@AllArgsConstructor
-@Getter
 public enum StatusEnumJackson {
 
+    /**
+     * 离线状态。
+     */
     OFFLINE(0, "离线"),
+
+    /**
+     * 在线状态。
+     */
     ONLINE(1, "在线");
 
     /**
-     * 数据库存储字段：状态编码
+     * 枚举对应的数据库存储值。
+     *
+     * <p>该值与数据库字段绑定，通常为数值型标识。</p>
      */
     @EnumValue
-    private final int code;
+    private final Integer code;
 
     /**
-     * 前端展示字段：状态名称
-     * <p>
-     * Jackson 序列化使用此字段
+     * 枚举的展示名称。
+     *
+     * <p>在 Jackson 中，若字段或方法标注 {@link JsonValue}，
+     * 则该值在序列化时会作为枚举的 JSON 输出。</p>
+     *
+     * <p>示例：
+     * <pre>
+     *     StatusEnumJackson.ONLINE  -> "在线"
+     *     StatusEnumJackson.OFFLINE -> "离线"
+     * </pre>
+     * </p>
      */
     @JsonValue
     private final String name;
-}
 
+    StatusEnumJackson(int code, String name) {
+        this.code = code;
+        this.name = name;
+    }
+
+    /**
+     * 获取枚举对应的存储值。
+     *
+     * @return 数据库存储的数值型标识
+     */
+    public Integer getCode() {
+        return this.code;
+    }
+
+    /**
+     * 获取枚举的展示名称。
+     *
+     * <p>在 Jackson 中，该方法通常不会直接影响序列化结果，
+     * 因为 {@link JsonValue} 已经标注在 {@code name} 字段上。</p>
+     *
+     * @return 枚举展示名称（中文）
+     */
+    public String getName() {
+        return this.name;
+    }
+
+    /**
+     * 根据存储值反序列化为枚举。
+     *
+     * <p>配合 {@link JsonCreator} 使用，Jackson 在反序列化时会调用该方法。</p>
+     *
+     * <p>示例：
+     * <pre>
+     *     // JSON: {"status":1} -> ONLINE
+     *     StatusEnumJackson.fromCode(1); // ONLINE
+     *
+     *     // JSON: {"status":0} -> OFFLINE
+     *     StatusEnumJackson.fromCode(0); // OFFLINE
+     *
+     *     // JSON: {"status":99} -> null
+     *     StatusEnumJackson.fromCode(99); // null
+     * </pre>
+     * </p>
+     *
+     * @param code 数值型标识，可能为 null 或不在定义范围
+     * @return 对应的枚举常量；未匹配时返回 null（可根据业务修改为默认值）
+     */
+    @JsonCreator
+    public static StatusEnumJackson fromCode(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        for (StatusEnumJackson e : values()) {
+            if (e.code.equals(code)) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+}
 ```
 
 #### Fastjson1 版本
 
 ```java
+package local.ateng.java.mybatisjdk8.enums;
+
+import com.alibaba.fastjson.annotation.JSONCreator;
 import com.alibaba.fastjson.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.EnumValue;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 
 /**
- * 状态枚举（Fastjson1 序列化版本）
- * <p>
- * Fastjson1 不支持字段注解序列化，需要通过 getter 方法标记 {@link JSONField}。
+ * 状态枚举（支持 MyBatis-Plus 与 Fastjson1 序列化、反序列化）。
+ *
+ * <p>主要功能：
+ * <ul>
+ *     <li>通过 {@link EnumValue} 注解，支持 MyBatis-Plus 将枚举存储到数据库时使用 {@code code} 字段。</li>
+ *     <li>通过 {@link JSONField} 注解，支持 Fastjson1 在序列化枚举时输出 {@code name} 字段。</li>
+ *     <li>通过 {@link JSONCreator} 注解，支持 Fastjson1 在反序列化时根据 {@code code} 自动映射枚举。</li>
+ * </ul>
+ *
+ * <p>适用场景：
+ * <ul>
+ *     <li>数据库中存储数值型状态码。</li>
+ *     <li>接口返回时需要输出中文或自定义描述。</li>
+ * </ul>
+ * </p>
+ *
+ * @author 孔余
+ * @since 2025-08-25
  */
-@AllArgsConstructor
-@Getter
 public enum StatusEnumFastjson1 {
 
+    /**
+     * 离线状态。
+     */
     OFFLINE(0, "离线"),
+
+    /**
+     * 在线状态。
+     */
     ONLINE(1, "在线");
 
     /**
-     * 数据库存储字段：状态编码
+     * 枚举对应的数据库存储值。
+     *
+     * <p>该值与数据库字段绑定，通常为数值型标识。</p>
      */
     @EnumValue
-    private final int code;
+    private final Integer code;
 
     /**
-     * 前端展示字段：状态名称
+     * 枚举的展示名称。
+     *
+     * <p>该值作为接口返回时的中文描述，或前端显示的名称。</p>
      */
     private final String name;
 
+    StatusEnumFastjson1(int code, String name) {
+        this.code = code;
+        this.name = name;
+    }
+
     /**
-     * Fastjson1 序列化使用 getter
+     * 获取枚举对应的存储值。
+     *
+     * @return 数据库存储的数值型标识
+     */
+    public Integer getCode() {
+        return this.code;
+    }
+
+    /**
+     * 获取枚举的展示名称。
+     *
+     * <p>配合 {@link JSONField} 使用，Fastjson1 在序列化时会输出此值。</p>
+     *
+     * <p>示例：
+     * <pre>
+     *     StatusEnumFastjson1.ONLINE  -> "在线"
+     *     StatusEnumFastjson1.OFFLINE -> "离线"
+     * </pre>
+     * </p>
+     *
+     * @return 枚举展示名称（中文）
      */
     @JSONField
-    public String getValue() {
+    public String getName() {
         return this.name;
     }
-}
 
+    /**
+     * 根据存储值反序列化为枚举。
+     *
+     * <p>配合 {@link JSONCreator} 使用，Fastjson1 在反序列化时会调用该方法。</p>
+     *
+     * <p>示例：
+     * <pre>
+     *     // JSON: {"status":1} -> ONLINE
+     *     StatusEnumFastjson1.fromCode(1); // ONLINE
+     *
+     *     // JSON: {"status":0} -> OFFLINE
+     *     StatusEnumFastjson1.fromCode(0); // OFFLINE
+     *
+     *     // JSON: {"status":99} -> null
+     *     StatusEnumFastjson1.fromCode(99); // null
+     * </pre>
+     * </p>
+     *
+     * @param code 数值型标识，可能为 null 或不在定义范围
+     * @return 对应的枚举常量；未匹配时返回 null（可根据业务修改为默认值）
+     */
+    @JSONCreator
+    public static StatusEnumFastjson1 fromCode(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        for (StatusEnumFastjson1 e : values()) {
+            if (e.code.equals(code)) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+}
 ```
 
 #### Fastjson2 版本
 
 ```java
+package local.ateng.java.mybatisjdk8.enums;
+
+import com.alibaba.fastjson2.annotation.JSONCreator;
 import com.alibaba.fastjson2.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.EnumValue;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 
 /**
- * 状态枚举（Fastjson2 序列化版本）
- * <p>
- * Fastjson2 支持字段上使用 {@link JSONField(value = true)} 来序列化枚举为 name。
+ * 状态枚举（支持 MyBatis-Plus 与 Fastjson2 序列化、反序列化）。
+ *
+ * <p>主要功能：
+ * <ul>
+ *     <li>通过 {@link EnumValue} 注解，支持 MyBatis-Plus 将枚举存储到数据库时使用 {@code code} 字段。</li>
+ *     <li>通过 {@link JSONField} 注解，支持 Fastjson2 在序列化枚举时输出 {@code name} 字段。</li>
+ *     <li>通过 {@link JSONCreator} 注解，支持 Fastjson2 在反序列化时根据 {@code code} 自动映射枚举。</li>
+ * </ul>
+ *
+ * <p>适用场景：
+ * <ul>
+ *     <li>数据库中存储数值型状态码。</li>
+ *     <li>接口返回时需要输出中文或自定义描述。</li>
+ * </ul>
+ * </p>
+ *
+ * @author 孔余
+ * @since 2025-08-25
  */
-@AllArgsConstructor
-@Getter
 public enum StatusEnumFastjson2 {
 
+    /**
+     * 离线状态。
+     */
     OFFLINE(0, "离线"),
+
+    /**
+     * 在线状态。
+     */
     ONLINE(1, "在线");
 
     /**
-     * 数据库存储字段：状态编码
+     * 枚举对应的数据库存储值。
+     *
+     * <p>该值与数据库字段绑定，通常为数值型标识。</p>
      */
     @EnumValue
-    private final int code;
+    private final Integer code;
 
     /**
-     * 前端展示字段：状态名称
-     * <p>
-     * Fastjson2 序列化使用此字段
+     * 枚举的展示名称。
+     *
+     * <p>该值作为接口返回时的中文描述，或前端显示的名称。</p>
+     *
+     * <p>在 Fastjson2 中，若字段上标记 {@code @JSONField(value = true)}，
+     * 则该字段在序列化时会作为枚举的输出值。</p>
      */
     @JSONField(value = true)
     private final String name;
-}
 
+    StatusEnumFastjson2(int code, String name) {
+        this.code = code;
+        this.name = name;
+    }
+
+    /**
+     * 获取枚举对应的存储值。
+     *
+     * @return 数据库存储的数值型标识
+     */
+    public Integer getCode() {
+        return this.code;
+    }
+
+    /**
+     * 获取枚举的展示名称。
+     *
+     * <p>在 Fastjson2 中，该方法通常不会直接影响序列化结果，
+     * 因为 {@link JSONField} 已经标注在 {@code name} 字段上。</p>
+     *
+     * @return 枚举展示名称（中文）
+     */
+    public String getName() {
+        return this.name;
+    }
+
+    /**
+     * 根据存储值反序列化为枚举。
+     *
+     * <p>配合 {@link JSONCreator} 使用，Fastjson2 在反序列化时会调用该方法。</p>
+     *
+     * <p>示例：
+     * <pre>
+     *     // JSON: {"status":1} -> ONLINE
+     *     StatusEnumFastjson2.fromCode(1); // ONLINE
+     *
+     *     // JSON: {"status":0} -> OFFLINE
+     *     StatusEnumFastjson2.fromCode(0); // OFFLINE
+     *
+     *     // JSON: {"status":99} -> null
+     *     StatusEnumFastjson2.fromCode(99); // null
+     * </pre>
+     * </p>
+     *
+     * @param code 数值型标识，可能为 null 或不在定义范围
+     * @return 对应的枚举常量；未匹配时返回 null（可根据业务修改为默认值）
+     */
+    @JSONCreator
+    public static StatusEnumFastjson2 fromCode(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        for (StatusEnumFastjson2 e : values()) {
+            if (e.code.equals(code)) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+}
 ```
 
 ### 数据库实体字段
@@ -3125,18 +3406,34 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 @MapperScan("local.ateng.java.mybatisjdk8.**.mapper")
 public class MyBatisPlusConfiguration {
 
+    /**
+     * 自定义 MyBatis 全局配置。
+     * <p>
+     * 方式一：逐个注册 TypeHandler。
+     * 方式二：包扫描注册（推荐）。
+     * </p>
+     *
+     * @return ConfigurationCustomizer 配置定制器
+     */
     @Bean
     public ConfigurationCustomizer configurationCustomizer() {
         return configuration -> {
-            // 方式一：逐个注册
+            // 方式一：逐个注册自定义 TypeHandler
             configuration.getTypeHandlerRegistry().register(GeometryTypeHandler.class);
             configuration.getTypeHandlerRegistry().register(JacksonTypeHandler.class);
             configuration.getTypeHandlerRegistry().register(UUIDTypeHandler.class);
 
-            // 方式二：包扫描（推荐）
-            //configuration.getTypeHandlerRegistry().register("local.ateng.java.mybatisjdk8.handler");
+            // 方式二：包扫描注册，推荐用于统一管理 TypeHandler
+            // configuration.getTypeHandlerRegistry()
+            //         .register("com.example.mybatis.handler");
         };
     }
 }
 ```
+
+
+
+## 拦截器Interceptor
+
+
 

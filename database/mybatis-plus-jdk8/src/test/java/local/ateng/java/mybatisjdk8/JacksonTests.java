@@ -10,6 +10,7 @@ import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
 import local.ateng.java.mybatisjdk8.entity.MyData;
+import local.ateng.java.mybatisjdk8.entity.Project;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -105,4 +106,13 @@ public class JacksonTests {
         System.out.println(list);
 //        System.out.println(list.get(0).getClass());
     }
+
+    @Test
+    public void enum01() throws JsonProcessingException {
+        ObjectMapper om = new ObjectMapper();
+        String json = "{\"name\":\"阿腾\",\"status\":3}";
+        Project project = om.readValue(json, Project.class);
+        System.out.println(project);
+    }
+
 }

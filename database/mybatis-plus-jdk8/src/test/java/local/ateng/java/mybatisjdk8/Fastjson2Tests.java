@@ -3,6 +3,7 @@ package local.ateng.java.mybatisjdk8;
 import com.alibaba.fastjson2.*;
 import com.alibaba.fastjson2.filter.Filter;
 import local.ateng.java.mybatisjdk8.entity.MyData;
+import local.ateng.java.mybatisjdk8.entity.Project;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -78,4 +79,12 @@ public class Fastjson2Tests {
         List list = JSON.parseObject(json, List.class, context);
         System.out.println(list.get(0).getClass());
     }
+
+    @Test
+    public void enum01() {
+        String json = "{\"name\":\"阿腾\",\"status\":3}";
+        Project project = JSON.parseObject(json, Project.class);
+        System.out.println(project);
+    }
+
 }

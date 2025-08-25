@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import local.ateng.java.mybatisjdk8.enums.StatusEnum;
 import local.ateng.java.mybatisjdk8.handler.*;
 import lombok.AllArgsConstructor;
@@ -181,6 +182,7 @@ public class Project implements Serializable {
      */
     @TableField(value = "location", typeHandler = GeometryTypeHandler.class)
     @JSONField(serialize = false)
+    @JsonIgnore
     private Geometry location;
 
     /**

@@ -24,7 +24,7 @@ import com.baomidou.mybatisplus.annotation.EnumValue;
  * @author 孔余
  * @since 2025-08-25
  */
-public enum StatusEnum {
+public enum StatusEnumFastjson1 {
 
     /**
      * 离线状态。
@@ -51,7 +51,7 @@ public enum StatusEnum {
      */
     private final String name;
 
-    StatusEnum(int code, String name) {
+    StatusEnumFastjson1(int code, String name) {
         this.code = code;
         this.name = name;
     }
@@ -106,11 +106,11 @@ public enum StatusEnum {
      * @return 对应的枚举常量；未匹配时返回 null（可根据业务修改为默认值）
      */
     @JSONCreator
-    public static StatusEnum fromCode(Integer code) {
+    public static StatusEnumFastjson1 fromCode(Integer code) {
         if (code == null) {
             return null;
         }
-        for (StatusEnum e : values()) {
+        for (StatusEnumFastjson1 e : values()) {
             if (e.code.equals(code)) {
                 return e;
             }
