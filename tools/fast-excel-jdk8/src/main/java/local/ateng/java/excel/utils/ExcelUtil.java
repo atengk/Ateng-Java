@@ -651,7 +651,7 @@ public final class ExcelUtil {
      */
     public static void writeWithSimpleHeader(OutputStream outputStream,
                                              List<String> headerList,
-                                             List<List<String>> dataList) {
+                                             List<List<Object>> dataList) {
         // 参数校验
         validateHeader(headerList);
 
@@ -698,7 +698,7 @@ public final class ExcelUtil {
      */
     public static void writeWithMultiLevelHeader(OutputStream outputStream,
                                                  List<List<String>> headerList,
-                                                 List<List<String>> dataList) {
+                                                 List<List<Object>> dataList) {
         // 参数校验
         validateHeader(headerList);
 
@@ -751,7 +751,7 @@ public final class ExcelUtil {
      */
     private static void writeWithHeader(OutputStream outputStream,
                                         List<List<String>> header,
-                                        List<List<String>> data) {
+                                        List<List<Object>> data) {
         EasyExcel.write(outputStream)
                 .head(header)
                 .sheet(DEFAULT_SHEET_NAME)

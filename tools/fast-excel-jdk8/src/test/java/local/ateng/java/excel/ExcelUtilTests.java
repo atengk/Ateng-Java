@@ -17,10 +17,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 public class ExcelUtilTests {
 
@@ -100,7 +97,7 @@ public class ExcelUtilTests {
     @Test
     void test3() throws IOException {
         List<String> headerList = Arrays.asList("姓名", "年龄", "部门");
-        List<List<String>> dataList = Arrays.asList(
+        List<List<Object>> dataList = Arrays.asList(
                 Arrays.asList("张三", "25", "技术部"),
                 Arrays.asList("李四", "30", "市场部")
         );
@@ -110,6 +107,29 @@ public class ExcelUtilTests {
         }
 
     }
+
+    @Test
+    void testWriteImage() throws IOException {
+        // 1. 表头
+        List<String> headerList = Arrays.asList("姓名", "年龄", "头像");
+
+        // 2. 读取本地图片
+        byte[] imageBytes = Files.readAllBytes(Paths.get("C:\\Users\\admin\\Pictures\\Saved Pictures\\通知.jpeg"));
+
+        // 3. 转 Base64 （只支持二级制的图片数据）
+        String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+
+        // 4. 组装数据（注意 List<List<Object>>）
+        List<List<Object>> dataList = new ArrayList<>();
+        dataList.add(Arrays.asList("张三", 25, imageBytes));     // 用 byte[] 写图片
+        dataList.add(Arrays.asList("王五", 28, "市场部"));      // 仍然支持普通字符串
+
+        // 5. 写入 Excel
+        try (OutputStream out = Files.newOutputStream(Paths.get("D:/Temp/excel/test-image.xlsx"))) {
+            ExcelUtil.writeWithSimpleHeader(out, headerList, dataList);
+        }
+    }
+
 
     @Test
     void test4() throws IOException {
