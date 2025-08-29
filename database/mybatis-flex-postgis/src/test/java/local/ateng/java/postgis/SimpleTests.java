@@ -26,7 +26,7 @@ public class SimpleTests {
     public void test3() throws SQLException {
         PGgeometry pgeometry = new PGgeometry("POINT Z (106.551787 29.56268 1)");
         Geometry geometry = pgeometry.getGeometry();
-        pgeometry.getGeoType()
+        pgeometry.getGeoType();
         System.out.println(geometry);
     }
 
