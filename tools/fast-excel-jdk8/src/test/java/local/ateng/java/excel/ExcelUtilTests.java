@@ -162,6 +162,38 @@ public class ExcelUtilTests {
     }
 
     @Test
+    void test41() throws IOException {
+        // ================== 表头定义 ==================
+        // headerList 是一个二维列表，用于定义每一列的“多级表头”
+        // 外层 List 表示每一列，内层 List 表示该列从上到下的多级标题
+
+        // 本例构造如下表头结构：
+        // | 人员信息 | 人员信息 |
+        // | 姓名     | 年龄     |
+        // 也就是两列，两级表头，"人员信息" 为父级表头，"姓名"、"年龄" 为子级表头
+        List<List<String>> headerList = Arrays.asList(
+                Arrays.asList("人员信息", "人员信息"),
+                Arrays.asList("姓名", "年龄")
+        );
+        // 转换表头
+        headerList = ExcelUtil.buildMultiLevelHeader(headerList);
+
+        // ================== 数据定义 ==================
+        // 每一个内层 List 代表一行数据，对应 headerList 的每一列
+        // 必须保证每行的列数和 headerList 的列数一致
+        List<List<String>> dataList = Arrays.asList(
+                Arrays.asList("张三", "25"),
+                Arrays.asList("李四", "30")
+        );
+
+        // ================== 写入 Excel 文件 ==================
+        // 使用工具类 ExcelUtil 中的 writeMultiLevelHeader 方法写出多级表头的数据
+        try (OutputStream out = Files.newOutputStream(Paths.get("D:/Temp/excel/test3.xlsx"))) {
+            ExcelUtil.writeWithMultiLevelHeader(out, headerList, dataList, ExcelStyleUtil.defaultRowHeightStrategy());
+        }
+    }
+
+    @Test
     void testOneLevelSimpleHeader() throws IOException {
         // 只有一级表头，headerList 中每列只包含一个字符串
         List<List<String>> headerList = Arrays.asList(
