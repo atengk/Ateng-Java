@@ -4,7 +4,7 @@ import com.aizuda.snailjob.client.job.core.dto.JobResponseVO;
 import com.aizuda.snailjob.client.job.core.enums.AllocationAlgorithmEnum;
 import com.aizuda.snailjob.client.job.core.enums.TriggerTypeEnum;
 import com.aizuda.snailjob.client.job.core.openapi.SnailJobOpenApi;
-import com.aizuda.snailjob.common.core.enums.BlockStrategyEnum;
+import com.aizuda.snailjob.common.core.enums.JobBlockStrategyEnum;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,7 +28,7 @@ public class OpenApiController {
                 .setExecutorInfo("testJobExecutor")
                 .setExecutorTimeout(30)
                 .setDescription("add")
-                .setBlockStrategy(BlockStrategyEnum.DISCARD)
+                .setBlockStrategy(JobBlockStrategyEnum.DISCARD)
                 .setMaxRetryTimes(1)
                 .setTriggerType(TriggerTypeEnum.SCHEDULED_TIME)
                 .setTriggerInterval(String.valueOf(60))
