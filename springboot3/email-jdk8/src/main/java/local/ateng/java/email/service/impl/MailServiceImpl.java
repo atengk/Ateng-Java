@@ -293,6 +293,11 @@ public class MailServiceImpl implements MailService {
         }
     }
 
+    @Override
+    public void sendMailAsync(String to, List<String> ccList, List<String> bccList, String subject, String html, Map<String, InputStream> attachments, Map<String, InputStream> images) {
+        sendMail(to, ccList, bccList, subject, html, attachments, images);
+    }
+
     /**
      * 将输入流完整读取为字节数组并关闭输入流
      *

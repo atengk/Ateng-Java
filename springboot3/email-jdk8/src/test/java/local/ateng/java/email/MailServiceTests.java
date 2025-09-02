@@ -132,5 +132,12 @@ public class MailServiceTests {
         );
     }
 
+    @Test
+    public void testSendMailAsync() throws InterruptedException {
+        String html = "<h1>异步 HTML 邮件测试</h1><p>这是异步发送的 HTML 邮件。</p>";
+        mailService.sendTextMail(TEST_EMAIL, "纯文本邮件测试", "这是一个纯文本邮件内容示例。");
+        mailService.sendMailAsync(TEST_EMAIL, null, null, "异步 HTML 邮件测试", html, null, null);
+        Thread.sleep(10_000);
+    }
 
 }
