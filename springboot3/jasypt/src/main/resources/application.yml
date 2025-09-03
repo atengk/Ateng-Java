@@ -1,0 +1,19 @@
+server:
+  port: 12019
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+jasypt:
+  encryptor:
+    password: ${JASYPT_ENCRYPTOR_PASSWORD}
+    algorithm: PBEWITHMD5ANDDES
+    iv-generator-classname: org.jasypt.iv.NoIvGenerator
+---
+user:
+  name: "ateng"
+  password: ENC(xgCgd4hXZr0qCqbrPaHzbg==)
