@@ -6,17 +6,17 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>jasypt</artifactId>
+    <artifactId>jasypt-jdk8</artifactId>
     <version>v1.0</version>
-    <name>jasypt</name>
+    <name>jasypt-jdk8</name>
     <description>jasypt：配置文件参数值加密</description>
 
     <!-- 项目属性 -->
     <properties>
-        <java.version>21</java.version>
+        <java.version>8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-boot.version>3.4.1</spring-boot.version>
+        <spring-boot.version>2.7.18</spring-boot.version>
         <maven-compiler.version>3.12.1</maven-compiler.version>
         <lombok.version>1.18.36</lombok.version>
         <hutool.version>5.8.35</hutool.version>

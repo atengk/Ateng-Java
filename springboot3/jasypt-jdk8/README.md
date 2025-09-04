@@ -22,8 +22,7 @@ JASYPT Spring Boot为Spring Boot应用程序中的属性源提供了加密支持
 ```java
 package local.ateng.java.jasypt.utils;
 
-import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
-import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
+import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
 
 /**
  * Jasypt 加密/解密工具类
@@ -38,26 +37,8 @@ public class EncryptorUtil {
 
     /**
      * 默认加密算法，可根据需要调整
-     * PBEWITHHMACSHA512ANDAES_128 在所有 JDK 上都能跑
-     * PBEWITHHMACSHA512ANDAES_256 在 JDK8u162+ / JDK21 默认支持
      */
-    private static final String ALGORITHM = "PBEWITHHMACSHA512ANDAES_256";
-
-    private static PooledPBEStringEncryptor getEncryptor(String password) {
-        SimpleStringPBEConfig config = new SimpleStringPBEConfig();
-        config.setPassword(password);
-        config.setAlgorithm(ALGORITHM);
-        config.setKeyObtentionIterations("1000"); // 派生迭代次数
-        config.setPoolSize("1");
-        config.setProviderName("SunJCE");
-        config.setSaltGeneratorClassName("org.jasypt.salt.RandomSaltGenerator");
-        config.setIvGeneratorClassName("org.jasypt.iv.RandomIvGenerator");
-        config.setStringOutputType("base64");
-
-        PooledPBEStringEncryptor encryptor = new PooledPBEStringEncryptor();
-        encryptor.setConfig(config);
-        return encryptor;
-    }
+    private static final String ALGORITHM = "PBEWITHMD5ANDDES";
 
     /**
      * 加密字符串
@@ -67,8 +48,11 @@ public class EncryptorUtil {
      * @return 加密后的密文，格式 ENC(xxx)
      */
     public static String encrypt(String plainText, String password) {
-        PooledPBEStringEncryptor encryptor = getEncryptor(password);
-        return "ENC(" + encryptor.encrypt(plainText) + ")";
+        StandardPBEStringEncryptor encryptor = new StandardPBEStringEncryptor();
+        encryptor.setAlgorithm(ALGORITHM);
+        encryptor.setPassword(password);
+        String encrypted = encryptor.encrypt(plainText);
+        return "ENC(" + encrypted + ")";
     }
 
     /**
@@ -79,15 +63,21 @@ public class EncryptorUtil {
      * @return 解密后的明文
      */
     public static String decrypt(String encryptedText, String password) {
-        PooledPBEStringEncryptor encryptor = getEncryptor(password);
+        StandardPBEStringEncryptor encryptor = new StandardPBEStringEncryptor();
+        encryptor.setAlgorithm(ALGORITHM);
+        encryptor.setPassword(password);
 
+        // 去掉 ENC(...) 包裹
         String text = encryptedText;
         if (encryptedText.startsWith("ENC(") && encryptedText.endsWith(")")) {
             text = encryptedText.substring(4, encryptedText.length() - 1);
         }
+
         return encryptor.decrypt(text);
     }
+
 }
+
 
 ```
 
@@ -116,7 +106,7 @@ public class Tests {
 输出：
 
 ```
-加密后: ENC(XyTk3mP6ZutCcqIQMcHRVB8diUg4VENywLfPdKFBoqpDj+caJmyNlxX7UIY0E3mW)
+加密后: ENC(SPr30wjbGw6zMewzBxcr/g==)
 解密后: root123
 ```
 
@@ -128,13 +118,15 @@ public class Tests {
 
 **配置 jasypt**
 
+PBEWithMD5AndDES 不支持 IV，必须用 `NoIvGenerator`
+
 ```
 ---
 jasypt:
   encryptor:
     password: ${JASYPT_ENCRYPTOR_PASSWORD}
-    algorithm: PBEWITHHMACSHA512ANDAES_256
-    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+    algorithm: PBEWITHMD5ANDDES
+    iv-generator-classname: org.jasypt.iv.NoIvGenerator
 ```
 
 将需要加密的配置使用 `ENC` 包裹起来，启动项目后会自动解密
@@ -143,14 +135,14 @@ jasypt:
 ---
 user:
   name: "ateng"
-  password: ENC(XyTk3mP6ZutCcqIQMcHRVB8diUg4VENywLfPdKFBoqpDj+caJmyNlxX7UIY0E3mW)
+  password: ENC(SPr30wjbGw6zMewzBxcr/g==)
 ```
 
 
 
 ### 添加环境变量
 
-系统添加环境变量
+系统添加环境变量，注意环境变量不要设置在全局，让其他项目读取到了会有问题
 
 ```
 JASYPT_ENCRYPTOR_PASSWORD=Admin@123
@@ -191,7 +183,6 @@ public class MyApplicationRunner implements ApplicationRunner {
 输出：
 
 ```
-2025-09-04T14:18:24.468+08:00  INFO 19300 --- [jasypt] [           main] l.a.j.jasypt.runner.MyApplicationRunner  : 加密后的配置：root123
+2025-09-04 14:14:53.382  INFO 33328 --- [           main] l.a.j.jasypt.runner.MyApplicationRunner  : 加密后的配置：root123
 ```
-
 

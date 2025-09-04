@@ -1,5 +1,5 @@
 server:
-  port: 12019
+  port: 12020
   servlet:
     context-path: /
 spring:
@@ -11,9 +11,9 @@ spring:
 jasypt:
   encryptor:
     password: ${JASYPT_ENCRYPTOR_PASSWORD}
-    algorithm: PBEWITHHMACSHA512ANDAES_256
-    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+    algorithm: PBEWITHMD5ANDDES
+    iv-generator-classname: org.jasypt.iv.NoIvGenerator
 ---
 user:
   name: "ateng"
-  password: ENC(XyTk3mP6ZutCcqIQMcHRVB8diUg4VENywLfPdKFBoqpDj+caJmyNlxX7UIY0E3mW)
+  password: ENC(SPr30wjbGw6zMewzBxcr/g==)
