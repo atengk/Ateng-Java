@@ -44,6 +44,7 @@ public class BeanUtilTests {
         myUser1.setUserName("admin");
         myUser1.setToday(LocalDate.now());
         myUser1.setCreateTime(LocalDateTime.now());
+        myUser1.setMyUser0(user1);
         myUser1.setMyUser0List(Arrays.asList(user1, user2));
 
         return myUser1;
@@ -97,6 +98,14 @@ public class BeanUtilTests {
         Map<String, Object> result = BeanUtil.toMapWithValueMapping(task, valueMapping);
         System.out.println(result); // 输出：进行中
 
+    }
+
+    @Test
+    void desensitize() {
+        MyUser1 myUser1 = createMyUser1Sample();
+        Map<String, Object> map = BeanUtil.toDesensitizedMap(myUser1 , Arrays.asList("userName", "createTime", "myUser0","myUser0List"), "*");
+        System.out.println(myUser1);
+        System.out.println(map);
     }
 
 }

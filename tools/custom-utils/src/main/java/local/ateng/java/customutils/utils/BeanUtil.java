@@ -382,7 +382,7 @@ public final class BeanUtil {
     }
 
     /**
-     * 将 Bean 转为 Map，支持字段映射和忽略属性
+     * 将 Bean 转为 Map，支持嵌套对象递归转换
      *
      * @param bean         JavaBean 对象
      * @param fieldMapping 属性名映射（原属性名 -> Map key），可为 null
@@ -414,13 +414,177 @@ public final class BeanUtil {
             try {
                 Object value = pd.getReadMethod().invoke(bean);
                 String mapKey = (fieldMapping != null && fieldMapping.containsKey(name)) ? fieldMapping.get(name) : name;
-                map.put(mapKey, value);
+                map.put(mapKey, convertValue(value, fieldMapping, ignoreFields));
             } catch (Exception e) {
-                // 单个属性访问异常，不影响其他属性
                 map.put(name, null);
             }
         }
 
+        return map;
+    }
+
+    /**
+     * 转换属性值，支持嵌套 Bean、集合、数组、Map
+     */
+    @SuppressWarnings("unchecked")
+    private static Object convertValue(Object value, Map<String, String> fieldMapping, String... ignoreFields) {
+        if (value == null) {
+            return null;
+        }
+
+        Class<?> clazz = value.getClass();
+
+        // 基本类型、包装类、字符串、枚举、时间类，直接返回
+        if (isSimpleValueType(value)) {
+            return value;
+        }
+
+        // 数组
+        if (clazz.isArray()) {
+            int length = Array.getLength(value);
+            List<Object> list = new ArrayList<>(length);
+            for (int i = 0; i < length; i++) {
+                Object element = Array.get(value, i);
+                list.add(convertValue(element, fieldMapping, ignoreFields));
+            }
+            return list;
+        }
+
+        // 集合
+        if (value instanceof Collection) {
+            Collection<?> collection = (Collection<?>) value;
+            List<Object> list = new ArrayList<>(collection.size());
+            for (Object element : collection) {
+                list.add(convertValue(element, fieldMapping, ignoreFields));
+            }
+            return list;
+        }
+
+        // Map
+        if (value instanceof Map) {
+            Map<Object, Object> original = (Map<Object, Object>) value;
+            Map<Object, Object> converted = new LinkedHashMap<>();
+            for (Map.Entry<Object, Object> entry : original.entrySet()) {
+                converted.put(entry.getKey(), convertValue(entry.getValue(), fieldMapping, ignoreFields));
+            }
+            return converted;
+        }
+
+        // 其他情况：认为是 JavaBean
+        return toMap(value, fieldMapping, ignoreFields);
+    }
+
+    /**
+     * 判断是否为简单值类型
+     */
+    private static boolean isSimpleValueType(Object value) {
+        if (value == null) {
+            return true;
+        }
+        Class<?> clazz = value.getClass();
+        return clazz.isPrimitive()
+                || value instanceof CharSequence
+                || value instanceof Number
+                || value instanceof Boolean
+                || value instanceof Character
+                || value instanceof Enum
+                || value instanceof java.util.Date
+                || value instanceof java.time.temporal.TemporalAccessor
+                || value instanceof Class
+                || value instanceof java.util.UUID;
+    }
+
+    /**
+     * 将 Java Bean 转换为 Map，并对指定字段进行脱敏（支持嵌套 Bean/集合）
+     *
+     * @param bean              JavaBean 对象
+     * @param desensitizeFields 需要脱敏字段集合
+     * @param maskChar          脱敏字符
+     * @return Map<String,Object>，嵌套 Bean/集合会被递归转换
+     */
+    public static Map<String, Object> toDesensitizedMap(Object bean, Collection<String> desensitizeFields, String maskChar) {
+        if (bean == null) {
+            return Collections.emptyMap();
+        }
+        return (Map<String, Object>) convert(bean, new HashSet<>(desensitizeFields), maskChar, false);
+    }
+
+    /**
+     * 递归转换对象
+     *
+     * @param value             待转换对象
+     * @param desensitizeFields 根对象层级需要脱敏的字段集合
+     * @param maskChar          脱敏字符
+     * @param forceDesensitize  是否强制整条对象脱敏
+     * @return 转换后的对象（Map/List/值）
+     */
+    @SuppressWarnings("unchecked")
+    private static Object convert(Object value, Set<String> desensitizeFields, String maskChar, boolean forceDesensitize) {
+        if (value == null) {
+            return null;
+        }
+
+        if (isSimpleValueType(value)) {
+            return forceDesensitize ? maskChar : value;
+        }
+
+        // 数组
+        if (value.getClass().isArray()) {
+            int len = Array.getLength(value);
+            List<Object> list = new ArrayList<>(len);
+            for (int i = 0; i < len; i++) {
+                // 嵌套层 forceDesensitize 继承父级
+                list.add(convert(Array.get(value, i), Collections.emptySet(), maskChar, forceDesensitize));
+            }
+            return list;
+        }
+
+        // 集合
+        if (value instanceof Collection) {
+            Collection<?> col = (Collection<?>) value;
+            List<Object> list = new ArrayList<>(col.size());
+            for (Object e : col) {
+                list.add(convert(e, Collections.emptySet(), maskChar, forceDesensitize));
+            }
+            return list;
+        }
+
+        // Map
+        if (value instanceof Map) {
+            Map<Object, Object> map = new LinkedHashMap<>();
+            ((Map<Object, Object>) value).forEach((k, v) -> map.put(k, convert(v, Collections.emptySet(), maskChar, forceDesensitize)));
+            return map;
+        }
+
+        // Bean
+        Map<String, Object> map = new LinkedHashMap<>();
+        try {
+            Map<String, PropertyDescriptor> pdMap = BeanUtil.getPropertyDescriptors(value.getClass());
+            for (Map.Entry<String, PropertyDescriptor> entry : pdMap.entrySet()) {
+                String name = entry.getKey();
+                PropertyDescriptor pd = entry.getValue();
+                if (pd.getReadMethod() == null) continue;
+                Object fieldValue = pd.getReadMethod().invoke(value);
+
+                if (forceDesensitize) {
+                    // 父字段命中脱敏 → 子字段全部脱敏
+                    map.put(name, convert(fieldValue, Collections.emptySet(), maskChar, true));
+                } else if (desensitizeFields.contains(name)) {
+                    // 当前字段命中脱敏
+                    if (isSimpleValueType(fieldValue)) {
+                        map.put(name, maskChar);
+                    } else {
+                        // 复杂对象或集合 → 全部脱敏
+                        map.put(name, convert(fieldValue, Collections.emptySet(), maskChar, true));
+                    }
+                } else {
+                    // 当前字段未命中脱敏 → 递归转换嵌套对象，但不脱敏
+                    map.put(name, convert(fieldValue, Collections.emptySet(), maskChar, false));
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Bean 转 Map 脱敏失败", e);
+        }
         return map;
     }
 

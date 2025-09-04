@@ -12,5 +12,6 @@ public class MyUser1 {
     private String userName;
     private LocalDate today;
     private LocalDateTime createTime;
+    private MyUser0 myUser0;
     private List<MyUser0> myUser0List;
 }
