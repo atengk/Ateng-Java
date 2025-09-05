@@ -8,6 +8,7 @@ import org.springframework.core.io.InputStreamSource;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
@@ -69,6 +70,41 @@ public class MailServiceImpl implements MailService {
             helper.setSubject(subject);
             helper.setText(html, true);
             mailSender.send(mimeMessage);
+            log.info("邮件发送成功，收件人：{}", to);
+        } catch (MessagingException | MailException e) {
+            log.error("邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
+        }
+    }
+
+    @Override
+    public void sendHtmlMail(String from, String password, String to, String subject, String html) {
+        JavaMailSenderImpl base = (JavaMailSenderImpl) mailSender;
+        sendHtmlMail(base.getHost(), base.getPort(), from, password, to, subject, html);
+    }
+
+    @Override
+    public void sendHtmlMail(String host, int port, String from, String password, String to, String subject, String html) {
+        JavaMailSenderImpl base = (JavaMailSenderImpl) mailSender;
+        JavaMailSenderImpl customSender = new JavaMailSenderImpl();
+        customSender.setHost(host);
+        customSender.setPort(port);
+        customSender.setProtocol(base.getProtocol());
+        customSender.setDefaultEncoding(base.getDefaultEncoding());
+        customSender.setJavaMailProperties(base.getJavaMailProperties());
+
+        customSender.setUsername(from);
+        customSender.setPassword(password);
+
+        MimeMessage mimeMessage = customSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            customSender.send(mimeMessage);
             log.info("邮件发送成功，收件人：{}", to);
         } catch (MessagingException | MailException e) {
             log.error("邮件发送失败，收件人：{}，错误信息：{}", to, e.getMessage(), e);
@@ -172,6 +208,35 @@ public class MailServiceImpl implements MailService {
         } catch (MessagingException | MailException e) {
             log.error("批量邮件发送失败，收件人数：{}，错误信息：{}", toList.size(), e.getMessage(), e);
             throw new RuntimeException("批量邮件发送失败", e);
+        }
+    }
+
+    @Override
+    public void sendBatchHtmlMail(String from, String password, List<String> toList, String subject, String html) {
+        JavaMailSenderImpl base = (JavaMailSenderImpl) mailSender;
+        JavaMailSenderImpl customSender = new JavaMailSenderImpl();
+        customSender.setHost(base.getHost());
+        customSender.setPort(base.getPort());
+        customSender.setProtocol(base.getProtocol());
+        customSender.setDefaultEncoding(base.getDefaultEncoding());
+        customSender.setJavaMailProperties(base.getJavaMailProperties());
+
+        customSender.setUsername(from);
+        customSender.setPassword(password);
+
+        MimeMessage mimeMessage = customSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(toList.toArray(new String[0]));
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            customSender.send(mimeMessage);
+            log.info("批量邮件发送成功，收件人数：{}", toList.size());
+        } catch (MessagingException | MailException e) {
+            log.error("批量邮件发送失败，收件人数：{}，错误信息：{}", toList.size(), e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
         }
     }
 
@@ -296,6 +361,182 @@ public class MailServiceImpl implements MailService {
     @Override
     public void sendMailAsync(String to, List<String> ccList, List<String> bccList, String subject, String html, Map<String, InputStream> attachments, Map<String, InputStream> images) {
         sendMail(to, ccList, bccList, subject, html, attachments, images);
+    }
+
+    @Override
+    public void sendMail(String from,
+                         String password,
+                         String to,
+                         List<String> ccList,
+                         List<String> bccList,
+                         String subject,
+                         String html,
+                         Map<String, InputStream> attachments,
+                         Map<String, InputStream> images) {
+
+        if (to == null || to.isEmpty()) {
+            log.warn("邮件发送失败：收件人为空");
+            return;
+        }
+
+        try {
+            // 克隆配置文件中的 mailSender，并覆盖账号/密码
+            JavaMailSenderImpl senderImpl = (JavaMailSenderImpl) this.mailSender;
+            JavaMailSenderImpl customSender = new JavaMailSenderImpl();
+            customSender.setHost(senderImpl.getHost());
+            customSender.setPort(senderImpl.getPort());
+            customSender.setProtocol(senderImpl.getProtocol());
+            customSender.setDefaultEncoding(senderImpl.getDefaultEncoding());
+            customSender.setJavaMailProperties(senderImpl.getJavaMailProperties());
+            customSender.setUsername(from);
+            customSender.setPassword(password);
+
+            MimeMessage mimeMessage = customSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            helper.setFrom(from);
+            helper.setTo(to);
+
+            if (ccList != null && !ccList.isEmpty()) {
+                helper.setCc(ccList.toArray(new String[0]));
+            }
+
+            if (bccList != null && !bccList.isEmpty()) {
+                helper.setBcc(bccList.toArray(new String[0]));
+            }
+
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            // 附件处理
+            if (attachments != null && !attachments.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : attachments.entrySet()) {
+                    String fileName = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addAttachment(fileName, reusable);
+                }
+            }
+
+            // 内嵌图片处理
+            if (images != null && !images.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : images.entrySet()) {
+                    String contentId = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    String contentType = sniffImageContentType(data);
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addInline(contentId, reusable, contentType);
+                }
+            }
+
+            customSender.send(mimeMessage);
+            log.info("邮件发送成功，收件人：{}，抄送：{}，密送：{}", to, ccList, bccList);
+
+        } catch (MessagingException | MailException e) {
+            log.error("邮件发送失败，收件人：{}，抄送：{}，密送：{}，错误信息：{}", to, ccList, bccList, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
+        }
+    }
+
+    @Override
+    public void sendMailAsync(String from,
+                              String password,
+                              String to,
+                              List<String> ccList,
+                              List<String> bccList,
+                              String subject,
+                              String html,
+                              Map<String, InputStream> attachments,
+                              Map<String, InputStream> images) {
+        sendMail(from, password, to, ccList, bccList, subject, html, attachments, images);
+    }
+
+    @Override
+    public void sendMail(String host,
+                         int port,
+                         String from,
+                         String password,
+                         String to,
+                         List<String> ccList,
+                         List<String> bccList,
+                         String subject,
+                         String html,
+                         Map<String, InputStream> attachments,
+                         Map<String, InputStream> images) {
+        if (to == null || to.isEmpty()) {
+            log.warn("邮件发送失败：收件人为空");
+            return;
+        }
+
+        JavaMailSenderImpl base = (JavaMailSenderImpl) mailSender;
+        JavaMailSenderImpl customSender = new JavaMailSenderImpl();
+        customSender.setHost(host);
+        customSender.setPort(port);
+        customSender.setProtocol(base.getProtocol());
+        customSender.setDefaultEncoding(base.getDefaultEncoding());
+        customSender.setJavaMailProperties(base.getJavaMailProperties());
+
+        customSender.setUsername(from);
+        customSender.setPassword(password);
+
+        MimeMessage mimeMessage = customSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+
+            if (ccList != null && !ccList.isEmpty()) {
+                helper.setCc(ccList.toArray(new String[0]));
+            }
+            if (bccList != null && !bccList.isEmpty()) {
+                helper.setBcc(bccList.toArray(new String[0]));
+            }
+
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            // 附件处理
+            if (attachments != null && !attachments.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : attachments.entrySet()) {
+                    String fileName = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addAttachment(fileName, reusable);
+                }
+            }
+
+            // 内嵌图片处理
+            if (images != null && !images.isEmpty()) {
+                for (Map.Entry<String, InputStream> entry : images.entrySet()) {
+                    String contentId = entry.getKey();
+                    byte[] data = toByteArrayAndClose(entry.getValue());
+                    String contentType = sniffImageContentType(data);
+                    InputStreamSource reusable = reusableSource(data);
+                    helper.addInline(contentId, reusable, contentType);
+                }
+            }
+
+            customSender.send(mimeMessage);
+            log.info("邮件发送成功，收件人：{}，抄送：{}，密送：{}", to, ccList, bccList);
+        } catch (MessagingException | MailException e) {
+            log.error("邮件发送失败，收件人：{}，抄送：{}，密送：{}，错误信息：{}", to, ccList, bccList, e.getMessage(), e);
+            throw new RuntimeException("邮件发送失败", e);
+        }
+    }
+
+    @Override
+    public void sendMailAsync(String host,
+                              int port,
+                              String from,
+                              String password,
+                              String to,
+                              List<String> ccList,
+                              List<String> bccList,
+                              String subject,
+                              String html,
+                              Map<String, InputStream> attachments,
+                              Map<String, InputStream> images) {
+        sendMail(host, port, from, password, to, ccList, bccList, subject, html, attachments, images);
     }
 
     /**

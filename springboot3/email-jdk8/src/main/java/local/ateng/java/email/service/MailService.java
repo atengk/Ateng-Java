@@ -33,6 +33,30 @@ public interface MailService {
     void sendHtmlMail(String to, String subject, String html);
 
     /**
+     * 使用动态发件人发送 HTML 邮件
+     *
+     * @param from     发件人邮箱
+     * @param password 发件人授权码/密码
+     * @param to       收件人邮箱
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    void sendHtmlMail(String from, String password, String to, String subject, String html);
+
+    /**
+     * 使用动态发件人 + 动态主机配置发送 HTML 邮件
+     *
+     * @param host     SMTP 服务器地址（例如 smtp.qq.com）
+     * @param port     SMTP 服务器端口（25 / 465 / 587）
+     * @param from     发件人邮箱
+     * @param password 发件人授权码/密码
+     * @param to       收件人邮箱
+     * @param subject  邮件主题
+     * @param html     邮件正文（HTML 格式）
+     */
+    void sendHtmlMail(String host, int port, String from, String password, String to, String subject, String html);
+
+    /**
      * 发送带附件的邮件（支持多个附件）
      *
      * @param to          收件人邮箱地址
@@ -73,6 +97,17 @@ public interface MailService {
      * @param html    邮件正文（HTML 格式）
      */
     void sendBatchHtmlMail(List<String> toList, String subject, String html);
+
+    /**
+     * 使用动态发件人批量发送 HTML 邮件
+     *
+     * @param from     发件人邮箱
+     * @param password 发件人授权码/密码
+     * @param toList  收件人邮箱地址列表
+     * @param subject 邮件主题
+     * @param html    邮件正文（HTML 格式）
+     */
+    void sendBatchHtmlMail(String from, String password, List<String> toList, String subject, String html);
 
     /**
      * 异步发送邮件（适用于耗时的发送场景）
@@ -157,4 +192,123 @@ public interface MailService {
                        String html,
                        Map<String, InputStream> attachments,
                        Map<String, InputStream> images);
+
+    /**
+     * 发送全功能邮件（支持自定义发件账号，HTML + 可选抄送/密送 + 附件 + 内嵌图片）
+     *
+     * <p>该方法允许调用时指定发件人邮箱及密码（授权码），
+     * 其他服务器参数（host、port、协议等）依然从配置文件中读取。</p>
+     *
+     * @param from        发件人邮箱地址
+     * @param password    发件人邮箱密码或授权码
+     * @param to          收件人邮箱地址，不能为空
+     * @param ccList      抄送邮箱列表，可为空
+     * @param bccList     密送邮箱列表，可为空
+     * @param subject     邮件主题
+     * @param html        邮件正文内容（HTML 格式）
+     * @param attachments 附件集合，key = 附件名，value = InputStream，可为空
+     * @param images      内嵌图片集合，key = contentId，value = InputStream，可为空，
+     *                    contentId 对应 HTML 内容中的 "cid:xxx" 引用
+     */
+    void sendMail(String from,
+                  String password,
+                  String to,
+                  List<String> ccList,
+                  List<String> bccList,
+                  String subject,
+                  String html,
+                  Map<String, InputStream> attachments,
+                  Map<String, InputStream> images);
+
+    /**
+     * 发送全功能邮件（支持自定义发件账号，HTML + 可选抄送/密送 + 附件 + 内嵌图片） 异步
+     *
+     * <p>该方法允许调用时指定发件人邮箱及密码（授权码），
+     * 其他服务器参数（host、port、协议等）依然从配置文件中读取。</p>
+     *
+     * @param from        发件人邮箱地址
+     * @param password    发件人邮箱密码或授权码
+     * @param to          收件人邮箱地址，不能为空
+     * @param ccList      抄送邮箱列表，可为空
+     * @param bccList     密送邮箱列表，可为空
+     * @param subject     邮件主题
+     * @param html        邮件正文内容（HTML 格式）
+     * @param attachments 附件集合，key = 附件名，value = InputStream，可为空
+     * @param images      内嵌图片集合，key = contentId，value = InputStream，可为空，
+     *                    contentId 对应 HTML 内容中的 "cid:xxx" 引用
+     */
+    @Async
+    void sendMailAsync(String from,
+                  String password,
+                  String to,
+                  List<String> ccList,
+                  List<String> bccList,
+                  String subject,
+                  String html,
+                  Map<String, InputStream> attachments,
+                  Map<String, InputStream> images);
+
+    /**
+     * 发送全功能邮件（支持自定义发件账号，HTML + 可选抄送/密送 + 附件 + 内嵌图片）
+     *
+     * <p>该方法允许在调用时指定邮件服务器主机、端口、账号及密码，
+     * 适用于多租户场景或需要动态切换发件人账号的场景。</p>
+     *
+     * @param host        邮件服务器地址，例如 "smtp.example.com"
+     * @param port        邮件服务器端口，通常为 25、465（SSL）、587（TLS）
+     * @param from        发件人邮箱地址（即实际账号）
+     * @param password    发件人邮箱密码或授权码
+     * @param to          收件人邮箱地址，不能为空
+     * @param ccList      抄送邮箱列表，可为空
+     * @param bccList     密送邮箱列表，可为空
+     * @param subject     邮件主题
+     * @param html        邮件正文内容（HTML 格式）
+     * @param attachments 附件集合，key = 附件名，value = InputStream，可为空
+     * @param images      内嵌图片集合，key = contentId，value = InputStream，可为空，
+     *                    contentId 对应 HTML 内容中的 "cid:xxx" 引用
+     */
+    void sendMail(String host,
+                  int port,
+                  String from,
+                  String password,
+                  String to,
+                  List<String> ccList,
+                  List<String> bccList,
+                  String subject,
+                  String html,
+                  Map<String, InputStream> attachments,
+                  Map<String, InputStream> images);
+
+    /**
+     * 发送全功能邮件（支持自定义发件账号，HTML + 可选抄送/密送 + 附件 + 内嵌图片） 异步
+     *
+     * <p>该方法允许在调用时指定邮件服务器主机、端口、账号及密码，
+     * 适用于多租户场景或需要动态切换发件人账号的场景。</p>
+     *
+     * @param host        邮件服务器地址，例如 "smtp.example.com"
+     * @param port        邮件服务器端口，通常为 25、465（SSL）、587（TLS）
+     * @param from        发件人邮箱地址（即实际账号）
+     * @param password    发件人邮箱密码或授权码
+     * @param to          收件人邮箱地址，不能为空
+     * @param ccList      抄送邮箱列表，可为空
+     * @param bccList     密送邮箱列表，可为空
+     * @param subject     邮件主题
+     * @param html        邮件正文内容（HTML 格式）
+     * @param attachments 附件集合，key = 附件名，value = InputStream，可为空
+     * @param images      内嵌图片集合，key = contentId，value = InputStream，可为空，
+     *                    contentId 对应 HTML 内容中的 "cid:xxx" 引用
+     */
+    @Async
+    void sendMailAsync(String host,
+                  int port,
+                  String from,
+                  String password,
+                  String to,
+                  List<String> ccList,
+                  List<String> bccList,
+                  String subject,
+                  String html,
+                  Map<String, InputStream> attachments,
+                  Map<String, InputStream> images);
+
 }
