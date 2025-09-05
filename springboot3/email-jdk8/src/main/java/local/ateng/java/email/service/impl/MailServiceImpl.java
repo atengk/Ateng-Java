@@ -253,12 +253,12 @@ public class MailServiceImpl implements MailService {
             return;
         }
 
+        log.info("批量异步邮件发送任务已提交，收件人数：{}", toList.size());
+
         for (String to : toList) {
             // 每个收件人都调用异步发送方法
             sendHtmlMailAsync(to, subject, html);
         }
-
-        log.info("批量异步邮件发送任务已提交，收件人数：{}", toList.size());
     }
 
     @Override
@@ -360,6 +360,7 @@ public class MailServiceImpl implements MailService {
 
     @Override
     public void sendMailAsync(String to, List<String> ccList, List<String> bccList, String subject, String html, Map<String, InputStream> attachments, Map<String, InputStream> images) {
+        log.info("异步邮件发送任务已提交，线程：{}", Thread.currentThread().getName());
         sendMail(to, ccList, bccList, subject, html, attachments, images);
     }
 
@@ -448,6 +449,7 @@ public class MailServiceImpl implements MailService {
                               String html,
                               Map<String, InputStream> attachments,
                               Map<String, InputStream> images) {
+        log.info("异步邮件发送任务已提交，线程：{}", Thread.currentThread().getName());
         sendMail(from, password, to, ccList, bccList, subject, html, attachments, images);
     }
 
@@ -536,6 +538,7 @@ public class MailServiceImpl implements MailService {
                               String html,
                               Map<String, InputStream> attachments,
                               Map<String, InputStream> images) {
+        log.info("异步邮件发送任务已提交，线程：{}", Thread.currentThread().getName());
         sendMail(host, port, from, password, to, ccList, bccList, subject, html, attachments, images);
     }
 
