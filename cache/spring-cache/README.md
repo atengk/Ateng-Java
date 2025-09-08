@@ -116,6 +116,14 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class RemoteService {
 
+    @Cacheable(value = "my:cache", key = "#root.targetClass.simpleName + ':' + #root.methodName + ':' + T(java.util.Arrays).toString(#root.args)")
+    public String getData() {
+        // 模拟从数据库或其他数据源获取数据
+        String data = "Data";
+        log.info(data);
+        return data;
+    }
+
     @Cacheable(value = "my:cache", key = "#id")
     public String getDataById(int id) {
         // 模拟从数据库或其他数据源获取数据
@@ -140,6 +148,8 @@ public class RemoteService {
     }
 
 }
+
+
 ```
 
 #### 创建接口
@@ -162,6 +172,11 @@ public class RemoteController {
 
     private final RemoteService remoteService;
 
+    @GetMapping("/data")
+    public String getData() {
+        return remoteService.getData();
+    }
+
     @GetMapping("/data/{id}")
     public String getData(@PathVariable int id) {
         return remoteService.getDataById(id);
@@ -178,6 +193,7 @@ public class RemoteController {
     }
 
 }
+
 ```
 
 #### 使用缓存

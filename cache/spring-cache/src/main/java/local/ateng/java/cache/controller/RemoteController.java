@@ -15,6 +15,11 @@ public class RemoteController {
 
     private final RemoteService remoteService;
 
+    @GetMapping("/data")
+    public String getData() {
+        return remoteService.getData();
+    }
+
     @GetMapping("/data/{id}")
     public String getData(@PathVariable int id) {
         return remoteService.getDataById(id);
