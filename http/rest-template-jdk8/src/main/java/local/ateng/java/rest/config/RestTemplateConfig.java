@@ -41,7 +41,7 @@ public class RestTemplateConfig {
         return new RestTemplate();
     }*/
 
-    @Bean
+    @Bean("myRestTemplate")
     public RestTemplate myRestTemplate() {
         // 创建 RestTemplate
         RestTemplate restTemplate = new RestTemplate();

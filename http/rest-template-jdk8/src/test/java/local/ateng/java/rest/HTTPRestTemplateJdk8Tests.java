@@ -3,6 +3,7 @@ package local.ateng.java.rest;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
+import local.ateng.java.rest.utils.RestUtil;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,14 @@ class HTTPRestTemplateJdk8Tests {
     void getForObject() {
         //getForObject方法，获取响应体，将其转换为第二个参数指定的类型
         JSONObject jsonObject = restTemplate.getForObject("https://www.wanandroid.com/article/list/0/json", JSONObject.class);
+        String string = JSON.toJSONString(jsonObject, JSONWriter.Feature.PrettyFormat);
+        System.out.println(string);
+    }
+
+    @Test
+    void getForObject22() {
+        //getForObject方法，获取响应体，将其转换为第二个参数指定的类型
+        JSONObject jsonObject = RestUtil.getForObject("https://www.wanandroid.com/article/list/0/json", JSONObject.class);
         String string = JSON.toJSONString(jsonObject, JSONWriter.Feature.PrettyFormat);
         System.out.println(string);
     }
