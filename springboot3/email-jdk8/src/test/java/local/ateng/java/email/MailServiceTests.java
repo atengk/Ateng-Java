@@ -43,6 +43,15 @@ public class MailServiceTests {
     }
 
     @Test
+    public void testSendHtmlMail3() {
+        String FROM_EMAIL = "2385569970@qq.com";
+
+        String html = "<h1 style='color:blue'>HTML 邮件测试</h1>"
+                + "<p>这是一封测试 HTML 邮件。</p>";
+        mailService.sendHtmlMail("192.168.1.12", 11025, FROM_EMAIL, null, "17623062936@163.com", "HTML 邮件测试", html);
+    }
+
+    @Test
     public void testSendMailWithAttachments() {
         String html = "<p>请查收附件。</p>";
 

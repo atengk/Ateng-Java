@@ -38,6 +38,21 @@ spring:
     default-encoding: UTF-8
 ```
 
+**无认证配置**
+
+```yaml
+---
+# 邮箱配置
+spring:
+  mail:
+    host: 192.168.1.12
+    port: 1025
+    username: 2385569970@qq.com
+    password: 
+    protocol: smtp
+    default-encoding: UTF-8
+```
+
 
 
 ## 创建服务
