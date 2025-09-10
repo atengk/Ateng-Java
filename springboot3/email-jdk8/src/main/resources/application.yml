@@ -17,4 +17,14 @@ spring:
     password: "***********"
     protocol: smtp
     default-encoding: UTF-8
-
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          socketFactory:
+            port: 465
+            class: javax.net.ssl.SSLSocketFactory
+          starttls:
+            enable: false
