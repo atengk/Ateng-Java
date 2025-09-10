@@ -1,12 +1,10 @@
 package local.ateng.java.rest.utils;
 
+import cn.hutool.extra.spring.SpringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
-import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClientException;
@@ -79,7 +77,6 @@ import java.util.Map;
  * @author 孔余
  * @since 2025-09-09
  */
-@Component
 public class RestUtil {
 
     private static final Logger log = LoggerFactory.getLogger(RestUtil.class);
@@ -87,17 +84,7 @@ public class RestUtil {
     /**
      * Spring 容器中注入的自定义 RestTemplate
      */
-    private static RestTemplate restTemplate;
-
-    /**
-     * 通过构造函数注入自定义的 {@code myRestTemplate}。
-     *
-     * @param restTemplate 由 Spring 管理的 Bean
-     */
-    @Autowired
-    public RestUtil(@Qualifier("myRestTemplate") RestTemplate restTemplate) {
-        RestUtil.restTemplate = restTemplate;
-    }
+    private static final RestTemplate restTemplate = SpringUtil.getBean("atengRestTemplate", RestTemplate.class);
 
     // ================= GET =================
 
