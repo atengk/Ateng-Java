@@ -1,6 +1,9 @@
 package local.ateng.java.customutils.utils;
 
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Array;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -1799,5 +1802,148 @@ public final class StringUtil {
 
         return sb.toString();
     }
+
+    /**
+     * 构建 URL 字符串：先拼接 query（保留占位），再用 uriVariables 替换占位符。
+     *
+     * @param baseUrl      基础 URL（例如 "https://api.example.com/user/{id}/detail"）
+     * @param queryParams  查询参数（支持 Collection / 数组 / 单值），若 value 为形如 "{name}" 的占位符则保留原样
+     * @param uriVariables 模板变量映射（用于替换 {id}, {name} 等）
+     * @param encode       是否对参数值与替换值进行 URL 编码（UTF-8）
+     * @return 最终构建的 URL 字符串
+     * @throws IllegalArgumentException 当 baseUrl 空或 encode==true 且最终 URL 非法时抛出
+     */
+    public static String buildUrl(String baseUrl,
+                                  Map<String, ?> queryParams,
+                                  Map<String, ?> uriVariables,
+                                  boolean encode) {
+        if (baseUrl == null || baseUrl.trim().isEmpty()) {
+            throw new IllegalArgumentException("baseUrl must not be blank");
+        }
+
+        StringBuilder sb = new StringBuilder(baseUrl);
+
+        // ========== 1) 拼接 query 参数（保留形如 "{name}" 的占位符） ==========
+        if (queryParams != null && !queryParams.isEmpty()) {
+            boolean first = !baseUrl.contains("?");
+            for (Map.Entry<String, ?> e : queryParams.entrySet()) {
+                String key = e.getKey();
+                Object val = e.getValue();
+                if (key == null || val == null) {
+                    continue;
+                }
+
+                // 把 value 统一展开为 List<String>
+                List<String> values = new ArrayList<>();
+                if (val instanceof Collection) {
+                    for (Object o : (Collection<?>) val) {
+                        if (o != null) {
+                            values.add(String.valueOf(o));
+                        }
+                    }
+                } else if (val.getClass().isArray()) {
+                    int len = Array.getLength(val);
+                    for (int i = 0; i < len; i++) {
+                        Object o = Array.get(val, i);
+                        if (o != null) {
+                            values.add(String.valueOf(o));
+                        }
+                    }
+                } else {
+                    values.add(String.valueOf(val));
+                }
+
+                for (String v : values) {
+                    if (v == null) {
+                        continue;
+                    }
+                    sb.append(first ? '?' : '&');
+                    first = false;
+
+                    String k = encode ? safeEncode(key) : key;
+
+                    // 如果 value 完全是占位符（全字符串为 {name}），则保留原样，后续统一替换
+                    if (isWholePlaceholder(v)) {
+                        sb.append(k).append("=").append(v);
+                    } else {
+                        String vv = encode ? safeEncode(v) : v;
+                        sb.append(k).append("=").append(vv);
+                    }
+                }
+            }
+        }
+
+        String urlWithPlaceholders = sb.toString();
+
+        // ========== 2) 替换占位符 ==========
+        if (uriVariables != null && !uriVariables.isEmpty()) {
+            // 为避免替换顺序影响（例如 {a} 和 {ab}），按键长度降序替换更稳妥
+            List<String> keys = new ArrayList<>();
+            for (String k : uriVariables.keySet()) {
+                if (k != null) {
+                    keys.add(k);
+                }
+            }
+            keys.sort((a, b) -> Integer.compare(b.length(), a.length()));
+
+            String result = urlWithPlaceholders;
+            for (String key : keys) {
+                Object rawVal = uriVariables.get(key);
+                if (rawVal == null) {
+                    continue;
+                }
+                String replacement = String.valueOf(rawVal);
+                replacement = encode ? safeEncode(replacement) : replacement;
+                // 使用 String.replace 替换所有出现的 {key}
+                result = result.replace("{" + key + "}", replacement);
+            }
+            urlWithPlaceholders = result;
+        }
+
+        // ========== 3) （可选）校验最终 URL ==========
+        if (encode) {
+            try {
+                new URI(urlWithPlaceholders);
+            } catch (URISyntaxException ex) {
+                throw new IllegalArgumentException("Constructed URL is invalid: " + urlWithPlaceholders, ex);
+            }
+        } // 如果 encode == false，我们不强制校验（避免中文等未编码造成异常）
+
+        return urlWithPlaceholders;
+    }
+
+    /**
+     * 判断字符串是否是完整占位符（形如 "{xxx}"）。
+     *
+     * @param s 待判断的字符串
+     * @return true 表示是占位符，false 表示不是
+     */
+    private static boolean isWholePlaceholder(String s) {
+        if (s == null) {
+            return false;
+        }
+        s = s.trim();
+        return s.length() >= 3 && s.charAt(0) == '{' && s.charAt(s.length() - 1) == '}';
+    }
+
+    /**
+     * 使用 UTF-8 对字符串进行 URL 编码。
+     * <p>如果输入为 null，则返回 null。</p>
+     *
+     * @param input 待编码的字符串
+     * @return 编码后的字符串
+     */
+    private static String safeEncode(String input) {
+        if (input == null) {
+            return null;
+        }
+        try {
+            return URLEncoder.encode(input, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            // 理论上不会发生
+            return input;
+        }
+    }
+
 
 }
