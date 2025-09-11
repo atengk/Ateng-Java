@@ -2,6 +2,74 @@
 
 
 
+## 环境配置
+
+### spring.profiles.active
+
+一般在配置文件 `application.yml` 或者 启动命令中 `--spring.profiles.active=dev` 设置项目环境
+
+```yaml
+spring:
+  profiles:
+    active: dev
+```
+
+然后就生效对应的配置文件 ： `application-dev.yml`
+
+如果同时设置多个环境，可以这样，两种写法都可以
+
+```yaml
+spring:
+  profiles:
+    active: dev, test
+--- 
+spring:
+  profiles:
+    active:
+      - dev
+      - test
+```
+
+### spring.config.activate.on-profile
+
+**`---`** 代表的是 **多文档分隔符**，每一段其实就是一个独立的配置文件片段。
+
+`on-profile` 匹配到当前环境，就生效这一块文档的配置
+
+```yaml
+---
+# dev 环境生效该文档
+spring:
+  config:
+    activate:
+      on-profile: dev
+data: "dev 环境"
+---
+# dev 环境生效该文档
+spring:
+  config:
+    activate:
+      on-profile: test
+data: "test 环境"
+---
+```
+
+### 环境变量
+
+如果环境变量存在，则取环境变量，否则取默认值
+value: ${ENV_VAR:defaultValue}
+
+```
+server:
+  port: ${SERVER_PORT:8080}
+```
+
+如果设置了 `SERVER_PORT` 环境变量，就用它的值；
+
+否则默认用 `8080`。
+
+
+
 ## 将配置文件加载到属性类中
 
 `@ConfigurationProperties` 是 Spring Boot 提供的一个注解，用于将外部配置文件中的属性值绑定到 Java 对象上。这使得在应用程序中访问配置信息变得更加简洁和类型安全。通常，配置文件可以是 `application.properties` 或 `application.yml`，通过 `@ConfigurationProperties` 注解，Spring Boot 会自动将这些配置映射到一个 POJO（Plain Old Java Object）中。

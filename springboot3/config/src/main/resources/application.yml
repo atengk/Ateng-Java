@@ -19,3 +19,22 @@ app:
   ateng:
     name: kongyu
     age: 24
+---
+spring:
+  profiles:
+    active: dev
+---
+# dev 环境生效该文档
+spring:
+  config:
+    activate:
+      on-profile: dev
+data: "dev 环境"
+---
+# dev 环境生效该文档
+spring:
+  config:
+    activate:
+      on-profile: test
+data: "test 环境"
+---
