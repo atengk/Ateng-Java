@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +54,21 @@ public class DemoController {
         String mainApplicationPackage = SpringUtil.getMainApplicationPackage(ToolsCustomUtilsApplication.class);
         System.out.println(mainApplicationPackage);
         return EnumUtil.getLabelValueListByEnumName(name);
+    }
+
+    @GetMapping("/buildUrl")
+    public void buildUrl() {
+        Map<String, Object> uriVariables = new HashMap<>();
+        uriVariables.put("id", 2002);
+        uriVariables.put("name", "阿腾");
+
+        Map<String, Object> queryParams = new HashMap<>();
+        queryParams.put("page", 1);
+        queryParams.put("size", 20);
+        queryParams.put("name", "{name}");
+
+        String url = SpringUtil.buildUrl("http://localhost:8080/api/user/{id}", queryParams, uriVariables);
+        System.out.println(url);
     }
 
 }

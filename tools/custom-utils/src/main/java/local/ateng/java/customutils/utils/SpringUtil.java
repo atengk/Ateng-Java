@@ -17,6 +17,8 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.util.UriComponents;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
@@ -761,6 +763,108 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
      */
     public static String getMainApplicationPackage(Class<?> mainClazz) {
         return mainClazz != null ? mainClazz.getPackage().getName() : null;
+    }
+
+    /**
+     * 构建完整的 URL，支持基础链接、查询参数、路径参数以及是否进行编码。
+     *
+     * <p><b>示例：</b></p>
+     * <pre>{@code
+     * Map<String, Object> queryParams = new HashMap<>();
+     * queryParams.put("page", 1);
+     * queryParams.put("size", 10);
+     *
+     * Map<String, Object> pathVars = new HashMap<>();
+     * pathVars.put("id", 1001);
+     *
+     * String url = SpringUtil.buildUrl(
+     *     "http://localhost:8080/api/user/{id}",
+     *     queryParams,
+     *     pathVars,
+     *     true
+     * );
+     * System.out.println(url); // http://localhost:8080/api/user/1001?page=1&size=10
+     * }</pre>
+     *
+     * @param baseUrl    基础 URL，例如 "http://localhost:8080/api/user/{id}"
+     * @param queryParams 查询参数 Map，可为 null
+     * @param uriVariables 路径参数 Map，可为 null
+     * @param encode     是否进行 URL 编码
+     * @return 构建后的完整 URL
+     */
+    public static String buildUrl(String baseUrl,
+                                  Map<String, ?> queryParams,
+                                  Map<String, ?> uriVariables,
+                                  boolean encode) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(baseUrl);
+
+        if (queryParams != null && !queryParams.isEmpty()) {
+            queryParams.forEach(builder::queryParam);
+        }
+
+        UriComponents uriComponents;
+        if (uriVariables != null && !uriVariables.isEmpty()) {
+            uriComponents = builder.buildAndExpand(uriVariables);
+        } else {
+            uriComponents = builder.build();
+        }
+
+        return encode ? uriComponents.encode().toUriString() : uriComponents.toUriString();
+    }
+
+    /**
+     * 构建带查询参数的 URL。
+     * <p>
+     * 使用给定的基础地址 {@code baseUrl} 和查询参数 {@code queryParams} 构建完整 URL。
+     * 该方法不涉及路径变量替换，适合纯 GET 请求参数场景。
+     *
+     * @param baseUrl     基础 URL，例如 "http://localhost:8080/api/user"
+     * @param queryParams 查询参数键值对，例如 {"name":"Tom","age":18}
+     * @return 构建完成的 URL 字符串
+     */
+    public static String buildUrl(String baseUrl, Map<String, ?> queryParams) {
+        return buildUrl(baseUrl, queryParams, null, true);
+    }
+
+    /**
+     * 构建带路径参数的 URL。
+     * <p>
+     * 使用给定的基础地址 {@code baseUrl} 和路径变量 {@code uriVariables} 构建完整 URL。
+     * 该方法不包含查询参数，常用于 RESTful 风格的接口地址拼接。
+     *
+     * @param baseUrl      基础 URL，支持占位符，例如 "http://localhost:8080/api/user/{id}"
+     * @param uriVariables 路径参数键值对，例如 {"id":1001}
+     * @return 构建完成的 URL 字符串
+     */
+    public static String buildUrlWithPath(String baseUrl, Map<String, ?> uriVariables) {
+        return buildUrl(baseUrl, null, uriVariables, true);
+    }
+
+    /**
+     * 构建不带参数的 URL。
+     * <p>
+     * 该方法仅对基础地址进行 encode 处理（可选），不附加路径参数或查询参数。
+     *
+     * @param baseUrl 基础 URL，例如 "http://localhost:8080/api/user"
+     * @param encode  是否对 URL 进行编码处理
+     * @return 构建完成的 URL 字符串
+     */
+    public static String buildUrl(String baseUrl, boolean encode) {
+        return buildUrl(baseUrl, null, null, encode);
+    }
+
+    /**
+     * 构建带路径参数与查询参数的 URL。
+     * <p>
+     * 综合处理路径参数与查询参数，支持 RESTful 占位符替换与 GET 请求参数拼接。
+     *
+     * @param baseUrl      基础 URL，例如 "http://localhost:8080/api/user/{id}"
+     * @param queryParams  查询参数键值对，例如 {"page":1,"size":20}
+     * @param uriVariables 路径参数键值对，例如 {"id":1001}
+     * @return 构建完成的 URL 字符串
+     */
+    public static String buildUrl(String baseUrl, Map<String, ?> queryParams, Map<String, ?> uriVariables) {
+        return buildUrl(baseUrl, queryParams, uriVariables, true);
     }
 
 }
