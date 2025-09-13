@@ -1,6 +1,7 @@
 package local.ateng.java.awss3.service.impl;
 
 import local.ateng.java.awss3.config.S3Properties;
+import local.ateng.java.awss3.entity.UploadResumeRecord;
 import local.ateng.java.awss3.service.S3Service;
 import local.ateng.java.awss3.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -1176,6 +1178,166 @@ public class S3ServiceImpl implements S3Service {
         }
 
         return endpoint + slash + bucket + slash + key;
+    }
+
+    /**
+     * 静态缓存：保存所有正在进行的 multipart 上传状态
+     * key = uploadId
+     */
+    private static final Map<String, UploadResumeRecord> UPLOAD_RECORDS = new ConcurrentHashMap<>();
+    /**
+     * S3 分片上传约束
+     * S3 限制：最多 10000 个分片
+     */
+    private static final int MIN_PART_NUMBER = 1;
+    private static final int MAX_PART_NUMBER = 10000;
+
+    @Override
+    public String initiateMultipartUpload(String key, String contentType) {
+        String bucket = s3Properties.getBucketName();
+
+        CreateMultipartUploadRequest.Builder createBuilder = CreateMultipartUploadRequest.builder()
+                .bucket(bucket)
+                .key(key);
+
+        if (contentType != null && !contentType.trim().isEmpty()) {
+            createBuilder.contentType(contentType);
+        }
+
+        CreateMultipartUploadResponse createResponse = s3Client.createMultipartUpload(createBuilder.build());
+        String uploadId = createResponse.uploadId();
+
+        // 创建记录并缓存
+        UploadResumeRecord record = new UploadResumeRecord(uploadId, key);
+        UPLOAD_RECORDS.put(uploadId, record);
+
+        log.info("初始化分片上传成功：对象Key={}, 分配的UploadId={}", key, uploadId);
+        return uploadId;
+    }
+
+    @Override
+    public String uploadPart(String uploadId, int partNumber, MultipartFile file) {
+        // 参数校验
+        if (uploadId == null || uploadId.trim().isEmpty()) {
+            throw new IllegalArgumentException("uploadId 不能为空");
+        }
+        if (partNumber < MIN_PART_NUMBER || partNumber > MAX_PART_NUMBER) {
+            throw new IllegalArgumentException(
+                    String.format("partNumber 必须在 %d..%d 之间", MIN_PART_NUMBER, MAX_PART_NUMBER)
+            );
+        }
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            throw new IllegalStateException("找不到对应的 uploadId（可能已过期或未初始化）: " + uploadId);
+        }
+
+        // ====== 新增：检查是否已上传过该分片 ======
+        if (record.getUploadedParts().containsKey(partNumber)) {
+            String eTag = record.getUploadedParts().get(partNumber);
+            log.info("分片已存在，本次跳过上传：uploadId={}, partNumber={}, 已记录的ETag={}", uploadId, partNumber, eTag);
+            // 返回已有的 eTag，保证幂等性
+            return eTag;
+        }
+
+        try {
+            // 调用 S3 UploadPart
+            UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(record.getKey())
+                    .uploadId(uploadId)
+                    .partNumber(partNumber)
+                    .contentLength(file.getSize())
+                    .build();
+
+            // 使用 InputStream 上传，避免文件过大时内存溢出
+            UploadPartResponse response = s3Client.uploadPart(uploadPartRequest,
+                    RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+
+            String eTag = response.eTag();
+            // 保存分片记录
+            record.getUploadedParts().put(partNumber, eTag);
+
+            log.info("分片上传成功：uploadId={}, partNumber={}, ETag={}", uploadId, partNumber, eTag);
+            return eTag;
+        } catch (IOException e) {
+            log.error("读取分片数据失败：uploadId={}, partNumber={}, 错误={}", uploadId, partNumber, e.getMessage(), e);
+            throw new RuntimeException("读取分片数据失败", e);
+        } catch (S3Exception s3e) {
+            log.error("S3 分片上传失败：uploadId={}, partNumber={}, 错误={}", uploadId, partNumber, s3e.awsErrorDetails().errorMessage(), s3e);
+            throw s3e;
+        }
+    }
+
+    @Override
+    public Map<Integer, String> listUploadedParts(String uploadId) {
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            return Collections.emptyMap();
+        }
+        // 返回一个不可修改的快照
+        return Collections.unmodifiableMap(new TreeMap<>(record.getUploadedParts()));
+    }
+
+    @Override
+    public String completeMultipartUpload(String uploadId) {
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            throw new IllegalStateException("找不到 uploadId 对应的上传记录: " + uploadId);
+        }
+
+        // 收集并排序 part 列表（S3 要求按 partNumber 升序）
+        List<CompletedPart> parts = record.getUploadedParts().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> CompletedPart.builder().partNumber(e.getKey()).eTag(e.getValue()).build())
+                .collect(Collectors.toList());
+
+        if (parts.isEmpty()) {
+            throw new IllegalStateException("没有已上传的分片，无法合并，uploadId=" + uploadId);
+        }
+
+        CompleteMultipartUploadRequest completeRequest = CompleteMultipartUploadRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .key(record.getKey())
+                .uploadId(uploadId)
+                .multipartUpload(CompletedMultipartUpload.builder().parts(parts).build())
+                .build();
+
+        try {
+            CompleteMultipartUploadResponse response = s3Client.completeMultipartUpload(completeRequest);
+            // 合并成功，清理本地缓存
+            UPLOAD_RECORDS.remove(uploadId);
+
+            String etagOrLocation = response.eTag() != null ? response.eTag() : response.location();
+            log.info("分片合并完成：uploadId={}, 对象Key={}, 最终结果={}", uploadId, record.getKey(), etagOrLocation);
+            return etagOrLocation;
+        } catch (S3Exception s3e) {
+            log.error("分片合并失败：uploadId={}, 错误信息={}", uploadId, s3e.awsErrorDetails().errorMessage(), s3e);
+            throw s3e;
+        }
+    }
+
+    @Override
+    public void abortMultipartUpload(String uploadId) {
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            log.warn("中止分片上传失败：未找到对应的 uploadId={}", uploadId);
+            return;
+        }
+
+        AbortMultipartUploadRequest abortRequest = AbortMultipartUploadRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .key(record.getKey())
+                .uploadId(uploadId)
+                .build();
+
+        try {
+            s3Client.abortMultipartUpload(abortRequest);
+            UPLOAD_RECORDS.remove(uploadId);
+            log.info("分片上传已中止：uploadId={}, 对象Key={}", uploadId, record.getKey());
+        } catch (S3Exception s3e) {
+            log.error("分片上传中止失败：uploadId={}, 错误信息={}", uploadId, s3e.awsErrorDetails().errorMessage(), s3e);
+            throw s3e;
+        }
     }
 
 }

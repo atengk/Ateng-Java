@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
@@ -22,7 +24,7 @@ import java.util.zip.ZipOutputStream;
  * @author Ateng
  * @since 2025-07-19
  */
-public class ZipUtil {
+public final class ZipUtil {
 
     /**
      * 缓冲区大小
@@ -151,6 +153,8 @@ public class ZipUtil {
             // 设置压缩级别（最高压缩）
             zos.setLevel(Deflater.BEST_COMPRESSION);
 
+            Set<String> entryNames = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
             // 遍历要压缩的每个文件或目录
             for (Path source : sources) {
                 if (!Files.exists(source)) {
@@ -161,7 +165,7 @@ public class ZipUtil {
                     continue;
                 }
                 Path basePath = source.getParent() != null ? source.getParent() : source;
-                zipPath(source, basePath, zos); // 压缩路径
+                zipPath(source, basePath, zos, entryNames); // 压缩路径
             }
         } catch (IOException e) {
             throw new UncheckedIOException("压缩文件时发生错误", e);
@@ -184,13 +188,15 @@ public class ZipUtil {
             // 设置压缩级别（最高压缩）
             zos.setLevel(Deflater.BEST_COMPRESSION);
 
+            Set<String> entryNames = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
             // 遍历要压缩的每个文件或目录
             for (Path source : sources) {
                 if (!Files.exists(source)) {
                     continue; // 如果文件不存在，跳过
                 }
                 Path basePath = source.getParent() != null ? source.getParent() : source;
-                zipPath(source, basePath, zos); // 压缩路径
+                zipPath(source, basePath, zos, entryNames); // 压缩路径
             }
         } catch (IOException e) {
             throw new UncheckedIOException("压缩文件到输出流时发生错误", e);
@@ -221,13 +227,15 @@ public class ZipUtil {
             // 设置压缩级别（最高压缩）
             zos.setLevel(Deflater.BEST_COMPRESSION);
 
+            Set<String> entryNames = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
             // 遍历要压缩的每个文件或目录
             for (Path source : sources) {
                 if (!Files.exists(source)) {
                     continue; // 如果文件不存在，跳过
                 }
                 Path basePath = source.getParent() != null ? source.getParent() : source;
-                zipPath(source, basePath, zos); // 压缩路径
+                zipPath(source, basePath, zos, entryNames); // 压缩路径
             }
 
             // 刷新输出流
@@ -245,7 +253,7 @@ public class ZipUtil {
      * @param output    输出流（通常为 HttpServletResponse.getOutputStream()）
      * @throws IOException 如果压缩或写入时发生错误
      */
-    public static void zipStreams(List<String> fileNames, List<InputStream> streams, OutputStream output) throws IOException {
+    public static void zip(List<String> fileNames, List<InputStream> streams, OutputStream output) throws IOException {
         Objects.requireNonNull(fileNames, "文件名列表不能为空");
         Objects.requireNonNull(streams, "输入流列表不能为空");
         Objects.requireNonNull(output, "输出流不能为空");
@@ -253,6 +261,8 @@ public class ZipUtil {
         if (fileNames.size() != streams.size()) {
             throw new IllegalArgumentException("文件名列表与输入流列表长度不一致");
         }
+
+        Set<String> entryNames = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
         try (ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(output))) {
             zos.setLevel(Deflater.BEST_COMPRESSION);
@@ -268,6 +278,9 @@ public class ZipUtil {
                 // 统一分隔符（兼容 Linux 和 Windows）
                 String zipEntryName = fileName.replace(File.separator, "/");
 
+                // 处理重名问题，生成唯一的 zipEntryName
+                zipEntryName = resolveDuplicateName(zipEntryName, entryNames);
+
                 zos.putNextEntry(new ZipEntry(zipEntryName));
 
                 try (InputStream is = inputStream) {
@@ -282,7 +295,7 @@ public class ZipUtil {
     /**
      * 将多个输入流压缩为 zip 文件并写入到指定路径
      */
-    public static void zipStreams(List<String> fileNames, List<InputStream> streams, Path zipTarget) throws IOException {
+    public static void zip(List<String> fileNames, List<InputStream> streams, Path zipTarget) throws IOException {
         Objects.requireNonNull(zipTarget, "压缩目标路径不能为空");
 
         // 确保目标目录存在
@@ -291,7 +304,7 @@ public class ZipUtil {
         }
 
         try (OutputStream out = Files.newOutputStream(zipTarget)) {
-            zipStreams(fileNames, streams, out);
+            zip(fileNames, streams, out);
         }
     }
 
@@ -331,6 +344,97 @@ public class ZipUtil {
             }
             zos.closeEntry(); // 关闭当前 entry
         }
+    }
+
+    /**
+     * 将指定路径压缩为 ZipEntry，支持处理文件名重复的情况，自动重命名。
+     *
+     * @param source       待压缩的路径（可以是文件或目录）
+     * @param basePath     压缩包中的根路径，用于计算相对路径
+     * @param zos          ZipOutputStream 输出流
+     * @param addedEntries 已添加的 ZipEntry 名称集合，用于去重
+     * @throws IOException IO异常
+     */
+    private static void zipPath(Path source, Path basePath, ZipOutputStream zos, Set<String> addedEntries) throws IOException {
+        if (Files.isDirectory(source)) {
+            // 处理目录：递归压缩子文件
+            try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(source)) {
+                boolean isEmpty = true;
+
+                for (Path subPath : directoryStream) {
+                    isEmpty = false;
+                    // 递归压缩
+                    zipPath(subPath, basePath, zos, addedEntries);
+                }
+
+                if (isEmpty) {
+                    // 如果是空目录，添加以 / 结尾的 ZipEntry
+                    String dirEntryName = basePath.relativize(source).toString().replace(File.separatorChar, '/') + "/";
+                    dirEntryName = resolveDuplicateName(dirEntryName, addedEntries);
+
+                    zos.putNextEntry(new ZipEntry(dirEntryName));
+                    zos.closeEntry();
+                }
+            }
+        } else {
+            // 是文件，生成相对路径（压缩包中的路径）
+            String zipEntryName = basePath.relativize(source).toString().replace(File.separatorChar, '/');
+
+            // 处理文件名重复
+            zipEntryName = resolveDuplicateName(zipEntryName, addedEntries);
+
+            // 写入 ZipEntry
+            zos.putNextEntry(new ZipEntry(zipEntryName));
+            try (InputStream is = Files.newInputStream(source)) {
+                copyStream(is, zos);
+            }
+            zos.closeEntry();
+        }
+    }
+
+    /**
+     * 生成一个不重复的 ZipEntry 名称，如果给定的名称已存在，则自动在文件名后加数字后缀，
+     * 例如 file.txt、file(1).txt、file(2).txt，依此类推。
+     * 目录名处理时保留末尾的斜杠 '/'。
+     *
+     * @param originalName  原始的 ZipEntry 名称（文件或目录路径，目录以 '/' 结尾）
+     * @param existingNames 已经存在的 ZipEntry 名称集合，用于避免重复
+     * @return 不重复的唯一 ZipEntry 名称
+     */
+    private static String resolveDuplicateName(String originalName, Set<String> existingNames) {
+        String name = originalName;
+        int count = 1;
+
+        String suffix = "";
+        // 如果是目录，目录名以 '/' 结尾，先去掉，后面加回去
+        if (name.endsWith("/")) {
+            name = name.substring(0, name.length() - 1);
+            suffix = "/";
+        }
+
+        String baseName = name;
+        String extension = "";
+
+        // 找最后一个点，拆分文件名和扩展名
+        int dotIndex = name.lastIndexOf('.');
+        if (dotIndex != -1 && !name.endsWith("/")) {
+            baseName = name.substring(0, dotIndex);
+            extension = name.substring(dotIndex);
+        }
+
+        // 循环直到生成一个不重复的名称
+        while (existingNames.contains(name + suffix)) {
+            name = baseName + "(" + count + ")" + extension;
+            count++;
+        }
+
+        // 拼回目录的斜杠
+        name = name + suffix;
+
+        // 添加到已存在名称集合
+        existingNames.add(name);
+
+        return name;
     }
 
     /**

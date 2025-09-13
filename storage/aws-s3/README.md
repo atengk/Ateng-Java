@@ -1718,3 +1718,462 @@ public class S3Controller {
 
 ```
 
+
+
+## 分片和断点续传上传
+
+### 创建断点记录类
+
+```java
+package local.ateng.java.awss3.entity;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 断点记录类：保存 uploadId、key、以及已上传分片（partNumber -> eTag）
+ *
+ * @author 孔余
+ * @since 2025-07-21
+ */
+public class UploadResumeRecord {
+    private final String uploadId;
+    private final String key;
+    private final Map<Integer, String> uploadedParts = new ConcurrentHashMap<>();
+
+    public UploadResumeRecord(String uploadId, String key) {
+        this.uploadId = uploadId;
+        this.key = key;
+    }
+
+    public String getUploadId() {
+        return uploadId;
+    }
+
+    public String getKey() {
+        return key;
+    }
+
+    public Map<Integer, String> getUploadedParts() {
+        return uploadedParts;
+    }
+}
+```
+
+### 创建Service接口
+
+```java
+/**
+ * S3 服务接口
+ * <p>
+ * 提供上传、下载、删除、预签名等常用 S3 操作能力
+ *
+ * @author
+ * @since 2025-07-21
+ */
+public interface S3Service {
+    // ...
+    
+    /* ----------------------------------- 分片和断点续传  ----------------------------------- */
+
+    /**
+     * 初始化 S3 Multipart Upload，返回 uploadId
+     *
+     * @param key         S3 对象 key
+     * @param contentType 可选的 content type
+     * @return uploadId 字符串
+     */
+    String initiateMultipartUpload(String key, String contentType);
+
+    /**
+     * 上传单个分片到 S3（服务端负责调用 UploadPart 并记录 ETag）
+     *
+     * @param uploadId   UploadId（由 init 返回）
+     * @param partNumber 分片序号（从 1 开始）
+     * @param file       分片文件（multipart/form-data）
+     * @return S3 返回的 ETag
+     */
+    String uploadPart(String uploadId, int partNumber, MultipartFile file);
+
+    /**
+     * 列出已上传的分片（本次上传记录）
+     *
+     * @param uploadId Upload id
+     * @return 已上传分片的映射：partNumber -> ETag
+     */
+    Map<Integer, String> listUploadedParts(String uploadId);
+
+    /**
+     * 完成 multipart 上传（调用 CompleteMultipartUpload）
+     *
+     * @param uploadId Upload id
+     * @return S3 返回的最终标识（例如 ETag 或 Location）
+     */
+    String completeMultipartUpload(String uploadId);
+
+    /**
+     * 中止 multipart 上传（调用 AbortMultipartUpload）
+     *
+     * @param uploadId Upload id
+     */
+    void abortMultipartUpload(String uploadId);
+    
+}
+```
+
+### 创建Service实现
+
+```java
+/**
+ * S3 服务类
+ *
+ * @author Ateng
+ * @since 2025-07-18
+ */
+@Service
+@RequiredArgsConstructor
+public class S3ServiceImpl implements S3Service {
+
+    private static final Logger log = LoggerFactory.getLogger(S3ServiceImpl.class);
+
+    private final S3Client s3Client;
+    private final S3Properties s3Properties;
+    private final S3Presigner s3Presigner;
+
+    /**
+     * 静态缓存：保存所有正在进行的 multipart 上传状态
+     * key = uploadId
+     */
+    private static final Map<String, UploadResumeRecord> UPLOAD_RECORDS = new ConcurrentHashMap<>();
+    /**
+     * S3 分片上传约束
+     * S3 限制：最多 10000 个分片
+     */
+    private static final int MIN_PART_NUMBER = 1;
+    private static final int MAX_PART_NUMBER = 10000;
+
+    @Override
+    public String initiateMultipartUpload(String key, String contentType) {
+        String bucket = s3Properties.getBucketName();
+
+        CreateMultipartUploadRequest.Builder createBuilder = CreateMultipartUploadRequest.builder()
+                .bucket(bucket)
+                .key(key);
+
+        if (contentType != null && !contentType.trim().isEmpty()) {
+            createBuilder.contentType(contentType);
+        }
+
+        CreateMultipartUploadResponse createResponse = s3Client.createMultipartUpload(createBuilder.build());
+        String uploadId = createResponse.uploadId();
+
+        // 创建记录并缓存
+        UploadResumeRecord record = new UploadResumeRecord(uploadId, key);
+        UPLOAD_RECORDS.put(uploadId, record);
+
+        log.info("初始化分片上传成功：对象Key={}, 分配的UploadId={}", key, uploadId);
+        return uploadId;
+    }
+
+    @Override
+    public String uploadPart(String uploadId, int partNumber, MultipartFile file) {
+        // 参数校验
+        if (uploadId == null || uploadId.trim().isEmpty()) {
+            throw new IllegalArgumentException("uploadId 不能为空");
+        }
+        if (partNumber < MIN_PART_NUMBER || partNumber > MAX_PART_NUMBER) {
+            throw new IllegalArgumentException(
+                    String.format("partNumber 必须在 %d..%d 之间", MIN_PART_NUMBER, MAX_PART_NUMBER)
+            );
+        }
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            throw new IllegalStateException("找不到对应的 uploadId（可能已过期或未初始化）: " + uploadId);
+        }
+
+        // ====== 新增：检查是否已上传过该分片 ======
+        if (record.getUploadedParts().containsKey(partNumber)) {
+            String eTag = record.getUploadedParts().get(partNumber);
+            log.info("分片已存在，本次跳过上传：uploadId={}, partNumber={}, 已记录的ETag={}", uploadId, partNumber, eTag);
+            // 返回已有的 eTag，保证幂等性
+            return eTag;
+        }
+
+        try {
+            // 调用 S3 UploadPart
+            UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
+                    .bucket(s3Properties.getBucketName())
+                    .key(record.getKey())
+                    .uploadId(uploadId)
+                    .partNumber(partNumber)
+                    .contentLength(file.getSize())
+                    .build();
+
+            // 使用 InputStream 上传，避免文件过大时内存溢出
+            UploadPartResponse response = s3Client.uploadPart(uploadPartRequest,
+                    RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+
+            String eTag = response.eTag();
+            // 保存分片记录
+            record.getUploadedParts().put(partNumber, eTag);
+
+            log.info("分片上传成功：uploadId={}, partNumber={}, ETag={}", uploadId, partNumber, eTag);
+            return eTag;
+        } catch (IOException e) {
+            log.error("读取分片数据失败：uploadId={}, partNumber={}, 错误={}", uploadId, partNumber, e.getMessage(), e);
+            throw new RuntimeException("读取分片数据失败", e);
+        } catch (S3Exception s3e) {
+            log.error("S3 分片上传失败：uploadId={}, partNumber={}, 错误={}", uploadId, partNumber, s3e.awsErrorDetails().errorMessage(), s3e);
+            throw s3e;
+        }
+    }
+
+    @Override
+    public Map<Integer, String> listUploadedParts(String uploadId) {
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            return Collections.emptyMap();
+        }
+        // 返回一个不可修改的快照
+        return Collections.unmodifiableMap(new TreeMap<>(record.getUploadedParts()));
+    }
+
+    @Override
+    public String completeMultipartUpload(String uploadId) {
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            throw new IllegalStateException("找不到 uploadId 对应的上传记录: " + uploadId);
+        }
+
+        // 收集并排序 part 列表（S3 要求按 partNumber 升序）
+        List<CompletedPart> parts = record.getUploadedParts().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> CompletedPart.builder().partNumber(e.getKey()).eTag(e.getValue()).build())
+                .collect(Collectors.toList());
+
+        if (parts.isEmpty()) {
+            throw new IllegalStateException("没有已上传的分片，无法合并，uploadId=" + uploadId);
+        }
+
+        CompleteMultipartUploadRequest completeRequest = CompleteMultipartUploadRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .key(record.getKey())
+                .uploadId(uploadId)
+                .multipartUpload(CompletedMultipartUpload.builder().parts(parts).build())
+                .build();
+
+        try {
+            CompleteMultipartUploadResponse response = s3Client.completeMultipartUpload(completeRequest);
+            // 合并成功，清理本地缓存
+            UPLOAD_RECORDS.remove(uploadId);
+
+            String etagOrLocation = response.eTag() != null ? response.eTag() : response.location();
+            log.info("分片合并完成：uploadId={}, 对象Key={}, 最终结果={}", uploadId, record.getKey(), etagOrLocation);
+            return etagOrLocation;
+        } catch (S3Exception s3e) {
+            log.error("分片合并失败：uploadId={}, 错误信息={}", uploadId, s3e.awsErrorDetails().errorMessage(), s3e);
+            throw s3e;
+        }
+    }
+
+    @Override
+    public void abortMultipartUpload(String uploadId) {
+        UploadResumeRecord record = UPLOAD_RECORDS.get(uploadId);
+        if (record == null) {
+            log.warn("中止分片上传失败：未找到对应的 uploadId={}", uploadId);
+            return;
+        }
+
+        AbortMultipartUploadRequest abortRequest = AbortMultipartUploadRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .key(record.getKey())
+                .uploadId(uploadId)
+                .build();
+
+        try {
+            s3Client.abortMultipartUpload(abortRequest);
+            UPLOAD_RECORDS.remove(uploadId);
+            log.info("分片上传已中止：uploadId={}, 对象Key={}", uploadId, record.getKey());
+        } catch (S3Exception s3e) {
+            log.error("分片上传中止失败：uploadId={}, 错误信息={}", uploadId, s3e.awsErrorDetails().errorMessage(), s3e);
+            throw s3e;
+        }
+    }
+    
+}
+```
+
+### 创建Controller
+
+```java
+package local.ateng.java.awss3.controller;
+
+import local.ateng.java.awss3.service.S3Service;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * S3 分片上传控制器
+ *
+ * 端点说明：
+ *  - POST /api/s3/multipart/init    -> 初始化 multipart 上传，返回 uploadId
+ *  - POST /api/s3/multipart/upload  -> 上传单个分片（表单 file）
+ *  - GET  /api/s3/multipart/parts   -> 列出已上传的分片信息（用于续传/检查）
+ *  - POST /api/s3/multipart/complete-> 完成 multipart 合并
+ *  - POST /api/s3/multipart/abort   -> 中止 multipart（放弃）
+ */
+@RestController
+@RequestMapping("/api/s3/multipart")
+@RequiredArgsConstructor
+public class S3MultipartController {
+
+    private final S3Service s3Service;
+
+    /**
+     * 初始化一个 Multipart Upload，会返回 uploadId（后续上传分片时使用）
+     *
+     * @param key         S3 对象 key（必须）
+     * @param contentType 可选的 contentType（建议传入）
+     * @return JSON 包含 uploadId
+     */
+    @PostMapping("/init")
+    public ResponseEntity<Map<String, String>> init(@RequestParam("key") String key,
+                                                    @RequestParam(value = "contentType", required = false) String contentType) {
+        String uploadId = s3Service.initiateMultipartUpload(key, contentType);
+        HashMap<String, String> map = new HashMap<>();
+        map.put("uploadId", uploadId);
+        return ResponseEntity.ok(map);
+    }
+
+    /**
+     * 接收并上传单个分片到 S3（后台直接调用 UploadPart）
+     *
+     * 参数说明：
+     *  - uploadId : 必须（init 时得到）
+     *  - partNumber : 分片序号（1 ~ 10000）
+     *  - file : 分片数据（multipart/form-data）
+     *
+     * 返回：
+     *  - {"partNumber":1, "eTag":"..."}
+     */
+    @PostMapping("/upload")
+    public ResponseEntity<Map<String, String>> uploadPart(@RequestParam("uploadId") String uploadId,
+                                                          @RequestParam("partNumber") int partNumber,
+                                                          @RequestParam("file") MultipartFile file) {
+        String eTag = s3Service.uploadPart(uploadId, partNumber, file);
+        HashMap<String, String> map = new HashMap<>();
+        map.put("eTag", eTag);
+        map.put("partNumber", String.valueOf(partNumber));
+        return ResponseEntity.ok(map);
+    }
+
+    /**
+     * 列出当前 uploadId 已上传的分片（返回 map: partNumber -> eTag）
+     * 可用于前端在中断后查询已上传哪些分片，决定是否重新上传
+     */
+    @GetMapping("/parts")
+    public ResponseEntity<Map<Integer, String>> listParts(@RequestParam("uploadId") String uploadId) {
+        Map<Integer, String> parts = s3Service.listUploadedParts(uploadId);
+        return ResponseEntity.ok(parts);
+    }
+
+    /**
+     * 完成 multipart 合并（由前端在确认所有分片均已上传后调用）
+     *
+     * @param uploadId 必须
+     */
+    @PostMapping("/complete")
+    public ResponseEntity<Map<String, String>> complete(@RequestParam("uploadId") String uploadId) {
+        String locationOrETag = s3Service.completeMultipartUpload(uploadId);
+        HashMap<String, String> map = new HashMap<>();
+        map.put("result", "completed");
+        map.put("etagOrLocation", locationOrETag);
+        return ResponseEntity.ok(map);
+    }
+
+    /**
+     * 中止 multipart（放弃此次上传）
+     *
+     * @param uploadId 必须
+     */
+    @PostMapping("/abort")
+    public ResponseEntity<Map<String, String>> abort(@RequestParam("uploadId") String uploadId) {
+        s3Service.abortMultipartUpload(uploadId);
+        HashMap<String, String> map = new HashMap<>();
+        map.put("result", "aborted");
+        return ResponseEntity.ok(map);
+    }
+}
+```
+
+### 使用说明（前端 & curl 示例）
+
+1) 初始化（前端先调用）
+
+```
+POST /api/s3/multipart/init?key=my-folder/big.iso&contentType=application/octet-stream
+
+返回:
+{ "uploadId": "ABC123-..." }
+```
+
+2) 前端把文件 split（或使用 File.slice）分成若干分片，然后逐个上传到后端
+
+- Linux split 示例：
+
+```bash
+split -b 8M big.iso part_
+```
+
+- curl 上传分片（假设 uploadId=ABC123）：
+
+```bash
+curl -X POST "http://localhost:8080/api/s3/multipart/upload?uploadId=ABC123&partNumber=1" \
+  -F "file=@part_aa"
+```
+
+- 或前端使用 axios（示例）：
+
+```js
+// 假设 blob 为 slice 后的片段
+const form = new FormData();
+form.append('file', blob);
+const res = await axios.post(`/api/s3/multipart/upload?uploadId=${uploadId}&partNumber=${i}`, form, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
+console.log(res.data.eTag); // 可用于前端显示
+```
+
+3) 查询已上传分片（恢复用）
+
+```
+GET /api/s3/multipart/parts?uploadId=ABC123
+返回: {"1":"\"etag1\"", "2":"\"etag2\"", ...}
+```
+
+4) 前端确认所有分片上传完成后调用合并
+
+```
+POST /api/s3/multipart/complete?uploadId=ABC123
+返回: {"result":"completed","etagOrLocation":"..."}
+```
+
+5) 如需放弃，调用 abort
+
+```
+POST /api/s3/multipart/abort?uploadId=ABC123
+```
+
+### 一些实现注意事项与建议
+
+1. **分片大小限制**：S3 要求非最后一个分片大小≥5MB，最好前端按照 >=5MB 生成分片（除最后一片）。
+2. **uploadId 作为唯一 session**：我把缓存 key 用 `uploadId`，更符合 S3 语义（一个 uploadId 对应一次上传会话）。
+3. **断点信息存放在静态 Map**：符合你要求（进程内缓存），但重启后会丢失。若需持久化（数据库/Redis/文件），可以把 `uploadRecords` 的写入逻辑替换为持久化操作。
+4. **并发上传**：后端 `uploadPart` 支持并发调用（`uploadedParts` 使用 `ConcurrentHashMap`），但合并时建议前端在所有上传完成后再调用 `complete`，并且 `complete` 会把当前缓存的 parts 按 partNumber 排序提交。
+5. **断点恢复**：前端可以在重新开始上传前用 `/parts` 查询已经上传的分片，跳过已上传的分片。
+6. **安全**：接口目前未做鉴权示例；生产环境请确保鉴权与权限校验（谁可以创建 uploadId、谁可以合并）——否则恶意用户可能占用存储或中止他人上传。

@@ -358,4 +358,49 @@ public interface S3Service {
      * @return 公开访问 URL
      */
     String generatePublicUrl(String key);
+
+    /* ----------------------------------- 分片和断点续传  ----------------------------------- */
+
+    /**
+     * 初始化 S3 Multipart Upload，返回 uploadId
+     *
+     * @param key         S3 对象 key
+     * @param contentType 可选的 content type
+     * @return uploadId 字符串
+     */
+    String initiateMultipartUpload(String key, String contentType);
+
+    /**
+     * 上传单个分片到 S3（服务端负责调用 UploadPart 并记录 ETag）
+     *
+     * @param uploadId   UploadId（由 init 返回）
+     * @param partNumber 分片序号（从 1 开始）
+     * @param file       分片文件（multipart/form-data）
+     * @return S3 返回的 ETag
+     */
+    String uploadPart(String uploadId, int partNumber, MultipartFile file);
+
+    /**
+     * 列出已上传的分片（本次上传记录）
+     *
+     * @param uploadId Upload id
+     * @return 已上传分片的映射：partNumber -> ETag
+     */
+    Map<Integer, String> listUploadedParts(String uploadId);
+
+    /**
+     * 完成 multipart 上传（调用 CompleteMultipartUpload）
+     *
+     * @param uploadId Upload id
+     * @return S3 返回的最终标识（例如 ETag 或 Location）
+     */
+    String completeMultipartUpload(String uploadId);
+
+    /**
+     * 中止 multipart 上传（调用 AbortMultipartUpload）
+     *
+     * @param uploadId Upload id
+     */
+    void abortMultipartUpload(String uploadId);
+
 }
