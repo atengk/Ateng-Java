@@ -9,6 +9,8 @@ import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedJdbcTypes;
 import org.apache.ibatis.type.MappedTypes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,8 @@ import java.util.Map;
 @MappedTypes({Map.class, List.class, JSONObject.class, JSONArray.class})     // Java 类型
 public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
+    private static final Logger log = LoggerFactory.getLogger(FastjsonTypeHandler.class);
+
     /**
      * 目标类型的 Class 对象，用于反序列化
      */
@@ -57,6 +61,10 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
      */
     @Override
     protected T parse(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return null;
+        }
+
         try {
             return JSON.parseObject(
                     json,
@@ -67,7 +75,7 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
                     Feature.IgnoreNotMatch
             );
         } catch (Exception e) {
-            // 解析失败时返回 null（可视情况记录日志）
+            log.error("JSON 解析失败: {}", json, e);
             return null;
         }
     }
@@ -102,7 +110,7 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
                     SerializerFeature.DisableCircularReferenceDetect
             );
         } catch (Exception e) {
-            // 序列化失败时返回 null（可根据需要记录错误日志）
+            log.error("对象序列化为 JSON 失败: {}", obj, e);
             return null;
         }
     }

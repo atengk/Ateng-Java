@@ -3397,6 +3397,10 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 }
 ```
 
+### 关于JSON的TypeHandler
+
+在Fastjson和Jackson中写入类名字段，主要的作用就是让泛型字段（List, Map）能够直接反序列化回来，但是结合MySQL的JSON字段就会有一些问题。这里建议的做法是，所有泛型字段都用一个实体类装起来，并且不要写入类名字段（@type, @class）。
+
 ### 注册全局TypeHandler
 
 注册后，MyBatis 会自动根据 `@MappedJdbcTypes` 和 `@MappedTypes` 匹配，几乎不用额外写 `typeHandler`。

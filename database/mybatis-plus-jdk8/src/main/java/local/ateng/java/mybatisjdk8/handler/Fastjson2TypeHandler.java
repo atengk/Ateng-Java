@@ -1,14 +1,12 @@
 package local.ateng.java.mybatisjdk8.handler;
 
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.*;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedJdbcTypes;
 import org.apache.ibatis.type.MappedTypes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -31,6 +29,8 @@ import java.util.Map;
 @MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
 @MappedTypes({Map.class, List.class, JSONObject.class, JSONArray.class})     // Java 类型
 public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
+
+    private static final Logger log = LoggerFactory.getLogger(Fastjson2TypeHandler.class);
 
     /**
      * 要处理的目标类型
@@ -58,14 +58,19 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
             return null;
         }
 
-        return JSON.parseObject(
-                json,
-                type,
-                // 开启自动类型识别，仅允许指定包名
-                JSONReader.autoTypeFilter("local.kongyu.java.", "local.ateng.java"),
-                // 开启智能字段匹配（允许字段名不完全匹配）
-                JSONReader.Feature.SupportSmartMatch
-        );
+        try {
+            return JSON.parseObject(
+                    json,
+                    type,
+                    // 开启自动类型识别，仅允许指定包名
+                    JSONReader.autoTypeFilter("local.kongyu.java.", "local.ateng.java"),
+                    // 开启智能字段匹配（允许字段名不完全匹配）
+                    JSONReader.Feature.SupportSmartMatch
+            );
+        } catch (Exception e) {
+            log.error("JSON 解析失败: {}", json, e);
+            return null;
+        }
     }
 
     /**
@@ -97,7 +102,7 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
                     JSONWriter.Feature.WriteBigDecimalAsPlain
             );
         } catch (Exception e) {
-            // 序列化失败返回 null（可视情况记录日志）
+            log.error("对象序列化为 JSON 失败: {}", obj, e);
             return null;
         }
     }
