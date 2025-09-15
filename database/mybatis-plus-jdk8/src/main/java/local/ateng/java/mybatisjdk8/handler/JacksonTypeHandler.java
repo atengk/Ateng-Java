@@ -17,8 +17,10 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.deser.LocalTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateSerializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
+import com.fasterxml.jackson.datatype.jsr310.ser.LocalTimeSerializer;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedJdbcTypes;
 import org.apache.ibatis.type.MappedTypes;
@@ -28,6 +30,7 @@ import java.math.BigInteger;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +117,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     public static String DEFAULT_TIME_ZONE = "Asia/Shanghai";
     public static String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     public static String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
+    public static String DEFAULT_TIME_FORMAT = "HH:mm:ss.SSS";
 
     public static ObjectMapper getObjectMapper() {
         if (OBJECT_MAPPER == null) {
@@ -121,7 +125,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
                 if (OBJECT_MAPPER == null) {
                     OBJECT_MAPPER = new ObjectMapper();
                     // 配置日期和时间的序列化与反序列化
-                    customizeJsonDateTime(OBJECT_MAPPER, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_DATE_TIME_FORMAT);
+                    customizeJsonDateTime(OBJECT_MAPPER, DEFAULT_TIME_ZONE, DEFAULT_DATE_FORMAT, DEFAULT_TIME_FORMAT, DEFAULT_DATE_TIME_FORMAT);
                     // 配置 JSON 序列化相关设置
                     customizeJsonSerialization(OBJECT_MAPPER);
                     // 配置 JSON 反序列化相关设置
@@ -141,7 +145,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
      *
      * @param objectMapper Jackson 的 ObjectMapper 实例
      */
-    public static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone, String dateFormat, String dateTimeFormat) {
+    public static void customizeJsonDateTime(ObjectMapper objectMapper, String timeZone, String dateFormat, String timeFormat, String dateTimeFormat) {
         // 设置全局时区，确保 Date 类型数据使用此时区
         objectMapper.setTimeZone(TimeZone.getTimeZone(timeZone));
 
@@ -154,19 +158,25 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
         // Java 8 时间模块
         JavaTimeModule javaTimeModule = new JavaTimeModule();
 
-        // LocalDateTime 序列化 & 反序列化
+        // LocalDateTime
         javaTimeModule.addSerializer(LocalDateTime.class,
                 new LocalDateTimeSerializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
         javaTimeModule.addDeserializer(LocalDateTime.class,
                 new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(dateTimeFormat)));
 
-        // LocalDate 序列化 & 反序列化
+        // LocalDate
         javaTimeModule.addSerializer(LocalDate.class,
                 new LocalDateSerializer(DateTimeFormatter.ofPattern(dateFormat)));
         javaTimeModule.addDeserializer(LocalDate.class,
                 new LocalDateDeserializer(DateTimeFormatter.ofPattern(dateFormat)));
 
-        // 注册 JavaTimeModule
+        // LocalTime
+        javaTimeModule.addSerializer(LocalTime.class,
+                new LocalTimeSerializer(DateTimeFormatter.ofPattern(timeFormat)));
+        javaTimeModule.addDeserializer(LocalTime.class,
+                new LocalTimeDeserializer(DateTimeFormatter.ofPattern(timeFormat)));
+
+        // 注册模块
         objectMapper.registerModule(javaTimeModule);
     }
 

@@ -2,6 +2,8 @@ package local.ateng.java.mybatisjdk8;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.parser.Feature;
+import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.alibaba.fastjson.serializer.ValueFilter;
 import local.ateng.java.mybatisjdk8.entity.MyData;
 import local.ateng.java.mybatisjdk8.entity.Project;
 import local.ateng.java.mybatisjdk8.enums.StatusEnum;
@@ -24,6 +26,7 @@ public class Fastjson1Tests {
         List<MyData> list = JSON.parseObject(json, List.class, Feature.SupportAutoType);
         System.out.println(list.get(0).getClass());
         System.out.println(list.get(0).getAddress());
+        System.out.println(JSON.toJSONString(list, SerializerFeature.WriteNonStringValueAsString));
     }
 
     @Test
@@ -56,6 +59,38 @@ public class Fastjson1Tests {
                 .status(null)
                 .build();
         System.out.println(JSON.toJSONString(project));
+    }
+
+    @Test
+    public void pase() {
+        Project project = Project.builder()
+                .name("阿腾")
+                .score(11.11)
+                .status(null)
+                .build();
+
+        String json = JSON.toJSONString(project, SerializerFeature.WriteClassName, SerializerFeature.WriteNonStringValueAsString);
+        System.out.println(json);
+    }
+
+    @Test
+    public void pase2() {
+        Project project = Project.builder()
+                .name("阿腾")
+                .score(11.11)
+                .status(null)
+                .build();
+
+        ValueFilter doubleFilter = (object, name, value) -> {
+            if (value instanceof Double) {
+                // 转为普通数值
+                return ((Double) value).doubleValue();
+            }
+            return value;
+        };
+
+        String json = JSON.toJSONString(project, doubleFilter, SerializerFeature.WriteClassName);
+        System.out.println(json);
     }
 
 }
