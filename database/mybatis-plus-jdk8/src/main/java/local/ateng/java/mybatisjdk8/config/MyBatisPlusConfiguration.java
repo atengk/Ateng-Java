@@ -7,6 +7,8 @@ import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerIntercept
 import local.ateng.java.mybatisjdk8.handler.GeometryTypeHandler;
 import local.ateng.java.mybatisjdk8.handler.JacksonTypeHandler;
 import local.ateng.java.mybatisjdk8.handler.UUIDTypeHandler;
+import local.ateng.java.mybatisjdk8.interceptor.SqlAuditInnerInterceptor;
+import local.ateng.java.mybatisjdk8.interceptor.SqlPrintInnerInterceptor;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -72,7 +74,18 @@ public class MyBatisPlusConfiguration {
         paginationInterceptor.setMaxLimit(1000L);
 
         interceptor.addInnerInterceptor(paginationInterceptor);
+
+        // SQL 审计
+        interceptor.addInnerInterceptor(new SqlPrintInnerInterceptor());
+
         return interceptor;
     }
+
+
+    @Bean
+    public SqlAuditInnerInterceptor sqlAuditInnerInterceptor() {
+        return new SqlAuditInnerInterceptor();
+    }
+
 
 }
