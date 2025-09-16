@@ -7,7 +7,6 @@ import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerIntercept
 import local.ateng.java.mybatisjdk8.handler.GeometryTypeHandler;
 import local.ateng.java.mybatisjdk8.handler.JacksonTypeHandler;
 import local.ateng.java.mybatisjdk8.handler.UUIDTypeHandler;
-import local.ateng.java.mybatisjdk8.interceptor.MyCustomInterceptor;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -59,7 +58,7 @@ public class MyBatisPlusConfiguration {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
 
         // 自定义插件（先注册）
-        interceptor.addInnerInterceptor(new MyCustomInterceptor());
+        //interceptor.addInnerInterceptor(new MyCustomInterceptor());
 //        interceptor.addInnerInterceptor(new SqlPrintInterceptor());
 
 

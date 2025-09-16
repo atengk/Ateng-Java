@@ -103,6 +103,8 @@ public class Project implements Serializable {
      * 状态：0=草稿, 1=进行中, 2=已完成, 3=已取消
      */
     @TableField("status")
+    @JSONField(serialize = false)
+    @JsonIgnore
     private StatusEnum status;
 
     /**
