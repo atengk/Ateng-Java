@@ -107,7 +107,18 @@ public final class ObjectUtil {
     }
 
     /**
-     * 判断对象是否为空（null 或 空字符串 或 空集合）
+     * 判断对象是否为空
+     * <p>支持以下类型：</p>
+     * <ul>
+     *     <li>null</li>
+     *     <li>CharSequence (String、StringBuilder、StringBuffer)</li>
+     *     <li>Collection</li>
+     *     <li>Map</li>
+     *     <li>Optional</li>
+     *     <li>数组（包括原始类型数组）</li>
+     *     <li>Iterator</li>
+     *     <li>Enumeration</li>
+     * </ul>
      *
      * @param object 要判断的对象
      * @return true：对象为空；false：对象不为空
@@ -116,18 +127,35 @@ public final class ObjectUtil {
         if (object == null) {
             return true;
         }
-        if (object instanceof String) {
-            return ((String) object).trim().isEmpty();
+        // 字符串及其子类
+        if (object instanceof CharSequence) {
+            return ((CharSequence) object).toString().trim().isEmpty();
         }
+        // 集合
         if (object instanceof Collection) {
             return ((Collection<?>) object).isEmpty();
         }
+        // Map
         if (object instanceof Map) {
             return ((Map<?, ?>) object).isEmpty();
         }
+        // Optional
         if (object instanceof Optional) {
             return !((Optional<?>) object).isPresent();
         }
+        // 数组（包括原始类型数组）
+        if (object.getClass().isArray()) {
+            return Array.getLength(object) == 0;
+        }
+        // Iterator
+        if (object instanceof Iterator) {
+            return !((Iterator<?>) object).hasNext();
+        }
+        // Enumeration
+        if (object instanceof Enumeration) {
+            return !((Enumeration<?>) object).hasMoreElements();
+        }
+        // 其他对象不认为是空
         return false;
     }
 

@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
  * @author 孔余
  * @since 2025-09-12
  */
-public class AsyncUtil {
+public final class AsyncUtil {
 
     /**
      * 默认线程池核心线程数
@@ -66,6 +66,13 @@ public class AsyncUtil {
             Executors.defaultThreadFactory(),
             new ThreadPoolExecutor.AbortPolicy()
     );
+
+    /**
+     * 禁止实例化工具类
+     */
+    private AsyncUtil() {
+        throw new UnsupportedOperationException("工具类不可实例化");
+    }
 
     /**
      * 异步执行无返回值任务

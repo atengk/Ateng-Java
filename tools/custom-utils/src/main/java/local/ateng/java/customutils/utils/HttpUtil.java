@@ -16,7 +16,7 @@ import java.util.concurrent.*;
  * @author 孔余
  * @since 2025-08-09
  */
-public class HttpUtil {
+public final class HttpUtil {
 
     /**
      * 连接超时时间，单位毫秒
@@ -27,6 +27,13 @@ public class HttpUtil {
      * 读取超时时间，单位毫秒
      */
     private static final int READ_TIMEOUT = 15000;
+
+    /**
+     * 禁止实例化工具类
+     */
+    private HttpUtil() {
+        throw new UnsupportedOperationException("工具类不可实例化");
+    }
 
     /**
      * 发送同步GET请求
