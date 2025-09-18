@@ -39,6 +39,8 @@ package local.ateng.java.customutils.enums;
  *
  * @param <C> code 的类型（如 Integer、String、Long 等）
  * @param <N> name 的类型（如 String、I18nLabel 等）
+ * @author 孔余
+ * @since 2025-08-21
  */
 public interface BaseEnum<C, N> {
 
