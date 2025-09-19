@@ -174,7 +174,7 @@ Word工具类
 
 PDF工具类
 
-**添加工具类**
+**添加依赖**
 
 ```xml
 <!-- OpenPDF (iText 2.x 开源分支) -->
@@ -190,3 +190,27 @@ PDF工具类
 ## AsyncUtil
 
 异步和线程池工具类
+
+
+
+## DesensitizedUtil
+
+数据脱敏工具类
+
+
+
+## SqlUtil
+
+SQL工具类
+
+**添加依赖**
+
+```xml
+<!-- JSqlParser：解析和操作 SQL 语句 -->
+<dependency>
+    <groupId>com.github.jsqlparser</groupId>
+    <artifactId>jsqlparser</artifactId>
+    <version>4.6</version>
+</dependency>
+```
+
