@@ -36,6 +36,12 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Spring Boot Validation 数据校验框架 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
         <!-- Lombok: 简化Java代码编写的依赖项 -->
         <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
         <dependency>
