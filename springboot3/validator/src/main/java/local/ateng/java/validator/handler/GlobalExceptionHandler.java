@@ -4,11 +4,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
-import local.ateng.java.validator.constant.AppCodeEnum;
+import local.ateng.java.validator.enums.AppCodeEnum;
 import local.ateng.java.validator.exception.ServiceException;
 import local.ateng.java.validator.utils.Result;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -74,9 +73,10 @@ public class GlobalExceptionHandler {
         // 打印异常日志
         log.error("请求 [{}] 参数校验失败: {}", request.getRequestURI(), ex.getMessage(), ex);
         // 设置状态码
-        response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        response.setStatus(AppCodeEnum.PARAM_DATA_VALIDATION_FAILED.getHttpStatus());
         // 构建返回结果
-        return Result.failure(firstErrorMessage).withData(errors);
+        return Result.failure(AppCodeEnum.PARAM_DATA_VALIDATION_FAILED.getCode(), firstErrorMessage)
+                .withData(errors);
     }
 
     /**
@@ -110,9 +110,10 @@ public class GlobalExceptionHandler {
         // 打印异常日志
         log.error("请求 [{}] 参数校验失败: {}", request.getRequestURI(), ex.getMessage(), ex);
         // 设置状态码
-        response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        response.setStatus(AppCodeEnum.PARAM_DATA_VALIDATION_FAILED.getHttpStatus());
         // 构建返回结果
-        return Result.failure(firstErrorMessage).withData(errors);
+        return Result.failure(AppCodeEnum.PARAM_DATA_VALIDATION_FAILED.getCode(), firstErrorMessage)
+                .withData(errors);
     }
 
     /**
@@ -140,69 +141,49 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理系统级异常
+     * 兜底系统异常处理
      *
-     * <p>兜底异常处理方法，捕获所有未显式声明的异常类型，
-     * 并根据异常类型返回不同的提示信息和 HTTP 状态码。</p>
+     * <p>
+     * 捕获所有未显式声明的异常类型，根据异常类别返回对应的枚举错误码和提示信息。
+     * 确保系统不会因未捕获异常而暴露堆栈或返回非标准响应。
+     * </p>
      *
-     * <p>常见异常映射：</p>
-     * <ul>
-     *   <li>{@link HttpRequestMethodNotSupportedException} → 请求方式不支持 (405)</li>
-     *   <li>{@link NoHandlerFoundException}, {@link NoResourceFoundException} → 资源未找到 (404)</li>
-     *   <li>{@link HttpMessageNotReadableException}, {@link MissingServletRequestParameterException},
-     *       {@link MethodArgumentTypeMismatchException}, {@link NumberFormatException} → 请求参数错误 (400)</li>
-     *   <li>{@link IllegalArgumentException} → 非法参数 (400)</li>
-     *   <li>{@link IOException} → 文件读写异常 (500)</li>
-     *   <li>其他未知异常 → 系统内部错误 (500)</li>
-     * </ul>
-     *
-     * @param request 当前 HTTP 请求对象
-     * @param ex      未捕获的系统异常
-     * @return 标准化错误响应，包含异常对应的提示信息
+     * @param request  当前 HTTP 请求对象
+     * @param response 当前 HTTP 响应对象
+     * @param ex       未捕获的异常
+     * @return {@link Result} 标准化失败结果，包含错误码与提示信息
      */
     @ExceptionHandler(Exception.class)
-    public final Result handleAllExceptions(HttpServletRequest request, HttpServletResponse response, Exception ex) {
-        // 定义异常码和消息
-        int httpStatus = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
-        String message;
+    public Result handleAllExceptions(HttpServletRequest request,
+                                      HttpServletResponse response,
+                                      Exception ex) {
+        AppCodeEnum errorCode;
         // 分批处理异常类型
         if (ex instanceof HttpRequestMethodNotSupportedException) {
-            message = "请求方式不支持";
-            httpStatus = HttpServletResponse.SC_METHOD_NOT_ALLOWED;
-        } else if (ex instanceof NoHandlerFoundException || ex instanceof NoResourceFoundException || ex instanceof HttpMessageNotReadableException) {
-            message = "资源未找到";
-            httpStatus = HttpServletResponse.SC_NOT_FOUND;
+            errorCode = AppCodeEnum.REQUEST_METHOD_NOT_SUPPORTED;
+        } else if (ex instanceof NoHandlerFoundException || ex instanceof NoResourceFoundException) {
+            errorCode = AppCodeEnum.RESOURCE_NOT_FOUND;
         } else if (ex instanceof MissingServletRequestParameterException) {
-            message = "请求参数缺失";
-        } else if (ex instanceof IllegalArgumentException) {
-            message = "请求参数错误";
-            httpStatus = HttpServletResponse.SC_BAD_REQUEST;
-        } else if (ex instanceof ClassCastException) {
-            message = "类型转换错误";
-        } else if (ex instanceof ArithmeticException) {
-            message = "数据计算异常";
-        } else if (ex instanceof IndexOutOfBoundsException) {
-            message = "数组越界异常";
+            errorCode = AppCodeEnum.PARAM_MISSING_REQUIRED;
+        } else if (ex instanceof IllegalArgumentException
+                || ex instanceof MethodArgumentTypeMismatchException
+                || ex instanceof NumberFormatException) {
+            errorCode = AppCodeEnum.PARAM_REQUEST_PARAMETER_TYPE_ERROR;
         } else if (ex instanceof FileNotFoundException || ex instanceof IOException) {
-            message = "文件操作异常";
+            errorCode = AppCodeEnum.FILE_NOT_FOUND;
         } else if (ex instanceof NullPointerException) {
-            message = "空指针异常";
-        } else if (ex instanceof MethodArgumentTypeMismatchException || ex instanceof NumberFormatException) {
-            message = "数据类型不匹配异常";
+            errorCode = AppCodeEnum.NULL_POINTER_ERROR;
         } else if (ex instanceof UnsupportedOperationException) {
-            message = "不支持的操作异常";
+            errorCode = AppCodeEnum.INVALID_OPERATION_TYPE;
         } else {
-            // 默认处理
-            message = AppCodeEnum.ERROR.getDescription();
-            httpStatus = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
+            errorCode = AppCodeEnum.ERROR;
         }
         // 打印异常日志
         log.error("请求 [{}] 系统异常: {}", request.getRequestURI(), ex.getMessage(), ex);
         // 设置状态码
-        response.setStatus(httpStatus);
+        response.setStatus(errorCode.getHttpStatus());
         // 构建返回结果
-        return Result.failure(message);
+        return Result.failure(errorCode.getCode(), errorCode.getMessage());
     }
-
 
 }

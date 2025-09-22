@@ -1,6 +1,6 @@
 package local.ateng.java.exception.controller;
 
-import local.ateng.java.exception.constant.AppCodeEnum;
+import local.ateng.java.exception.enums.AppCodeEnum;
 import local.ateng.java.exception.utils.Result;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,7 +27,7 @@ public class TestController {
             put("result", result);
             put("null", null);
         }};
-        return Result.success(AppCodeEnum.SUCCESS.getCode(), AppCodeEnum.SUCCESS.getDescription()).withData(map);
+        return Result.success(AppCodeEnum.SUCCESS.getCode(), AppCodeEnum.SUCCESS.getMessage()).withData(map);
     }
 
 }

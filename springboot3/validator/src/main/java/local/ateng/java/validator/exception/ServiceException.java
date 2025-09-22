@@ -1,6 +1,6 @@
 package local.ateng.java.validator.exception;
 
-import local.ateng.java.validator.constant.AppCodeEnum;
+import local.ateng.java.validator.enums.AppCodeEnum;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -59,7 +59,7 @@ public final class ServiceException extends RuntimeException {
      * <p>使用 {@link AppCodeEnum#ERROR} 作为默认错误码和描述。</p>
      */
     public ServiceException() {
-        this(AppCodeEnum.ERROR.getCode(), AppCodeEnum.ERROR.getDescription(), null);
+        this(AppCodeEnum.ERROR.getCode(), AppCodeEnum.ERROR.getMessage(), null);
     }
 
     /**

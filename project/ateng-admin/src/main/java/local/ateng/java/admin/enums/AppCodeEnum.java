@@ -1,6 +1,6 @@
-package local.ateng.java.exception.constant;
+package local.ateng.java.admin.enums;
 
-public enum AppCodeEnum {
+public enum AppCodeEnum implements BaseEnum<String, String>{
     // 常用 Request successful failed
     SUCCESS("0", "请求成功"),
     ERROR("-1", "服务器异常, 请稍后再试"),
@@ -106,8 +106,14 @@ public enum AppCodeEnum {
         this.description = description;
     }
 
+    @Override
     public String getCode() {
         return code;
+    }
+
+    @Override
+    public String getName() {
+        return description;
     }
 
     public String getDescription() {
