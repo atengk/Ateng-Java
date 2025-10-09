@@ -513,3 +513,188 @@ public class RedisController {
 MyUser(id=1, name=ateng, age=null, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2025-03-06T14:17:55.734, createTime2=Thu Mar 06 14:17:55 CST 2025, createTime3=null, num=0, list=[1, 2])
 ```
 
+
+
+## 默认值
+
+### 默认注解参数
+
+当该字段为null时，反序列化后的值就是字符串的斜杠
+
+注意Fastjson2是反序列化生效这个默认值，Fastjson1是序列化是生效
+
+```java
+@JSONField(defaultValue = "/")
+private String province;
+```
+
+### 自定义注解+Filters
+
+#### 创建注解
+
+```java
+package local.ateng.java.serialize.serializer;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface DefaultNullValue {
+    String value() default "/";
+}
+
+```
+
+#### 创建过滤器
+
+```java
+package local.ateng.java.serialize.serializer;
+
+
+import com.alibaba.fastjson2.filter.BeanContext;
+import com.alibaba.fastjson2.filter.ContextValueFilter;
+
+public class DefaultValueFilter implements ContextValueFilter {
+
+    @Override
+    public Object process(BeanContext context, Object object, String name, Object value) {
+        if (value != null) {
+            return value;
+        }
+
+        // 如果字段上有注解，就用注解里的值
+        DefaultNullValue ann = context.getField().getAnnotation(DefaultNullValue.class);
+        if (ann != null) {
+            return ann.value();
+        }
+
+        // 没有注解就返回原来的 null
+        return null;
+    }
+}
+
+```
+
+#### 配置Converter
+
+给 FastJsonConfig 配置上序列化过滤器
+
+```java
+config.setWriterFilters(new DefaultValueFilter());
+```
+
+完整代码如下
+
+```java
+package local.ateng.java.serialize.config;
+
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.support.config.FastJsonConfig;
+import com.alibaba.fastjson2.support.spring6.http.converter.FastJsonHttpMessageConverter;
+import local.ateng.java.serialize.serializer.DefaultValueFilter;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * 在 Spring Web MVC 中集成 Fastjson2
+ * https://github.com/alibaba/fastjson2/blob/main/docs/spring_support_cn.md#2-%E5%9C%A8-spring-web-mvc-%E4%B8%AD%E9%9B%86%E6%88%90-fastjson2
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-03-06
+ */
+@Configuration
+public class FastJsonWebMvcConfig implements WebMvcConfigurer {
+
+    /**
+     * Fastjson2转换器配置
+     *
+     * @return
+     */
+    private static FastJsonHttpMessageConverter getFastJsonHttpMessageConverter() {
+        FastJsonHttpMessageConverter converter = new FastJsonHttpMessageConverter();
+        FastJsonConfig config = new FastJsonConfig();
+        config.setDateFormat("yyyy-MM-dd HH:mm:ss");
+        config.setWriterFeatures(
+                // 序列化输出空值字段
+                JSONWriter.Feature.WriteNulls,
+                // 在大范围超过JavaScript支持的整数，输出为字符串格式
+                JSONWriter.Feature.BrowserCompatible,
+                // 序列化BigDecimal使用toPlainString，避免科学计数法
+                JSONWriter.Feature.WriteBigDecimalAsPlain
+        );
+        config.setReaderFeatures(
+                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                JSONReader.Feature.SupportSmartMatch
+        );
+        config.setWriterFilters(new DefaultValueFilter());
+        converter.setFastJsonConfig(config);
+        converter.setDefaultCharset(StandardCharsets.UTF_8);
+        converter.setSupportedMediaTypes(Collections.singletonList(MediaType.APPLICATION_JSON));
+        return converter;
+    }
+
+    @Override
+    public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+        FastJsonHttpMessageConverter converter = getFastJsonHttpMessageConverter();
+        converters.add(0, converter);
+    }
+
+}
+
+
+```
+
+#### 配置默认值
+
+在字段上配置默认值即可
+
+```java
+@DefaultNullValue("/")
+private Date createTime3;
+```
+
+
+
+## 自定义序列化
+
+### 配置自定义序列化器
+
+```java
+package local.ateng.java.serialize.serializer;
+
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.writer.ObjectWriter;
+
+import java.lang.reflect.Type;
+
+public class CustomSerializer implements ObjectWriter {
+
+    @Override
+    public void write(JSONWriter writer, Object object, Object fieldName, Type fieldType, long features) {
+        writer.writeString(object + "~");
+    }
+
+}
+
+```
+
+### 使用
+
+使用 serializeUsing 指定自定义的序列化器，最终序列化后就可以实现自定义，但是注意字段为null就不会走该序列化器（不会生效）
+
+```java
+@JSONField(serializeUsing = CustomSerializer.class)
+private String province;
+```
+

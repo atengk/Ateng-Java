@@ -29,7 +29,7 @@ public class Fastjson2Controller {
                 .score(new BigDecimal("8800000000000000000000000000.911000000000000000000000"))
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
-                .province("<")
+                .province(null)
                 .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .createTime2(new Date())

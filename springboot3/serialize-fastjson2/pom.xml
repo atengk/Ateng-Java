@@ -19,7 +19,7 @@
         <spring-boot.version>3.4.1</spring-boot.version>
         <maven-compiler.version>3.12.1</maven-compiler.version>
         <lombok.version>1.18.36</lombok.version>
-        <fastjson2.version>2.0.53</fastjson2.version>
+        <fastjson2.version>2.0.59</fastjson2.version>
     </properties>
 
     <!-- 项目依赖 -->
