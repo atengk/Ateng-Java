@@ -3,6 +3,7 @@ package local.ateng.java.serialize.config;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.support.config.FastJsonConfig;
 import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter;
+import local.ateng.java.serialize.serializer.DefaultValueFilter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -41,6 +42,7 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
                 // 序列化BigDecimal使用toPlainString，避免科学计数法
                 SerializerFeature.WriteBigDecimalAsPlain
         );
+        config.setSerializeFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);
         converter.setSupportedMediaTypes(Collections.singletonList(MediaType.APPLICATION_JSON));
         return converter;

@@ -18,7 +18,7 @@ import java.util.List;
 @RequestMapping("/redis")
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class RedisController {
-    private final RedisTemplate<Object, Object> redisTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     // 序列化
     @GetMapping("/serialize")
