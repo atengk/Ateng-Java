@@ -34,7 +34,8 @@ public class JacksonAnnotationTests {
                 .score(new BigDecimal("88.911"))
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
-                .province("重庆市")
+//                .province("重庆市")
+                .province(null)
                 .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .build();
@@ -46,7 +47,7 @@ public class JacksonAnnotationTests {
     @Test
     public void deserialization() throws JsonProcessingException {
         // 创建数据
-        String json = "{\"id\":\"1\",\"age\":25,\"phoneNumber\":\"1762306666\",\"email\":\"kongyu2385569970@gmail.com\",\"score\":\"88.91\",\"ratio\":0.7147,\"birthday\":\"2000-01-01\",\"province\":\"重庆市\",\"city\":\"重庆市\",\"createTime\":\"2025-03-05 11:02:56\",\"full_name\":\"ateng\"}";
+        String json = "{\"id\":\"1\",\"age\":25,\"phoneNumber\":\"1762306666\",\"email\":\"kongyu2385569970@gmail.com\",\"score\":\"88.91\",\"ratio\":0.7147,\"birthday\":\"2000-01-01\",\"city\":\"重庆市\"}";
         // 进行反序列化
         MyUser myUser = objectMapper.readValue(json, MyUser.class);
         System.out.println(myUser);

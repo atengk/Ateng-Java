@@ -28,7 +28,8 @@ public class JacksonController {
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
                 .province("重庆市")
-                .city("重庆市")
+                .province(null)
+//                .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .build();
     }

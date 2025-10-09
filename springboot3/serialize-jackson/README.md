@@ -499,3 +499,41 @@ public class RedisController {
 MyUser(id=1, name=ateng, age=null, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2025-03-06T08:46:55.760579, createTime2=Thu Mar 06 08:46:55 CST 2025, createTime3=null, num=0, list=[])
 ```
 
+
+
+## 自定义序列化
+
+### 配置自定义序列化器
+
+```java
+package local.ateng.java.serialize.serializer;
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+
+import java.io.IOException;
+
+public class DefaultValueStringSerializer extends JsonSerializer {
+    @Override
+    public void serialize(Object value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        if (value == null) {
+            gen.writeString("/");
+        } else {
+            gen.writeString(value + "~");
+        }
+    }
+}
+
+
+```
+
+### 使用
+
+使用 @JsonSerialize 的 using 和 nullsUsing 指定自定义的序列化器，最终序列化后就可以实现自定义
+
+```java
+@JsonSerialize(using = DefaultValueStringSerializer.class, nullsUsing = DefaultValueStringSerializer.class)
+private String province;
+```
+
