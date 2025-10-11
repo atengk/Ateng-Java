@@ -13,7 +13,7 @@ public class StringUtilTests {
     @Test
     void split1() {
         String str1 = "1,  2  ,3,4,,,";
-        System.out.println(StringUtil.splitToList(str1,",", true));
+        System.out.println(StringUtil.splitToList(str1, ",", true));
         System.out.println(Arrays.asList(StringUtil.split(str1, ",", false)));
     }
 
@@ -35,6 +35,18 @@ public class StringUtilTests {
 
         String url2 = StringUtil.buildUrl(baseUrl, queryParams, uriVariables, false);
         System.out.println("encode=false : " + url2);
+    }
+
+    @Test
+    void repeat() {
+        String repeat = StringUtil.repeat("=", 50);
+        System.out.println(repeat);
+    }
+
+    @Test
+    void format() {
+        String format = StringUtil.format("你好，我是{}，来自{}，{}、{}", "阿腾", "重庆");
+        System.out.println(format);
     }
 
 }
