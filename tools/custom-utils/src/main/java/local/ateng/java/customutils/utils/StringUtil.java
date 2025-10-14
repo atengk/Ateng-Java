@@ -87,6 +87,50 @@ public final class StringUtil {
     }
 
     /**
+     * 去除字符串两侧指定的字符串（子串）。
+     *
+     * <p>与 {@link String#trim()} 不同，该方法可去除任意指定的子串。
+     * 当 {@code str} 为 null 或空字符串时，将默认去除两端的空格。</p>
+     *
+     * <p>示例：
+     * <pre>
+     * trim("##hello##", "##") → "hello"
+     * trim("--abc--", "--")   → "abc"
+     * trim("  xyz  ", null)   → "xyz"
+     * trim("", "##")          → ""
+     * </pre>
+     *
+     * @param str 原始字符串，可为 null
+     * @param trimStr 要去除的子串；如果为 null 或空，则默认去除空格
+     * @return 去除后的字符串；若输入为 null 则返回 null
+     */
+    public static String trim(String str, String trimStr) {
+        if (str == null) {
+            return null;
+        }
+
+        if (str.isEmpty()) {
+            // 空字符串时直接去除空格
+            return str.trim();
+        }
+
+        // 如果 trimStr 为空，则默认去除空格
+        if (trimStr == null || trimStr.isEmpty()) {
+            return str.trim();
+        }
+
+        String result = str;
+        while (result.startsWith(trimStr)) {
+            result = result.substring(trimStr.length());
+        }
+        while (result.endsWith(trimStr)) {
+            result = result.substring(0, result.length() - trimStr.length());
+        }
+        // 额外再去除空格，保证干净
+        return result.trim();
+    }
+
+    /**
      * 判断字符串是否为纯数字（可用于 ID、手机号等）
      *
      * @param str 输入字符串

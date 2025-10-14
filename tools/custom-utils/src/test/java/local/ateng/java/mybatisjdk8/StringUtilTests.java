@@ -49,4 +49,16 @@ public class StringUtilTests {
         System.out.println(format);
     }
 
+    @Test
+    void testTrimString() {
+        System.out.println(StringUtil.trim("##hello##", "##"));
+        System.out.println(StringUtil.trim("a,b,c,x,", ","));
+        System.out.println(StringUtil.trim("--abc--", "--"));
+        System.out.println(StringUtil.trim("  xyz  ", null));
+        System.out.println(StringUtil.trim("", "##"));
+        System.out.println(StringUtil.trim(null, "--"));
+        System.out.println(StringUtil.trim("####", "##"));
+        System.out.println(StringUtil.trim("##abc##xyz", "##"));
+    }
+
 }
