@@ -5,6 +5,7 @@ import local.ateng.java.customutils.entity.MyUser0;
 import local.ateng.java.customutils.entity.MyUser1;
 import local.ateng.java.customutils.entity.MyUser2;
 import local.ateng.java.customutils.utils.BeanUtil;
+import lombok.Data;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -25,6 +26,61 @@ public class BeanUtilTests {
         System.out.println(myUser1);
         System.out.println(myUser2);
     }
+
+    @Test
+    void copy() {
+        MyUser2 myUser2 = new MyUser2();
+        MyUser1 myUser1 = createMyUser1Sample();
+        BeanUtil.copy(myUser1, myUser2);
+        System.out.println(myUser2);
+        System.out.println(myUser2.getUserName());
+        System.out.println(myUser2.getMyUser0List().get(0).getId());
+        myUser2.setId(0L);
+        System.out.println(myUser1);
+        System.out.println(myUser2);
+    }
+
+    @Test
+    void copy2() {
+        MyUser2 myUser2 = new MyUser2();
+        myUser2.setId(0L);
+        myUser2.setUserName("test");
+        MyUser1 myUser1 = createMyUser1Sample();
+        myUser1.setId(null);
+        myUser1.setUserName(null);
+        BeanUtil.copy(myUser1, myUser2);
+        System.out.println(myUser2);
+    }
+
+    /**
+     * Bean转Bean
+     */
+    @Test
+    void test021() {
+        A a = new A();
+        a.setA("A");
+        B b = new B();
+        b.setB("B");
+        C c = new C();
+        BeanUtil.copy(a, c);
+        BeanUtil.copy(b, c);
+        System.out.println(c);
+    }
+    @Data
+    public class A {
+        private String a;
+    }
+    @Data
+    public class B {
+        private String b;
+    }
+    @Data
+    public class C {
+        private String a;
+        private String b;
+        private String c;
+    }
+
 
     public static MyUser1 createMyUser1Sample() {
         MyUser0 user1 = new MyUser0();

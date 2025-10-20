@@ -3,6 +3,7 @@ package local.ateng.java.hutool;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.json.JSONObject;
 import local.ateng.java.hutool.entity.UserInfoEntity;
+import lombok.Data;
 import org.junit.jupiter.api.Test;
 
 import java.util.Date;
@@ -41,6 +42,35 @@ public class BeanUtilTests {
         JSONObject json = new JSONObject();
         BeanUtil.copyProperties(user, json);
         System.out.println(json);
+    }
+
+    /**
+     * Bean转Bean
+     */
+    @Test
+    void test021() {
+        A a = new A();
+        a.setA("A");
+        B b = new B();
+        b.setB("B");
+        C c = new C();
+        BeanUtil.copyProperties(a, c);
+        BeanUtil.copyProperties(b, c);
+        System.out.println(c);
+    }
+    @Data
+    class A {
+        private String a;
+    }
+    @Data
+    class B {
+        private String b;
+    }
+    @Data
+    class C {
+        private String a;
+        private String b;
+        private String c;
     }
 
     /**
