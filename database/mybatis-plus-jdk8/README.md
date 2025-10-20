@@ -1102,7 +1102,7 @@ private StatusEnum status;
 <!-- MyBatis Plus 多数据源 -->
 <dependency>
     <groupId>com.baomidou</groupId>
-    <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+    <artifactId>dynamic-datasource-spring-boot-starter</artifactId>
     <version>4.3.1</version>
 </dependency>
 ```
