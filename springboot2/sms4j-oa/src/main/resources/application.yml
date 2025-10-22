@@ -1,0 +1,31 @@
+server:
+  port: 12101
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# OA消息通知配置
+sms-oa:
+  config-type: yaml
+  oas:
+    dingTalk: # configId
+      isEnable: true # 表示该配置是否生效(默认生效,false表示不生效)
+      supplier: ding_ding # 厂商标识
+      tokenId: 1c58688af20ba408585bbb51997532e421b377093f7e876f2ef88333eaabb291 # webhook 中的 access_token
+      sign: SEC9dbf5a36f16940ede57fd870b2fcb61c61c0b5fb66bb666b7c0c8828ca0f8551 # 安全设置在验签模式下才的秘钥，非验签模式没有此值
+    byteTalk: # configId
+      supplier: byte_talk # 厂商标识
+      tokenId: 您的accessKey # webhook 中的 token
+      sign: 您的sign # 安全设置在签名校验模式下才的秘钥，非验签模式没有此值
+    weTalk:
+      isEnable: true
+      supplier: we_talk # 厂商标识
+      tokenId: ff3e6d6d-fd52-46e7-9ccb-7dd41c98053a # webhook 中的 key
+  core-pool-size: 20 # 核型线程数量
+  queue-capacity: 20 # 队列容量
+  max-pool-size: 20 # 最大线程池数量
+

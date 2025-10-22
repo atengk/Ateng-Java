@@ -1,0 +1,21 @@
+server:
+  port: 12102
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# OA消息通知配置
+sms-email:
+  smtp-server: "smtp.qq.com"
+  port: "465"
+  from-address: "2385569970@qq.com"
+  username: "2385569970@qq.com"
+  password: "nkoojkmbokvweaji"
+  is-ssl: "true"
+  is-auth: "true"
+  retry-interval: "5"
+  max-retries: "1"
