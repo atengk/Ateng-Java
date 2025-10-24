@@ -1,0 +1,40 @@
+server:
+  port: 14001
+  servlet:
+    context-path: /
+spring:
+  main:
+    web-application-type: servlet
+  application:
+    name: ${project.artifactId}
+---
+# 自定义配置文件
+app:
+  name: ateng
+  port: 12345
+  ids:
+    - 1
+    - 2
+    - 3
+  ateng:
+    name: kongyu
+    age: 24
+---
+spring:
+  profiles:
+    active: dev
+---
+# dev 环境生效该文档
+spring:
+  config:
+    activate:
+      on-profile: dev
+data: "dev 环境"
+---
+# dev 环境生效该文档
+spring:
+  config:
+    activate:
+      on-profile: test
+data: "test 环境"
+---
