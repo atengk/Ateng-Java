@@ -6,9 +6,9 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>email-jdk8</artifactId>
+    <artifactId>boot2-email</artifactId>
     <version>v1.0</version>
-    <name>email-jdk8</name>
+    <name>boot2-email</name>
     <description>SpringBoot2 邮箱 模块</description>
 
     <!-- 项目属性 -->

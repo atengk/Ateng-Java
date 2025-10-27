@@ -6,10 +6,11 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>jasypt-jdk8</artifactId>
+    <artifactId>sms4j</artifactId>
     <version>v1.0</version>
-    <name>jasypt-jdk8</name>
-    <description>jasypt：配置文件参数值加密</description>
+    <name>sms4j</name>
+    <description>SMS4J：发送短信</description>
+    <url>https://sms4j.com/doc3/plugin/oa.html</url>
 
     <!-- 项目属性 -->
     <properties>
@@ -19,7 +20,6 @@
         <spring-boot.version>2.7.18</spring-boot.version>
         <maven-compiler.version>3.12.1</maven-compiler.version>
         <lombok.version>1.18.36</lombok.version>
-        <hutool.version>5.8.35</hutool.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -46,18 +46,17 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Hutool: Java工具库，提供了许多实用的工具方法 -->
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
-            <version>${hutool.version}</version>
+            <version>5.8.35</version>
         </dependency>
 
-        <!-- jasypt：配置文件参数值加密 -->
+        <!-- SMS4J 短信发送 -->
         <dependency>
-            <groupId>com.github.ulisesbocchio</groupId>
-            <artifactId>jasypt-spring-boot-starter</artifactId>
-            <version>3.0.5</version>
+            <groupId>org.dromara.sms4j</groupId>
+            <artifactId>sms4j-spring-boot-starter</artifactId>
+            <version>3.3.5</version>
         </dependency>
 
     </dependencies>

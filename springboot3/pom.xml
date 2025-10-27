@@ -31,8 +31,6 @@
         <module>serialize-jackson</module>
         <module>docker</module>
         <module>email</module>
-        <module>email-jdk8</module>
         <module>jasypt</module>
-        <module>jasypt-jdk8</module>
     </modules>
 </project>

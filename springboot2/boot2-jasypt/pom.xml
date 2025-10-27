@@ -6,11 +6,10 @@
 
     <!-- 项目坐标 -->
     <groupId>local.ateng.java</groupId>
-    <artifactId>sms4j-oa</artifactId>
+    <artifactId>boot2-jasypt</artifactId>
     <version>v1.0</version>
-    <name>sms4j-oa</name>
-    <description>oa消息通知，飞书、钉钉、企业微信</description>
-    <url>https://sms4j.com/doc3/plugin/oa.html</url>
+    <name>boot2-jasypt</name>
+    <description>jasypt：配置文件参数值加密</description>
 
     <!-- 项目属性 -->
     <properties>
@@ -20,6 +19,7 @@
         <spring-boot.version>2.7.18</spring-boot.version>
         <maven-compiler.version>3.12.1</maven-compiler.version>
         <lombok.version>1.18.36</lombok.version>
+        <hutool.version>5.8.35</hutool.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -46,17 +46,18 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Hutool: Java工具库，提供了许多实用的工具方法 -->
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
-            <version>5.8.35</version>
+            <version>${hutool.version}</version>
         </dependency>
 
-        <!-- SMS4J oa消息通知，飞书、钉钉、企业微信 -->
+        <!-- jasypt：配置文件参数值加密 -->
         <dependency>
-            <groupId>org.dromara.sms4j</groupId>
-            <artifactId>sms4j-oa-core</artifactId>
-            <version>3.3.5</version>
+            <groupId>com.github.ulisesbocchio</groupId>
+            <artifactId>jasypt-spring-boot-starter</artifactId>
+            <version>3.0.5</version>
         </dependency>
 
     </dependencies>

@@ -8,7 +8,7 @@
     <groupId>local.ateng.java</groupId>
     <artifactId>sms4j-email</artifactId>
     <version>v1.0</version>
-    <name>config</name>
+    <name>sms4j-email</name>
     <description>oa消息通知，飞书、钉钉、企业微信</description>
     <url>https://sms4j.com/doc3/plugin/oa.html</url>
 

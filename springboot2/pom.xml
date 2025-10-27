@@ -16,5 +16,8 @@
     <modules>
         <module>sms4j-oa</module>
         <module>sms4j-email</module>
+        <module>sms4j</module>
+        <module>boot2-email</module>
+        <module>boot2-jasypt</module>
     </modules>
 </project>
