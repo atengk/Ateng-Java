@@ -145,3 +145,30 @@ public void test1() {
 }
 ```
 
+### 带附件
+
+注意带附件（批量的，单个的不影响）的需要JDK>=11，否则会报错 `java.lang.NullPointerException: Deflater has been closed` 、`java.lang.NoSuchMethodError: java.nio.ByteBuffer.flip()Ljava/nio/ByteBuffer;`
+
+```java
+@Test
+public void test3() {
+    List<String> mailAddress = new ArrayList<>();
+    mailAddress.add("2385569970@qq.com");
+    mailAddress.add("kongyu@beraising.cn");
+    HashMap<String, String> filesMap = new HashMap<>();
+    filesMap.put("sms4j.png", "https://sms4j.com/logo.png");
+    filesMap.put("sa-token.png", "https://oss.dev33.cn/sa-token/doc/home/sa-token-jss--tran.png");
+    MailMessage message = MailMessage.Builder()
+            .mailAddress(mailAddress)
+            .title("测试标题")
+            .body("测试邮件发送")
+            .htmlContent("11111111111")
+            .files(filesMap)
+            .zipName("附件-归档.zip")
+            .build();
+
+    mailClient.send(message);
+
+}
+```
+
