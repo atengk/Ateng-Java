@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- 项目模型版本 -->
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 项目坐标 -->
+    <groupId>io.github.atengk</groupId>
+    <artifactId>boot2-deploy</artifactId>
+    <version>1.0.5-SNAPSHOT</version>
+    <name>boot2-deploy</name>
+    <description>SpringBoot2 发布到仓库 模块</description>
+    <url>https://atengk.github.io/dev</url>
+
+    <!-- 许可证信息 -->
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <!-- 开发者信息 -->
+    <developers>
+        <developer>
+            <id>ateng</id>
+            <name>阿腾</name>
+            <email>2385569970@qq.com</email>
+        </developer>
+    </developers>
+
+    <!-- 版本控制信息 -->
+    <scm>
+        <url>https://github.com/atengk/Ateng-Java</url>
+        <connection>scm:git:git://github.com/atengk/Ateng-Java.git</connection>
+        <developerConnection>scm:git:ssh://github.com/atengk/Ateng-Java.git</developerConnection>
+    </scm>
+
+    <!-- 项目属性 -->
+    <properties>
+        <java.version>8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spring.boot.version>2.7.18</spring.boot.version>
+        <maven-compiler.version>3.12.1</maven-compiler.version>
+        <lombok.version>1.18.36</lombok.version>
+    </properties>
+
+    <!-- 项目依赖 -->
+    <dependencies>
+        <!-- Spring Boot Auto Configuration -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
+
+        <!-- Optional: 如果需要用到 Spring Boot 核心功能 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot</artifactId>
+            <version>${spring.boot.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Lombok: 简化Java代码编写的依赖项 -->
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- 你的业务依赖 -->
+        <!-- ... -->
+    </dependencies>
+
+    <!-- Spring Boot 依赖管理 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring.boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- 普通仓库配置 -->
+    <repositories>
+        <!-- 阿里云中央仓库 -->
+        <repository>
+            <id>aliyun-central</id>
+            <name>阿里云中央仓库</name>
+            <url>https://maven.aliyun.com/repository/central</url>
+        </repository>
+
+        <!-- 官方中央仓库 -->
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo.maven.apache.org/maven2/</url>
+        </repository>
+    </repositories>
+
+    <!-- 构建配置 -->
+    <build>
+        <plugins>
+            <!-- 编译 JAR -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.1</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+
+            <!-- 打包源码 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- javadoc插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.12.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <source>${java.version}</source>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                    <failOnError>false</failOnError>
+                </configuration>
+            </plugin>
+
+            <!-- JAR 签名、发布 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.1.4</version>
+            </plugin>
+
+            <!-- GPG 签名插件 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.8</version>
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <!-- 用 loopback 模式 -->
+                    <gpgArguments>
+                        <arg>--pinentry-mode</arg>
+                        <arg>loopback</arg>
+                    </gpgArguments>
+
+                    <!-- 从 settings.xml 中取 passphrase -->
+                    <passphraseServerId>gpg.passphrase</passphraseServerId>
+                </configuration>
+            </plugin>
+
+            <!-- 部署到 Sonatype 的插件 -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.9.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <!-- 对应 settings.xml 中 servers.server 的 id -->
+                    <publishingServerId>maven-central</publishingServerId>
+                    <!-- 自动发布，否则需要手动去 [sonatype](https://central.sonatype.com/publishing/deployments) 发布 -->
+                    <autoPublish>true</autoPublish>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>
