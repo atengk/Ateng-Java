@@ -32,5 +32,6 @@
         <module>docker</module>
         <module>email</module>
         <module>jasypt</module>
+        <module>boot3-deploy</module>
     </modules>
 </project>
