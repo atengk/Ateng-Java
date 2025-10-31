@@ -784,20 +784,6 @@ public final class StringUtil {
     }
 
     /**
-     * 使用指定分隔符拼接字符串数组
-     *
-     * @param delimiter 分隔符
-     * @param elements  元素数组
-     * @return 拼接结果
-     */
-    public static String join(String delimiter, String... elements) {
-        if (elements == null || elements.length == 0) {
-            return "";
-        }
-        return String.join(delimiter, elements);
-    }
-
-    /**
      * 使用指定分隔符拼接集合中的字符串元素
      *
      * @param delimiter 分隔符
@@ -863,7 +849,10 @@ public final class StringUtil {
      * @return 拼接结果，数组为空返回空字符串
      */
     public static String join(String... elements) {
-        return join(DEFAULT_DELIMITER, elements);
+        if (elements == null || elements.length == 0) {
+            return "";
+        }
+        return String.join(DEFAULT_DELIMITER, elements);
     }
 
     /**
