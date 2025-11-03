@@ -1,10 +1,12 @@
-# 属性配置
+# 属性配置和Bean的使用
 
 
 
-## 环境配置
+## 属性配置
 
-### spring.profiles.active
+### 环境配置
+
+#### spring.profiles.active
 
 一般在配置文件 `application.yml` 或者 启动命令中 `--spring.profiles.active=dev` 设置项目环境
 
@@ -30,7 +32,7 @@ spring:
       - test
 ```
 
-### spring.config.activate.on-profile
+#### spring.config.activate.on-profile
 
 **`---`** 代表的是 **多文档分隔符**，每一段其实就是一个独立的配置文件片段。
 
@@ -54,7 +56,7 @@ data: "test 环境"
 ---
 ```
 
-### 环境变量
+#### 环境变量
 
 如果环境变量存在，则取环境变量，否则取默认值
 value: ${ENV_VAR:defaultValue}
@@ -70,7 +72,7 @@ server:
 
 
 
-## 将配置文件加载到属性类中
+### 将配置文件加载到属性类中
 
 `@ConfigurationProperties` 是 Spring Boot 提供的一个注解，用于将外部配置文件中的属性值绑定到 Java 对象上。这使得在应用程序中访问配置信息变得更加简洁和类型安全。通常，配置文件可以是 `application.properties` 或 `application.yml`，通过 `@ConfigurationProperties` 注解，Spring Boot 会自动将这些配置映射到一个 POJO（Plain Old Java Object）中。
 
@@ -146,16 +148,18 @@ public class MyApplicationRunner implements ApplicationRunner {
 
 
 
-## 使用@Value
+### 使用@Value
 
 `@Value` 是 Spring 提供的一个用于 **属性注入** 的注解，主要用于从 **配置文件**（`application.properties` 或 `application.yml`）、**环境变量** 或 **SpEL 表达式** 中获取值。
 
 ---
 
-### **1. `@Value` 的基本用法**
+**1. `@Value` 的基本用法**
+
 `@Value` 通常用于 **从配置文件加载值**，并提供默认值：
 
-#### **🔹（1）从 `application.properties` 或 `application.yml` 读取**
+**🔹（1）从 `application.properties` 或 `application.yml` 读取**
+
 ✅ **`application.properties`**
 
 ```properties
@@ -185,7 +189,8 @@ public class AppConfig {
 
 ---
 
-#### **🔹（2）使用默认值**
+**🔹（2）使用默认值**
+
 如果 **配置文件中没有该属性**，可以使用 `:` 提供 **默认值**：
 ```java
 @Value("${app.version:1.0.0}") // 读取 app.version，如果不存在，则使用默认值 "1.0.0"
@@ -196,8 +201,10 @@ private String appVersion;
 
 ---
 
-### **2. `@Value` 的高级用法**
-#### **🔹（1）SpEL 表达式（Spring Expression Language）**
+**2. `@Value` 的高级用法**
+
+**🔹（1）SpEL 表达式（Spring Expression Language）**
+
 `@Value` 支持 **SpEL 表达式**，可以动态计算值。
 
 ✅ **使用 `SpEL` 进行计算**
@@ -236,7 +243,8 @@ public class SpELExample {
 
 ---
 
-#### **🔹（2）从环境变量或系统属性读取**
+**🔹（2）从环境变量或系统属性读取**
+
 ✅ **获取环境变量**
 
 ```java
@@ -257,7 +265,8 @@ private String userDir;
 
 ---
 
-#### **🔹（3）注入 List、Map、数组**
+**🔹（3）注入 List、Map、数组**
+
 ✅ **读取数组**
 
 `application.properties`:
@@ -296,3 +305,436 @@ Java 代码：
 @Value("#{${app.config}}")
 private Map<String, String> configMap;
 ```
+
+**🔹（4）从 classpath 获取文件**
+
+Spring 的 `@Value` 支持 **资源表达式**（Resource Expression）
+ 即以 `classpath:`、`file:`、`url:` 开头的路径。
+
+示例：
+
+```java
+package io.github.atengk.demo.value;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ClasspathFileExample {
+
+    @Value("classpath:data/example.txt")
+    private Resource resourceFile;
+
+    public void printContent() throws Exception {
+        System.out.println("文件路径: " + resourceFile.getFilename());
+        System.out.println("文件内容: " + new String(resourceFile.getInputStream().readAllBytes()));
+    }
+}
+```
+
+**说明：**
+
+- `@Value("classpath:...")` 会自动注入一个 `org.springframework.core.io.Resource` 对象；
+- 通过 `resourceFile.getInputStream()` 可读取文件内容；
+- 文件放在 `src/main/resources/data/example.txt` 即可。
+
+🧾 **注入外部文件（file:）**
+
+如果你想读取绝对路径文件：
+
+```java
+@Value("file:/opt/config/custom.conf")
+private Resource externalFile;
+```
+
+同样通过 `externalFile.getInputStream()` 读取。
+
+------
+
+🌐 **读取 URL 资源**
+
+Spring 的 `Resource` 抽象支持网络资源：
+
+```java
+@Value("https://example.com/data.txt")
+private Resource remoteFile;
+```
+
+------
+
+⚙️ **读取并转为字符串或属性值**
+
+如果文件内容是文本或配置文件，你还可以直接注入为字符串：
+
+```java
+@Value("classpath:data/message.txt")
+private String message;
+```
+
+> ⚠️ 注意：这种方式只在文件内容较短且能正确转换为字符串时有效，否则会报错。
+>  更推荐注入 `Resource` 再读取流。
+
+
+
+## Bean的使用
+
+### 🧩 一、@Profile —— 按环境激活 Bean
+
+**作用**：
+ `@Profile` 用于指定 Bean 仅在某个或某些 Profile 环境下加载。
+
+**使用示例：**
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+
+@Configuration
+public class ProfileConfig {
+
+    @Bean
+    @Profile("dev")
+    public String devBean() {
+        return "开发环境Bean";
+    }
+
+    @Bean
+    @Profile("prod")
+    public String prodBean() {
+        return "生产环境Bean";
+    }
+}
+```
+
+**配置文件：**
+
+```yaml
+spring:
+  profiles:
+    active: dev
+```
+
+**说明：**
+
+- 当 `spring.profiles.active=dev` 时，容器只加载 `devBean()`。
+- 切换为 `prod` 时，自动加载 `prodBean()`。
+
+------
+
+### 🧠 二、@ConditionalOnXxx —— 条件装配示例
+
+**作用：**
+ Spring Boot 的条件装配注解族，用于根据各种条件动态控制 Bean 的创建。
+
+以下给出常用示例：
+
+1️⃣ @ConditionalOnProperty
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class PropertyConditionConfig {
+
+    @Bean
+    @ConditionalOnProperty(prefix = "feature", name = "enabled", havingValue = "true")
+    public String propertyConditionBean() {
+        return "属性开启时加载的Bean";
+    }
+}
+```
+
+**配置文件：**
+
+```yaml
+feature:
+  enabled: true
+```
+
+------
+
+2️⃣ @ConditionalOnClass
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@ConditionalOnClass(name = "org.springframework.web.client.RestTemplate")
+public class ClassConditionConfig {
+
+    @Bean
+    public String classConditionBean() {
+        return "当类路径存在 RestTemplate 时生效";
+    }
+}
+```
+
+------
+
+3️⃣ @ConditionalOnMissingBean
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class MissingBeanConditionConfig {
+
+    @Bean
+    @ConditionalOnMissingBean(name = "customService")
+    public String defaultService() {
+        return "默认服务Bean";
+    }
+}
+```
+
+------
+
+4️⃣ @ConditionalOnResource
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnResource;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class ResourceConditionConfig {
+
+    @Bean
+    @ConditionalOnResource(resources = "classpath:application.yml")
+    public String resourceConditionBean() {
+        return "当 classpath 下存在 application.yml 时加载";
+    }
+}
+```
+
+------
+
+### ⚙️ 三、@Primary —— 指定首选 Bean
+
+**作用：**
+ 当容器中存在多个相同类型的 Bean 时，优先使用带 `@Primary` 的那个。
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
+@Configuration
+public class PrimaryConfig {
+
+    @Bean
+    @Primary
+    public String mainService() {
+        return "主服务实现";
+    }
+
+    @Bean
+    public String backupService() {
+        return "备用服务实现";
+    }
+}
+```
+
+**说明：**
+
+- 如果 `@Autowired String service;`，会注入 `mainService()`。
+
+------
+
+### 🧭 四、@Qualifier —— 指定注入哪个 Bean
+
+**作用：**
+ 当存在多个同类型 Bean 时，通过 `@Qualifier` 明确注入目标。
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Service;
+
+@Configuration
+public class QualifierConfig {
+
+    @Bean("mysqlRepo")
+    public String mysqlRepository() {
+        return "MySQL 数据源";
+    }
+
+    @Bean("oracleRepo")
+    public String oracleRepository() {
+        return "Oracle 数据源";
+    }
+}
+
+@Service
+class DataService {
+    private final String repository;
+
+    public DataService(@Qualifier("mysqlRepo") String repository) {
+        this.repository = repository;
+    }
+}
+```
+
+------
+
+### 🧱 五、@DependsOn —— 控制初始化顺序
+
+**作用：**
+ 声明该 Bean 依赖于某个其他 Bean，先初始化被依赖的 Bean。
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
+
+@Configuration
+public class DependsOnConfig {
+
+    @Bean
+    public String baseBean() {
+        System.out.println("初始化 baseBean");
+        return "Base";
+    }
+
+    @Bean
+    @DependsOn("baseBean")
+    public String dependentBean() {
+        System.out.println("初始化 dependentBean（依赖 baseBean）");
+        return "Dependent";
+    }
+}
+```
+
+**控制台输出顺序：**
+
+```
+初始化 baseBean
+初始化 dependentBean（依赖 baseBean）
+```
+
+------
+
+### 💤 六、@Lazy —— 延迟初始化 Bean
+
+**作用：**
+ 默认情况下，Spring 在容器启动时创建所有单例 Bean。
+ 加上 `@Lazy` 可延迟创建，直到首次使用时再初始化。
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
+
+@Configuration
+public class LazyConfig {
+
+    @Bean
+    @Lazy
+    public String lazyBean() {
+        System.out.println("只有在首次调用时才会初始化");
+        return "Lazy Bean";
+    }
+}
+```
+
+------
+
+### 🔁 七、@Scope —— 控制 Bean 的作用域
+
+**作用：**
+ 控制 Bean 的生命周期范围，如单例、多例、请求级、会话级等。
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
+
+@Configuration
+public class ScopeConfig {
+
+    @Bean
+    @Scope("prototype")
+    public String prototypeBean() {
+        System.out.println("每次获取都会创建新实例");
+        return "Prototype Bean";
+    }
+}
+```
+
+**常见取值：**
+
+- `singleton`：单例（默认）
+- `prototype`：多例
+- `request`：每个 HTTP 请求创建一个实例（Web 环境）
+- `session`：每个会话创建一个实例（Web 环境）
+
+------
+
+### 📦 八、@Import —— 导入其他配置类或 Bean
+
+**作用：**
+ 将其他配置类、组件、选择器或注册器导入当前容器中。
+
+**示例：**
+
+```java
+package io.github.atengk.demo.condition;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class ExternalConfig {
+
+    @Bean
+    public String externalBean() {
+        return "来自外部配置类的 Bean";
+    }
+}
+package io.github.atengk.demo.condition;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+
+@Configuration
+@Import(ExternalConfig.class)
+public class ImportConfig {
+}
+```
+
+**说明：**
+
+- `ImportConfig` 自动加载 `ExternalConfig` 中定义的所有 Bean。
+- 类似 XML 中的 `<import resource="..."/>`。
+
+------
+
