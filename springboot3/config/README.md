@@ -738,3 +738,239 @@ public class ImportConfig {
 
 ------
 
+
+
+## Bean 注入方式
+
+### 🧩 一、构造器注入（推荐✅）
+
+✅ 特点
+
+- Spring 官方**强烈推荐**使用构造器注入；
+- 最安全（字段可声明为 `final`）；
+- 易于单元测试；
+- 不依赖反射注入（性能较好）。
+
+📘 示例
+
+```java
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserService {
+
+    private final UserRepository userRepository;
+
+    // Spring 自动识别构造函数并注入依赖
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    public void printUser() {
+        System.out.println("User count: " + userRepository.count());
+    }
+}
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class UserRepository {
+    public int count() {
+        return 10;
+    }
+}
+```
+
+✅ 特点说明
+
+- 推荐方式，尤其在 Spring Boot 3 中；
+- 如果类只有一个构造函数，可以省略 `@Autowired`；
+- 可与 `@RequiredArgsConstructor`（Lombok）配合使用。
+
+------
+
+### 🧩 二、字段注入（不推荐❌，但仍可用）
+
+📘 示例
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class OrderService {
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    public void printOrder() {
+        System.out.println("Orders: " + orderRepository.count());
+    }
+}
+```
+
+⚠️ 缺点
+
+- 不能声明 `final`；
+- 不利于单元测试；
+- 不利于依赖管理，违反依赖倒置原则。
+
+------
+
+### 🧩 三、Setter 方法注入（适合可选依赖）
+
+📘 示例
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class PaymentService {
+
+    private PaymentRepository paymentRepository;
+
+    @Autowired
+    public void setPaymentRepository(PaymentRepository paymentRepository) {
+        this.paymentRepository = paymentRepository;
+    }
+
+    public void pay() {
+        System.out.println("Pay with repo: " + paymentRepository);
+    }
+}
+```
+
+✅ 优点
+
+- 支持可选依赖（使用 `@Autowired(required = false)`）；
+- 支持在运行时重新注入（例如 AOP 代理替换）。
+
+------
+
+### 🧩 四、`@Resource` 注入（基于 JSR-250）
+
+📘 示例
+
+```java
+import jakarta.annotation.Resource;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MailService {
+
+    // 根据 Bean 名称匹配，优先按 name，其次按 type
+    @Resource(name = "mailRepository")
+    private MailRepository mailRepository;
+
+    public void send() {
+        System.out.println("Send mail using: " + mailRepository);
+    }
+}
+```
+
+✅ 特点
+
+- 来源于 **JDK标准（JSR-250）**；
+- 按 **名称优先**，其次按类型；
+- 常用于与老项目或 JavaEE 兼容的情况；
+- Spring Boot 3 中依然完全支持。
+
+------
+
+### 🧩 五、`@Inject` 注入（基于 JSR-330）
+
+📘 示例
+
+```java
+import jakarta.inject.Inject;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ProductService {
+
+    @Inject
+    private ProductRepository productRepository;
+
+    public void show() {
+        System.out.println("Products: " + productRepository);
+    }
+}
+```
+
+✅ 特点
+
+- 与 `@Autowired` 功能几乎一致；
+- 按类型注入；
+- 无法使用 `required=false`；
+- 更多用于与 CDI (Contexts and Dependency Injection) 框架兼容。
+
+------
+
+### 🧩 六、手动注入（通过 `ApplicationContext`）
+
+在某些需要**动态获取 Bean** 的场景下（例如工厂模式、策略模式），可以手动注入。
+
+📘 示例
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.stereotype.Component;
+
+@Component
+public class BeanLocator {
+
+    private final ApplicationContext context;
+
+    @Autowired
+    public BeanLocator(ApplicationContext context) {
+        this.context = context;
+    }
+
+    public <T> T getBean(Class<T> clazz) {
+        return context.getBean(clazz);
+    }
+}
+```
+
+------
+
+### 🧩 七、配置类中定义 Bean（`@Configuration` + `@Bean`）
+
+除了自动扫描，还可以**手动注册 Bean**。
+
+📘 示例
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+
+    @Bean
+    public MessageService messageService() {
+        return new MessageService();
+    }
+}
+public class MessageService {
+    public void sayHello() {
+        System.out.println("Hello, Spring Boot 3!");
+    }
+}
+```
+
+------
+
+## 🧭 总结对比表
+
+| 注入方式             | 注入时机 | 优点                   | 缺点                  | 推荐度 |
+| -------------------- | -------- | ---------------------- | --------------------- | ------ |
+| 构造器注入           | 初始化时 | 安全、可测试、推荐     | 无可选依赖            | ⭐⭐⭐⭐⭐  |
+| 字段注入             | 反射注入 | 简单直接               | 不可测试、违背原则    | ⭐      |
+| Setter 注入          | 初始化后 | 支持可选依赖           | 依赖可变              | ⭐⭐⭐    |
+| `@Resource`          | 初始化时 | 按名称优先             | 不灵活                | ⭐⭐     |
+| `@Inject`            | 初始化时 | 标准注解               | 不支持 required=false | ⭐⭐     |
+| `ApplicationContext` | 手动     | 灵活、动态获取         | 增加耦合              | ⭐⭐     |
+| `@Bean`              | 配置类   | 明确控制 Bean 生命周期 | 较繁琐                | ⭐⭐⭐    |
+
