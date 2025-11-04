@@ -2,9 +2,9 @@
 
 工厂模式用于封装对象创建逻辑，通过工厂方法来创建不同类型的对象，而不是直接使用 `new`。在 Spring 中，`BeanFactory` 和 `ApplicationContext` 就是典型应用。可有效减少代码耦合，让对象创建更灵活。
 
-## 设计思想
+## 简介
 
-> 工厂模式（Factory Pattern）用于封装对象创建逻辑，让对象的实例化与使用分离，调用方只需关心“要什么类型”，而不用关心“怎么创建”。
+**工厂模式（Factory Pattern）**用于封装对象创建逻辑，让对象的实例化与使用分离，调用方只需关心“要什么类型”，而不用关心“怎么创建”。
 
 在 Spring Boot 项目中，这个模式经常用于：
 
@@ -34,9 +34,9 @@
 
 
 
-## 创建策略
+## 定义策略
 
-### 日志枚举
+### 策略枚举
 
 ```java
 package io.github.atengk.enums;
@@ -81,7 +81,7 @@ public enum LogTypeEnum {
 
 ```
 
-### 日志策略接口
+### 策略接口
 
 ```java
 package io.github.atengk.service.strategy;
@@ -116,7 +116,9 @@ public interface LogStrategy {
 
 ```
 
-### 文件日志实现类
+### 策略实现类
+
+#### 文件策略
 
 ```java
 package io.github.atengk.service.strategy.impl;
@@ -149,7 +151,7 @@ public class FileLogStrategy implements LogStrategy {
 
 ```
 
-### 数据库日志实现类
+### 数据库策略
 
 ```java
 package io.github.atengk.service.strategy.impl;
@@ -181,7 +183,7 @@ public class DatabaseLogStrategy implements LogStrategy {
 
 ```
 
-## 创建策略
+## 策略工厂类
 
 ```java
 package io.github.atengk.service.factory;
@@ -253,7 +255,7 @@ public class LogStrategyFactory {
 
 ```
 
-## 创建接口
+## 控制层调用示例
 
 ```java
 package io.github.atengk.controller;
