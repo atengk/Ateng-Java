@@ -1,6 +1,6 @@
 package local.ateng.java.serialize.config;
 
-import com.alibaba.fastjson.support.spring.GenericFastJsonRedisSerializer;
+import local.ateng.java.serialize.serializer.FastJsonRedisSerializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -36,9 +36,9 @@ public class RedisTemplateConfig {
         redisTemplate.setHashKeySerializer(stringRedisSerializer);
 
         /**
-         * 使用自定义的Fastjson的Serializer来序列化和反序列化redis的value值
+         * 使用自定义的Fastjson2的Serializer来序列化和反序列化redis的value值
          */
-        GenericFastJsonRedisSerializer fastJson2RedisSerializer = new GenericFastJsonRedisSerializer();
+        FastJsonRedisSerializer fastJson2RedisSerializer = new FastJsonRedisSerializer(Object.class);
         redisTemplate.setValueSerializer(fastJson2RedisSerializer);
         redisTemplate.setHashValueSerializer(fastJson2RedisSerializer);
 

@@ -2,8 +2,6 @@ package local.ateng.java.serialize.controller;
 
 import com.alibaba.fastjson.JSONObject;
 import local.ateng.java.serialize.entity.MyUser;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -13,8 +11,7 @@ import java.util.Date;
 import java.util.List;
 
 @RestController
-@RequestMapping("/fastjson2")
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+@RequestMapping("/fastjson")
 public class FastjsonController {
 
     // 序列化

@@ -1,5 +1,6 @@
 package local.ateng.java.serialize.config;
 
+import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.support.config.FastJsonConfig;
 import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter;
@@ -25,22 +26,53 @@ import java.util.List;
 public class FastJsonWebMvcConfig implements WebMvcConfigurer {
 
     /**
-     * Fastjson转换器配置
+     * 获取自定义的 FastJson HttpMessageConverter 配置
+     * 主要用于 Spring Boot WebMVC 的序列化与反序列化
      *
-     * @return
+     * @return FastJson HttpMessageConverter
      */
     private static FastJsonHttpMessageConverter getFastJsonHttpMessageConverter() {
         FastJsonHttpMessageConverter converter = new FastJsonHttpMessageConverter();
         FastJsonConfig config = new FastJsonConfig();
         config.setDateFormat("yyyy-MM-dd HH:mm:ss");
         config.setCharset(StandardCharsets.UTF_8);
+        // 序列化配置
         config.setSerializerFeatures(
-                // 序列化输出空值字段
+                // 输出为 null 的字段，否则默认会被忽略
                 SerializerFeature.WriteMapNullValue,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                SerializerFeature.BrowserCompatible,
-                // 序列化BigDecimal使用toPlainString，避免科学计数法
-                SerializerFeature.WriteBigDecimalAsPlain
+                // String 类型为 null 时输出 ""
+                SerializerFeature.WriteNullStringAsEmpty,
+                // Number 类型为 null 时输出 0
+                SerializerFeature.WriteNullNumberAsZero,
+                // Boolean 类型为 null 时输出 false
+                SerializerFeature.WriteNullBooleanAsFalse,
+                // 集合类型为 null 时输出 []
+                SerializerFeature.WriteNullListAsEmpty,
+                // 禁用循环引用检测，避免出现 "$ref" 结构
+                SerializerFeature.DisableCircularReferenceDetect,
+                // BigDecimal 输出为纯字符串（不使用科学计数法）
+                SerializerFeature.WriteBigDecimalAsPlain,
+                // 浏览器安全输出，防止特殊字符被浏览器误解析
+                SerializerFeature.BrowserCompatible
+        );
+        // 反序列化配置
+        config.setFeatures(
+                // 允许 JSON 中包含注释（// 或 /* */）
+                Feature.AllowComment,
+                // 允许字段名不加双引号
+                Feature.AllowUnQuotedFieldNames,
+                // 允许单引号作为字符串定界符
+                Feature.AllowSingleQuotes,
+                // 字段名使用常量池优化内存
+                Feature.InternFieldNames,
+                // 允许多余的逗号
+                Feature.AllowArbitraryCommas,
+                // 忽略 JSON 中不存在的字段
+                Feature.IgnoreNotMatch,
+                // 使用 BigDecimal 处理浮动精度，避免科学计数法的输出
+                Feature.UseBigDecimal,
+                // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
+                Feature.AllowISO8601DateFormat
         );
         config.setSerializeFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);

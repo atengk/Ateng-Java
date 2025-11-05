@@ -1,8 +1,8 @@
-# Fastjson2
+# FastJson1
 
-[Fastjson2](https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn) 是一个高性能的 JSON 处理库，用于序列化和反序列化 Java 对象。在 Spring Boot 中集成 Fastjson2，通过自定义 `HttpMessageConverter` 来定制序列化配置，使其替代默认的 Jackson 进行 JSON 处理。这样，Spring Boot 会使用 Fastjson2 来处理 HTTP 请求和响应的 JSON 数据。
+fastjson是阿里巴巴的开源JSON解析库，它可以解析JSON格式的字符串，支持将Java Bean序列化为JSON字符串，也可以从JSON字符串反序列化到JavaBean。
 
-以下是序列化和反序列化的应用场景
+- [官方文档](https://github.com/alibaba/fastjson/wiki/Quick-Start-CN)
 
 | **应用场景**                       | **序列化**                  | **反序列化**              |
 | ---------------------------------- | --------------------------- | ------------------------- |
@@ -10,8 +10,6 @@
 | **数据库存储 JSON**                | Java 对象 → JSON 存储       | 读取 JSON → Java 对象     |
 | **Redis 缓存**                     | Java 对象 → JSON 存入 Redis | 取出 JSON → Java 对象     |
 | **消息队列（MQ）**                 | Java 对象 → JSON 发送       | 监听 JSON → Java 对象     |
-
-- [Fastjson2使用文档](/work/Ateng-Java/tools/fastjson2/)
 
 
 
@@ -21,15 +19,15 @@
 
 ```xml
 <properties>
-    <fastjson2.version>2.0.53</fastjson2.version>
+    <fastjson.version>1.2.83</fastjson.version>
 </properties>
 <!-- 在 Spring 中集成 Fastjson2 -->
 <dependencies>
-    <!-- 在 Spring 中集成 Fastjson2 -->
+    <!-- 高性能的JSON库 -->
     <dependency>
-        <groupId>com.alibaba.fastjson2</groupId>
-        <artifactId>fastjson2-extension-spring6</artifactId>
-        <version>${fastjson2.version}</version>
+        <groupId>com.alibaba</groupId>
+        <artifactId>fastjson</artifactId>
+        <version>${fastjson.version}</version>
     </dependency>
 </dependencies>
 ```
@@ -38,17 +36,18 @@
 
 ## Spring Web MVC序列化和反序列化
 
-在Spring Boot Web应用中，JSON的序列化和反序列化操作通常通过`HttpMessageConverter`来实现。默认情况下，Spring Boot使用Jackson来处理JSON数据，但如果想使用Fastjson2作为JSON处理工具，可以通过自定义配置来替换Spring Boot的默认`ObjectMapper`。Fastjson2在处理大数据量时具备更高的性能，同时提供了更丰富的序列化特性，如格式化输出、嵌套对象处理和日期格式化等。通过配置`Fastjson2HttpMessageConverter`，Spring Boot可以高效地序列化Java对象为JSON格式，也能将JSON字符串反序列化为Java对象。这种配置对于性能要求较高的应用非常有利，尤其是在处理大量数据交互时。
+在Spring Boot Web应用中，JSON的序列化和反序列化操作通常通过`HttpMessageConverter`来实现。默认情况下，Spring Boot使用Jackson来处理JSON数据，但如果想使用Fastjson作为JSON处理工具，可以通过自定义配置来替换Spring Boot的默认`ObjectMapper`。Fastjson在处理大数据量时具备更高的性能，同时提供了更丰富的序列化特性，如格式化输出、嵌套对象处理和日期格式化等。通过配置`FastjsonHttpMessageConverter`，Spring Boot可以高效地序列化Java对象为JSON格式，也能将JSON字符串反序列化为Java对象。这种配置对于性能要求较高的应用非常有利，尤其是在处理大量数据交互时。
 
 ### 配置
 
 ```java
 package local.ateng.java.serialize.config;
 
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.support.config.FastJsonConfig;
-import com.alibaba.fastjson2.support.spring6.http.converter.FastJsonHttpMessageConverter;
+import com.alibaba.fastjson.parser.Feature;
+import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.alibaba.fastjson.support.config.FastJsonConfig;
+import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter;
+import local.ateng.java.serialize.serializer.DefaultValueFilter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -59,39 +58,67 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 在 Spring Web MVC 中集成 Fastjson2
- * https://github.com/alibaba/fastjson2/blob/main/docs/spring_support_cn.md#2-%E5%9C%A8-spring-web-mvc-%E4%B8%AD%E9%9B%86%E6%88%90-fastjson2
+ * 在 Spring Web MVC 中集成 Fastjson
+ * https://github.com/alibaba/fastjson/wiki/%E5%9C%A8-Spring-%E4%B8%AD%E9%9B%86%E6%88%90-Fastjson
  *
  * @author 孔余
  * @email 2385569970@qq.com
- * @since 2025-03-06
+ * @since 2025-09-29
  */
 @Configuration
 public class FastJsonWebMvcConfig implements WebMvcConfigurer {
 
     /**
-     * Fastjson2转换器配置
+     * 获取自定义的 FastJson HttpMessageConverter 配置
+     * 主要用于 Spring Boot WebMVC 的序列化与反序列化
      *
-     * @return
+     * @return FastJson HttpMessageConverter
      */
     private static FastJsonHttpMessageConverter getFastJsonHttpMessageConverter() {
         FastJsonHttpMessageConverter converter = new FastJsonHttpMessageConverter();
         FastJsonConfig config = new FastJsonConfig();
         config.setDateFormat("yyyy-MM-dd HH:mm:ss");
-        config.setWriterFeatures(
-                // 序列化输出空值字段
-                JSONWriter.Feature.WriteNulls,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.BrowserCompatible,
-                // 序列化BigDecimal使用toPlainString，避免科学计数法
-                JSONWriter.Feature.WriteBigDecimalAsPlain
+        config.setCharset(StandardCharsets.UTF_8);
+        // 序列化配置
+        config.setSerializerFeatures(
+                // 输出为 null 的字段，否则默认会被忽略
+                SerializerFeature.WriteMapNullValue,
+                // String 类型为 null 时输出 ""
+                SerializerFeature.WriteNullStringAsEmpty,
+                // Number 类型为 null 时输出 0
+                SerializerFeature.WriteNullNumberAsZero,
+                // Boolean 类型为 null 时输出 false
+                SerializerFeature.WriteNullBooleanAsFalse,
+                // 集合类型为 null 时输出 []
+                SerializerFeature.WriteNullListAsEmpty,
+                // 禁用循环引用检测，避免出现 "$ref" 结构
+                SerializerFeature.DisableCircularReferenceDetect,
+                // BigDecimal 输出为纯字符串（不使用科学计数法）
+                SerializerFeature.WriteBigDecimalAsPlain,
+                // 浏览器安全输出，防止特殊字符被浏览器误解析
+                SerializerFeature.BrowserCompatible
         );
-        config.setReaderFeatures(
-                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
-                JSONReader.Feature.SupportSmartMatch
+        // 反序列化配置
+        config.setFeatures(
+                // 允许 JSON 中包含注释（// 或 /* */）
+                Feature.AllowComment,
+                // 允许字段名不加双引号
+                Feature.AllowUnQuotedFieldNames,
+                // 允许单引号作为字符串定界符
+                Feature.AllowSingleQuotes,
+                // 字段名使用常量池优化内存
+                Feature.InternFieldNames,
+                // 允许多余的逗号
+                Feature.AllowArbitraryCommas,
+                // 忽略 JSON 中不存在的字段
+                Feature.IgnoreNotMatch,
+                // 使用 BigDecimal 处理浮动精度，避免科学计数法的输出
+                Feature.UseBigDecimal,
+                // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
+                Feature.AllowISO8601DateFormat
         );
+        config.setSerializeFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);
-        converter.setDefaultCharset(StandardCharsets.UTF_8);
         converter.setSupportedMediaTypes(Collections.singletonList(MediaType.APPLICATION_JSON));
         return converter;
     }
@@ -110,10 +137,8 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
 ```java
 package local.ateng.java.serialize.controller;
 
-import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson.JSONObject;
 import local.ateng.java.serialize.entity.MyUser;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -123,9 +148,8 @@ import java.util.Date;
 import java.util.List;
 
 @RestController
-@RequestMapping("/fastjson2")
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class Fastjson2Controller {
+@RequestMapping("/fastjson")
+public class FastjsonController {
 
     // 序列化
     @GetMapping("/serialize")
@@ -165,13 +189,25 @@ public class Fastjson2Controller {
         return "ok";
     }
 
+    // 反序列化
+    @PostMapping("/test")
+    public String test(@RequestBody String str) {
+        System.out.println(str);
+        JSONObject jsonObject = JSONObject.parseObject(str);
+        System.out.println(jsonObject);
+        System.out.println(jsonObject.getDouble("score"));
+        System.out.println(JSONObject.parseObject(str, MyUser.class));
+        return "ok";
+    }
+
 }
+
 ```
 
 **访问序列化接口**
 
 ```
-curl -X GET http://localhost:12013/fastjson2/serialize
+curl -X GET http://localhost:12013/fastjson/serialize
 ```
 
 示例输出：
@@ -183,7 +219,7 @@ curl -X GET http://localhost:12013/fastjson2/serialize
 **访问反序列化接口**
 
 ```
-curl -X POST http://192.168.100.2:12013/fastjson2/deserialize \
+curl -X POST http://192.168.100.2:12013/fastjson/deserialize \
      -H "Content-Type: application/json" \
      -d '{"age":25,"birthday":"2000-01-01 00:00:00","city":"重庆市","createTime":"2025-03-06 11:37:07","createTime2":"2025-03-06 11:37:07","createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":null,"name":"ateng","num":0,"phoneNumber":"1762306666","province":"<","ratio":0.7147,"score":"8800000000000000000000000000.911000000000000000000000"}'
 ```
@@ -198,7 +234,7 @@ MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@
 
 ## Spring Data Redis序列化和反序列化
 
-在Spring Boot集成Redis时，数据的序列化与反序列化是至关重要的，通常通过`RedisTemplate`来完成。默认情况下，Spring Boot使用JDK的原生序列化方式或Jackson来序列化对象。如果需要使用Fastjson2，可以自定义Redis的序列化机制，采用Fastjson2进行高效的对象与JSON的转换。通过配置`RedisTemplate`的序列化器，开发者可以利用Fastjson2对Redis中存储的对象进行序列化和反序列化。Fastjson2在性能上相较于其他序列化库表现更优，尤其是在大规模数据访问时，可以显著提升应用性能，确保在分布式缓存系统中对数据的高效处理和快速响应。
+在Spring Boot集成Redis时，数据的序列化与反序列化是至关重要的，通常通过`RedisTemplate`来完成。默认情况下，Spring Boot使用JDK的原生序列化方式或Jackson来序列化对象。如果需要使用Fastjson，可以自定义Redis的序列化机制，采用Fastjson进行高效的对象与JSON的转换。通过配置`RedisTemplate`的序列化器，开发者可以利用Fastjson对Redis中存储的对象进行序列化和反序列化。Fastjson在性能上相较于其他序列化库表现更优，尤其是在大规模数据访问时，可以显著提升应用性能，确保在分布式缓存系统中对数据的高效处理和快速响应。
 
 ### 配置（默认）
 
@@ -216,7 +252,7 @@ public GenericFastJsonRedisSerializer() {
 ```java
 package local.ateng.java.serialize.config;
 
-import com.alibaba.fastjson2.support.spring6.data.redis.GenericFastJsonRedisSerializer;
+import com.alibaba.fastjson.support.spring.GenericFastJsonRedisSerializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -234,7 +270,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  *
  * @author 孔余
  * @email 2385569970@qq.com
- * @since 2025-03-06
+ * @since 2025-09-29
  */
 @Configuration
 public class RedisTemplateConfig {
@@ -250,13 +286,13 @@ public class RedisTemplateConfig {
         StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
         redisTemplate.setKeySerializer(stringRedisSerializer);
         redisTemplate.setHashKeySerializer(stringRedisSerializer);
+
         /**
-         * 使用Fastjson2默认的Serializer来序列化和反序列化redis的value值
+         * 使用Fastjson默认的Serializer来序列化和反序列化redis的value值
          */
-        GenericFastJsonRedisSerializer fastJsonRedisSerializer = new GenericFastJsonRedisSerializer();
-        redisTemplate.setValueSerializer(fastJsonRedisSerializer);
-        redisTemplate.setHashValueSerializer(fastJsonRedisSerializer);
-        redisTemplate.setStringSerializer(fastJsonRedisSerializer);
+        GenericFastJsonRedisSerializer fastJson2RedisSerializer = new GenericFastJsonRedisSerializer();
+        redisTemplate.setValueSerializer(fastJson2RedisSerializer);
+        redisTemplate.setHashValueSerializer(fastJson2RedisSerializer);
 
         // 返回redisTemplate
         redisTemplate.afterPropertiesSet();
@@ -264,6 +300,7 @@ public class RedisTemplateConfig {
     }
 
 }
+
 ```
 
 ### 配置（自定义）
@@ -273,97 +310,94 @@ public class RedisTemplateConfig {
 注意修改为自己的包名：`config.setReaderFilters(JSONReader.autoTypeFilter("local.ateng.java."));`
 
 ```java
-package local.ateng.java.serialize.config;
+package local.ateng.java.serialize.serializer;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONB;
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.support.config.FastJsonConfig;
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.parser.Feature;
+import com.alibaba.fastjson.parser.ParserConfig;
+import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.alibaba.fastjson.util.IOUtils;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
 
-import java.nio.charset.Charset;
+/**
+ * 基于 Fastjson 1.x 的 Redis 序列化器
+ * 适用于 Spring Data Redis 中的 value 序列化方案。
+ * <p>
+ * 说明：
+ * - 支持类型信息输出（WriteClassName）
+ * - 支持空值字段输出（WriteMapNullValue）
+ * - 支持安全反序列化（白名单机制）
+ * - 通用 UTF-8 编码
+ *
+ * @param <T> 序列化对象类型
+ * @author 孔余
+ * @since 2025-11-05
+ */
+public class FastJsonRedisSerializer<T> implements RedisSerializer<T> {
 
-public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
-    private final Class<T> type;
-    private FastJsonConfig config = new FastJsonConfig();
+    private static final ParserConfig GLOBAL_PARSER_CONFIG = new ParserConfig();
 
-    public FastJson2RedisSerializer(Class<T> type) {
-        config.setCharset(Charset.forName("UTF-8"));
-        config.setDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-        // 配置 JSONWriter 的特性
-        config.setWriterFeatures(
-                // 序列化时输出类型信息
-                JSONWriter.Feature.WriteClassName,
-                // 不输出数字类型的类名
-                JSONWriter.Feature.NotWriteNumberClassName,
-                // 不输出 Set 类型的类名
-                JSONWriter.Feature.NotWriteSetClassName,
-                // 序列化输出空值字段
-                JSONWriter.Feature.WriteNulls,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.BrowserCompatible,
-                // 序列化BigDecimal使用toPlainString，避免科学计数法
-                JSONWriter.Feature.WriteBigDecimalAsPlain
-        );
-
-        // 配置 JSONReader 的特性
-        config.setReaderFeatures(
-                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
-                JSONReader.Feature.SupportSmartMatch
-        );
-
-        // 支持自动类型，要读取带"@type"类型信息的JSON数据，需要显式打开SupportAutoType
-        config.setReaderFilters(
-                JSONReader.autoTypeFilter(
-                        // 按需加上需要支持自动类型的类名前缀，范围越小越安全
-                        "local.ateng.java."
-                )
-        );
-        this.type = type;
+    static {
+        // 启用 AutoType 支持（反序列化时保留类型信息）
+        GLOBAL_PARSER_CONFIG.setAutoTypeSupport(true);
     }
 
-    public FastJsonConfig getFastJsonConfig() {
-        return config;
+    private final Class<T> clazz;
+
+    public FastJsonRedisSerializer(Class<T> clazz) {
+        this.clazz = clazz;
     }
 
-    public void setFastJsonConfig(FastJsonConfig fastJsonConfig) {
-        this.config = fastJsonConfig;
-    }
-
+    /**
+     * 序列化：将对象转为 JSON 字节数组
+     */
     @Override
-    public byte[] serialize(T t) throws SerializationException {
-        if (t == null) {
+    public byte[] serialize(T object) throws SerializationException {
+        if (object == null) {
             return new byte[0];
         }
         try {
-            if (config.isJSONB()) {
-                return JSONB.toBytes(t, config.getSymbolTable(), config.getWriterFilters(), config.getWriterFeatures());
-            } else {
-                return JSON.toJSONBytes(t, config.getDateFormat(), config.getWriterFilters(), config.getWriterFeatures());
-            }
+            return JSON.toJSONBytes(
+                    object,
+                    // 输出类型信息（反序列化时才能还原具体类）
+                    SerializerFeature.WriteClassName,
+                    // 输出为 null 的字段，否则默认会被忽略
+                    SerializerFeature.WriteMapNullValue,
+                    // 禁用循环引用检测，避免 $ref 结构
+                    SerializerFeature.DisableCircularReferenceDetect,
+                    // BigDecimal 输出为纯字符串，避免科学计数法
+                    SerializerFeature.WriteBigDecimalAsPlain
+            );
         } catch (Exception ex) {
-            throw new SerializationException("Could not serialize: " + ex.getMessage(), ex);
+            throw new SerializationException("Redis 序列化失败: " + ex.getMessage(), ex);
         }
     }
 
+    /**
+     * 反序列化：将 JSON 字节数组转回对象
+     */
     @Override
     public T deserialize(byte[] bytes) throws SerializationException {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
         try {
-            if (config.isJSONB()) {
-                return JSONB.parseObject(bytes, type, config.getSymbolTable(), config.getReaderFilters(), config.getReaderFeatures());
-            } else {
-                return JSON.parseObject(bytes, type, config.getDateFormat(), config.getReaderFilters(), config.getReaderFeatures());
-            }
+            return JSON.parseObject(
+                    new String(bytes, IOUtils.UTF8),
+                    clazz,
+                    GLOBAL_PARSER_CONFIG,
+                    // 忽略 JSON 中不存在的字段
+                    Feature.IgnoreNotMatch,
+                    // 支持 ISO8601 日期格式
+                    Feature.AllowISO8601DateFormat
+            );
         } catch (Exception ex) {
-            throw new SerializationException("Could not deserialize: " + ex.getMessage(), ex);
+            throw new SerializationException("Redis 反序列化失败: " + ex.getMessage(), ex);
         }
     }
 }
+
 ```
 
 #### 配置序列化和反序列化
@@ -371,6 +405,7 @@ public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
 ```java
 package local.ateng.java.serialize.config;
 
+import local.ateng.java.serialize.serializer.FastJsonRedisSerializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -388,7 +423,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  *
  * @author 孔余
  * @email 2385569970@qq.com
- * @since 2025-03-06
+ * @since 2025-09-29
  */
 @Configuration
 public class RedisTemplateConfig {
@@ -408,7 +443,7 @@ public class RedisTemplateConfig {
         /**
          * 使用自定义的Fastjson2的Serializer来序列化和反序列化redis的value值
          */
-        FastJson2RedisSerializer fastJson2RedisSerializer = new FastJson2RedisSerializer(Object.class);
+        FastJsonRedisSerializer fastJson2RedisSerializer = new FastJsonRedisSerializer(Object.class);
         redisTemplate.setValueSerializer(fastJson2RedisSerializer);
         redisTemplate.setHashValueSerializer(fastJson2RedisSerializer);
 
@@ -418,6 +453,7 @@ public class RedisTemplateConfig {
     }
 
 }
+
 ```
 
 
@@ -429,7 +465,6 @@ package local.ateng.java.serialize.controller;
 
 import local.ateng.java.serialize.entity.MyUser;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -443,7 +478,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/redis")
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+@RequiredArgsConstructor
 public class RedisController {
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -588,6 +623,7 @@ config.setSerializeFilters(new DefaultValueFilter());
 ```java
 package local.ateng.java.serialize.config;
 
+import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.support.config.FastJsonConfig;
 import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter;
@@ -613,22 +649,53 @@ import java.util.List;
 public class FastJsonWebMvcConfig implements WebMvcConfigurer {
 
     /**
-     * Fastjson转换器配置
+     * 获取自定义的 FastJson HttpMessageConverter 配置
+     * 主要用于 Spring Boot WebMVC 的序列化与反序列化
      *
-     * @return
+     * @return FastJson HttpMessageConverter
      */
     private static FastJsonHttpMessageConverter getFastJsonHttpMessageConverter() {
         FastJsonHttpMessageConverter converter = new FastJsonHttpMessageConverter();
         FastJsonConfig config = new FastJsonConfig();
         config.setDateFormat("yyyy-MM-dd HH:mm:ss");
         config.setCharset(StandardCharsets.UTF_8);
+        // 序列化配置
         config.setSerializerFeatures(
-                // 序列化输出空值字段
+                // 输出为 null 的字段，否则默认会被忽略
                 SerializerFeature.WriteMapNullValue,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                SerializerFeature.BrowserCompatible,
-                // 序列化BigDecimal使用toPlainString，避免科学计数法
-                SerializerFeature.WriteBigDecimalAsPlain
+                // String 类型为 null 时输出 ""
+                SerializerFeature.WriteNullStringAsEmpty,
+                // Number 类型为 null 时输出 0
+                SerializerFeature.WriteNullNumberAsZero,
+                // Boolean 类型为 null 时输出 false
+                SerializerFeature.WriteNullBooleanAsFalse,
+                // 集合类型为 null 时输出 []
+                SerializerFeature.WriteNullListAsEmpty,
+                // 禁用循环引用检测，避免出现 "$ref" 结构
+                SerializerFeature.DisableCircularReferenceDetect,
+                // BigDecimal 输出为纯字符串（不使用科学计数法）
+                SerializerFeature.WriteBigDecimalAsPlain,
+                // 浏览器安全输出，防止特殊字符被浏览器误解析
+                SerializerFeature.BrowserCompatible
+        );
+        // 反序列化配置
+        config.setFeatures(
+                // 允许 JSON 中包含注释（// 或 /* */）
+                Feature.AllowComment,
+                // 允许字段名不加双引号
+                Feature.AllowUnQuotedFieldNames,
+                // 允许单引号作为字符串定界符
+                Feature.AllowSingleQuotes,
+                // 字段名使用常量池优化内存
+                Feature.InternFieldNames,
+                // 允许多余的逗号
+                Feature.AllowArbitraryCommas,
+                // 忽略 JSON 中不存在的字段
+                Feature.IgnoreNotMatch,
+                // 使用 BigDecimal 处理浮动精度，避免科学计数法的输出
+                Feature.UseBigDecimal,
+                // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
+                Feature.AllowISO8601DateFormat
         );
         config.setSerializeFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);
