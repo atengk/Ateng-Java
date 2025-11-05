@@ -1,0 +1,88 @@
+package local.ateng.java.fastjson.entity;
+
+import com.alibaba.fastjson.annotation.JSONField;
+import com.alibaba.fastjson.annotation.JSONType;
+import com.alibaba.fastjson.serializer.SerializerFeature;
+import com.alibaba.fastjson.serializer.ToStringSerializer;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.List;
+
+/**
+ * 用户信息实体类
+ * 用于表示系统中的用户信息。
+ *
+ * @author 孔余
+ * @since 2024-01-10 15:51
+ */
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+@JSONType(serialzeFeatures = {SerializerFeature.WriteMapNullValue})
+public class UserInfoEntity {
+
+    /**
+     * 用户ID
+     */
+    @JSONField(serializeUsing = ToStringSerializer.class, serialzeFeatures =  {SerializerFeature.WriteMapNullValue})
+    private Long id;
+
+    /**
+     * 用户姓名
+     */
+    private String name;
+
+    /**
+     * 用户年龄
+     * 注意：这里使用Integer类型，表示年龄是一个整数值。
+     */
+    private Integer age;
+
+    /**
+     * 分数
+     */
+    private Double score;
+
+    /**
+     * 数字
+     */
+    private BigDecimal num;
+
+    /**
+     * 用户生日
+     * 注意：这里使用Date类型，表示用户的生日。
+     */
+    private Date birthday;
+
+    /**
+     * 用户所在省份
+     */
+    private String province;
+
+    /**
+     * 用户所在城市
+     */
+    private String city;
+
+    /**
+     * 创建时间
+     * 自定义时间格式
+     */
+    @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
+    private LocalDateTime createAt;
+
+    /**
+     * 列表
+     */
+    private List<String> list;
+
+    private UserInfoEntity user;
+    private List<UserInfoEntity> children;
+}
