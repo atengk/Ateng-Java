@@ -341,6 +341,21 @@ public class FastJsonRedisSerializer<T> implements RedisSerializer<T> {
     static {
         // 启用 AutoType 支持（反序列化时保留类型信息）
         GLOBAL_PARSER_CONFIG.setAutoTypeSupport(true);
+        // 禁止 com.sun.、java.、org.apache. 等类被加载（防止安全漏洞）
+        GLOBAL_PARSER_CONFIG.addDeny("java.");
+        GLOBAL_PARSER_CONFIG.addDeny("javax.");
+        GLOBAL_PARSER_CONFIG.addDeny("com.sun.");
+        GLOBAL_PARSER_CONFIG.addDeny("sun.");
+        GLOBAL_PARSER_CONFIG.addDeny("org.apache.");
+        GLOBAL_PARSER_CONFIG.addDeny("org.springframework.");
+        GLOBAL_PARSER_CONFIG.addDeny("com.alibaba.");
+        GLOBAL_PARSER_CONFIG.addDeny("ognl.");
+        GLOBAL_PARSER_CONFIG.addDeny("bsh.");
+        GLOBAL_PARSER_CONFIG.addDeny("c3p0.");
+        GLOBAL_PARSER_CONFIG.addDeny("net.sf.ehcache.");
+        GLOBAL_PARSER_CONFIG.addDeny("org.yaml.");
+        GLOBAL_PARSER_CONFIG.addDeny("org.hibernate.");
+        GLOBAL_PARSER_CONFIG.addDeny("org.jboss.");
     }
 
     private final Class<T> clazz;
