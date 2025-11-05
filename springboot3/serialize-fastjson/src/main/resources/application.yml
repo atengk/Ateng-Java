@@ -12,9 +12,9 @@ spring:
 spring:
   data:
     redis:
-      host: 192.168.1.10 # Redis服务器地址
-      database: 102 # Redis数据库索引（默认为0）
-      port: 42784 # Redis服务器连接端口
+      host: 175.178.193.128 # Redis服务器地址
+      database: 1 # Redis数据库索引（默认为0）
+      port: 20045 # Redis服务器连接端口
       password: Admin@123 # Redis服务器连接密码（默认为空）
       client-type: lettuce  # 默认使用Lettuce作为Redis客户端
       lettuce:
