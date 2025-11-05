@@ -216,7 +216,7 @@ public class JSONObjectTests {
                 .city("Example City")
                 .build();
 
-        // JSONWriter.Feature.PrettyFormat -> 格式化输出
+        // 格式化输出
         String str = JSONObject.toJSONString(user, SerializerFeature.PrettyFormat);
         System.out.println(str);
         /*
