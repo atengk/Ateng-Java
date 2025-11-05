@@ -1,15 +1,19 @@
 package local.ateng.java.fastjson1;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.annotation.JSONCreator;
 import com.alibaba.fastjson.annotation.JSONField;
 import com.alibaba.fastjson.parser.DefaultJSONParser;
 import com.alibaba.fastjson.parser.Feature;
+import com.alibaba.fastjson.parser.ParserConfig;
 import com.alibaba.fastjson.parser.deserializer.ObjectDeserializer;
 import com.alibaba.fastjson.serializer.*;
 import local.ateng.java.fastjson.entity.UserInfoEntity;
 import local.ateng.java.fastjson.init.InitData;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -19,6 +23,7 @@ import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -836,6 +841,107 @@ public class JSONObjectTests {
         }
     }
 
+
+    /* =======================  AutoType部分 =======================  */
+    @Test
+    void testAutoType1() {
+        // 序列化
+        AutoType1 entity = new AutoType1(1L, "ateng");
+        String str = JSONObject.toJSONString(entity, SerializerFeature.WriteClassName);
+        System.out.println(str);
+        // {"@type":"local.ateng.java.fastjson1.JSONObjectTests$AutoType1","id":1,"name":"ateng"}
+        // 反序列化
+        String str2 = "{\"id\":1,\"@type\":\"local.ateng.java.fastjson1.JSONObjectTests$AutoType1\",\"name\":\"ateng\"}";
+        AutoType1 entity2 = (AutoType1) JSON.parseObject(str2, Object.class, Feature.SupportAutoType);
+        // 开启 AutoType ，可以将有@type字段的JSON字符串直接强转类型
+        System.out.println(entity2.getClass());
+        // class local.ateng.java.fastjson1.JSONObjectTests$AutoType1
+        System.out.println(entity2);
+        // JSONObjectTests.AutoType1(id=1, name=ateng)
+    }
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class AutoType1 {
+        private Long id;
+        private String name;
+    }
+
+    /**
+     * 示例2：全局开启 AutoType 支持
+     * 通过 ParserConfig 全局配置 setAutoTypeSupport(true)，
+     * 可以让所有解析操作都支持 @type 自动反序列化。
+     */
+    @Test
+    void testAutoType2() {
+        ParserConfig.getGlobalInstance().setAutoTypeSupport(true);
+        String json = "{\"@type\":\"local.ateng.java.fastjson1.JSONObjectTests$AutoType1\",\"id\":1,\"name\":\"ateng\"}";
+        AutoType1 result = (AutoType1) JSON.parseObject(json, Object.class);
+        System.out.println(result.getClass());
+        // class local.ateng.java.fastjson1.JSONObjectTests$AutoType1
+        System.out.println(result);
+        // JSONObjectTests.AutoType1(id=1, name=ateng)
+    }
+
+    /**
+     * 示例3：禁止特定类（安全防护）
+     * 通过 addDeny(prefix) 禁止某些包的类被反序列化。
+     */
+    @Test
+    void testAutoType3() {
+        ParserConfig config = ParserConfig.getGlobalInstance();
+        config.setAutoTypeSupport(true);
+        // 禁止 com.sun.、java.、org.apache. 等类被加载（防止安全漏洞）
+        config.addDeny("java.");
+        config.addDeny("javax.");
+        config.addDeny("com.sun.");
+        config.addDeny("sun.");
+        config.addDeny("org.apache.");
+        config.addDeny("org.springframework.");
+        config.addDeny("com.alibaba.");
+        config.addDeny("ognl.");
+        config.addDeny("bsh.");
+        config.addDeny("c3p0.");
+        config.addDeny("net.sf.ehcache.");
+        config.addDeny("org.yaml.");
+        config.addDeny("org.hibernate.");
+        config.addDeny("org.jboss.");
+        // 添加了后会报错：com.alibaba.fastjson.JSONException: autoType is not support. local.ateng.java.fastjson1.JSONObjectTests$AutoType1
+        //config.addDeny("local.ateng.java.");
+        String json = "{\"@type\":\"local.ateng.java.fastjson1.JSONObjectTests$AutoType1\",\"id\":1,\"name\":\"ateng\"}";
+        AutoType1 result = (AutoType1) JSON.parseObject(json, Object.class);
+        System.out.println(result.getClass());
+        // class local.ateng.java.fastjson1.JSONObjectTests$AutoType1
+        System.out.println(result);
+        // JSONObjectTests.AutoType1(id=1, name=ateng)
+    }
+
+    /**
+     * 示例4：集合类型中使用 AutoType
+     * List/Map 中带有 @type 的对象也能正确反序列化。
+     */
+    @Test
+    void testAutoType4() {
+        // 序列化
+        List<AutoType1> list = new ArrayList<>();
+        list.add(new AutoType1(1L, "ateng"));
+        list.add(new AutoType1(2L, "blair"));
+        String json = JSON.toJSONString(list, SerializerFeature.WriteClassName);
+        System.out.println(json);
+        // [{"@type":"local.ateng.java.fastjson1.JSONObjectTests$AutoType1","id":1,"name":"ateng"},{"@type":"local.ateng.java.fastjson1.JSONObjectTests$AutoType1","id":2,"name":"blair"}]
+        // 反序列化
+        String str = "[{\"@type\":\"local.ateng.java.fastjson1.JSONObjectTests$AutoType1\",\"id\":1,\"name\":\"ateng\"},{\"@type\":\"local.ateng.java.fastjson1.JSONObjectTests$AutoType1\",\"id\":2,\"name\":\"blair\"}]";
+        List<AutoType1> parsed = (List<AutoType1>) JSON.parseObject(str, Object.class, Feature.SupportAutoType);
+        System.out.println(parsed.getClass());
+        // 这里是 JSONArray，JSONArray 实现了 java.util.List 接口，强转后也可以正常使用
+        // class com.alibaba.fastjson.JSONArray
+        System.out.println(parsed.get(0).getClass());
+        // class local.ateng.java.fastjson1.JSONObjectTests$AutoType1
+        System.out.println(parsed);
+        // [{"id":1,"name":"ateng"},{"id":2,"name":"blair"}]
+        System.out.println(parsed.get(0).getName());
+        // ateng
+    }
 
     /* =======================  其他部分 =======================  */
 
