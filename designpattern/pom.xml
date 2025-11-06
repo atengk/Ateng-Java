@@ -18,5 +18,6 @@
         <module>singleton</module>
         <module>factory</module>
         <module>strategy</module>
+        <module>template</module>
     </modules>
 </project>
