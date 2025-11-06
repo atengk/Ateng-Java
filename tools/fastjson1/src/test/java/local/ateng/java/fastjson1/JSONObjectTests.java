@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.annotation.JSONCreator;
 import com.alibaba.fastjson.annotation.JSONField;
+import com.alibaba.fastjson.annotation.JSONType;
 import com.alibaba.fastjson.parser.DefaultJSONParser;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.parser.ParserConfig;
@@ -738,6 +739,48 @@ public class JSONObjectTests {
         /** 千分位 + 两位小数（财务场景常用） */
         @JSONField(format = "#,##0.00")
         private Double score5;
+    }
+
+    // 字段排序
+    @Test
+    void testField4() {
+        UserField4 user = new UserField4();
+        user.setId1(9223372036854775807L);
+        user.setId2(9223372036854775807L);
+        user.setId3(9223372036854775807L);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // 输出：{"id3":9223372036854775807,"id2":9223372036854775807,"id1":9223372036854775807}
+    }
+    @Data
+    public static class UserField4 {
+        @JSONField(ordinal = 3)
+        private Long id1;
+        @JSONField(ordinal = 2)
+        private Long id2;
+        @JSONField(ordinal = 1)
+        private Long id3;
+    }
+    @Test
+    void testField5() {
+        UserField5 user = new UserField5();
+        user.setId1(9223372036854775807L);
+        user.setId2(9223372036854775807L);
+        user.setId3(9223372036854775807L);
+        user.setId4(9223372036854775807L);
+        user.setId5(9223372036854775807L);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // 输出：{"id5":9223372036854775807,"id3":9223372036854775807,"id1":9223372036854775807,"id2":9223372036854775807,"id4":9223372036854775807}
+    }
+    @Data
+    @JSONType(orders = {"id5", "id3", "id1"})
+    public static class UserField5 {
+        private Long id1;
+        private Long id2;
+        private Long id3;
+        private Long id4;
+        private Long id5;
     }
 
     /* =======================  自定义序列化器/反序列化器 =======================  */
