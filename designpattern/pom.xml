@@ -20,5 +20,6 @@
         <module>strategy</module>
         <module>template</module>
         <module>decorator</module>
+        <module>proxy</module>
     </modules>
 </project>
