@@ -38,3 +38,11 @@ spring:
       on-profile: test
 data: "test 环境"
 ---
+common:
+  name: MyApp
+  enabled: true
+  host: 111
+  env: PROD
+  tags:
+    - alpha
+    - beta

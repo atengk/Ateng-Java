@@ -146,6 +146,286 @@ public class MyApplicationRunner implements ApplicationRunner {
 }
 ```
 
+### 配置属性校验
+
+**添加依赖**
+
+```xml
+        <!-- Spring Boot Validation 数据校验框架 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+```
+
+**配置类使用示例**
+
+```java
+import org.springframework.validation.annotation.Validated;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+import javax.validation.constraints.*;
+
+@Component  // 注册为Spring组件
+@ConfigurationProperties(prefix = "mail")  // 绑定前缀为mail的配置
+@Validated  // 启用属性校验
+public class MailProperties {
+
+    @NotEmpty  // 不能为空
+    private String host;  // 邮件服务器地址
+
+    @Min(1025)  // 最小值1025
+    @Max(65536)  // 最大值65536
+    private int port = 25;  // 邮件服务器端口，默认25
+
+    @Email  // 必须符合邮箱格式
+    private String from;  // 发件人邮箱
+
+    private boolean enabled;  // 是否启用邮件功能
+}
+
+import org.springframework.validation.annotation.Validated;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import javax.validation.constraints.*;
+
+@ConfigurationProperties(prefix = "app.connection")
+@Validated  // 启用校验
+public class ConnectionProperties {
+
+    @NotNull  // 不能为null
+    @Min(1000)  // 最小值1000
+    @Max(10000)  // 最大值10000
+    private Integer timeout;  // 超时时间
+
+    // 必须以http或https开头的URL格式
+    @Pattern(regexp = "^(http|https)://.*$")
+    private String serviceUrl;  // 服务地址
+
+    @Email  // 必须是合法邮箱格式
+    private String supportEmail;  // 支持邮箱
+}
+```
+
+### 配置元数据
+
+创建配置元数据，提供IDE自动完成和文档。
+
+引入配置处理器依赖（Maven）：
+
+```xml
+        <!-- Spring Boot Configuration Processor -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+```
+
+配置属性类
+
+```java
+package local.ateng.java.config.config;
+
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 通用配置类，涵盖常见类型，用于演示 Spring Boot 3 元数据提示
+ * <p>
+ * prefix: common
+ */
+@Data
+@Validated
+@Configuration
+@ConfigurationProperties(prefix = "common")
+public class CommonProperties {
+
+    /**
+     * 应用名称（必填）
+     */
+    @NotBlank
+    private String name;
+
+    /**
+     * 是否启用模块
+     */
+    private boolean enabled = true;
+
+    /**
+     * 服务端口号
+     */
+    private int port = 8080;
+
+    /**
+     * 允许的ID列表
+     */
+    private List<Integer> ids;
+
+    /**
+     * 元信息键值对
+     */
+    private Map<String, String> metadata;
+
+    /**
+     * 运行环境类型
+     */
+    private EnvType env = EnvType.DEV;
+
+    /**
+     * 请求超时时间（如 10s、1m）
+     */
+    private Duration timeout = Duration.ofSeconds(30);
+
+    /**
+     * 已弃用字段（示例）
+     */
+    private String host;
+
+    /**
+     * 枚举类型：环境类型
+     */
+    public enum EnvType {
+        DEV, TEST, PROD
+    }
+}
+```
+
+创建 `META-INF/additional-spring-configuration-metadata.json`文件，提供额外元数据：
+
+```json
+{
+  "groups": [
+    {
+      "name": "common",
+      "type": "local.ateng.java.config.config.CommonProperties",
+      "sourceType": "local.ateng.java.config.config.CommonProperties",
+      "description": "通用应用配置（CommonProperties）"
+    }
+  ],
+  "properties": [
+    {
+      "name": "common.name",
+      "type": "java.lang.String",
+      "description": "应用名称（必填项）",
+      "sourceType": "local.ateng.java.config.config.CommonProperties",
+      "defaultValue": "MyApp"
+    },
+    {
+      "name": "common.enabled",
+      "type": "java.lang.Boolean",
+      "description": "是否启用该功能模块",
+      "defaultValue": true,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.port",
+      "type": "java.lang.Integer",
+      "description": "服务监听端口号",
+      "defaultValue": 8080,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.max-size",
+      "type": "java.lang.Long",
+      "description": "最大处理数据大小（单位：MB）",
+      "defaultValue": 1024,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.threshold",
+      "type": "java.lang.Double",
+      "description": "阈值比例（0~1）",
+      "defaultValue": 0.75,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.tags",
+      "type": "java.util.List<java.lang.String>",
+      "description": "标签列表",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.metadata",
+      "type": "java.util.Map<java.lang.String,java.lang.String>",
+      "description": "键值对元信息",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.env",
+      "type": "local.ateng.java.config.config.CommonProperties$EnvType",
+      "description": "运行环境类型",
+      "defaultValue": "DEV",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.timeout",
+      "type": "java.time.Duration",
+      "description": "请求超时时间（支持 10s、1m 等格式）",
+      "defaultValue": "30s",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.release-date",
+      "type": "java.time.LocalDate",
+      "description": "发布日期（格式：yyyy-MM-dd）",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.host",
+      "type": "java.lang.String",
+      "description": "（已弃用）旧版主机配置，请使用 common.name 替代",
+      "deprecation": {
+        "level": "warning",
+        "reason": "已迁移至 common.name",
+        "replacement": "common.name"
+      },
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    }
+  ],
+  "hints": [
+    {
+      "name": "common.enabled",
+      "values": [
+        { "value": true, "description": "启用" },
+        { "value": false, "description": "禁用" }
+      ]
+    },
+    {
+      "name": "common.port",
+      "values": [
+        { "value": 8080, "description": "默认 HTTP 端口" },
+        { "value": 8443, "description": "默认 HTTPS 端口" }
+      ]
+    },
+    {
+      "name": "common.tags",
+      "values": [
+        { "value": "alpha", "description": "Alpha 标签" },
+        { "value": "beta", "description": "Beta 标签" },
+        { "value": "release", "description": "正式发布标签" }
+      ]
+    },
+    {
+      "name": "common.env",
+      "values": [
+        { "value": "DEV", "description": "开发环境" },
+        { "value": "TEST", "description": "测试环境" },
+        { "value": "PROD", "description": "生产环境" }
+      ]
+    }
+  ]
+}
+
+```
+
 
 
 ### 使用@Value
