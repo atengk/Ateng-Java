@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Date;
 
@@ -43,6 +44,8 @@ public class UserInfoEntity {
      */
     private Double score;
 
+    private BigDecimal num;
+
     /**
      * 用户生日
      * 注意：这里使用Date类型，表示用户的生日。
@@ -65,4 +68,6 @@ public class UserInfoEntity {
      */
     @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
     private LocalDateTime createAt;
+
+    private UserInfoEntity user;
 }

@@ -11,28 +11,41 @@ import org.springframework.context.event.EventListener;
  * 全局配置fastjson2
  *
  * @author 孔余
- * @email 2385569970@qq.com
- * @date 2024-06-21 11:38:11
+ * @since 2025-11-06
  */
 @Configuration
 public class FastJsonConfig {
 
     @EventListener
     public void run(ApplicationReadyEvent event) {
+        JSON.configReaderDateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS");
+        JSON.configWriterDateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS");
         JSON.config(
-                //JSONWriter.Feature.WriteNulls, // 将String类型字段的空值序列化输出为空字符串""
-                //JSONWriter.Feature.FieldBased, // 基于字段序列化，如果不配置，会默认基于public的field和getter方法序列化。配置后，会基于非static的field（包括private）做序列化。
-                //JSONWriter.Feature.NullAsDefaultValue, // 将空置输出为缺省值，Number类型的null都输出为0，String类型的null输出为""，数组和Collection类型的输出为[]
-                JSONWriter.Feature.BrowserCompatible, // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.WriteMapNullValue,
-                JSONWriter.Feature.BrowserSecure // 浏览器安全，将会'<' '>' '(' ')'字符做转义输出
+                // 序列化输出空值字段
+                JSONWriter.Feature.WriteNulls,
+                // 将空置输出为缺省值，Number类型的null都输出为0，String类型的null输出为""，数组和Collection类型的输出为[]
+                JSONWriter.Feature.NullAsDefaultValue,
+                // 打开循环引用检测
+                JSONWriter.Feature.ReferenceDetection,
+                // 保证 BigDecimal 精度
+                JSONWriter.Feature.WriteBigDecimalAsPlain,
+                // 把 Long 类型转为字符串，避免前端精度丢失
+                JSONWriter.Feature.WriteLongAsString,
+                // 浏览器安全输出（防止前端注入）
+                JSONWriter.Feature.BrowserCompatible,
+                JSONWriter.Feature.BrowserSecure
         );
 
         JSON.config(
-                //JSONReader.Feature.FieldBased, // 基于字段反序列化，如果不配置，会默认基于public的field和getter方法序列化。配置后，会基于非static的field（包括private）做反序列化。在fieldbase配置下会更安全
-                //JSONReader.Feature.InitStringFieldAsEmpty, // 初始化String字段为空字符串""
-                JSONReader.Feature.SupportArrayToBean, // 支持数据映射的方式
-                JSONReader.Feature.UseBigDecimalForDoubles // 默认配置会使用BigDecimal来parse小数
+                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                JSONReader.Feature.SupportSmartMatch,
+                // 允许字段名不带引号
+                JSONReader.Feature.AllowUnQuotedFieldNames,
+                // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreNoneSerializable,
+                // 防止类型不匹配时报错（更安全）
+                JSONReader.Feature.IgnoreAutoTypeNotMatch
         );
+
     }
 }

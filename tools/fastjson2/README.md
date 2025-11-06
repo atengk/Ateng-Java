@@ -203,87 +203,990 @@ public class JSONObjectTests {
 
 ### 使用JSONObject
 
-#### 字符串转换为JSONObject
+#### 反序列化部分
+
+##### 字符串转换为JSONObject
 
 ```java
     // 字符串转换为JSONObject
     @Test
-    void test01() {
+    void testDeSerializer1() {
         String str = "{\"id\":12345,\"name\":\"John Doe\",\"age\":25,\"score\":85.5,\"birthday\":\"1997-03-15\",\"province\":\"Example Province\",\"city\":\"Example City\"}";
-        JSONObject jsonObject = JSONObject.parse(str);
+        JSONObject jsonObject = JSONObject.parseObject(str);
         System.out.println(jsonObject);
+        // {"id":12345,"name":"John Doe","age":25,"score":85.5,"birthday":"1997-03-15","province":"Example Province","city":"Example City"}
     }
 ```
 
-#### 字符串转换为java对象
+##### 字符串转换为java对象
 
 ```java
     // 字符串转换为java对象
     @Test
-    void test02() {
+    void testDeSerializer2() {
         String str = "{\"id\":null,\"name\":\"John Doe\",\"age\":25,\"score\":0.0,\"birthday\":\"2024-01-18 15:05:10.102\",\"province\":\"\",\"city\":\"Example City\"}";
         UserInfoEntity user = JSONObject.parseObject(str, UserInfoEntity.class);
         System.out.println(user);
+        // UserInfoEntity(id=null, name=John Doe, age=25, score=0.0, birthday=Thu Jan 18 15:05:10 CST 2024, province=, city=Example City, createAt=null)
     }
 ```
 
-#### JSONObject转换为java对象
+##### JSONObject转换为java对象
 
 ```java
     // JSONObject转换为java对象
     @Test
-    void test02_2() {
-        JSONObject jsonObject = new JSONObject() {{
-            put("name", "John Doe");
-            put("age", 25);
-            put("birthday", "2024-01-18 15:05:10.102");
-            put("city", "Example City");
-            put("province", "Example province");
-            put("score", 85.5);
-        }};
+    void testDeSerializer3() {
+        JSONObject jsonObject = JSONObject.of(
+                        "name", "John Doe",
+                        "age", 25,
+                        "birthday", "2024-01-18 15:05:10.102",
+                        "city", "Example City",
+                        "province", "Example province",
+                        "score", 85.5
+                );
         UserInfoEntity user = jsonObject.toJavaObject(UserInfoEntity.class);
         System.out.println(user);
+        // UserInfoEntity(id=null, name=John Doe, age=25, score=85.5, num=null, birthday=Thu Jan 18 15:05:10 CST 2024, province=Example province, city=Example City, createAt=null, list=null, user=null, children=null)
     }
 ```
 
-#### 从URL链接获取结果并转JSONObject
+##### 容忍松散 JSON 格式
 
 ```java
-    // 从URL链接获取结果并转JSONObject
+    // 容忍松散 JSON 格式
     @Test
-    void test03() throws MalformedURLException {
-        JSONObject jsonObject = JSON.parseObject(new URL("https://api.apiopen.top/api/sentences"));
-        System.out.println(jsonObject);
+    void testDeSerializer4() {
+        String str = "{\n" +
+                "    // id\n" +
+                "    \"id\": 12345,\n" +
+                "    name: \"John Doe\", // 姓名\n" +
+                "    /*  年龄 */\n" +
+                "    \"age\": 25,\n" +
+                "    \"score\": 85.5,\n" +
+                "    'birthday': \"1997-03-15\",\n" +
+                "    \"province\": \"Example Province\",\n" +
+                "    \"city\": \"Example City\",\n" +
+                "    other: 1\n" +
+                "}";
+        JSONObject user = JSONObject.parse(
+                str,
+                JSONReader.Feature.SupportSmartMatch,         // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                JSONReader.Feature.AllowUnQuotedFieldNames,   // 允许字段名不带引号
+                JSONReader.Feature.IgnoreNoneSerializable,    // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreAutoTypeNotMatch     // 防止类型不匹配时报错（更安全）
+        );
+        System.out.println(user);
+        // {"birthday":"1997-03-15","score":85.5,"other":1,"province":"Example Province","city":"Example City","name":"John Doe","id":12345,"age":25}
     }
 ```
 
-#### java对象转String
+#### 序列化部分
+
+这些还可以放在类或者字段上
+类：@JSONType(serializeFeatures = {JSONWriter.Feature.WriteNulls})
+字段：@JSONField(serialzeFeatures =  {SerializerFeature.WriteMapNullValue})
+
+##### 输出空字段
 
 ```java
-    // java对象转String
+    // 输出空字段
     @Test
-    void test04() {
+    void testSerializer1() {
+        TestSerializerEntity1 user = new TestSerializerEntity1();
+        user.setId(1L);
+        String str = JSONObject.toJSONString(user,
+                // 序列化输出空值字段
+                JSONWriter.Feature.WriteNulls
+        );
+        System.out.println(str);
+        // {"age":null,"birthday":null,"datetime":null,"entity":null,"id":1,"list":null,"map":null,"name":null,"num":null,"score":null,"status":null}
+    }
+    @Data
+    public static class TestSerializerEntity1 {
+        private Long id;
+        private String name;
+        private Integer age;
+        private Double score;
+        private BigDecimal num;
+        private Boolean status;
+        private Date birthday;
+        private LocalDateTime datetime;
+        private List<String> list;
+        private TestSerializerEntity1 entity;
+        private Map<String, String> map;
+    }
+```
+
+##### 输出缺省值
+
+```java
+    // 输出缺省值
+    @Test
+    void testSerializer12() {
+        TestSerializerEntity1 user = new TestSerializerEntity1();
+        user.setId(1L);
+        String str = JSONObject.toJSONString(user,
+                // 将空置输出为缺省值，Number类型的null都输出为0，String类型的null输出为""，数组和Collection类型的输出为[]
+                JSONWriter.Feature.NullAsDefaultValue
+        );
+        System.out.println(str);
+        // {"age":0,"birthday":null,"id":1,"list":[],"name":"","num":0,"score":0,"status":false}
+    }
+```
+
+##### 格式化
+
+```java
+    // 格式化
+    @Test
+    void testSerializer2() {
         UserInfoEntity user = UserInfoEntity.builder()
                 .name("John Doe")
                 .age(25)
                 .score(85.5)
                 .birthday(new Date())
-                .province("")
+                .province(null)
                 .city("Example City")
                 .build();
-        // JSONWriter.Feature介绍
-        // https://github.com/alibaba/fastjson2/blob/main/docs/features_cn.md
-        // JSONWriter.Feature.WriteNulls -> 序列化输出空值字段
-        String str1 = JSONObject.toJSONString(user, JSONWriter.Feature.WriteNulls);
-        System.out.println(str1);
 
         // JSONWriter.Feature.PrettyFormat -> 格式化输出
-        String str2 = JSONObject.toJSONString(user, JSONWriter.Feature.PrettyFormat);
-        System.out.println(str2);
+        String str = JSONObject.toJSONString(user, JSONWriter.Feature.PrettyFormat);
+        System.out.println(str);
+        /*
+        {
+            "age":25,
+            "birthday":"2025-11-05 17:25:58.053",
+            "city":"Example City",
+            "name":"John Doe",
+            "score":85.5
+        }
+         */
     }
 ```
 
-#### java对象转JSONObject
+##### 防止循环引用导致 "$ref"
+
+```java
+    // 防止循环引用导致 "$ref"
+    @Test
+    void testSerializer3() {
+        // 创建两个相互引用的对象
+        UserInfoEntity user1 = UserInfoEntity.builder()
+                .name("John Doe")
+                .age(25)
+                .score(85.5)
+                .birthday(new Date())
+                .province(null)
+                .city("Example City")
+                .build();
+        UserInfoEntity user2 = UserInfoEntity.builder()
+                .name("John Doe")
+                .age(25)
+                .score(85.5)
+                .birthday(new Date())
+                .province(null)
+                .city("Example City")
+                .build();
+
+        // 相互引用，形成循环
+        user1.setUser(user2);
+        user2.setUser(user1);
+
+        // 打开循环引用检测
+        String json2 = JSONObject.toJSONString(user1, JSONWriter.Feature.ReferenceDetection);
+        System.out.println("打开循环引用检测：");
+        System.out.println(json2);
+        // {"age":25,"birthday":"2025-11-05 17:27:45.362","city":"Example City","name":"John Doe","score":85.5,"user":{"age":25,"birthday":"2025-11-05 17:27:45.362","city":"Example City","name":"John Doe","score":85.5,"user":{"$ref":"$"}}}
+
+        // 默认情况下（关闭循环引用检测）
+        String json1 = JSONObject.toJSONString(user1);
+        System.out.println("默认序列化：");
+        System.out.println(json1);
+
+    }
+```
+
+##### 保证 BigDecimal 精度
+
+```java
+    // 保证 BigDecimal 精度（金融系统常用）
+    @Test
+    void testSerializer4() {
+        UserInfoEntity user = UserInfoEntity.builder()
+                .name("John Doe")
+                .age(25)
+                .score(85.5)
+                .birthday(new Date())
+                .province(null)
+                .num(new BigDecimal("1E+20"))
+                .city("Example City")
+                .build();
+
+        String str = JSONObject.toJSONString(user, JSONWriter.Feature.WriteBigDecimalAsPlain);
+        System.out.println(str);
+        // 输出：{"age":25,"birthday":"2025-11-05 17:29:39.404","city":"Example City","name":"John Doe","num":100000000000000000000,"score":85.5}
+    }
+```
+
+##### 把 Long 类型转为字符串
+
+```java
+    // 把 Long 类型转为字符串，避免前端精度丢失
+    @Test
+    void testSerializer44() {
+        UserSerializer44 user = new UserSerializer44();
+        user.setId(9223372036854775807L);
+        user.setNum(new BigDecimal("1E+20"));
+        String str = JSONObject.toJSONString(user, JSONWriter.Feature.WriteLongAsString);
+        System.out.println(str);
+        // 输出：{"id":"9223372036854775807","num":1E+20}
+    }
+    @Data
+    public static class UserSerializer44 {
+        private Long id;
+        private BigDecimal num;
+    }
+```
+
+##### 浏览器安全输出（防止前端注入）
+
+```java
+    // 浏览器安全输出（防止前端注入）
+    @Test
+    void testSerializer5() {
+        UserInfoEntity user = UserInfoEntity.builder()
+                .id(9223372036854775807L)
+                .name("John Doe")
+                .age(25)
+                .score(85.5)
+                .birthday(new Date())
+                .province(null)
+                .city("Example City <script>alert('XSS')</script>")
+                .build();
+
+        String str = JSONObject.toJSONString(user, JSONWriter.Feature.BrowserCompatible, JSONWriter.Feature.BrowserSecure);
+        System.out.println(str);
+        // 输出：{"age":25,"birthday":"2025-11-05 17:36:45.81","city":"Example City \u003Cscript\u003Ealert\u0028'XSS'\u0029\u003C/script\u003E","id":"9223372036854775807","name":"John Doe","score":85.5}
+    }
+```
+
+##### 输出类型信息（反序列化时保留类型）
+
+```java
+    // 输出类型信息（反序列化时保留类型）
+    @Test
+    void testSerializer6() {
+        UserInfoEntity user = UserInfoEntity.builder()
+                .name("John Doe")
+                .age(25)
+                .score(85.5)
+                .birthday(new Date())
+                .province(null)
+                .city("Example City ")
+                .build();
+
+        String str = JSONObject.toJSONString(user, JSONWriter.Feature.WriteClassName);
+        System.out.println(str);
+        // 输出：{"@type":"local.ateng.java.fastjson2.entity.UserInfoEntity","age":25,"birthday":"2025-11-05 17:37:54.721","city":"Example City ","name":"John Doe","score":85.5}
+    }
+```
+
+##### 枚举字段 序列化和反序列化
+
+```java
+   /**
+     * 枚举字段 序列化和反序列化
+     */
+    @Test
+    void testEnum() {
+        // 序列化
+        userEnumEntity user = new userEnumEntity();
+        user.setId(1L);
+        user.setUserEnum(UserEnum.ENABLE);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"id":1,"userEnum":"开启"}
+        // 反序列化
+        String str2 = "{\"id\":1,\"userEnum\":1}";
+        userEnumEntity user2 = JSONObject.parseObject(str2, userEnumEntity.class);
+        System.out.println(user2);
+        // JSONObjectTests.userEnumEntity(id=1, userEnum=ENABLE)
+    }
+    @Data
+    public static class userEnumEntity {
+        private Long id;
+        private UserEnum userEnum;
+    }
+    public enum UserEnum {
+        ENABLE(1, "开启"),
+        DISABLE(2, "关闭");
+        private Integer code;
+        private String name;
+        UserEnum(int code, String name) {
+            this.code = code;
+            this.name = name;
+        }
+
+        public Integer getCode() {
+            return code;
+        }
+
+        @JSONField
+        public String getName() {
+            return this.name;
+        }
+
+        @JSONCreator
+        public static UserEnum fromCode(Integer code) {
+            if (code == null) {
+                return null;
+            }
+            for (UserEnum e : values()) {
+                if (e.code.equals(code)) {
+                    return e;
+                }
+            }
+            return null;
+        }
+    }
+```
+
+#### 字段注解部分
+
+##### 指定默认值，在序列化时生效，反序列化不生效
+
+```java
+    /**
+     * 指定默认值，在反序列化时生效，序列化不生效
+     */
+    @Test
+    void testField0() {
+        // 序列化
+        User0 user = new User0();
+        user.setId(1L);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"id":1}
+        // 反序列化
+        String str2 = "{\"id\":1}";
+        User0 user2 = JSONObject.parseObject(str2, User0.class);
+        System.out.println(user2);
+        // JSONObjectTests.User0(id=1, name=阿腾, age=25)
+    }
+    @Data
+    public static class User0 {
+        private Long id;
+        @JSONField(defaultValue = "阿腾")
+        private String name;
+        @JSONField(defaultValue = "25")
+        private Integer age;
+    }
+```
+
+##### 禁用序列化/反序列化字段
+
+```java
+    /**
+     * 禁用序列化/反序列化字段
+     */
+    @Test
+    void testField00() {
+        // 序列化
+        User00 user = new User00();
+        user.setId(1L);
+        user.setName("阿腾");
+        user.setAge(25);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"id":1,"name":"阿腾"}
+        // 反序列化
+        String str2 = "{\"age\":\"25\",\"id\":1,\"name\":\"阿腾\"}";
+        User00 user2 = JSONObject.parseObject(str2, User00.class);
+        System.out.println(user2);
+        // JSONObjectTests.User00(id=1, name=阿腾, age=null)
+    }
+    @Data
+    public static class User00 {
+        private Long id;
+        private String name;
+        @JSONField(serialize = false, deserialize = false)
+        private Integer age;
+    }
+```
+
+##### 指定 JSON 字段名
+
+```java
+    /**
+     * 指定 JSON 字段名
+     * 🔹 序列化结果字段名变为 "user_name"
+     * 🔹 反序列化时会自动匹配 "user_name"
+     */
+    @Test
+    void testField1() {
+        // 序列化
+        User1 user = new User1();
+        user.setName("John Doe");
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"user_name":"John Doe"}
+        // 反序列化
+        String str2 = "{\"user_name\":\"John Doe\"}";
+        User1 user2 = JSONObject.parseObject(str2, User1.class);
+        System.out.println(user2);
+        // JSONObjectTests.User1(name=John Doe)
+    }
+    @Data
+    public static class User1 {
+        @JSONField(name = "user_name")
+        private String name;
+    }
+```
+
+##### 日期格式化
+
+```java
+    /**
+     * 日期格式化
+     * 🔹 控制日期序列化输出格式
+     * 🔹 反序列化时也会自动识别同格式字符串
+     * 🔹 优先级高于 JSON.DEFFAULT_DATE_FORMAT
+     */
+    @Test
+    void testField2() {
+        // 序列化
+        User2 user = new User2();
+        user.setBirthday(new Date());
+        user.setDateTime(LocalDateTime.now());
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"birthday":"2025年11月06 09:14:43","dateTime":"2025年11月06日 09时14分43秒"}
+        // 反序列化
+        String str2 = "{\"birthday\":\"2025年11月04 16:24:35\",\"dateTime\":\"2025年11月04日 16时24分35秒\"}";
+        User2 user2 = JSONObject.parseObject(str2, User2.class);
+        System.out.println(user2);
+        // JSONObjectTests.User2(birthday=Tue Nov 04 16:24:35 CST 2025, dateTime=2025-11-04T16:24:35)
+    }
+    @Data
+    public static class User2 {
+        @JSONField(format = "yyyy年MM月dd HH:mm:ss")
+        private Date birthday;
+        @JSONField(format = "yyyy年MM月dd日 HH时mm分ss秒")
+        private LocalDateTime dateTime;
+    }
+```
+
+##### 小数（如 BigDecimal、Double、Float）字段格式化
+
+```java
+    /**
+     * 小数（如 BigDecimal、Double、Float）字段格式化
+     */
+    @Test
+    void testField3() {
+        // 序列化
+        User3 user = new User3();
+        user.setScore(new BigDecimal("1234.5678"));
+        user.setScore1(1234.5678);
+        user.setScore2(1234.0);
+        user.setScore3(0.1267);
+        user.setScore4(85.0);
+        user.setScore5(9999999.99);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"score":1234.6,"score1":1234.5678,"score2":1234.00,"score3":12.67%,"score4":85,"score5":9,999,999.99}
+        // 反序列化
+        // 无，格式化后的 12.67% 9,999,999.99 数据无法转换成数字类型
+    }
+    @Data
+    public static class User3 {
+
+        /** 保留两位小数（常用于金额、分数等） */
+        @JSONField(format = "#0.0")
+        private BigDecimal score;
+
+        /** 默认输出，不指定 format */
+        private Double score1;
+
+        /** 保留两位小数（常用于金额、分数等） */
+        @JSONField(format = "#0.00")
+        private Double score2;
+
+        /** 百分比格式（乘100并附加%符号） */
+        @JSONField(format = "0.##%")
+        private Double score3;
+
+        /** 没有小数（取整显示） */
+        @JSONField(format = "#")
+        private Double score4;
+
+        /** 千分位 + 两位小数（财务场景常用） */
+        @JSONField(format = "#,##0.00")
+        private Double score5;
+    }
+
+```
+
+##### 字段排序
+
+**字段注解排序**
+
+```java
+    // 字段排序
+    @Test
+    void testField4() {
+        UserField4 user = new UserField4();
+        user.setId1(9223372036854775807L);
+        user.setId2(9223372036854775807L);
+        user.setId3(9223372036854775807L);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // 输出：{"id3":9223372036854775807,"id2":9223372036854775807,"id1":9223372036854775807}
+    }
+    @Data
+    public static class UserField4 {
+        @JSONField(ordinal = 3)
+        private Long id1;
+        @JSONField(ordinal = 2)
+        private Long id2;
+        @JSONField(ordinal = 1)
+        private Long id3;
+    }
+```
+
+**类注解排序**
+
+```java
+    @Test
+    void testField5() {
+        UserField5 user = new UserField5();
+        user.setId1(9223372036854775807L);
+        user.setId2(9223372036854775807L);
+        user.setId3(9223372036854775807L);
+        user.setId4(9223372036854775807L);
+        user.setId5(9223372036854775807L);
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // 输出：{"id5":9223372036854775807,"id3":9223372036854775807,"id1":9223372036854775807,"id2":9223372036854775807,"id4":9223372036854775807}
+    }
+    @Data
+    @JSONType(orders = {"id5", "id3", "id1"})
+    public static class UserField5 {
+        private Long id1;
+        private Long id2;
+        private Long id3;
+        private Long id4;
+        private Long id5;
+    }
+```
+
+
+
+#### 自定义序列化器/反序列化器
+
+##### 数值格式化
+
+```java
+    /**
+     * 数值格式化
+     */
+    @Test
+    void testCustom1() {
+        // 序列化
+        Custom1 user = new Custom1();
+        user.setScore1(66.666);
+        user.setScore2(new BigDecimal("12345.67890"));
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"score1":66.67,"score2":"￥12,345.68"}
+        // 反序列化
+        String str2 = "{\"score1\":66.67,\"score2\":\"￥12,345.68\"}";
+        Custom1 user2 = JSONObject.parseObject(str2, Custom1.class);
+        System.out.println(user2);
+        // JSONObjectTests.Custom1(score1=66.67, score2=12345.68)
+    }
+    @Data
+    public static class Custom1 {
+        /** 保留两位小数（常用于金额、分数等） */
+        @JSONField(format = "#0.00")
+        private Double score1;
+        /** 保留两位小数（常用于金额、分数等） */
+        @JSONField(serializeUsing =  CurrencySerializer.class, deserializeUsing = CurrencyDeserializer.class)
+        private BigDecimal score2;
+    }
+    /** 金额格式化：#,##0.00 带千分位 */
+    public static class CurrencySerializer implements ObjectWriter<BigDecimal> {
+        private static final DecimalFormat FORMAT = new DecimalFormat("#,##0.00");
+        @Override
+        public void write(JSONWriter jsonWriter, Object value, Object fieldName, Type fieldType, long features) {
+            // 检查是否为 null
+            if (value == null) {
+                jsonWriter.writeString("￥0.00");
+                return;
+            }
+            // 如果不是 BigDecimal 类型，直接返回 "￥0.00" 作为默认值
+            if (!(value instanceof BigDecimal)) {
+                jsonWriter.writeString("￥0.00");
+                return;
+            }
+            // 类型转换安全地进行
+            BigDecimal val = (BigDecimal) value;
+            // 格式化并写入数据
+            jsonWriter.writeString("￥" + FORMAT.format(val));  // 写入格式化后的字符串
+        }
+    }
+    /** 金额反序列化（去掉￥和,） */
+    public static class CurrencyDeserializer implements ObjectReader<BigDecimal> {
+        @Override
+        public BigDecimal readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
+            String val = jsonReader.readString();
+            if (val == null) return BigDecimal.ZERO;
+            String cleaned = val.replace("￥", "").replace(",", "").trim();
+            try {
+                return new BigDecimal(cleaned);
+            } catch (Exception e) {
+                return BigDecimal.ZERO;
+            }
+        }
+    }
+```
+
+##### 数据脱敏
+
+```java
+    /**
+     * 数据脱敏
+     */
+    @Test
+    void testCustom2() {
+        // 序列化
+        Custom2 user = new Custom2();
+        user.setId(1L);
+        user.setMobile("17623062936");
+        String str = JSONObject.toJSONString(user);
+        System.out.println(str);
+        // {"id":1,"mobile":"176****2936"}
+        // 反序列化
+        // 无
+    }
+    @Data
+    public static class Custom2 {
+        private Long id ;
+        /** 手机号脱敏 */
+        @JSONField(serializeUsing =  SensitiveSerializer.class)
+        private String mobile;
+    }
+    /** 脱敏序列化器 */
+    public static class SensitiveSerializer implements ObjectWriter<String> {
+        @Override
+        public void write(JSONWriter jsonWriter, Object value, Object fieldName, Type fieldType, long features) {
+            if (value == null) {
+                jsonWriter.writeNull();
+                return;
+            }
+            String strValue = value.toString();
+            // 简单示例：手机号脱敏
+            if (strValue.matches("\\d{11}")) {
+                strValue = strValue.replaceAll("(\\d{3})\\d{4}(\\d{4})", "$1****$2");
+            }
+            jsonWriter.writeString(strValue);
+        }
+    }
+```
+
+#### 序列化过滤器
+
+##### 使用 `PropertyPreFilter` 过滤字段
+
+`PropertyPreFilter` 可以根据字段的名称来决定是否序列化该字段。
+
+```java
+    /**
+     * PropertyPreFilter: 根据字段名过滤字段
+     * PropertyPreFilter 可以根据字段的名称来决定是否序列化该字段。
+     */
+    @Test
+    void testFilter0() {
+        // 序列化
+        FilterEntity0 user = new FilterEntity0();
+        user.setId(1L);
+        user.setName("阿腾");
+        user.setAge(25);
+
+        // 使用 PropertyFilter 过滤掉 "age" 字段
+        String str = JSON.toJSONString(user, Filter0());
+        System.out.println(str);
+        // 输出: {"id":1,"name":"阿腾"}
+    }
+    // 实体类定义
+    @Data
+    public static class FilterEntity0 {
+        private Long id;
+        private String name;
+        private Integer age;
+    }
+    // 定义一个 PropertyFilter，过滤掉 "age" 字段
+    public static PropertyPreFilter Filter0() {
+        return (writer, source, name) -> !"age".equals(name);
+    }
+```
+
+##### 使用 **`ValueFilter`** 修改字段的值
+
+`ValueFilter` 可以在序列化时修改字段的值。例如，将 `null` 值替换为其他值，或者对某个字段进行格式化。
+
+```java
+    /**
+     * ValueFilter: 修改字段的值
+     * ValueFilter 可以在序列化时修改字段的值。例如，将 null 值替换为其他值，或者对某个字段进行格式化。
+     */
+    @Test
+    void testFilter1() {
+        // 序列化
+        FilterEntity1 user = new FilterEntity1();
+        user.setId(1L);
+        user.setName("阿腾");
+        user.setAge(null);  // Age 为 null
+
+        // 使用 ValueFilter 将 null 值替换为默认值
+        // JSONWriter.Feature.WriteNulls 特性需要加上，否则为null的值就不会走Filter
+        String str = JSON.toJSONString(user, Filter1(), JSONWriter.Feature.WriteNulls);
+        System.out.println(str);
+        // 输出: {"age":"未知","id":1,"name":"阿腾"}
+    }
+    // 实体类定义
+    @Data
+    public static class FilterEntity1 {
+        private Long id;
+        private String name;
+        private Integer age;
+    }
+    // 定义一个 ValueFilter，修改字段的值
+    public static ValueFilter Filter1() {
+        return (object, name, value) -> {
+            if (value == null) {
+                if ("age".equals(name)) {
+                    return "未知";  // 如果 age 字段为 null，替换为 "未知"
+                }
+            }
+            return value;
+        };
+    }
+```
+
+##### 使用 `ContextValueFilter` 修改字段
+
+ContextValueFilter: 基于上下文修改字段的值
+
+ContextValueFilter 与 ValueFilter 类似，但它能通过 context 获取序列化上下文信息，
+
+如字段的 Field 对象，从而访问注解或类型信息，实现更灵活的序列化控制。
+
+```java
+    /**
+     * ContextValueFilter: 基于上下文修改字段的值
+     * ContextValueFilter 与 ValueFilter 类似，但它能通过 context 获取序列化上下文信息，
+     * 如字段的 Field 对象，从而访问注解或类型信息，实现更灵活的序列化控制。
+     *
+     * 下面的示例通过自定义 @DefaultValue 注解，
+     * 在序列化时如果字段值为 null，就自动替换为注解中指定的默认值。
+     */
+    @Test
+    void testFilter3() {
+        // 序列化
+        User user = new User();
+        user.setId(1L);
+        user.setName(null); // 没有设置名称
+        user.setAge(null);  // 没有设置年龄
+
+        // 使用 ContextValueFilter 序列化
+        // JSONWriter.Feature.WriteNulls 特性需要加上，否则为null的值就不会走Filter
+        String json = JSON.toJSONString(user, defaultValueFilter(), JSONWriter.Feature.WriteNulls);
+        System.out.println(json);
+        // 输出: {"age":18,"id":1,"name":"未知用户"}
+    }
+    /**
+     * 定义 ContextValueFilter：
+     * 可通过 context（包含字段元信息）访问注解，实现动态默认值替换
+     */
+    public static ContextValueFilter defaultValueFilter() {
+        return (context, object, name, value) -> {
+            if (value == null) {
+                try {
+                    // 从当前字段读取 @DefaultValue 注解
+                    DefaultValue annotation = context.getField().getAnnotation(DefaultValue.class);
+                    if (annotation != null) {
+                        return annotation.value(); // 使用注解中的默认值
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            return value;
+        };
+    }
+    // 自定义注解，用于定义默认值
+    @Retention(RetentionPolicy.RUNTIME)
+    public @interface DefaultValue {
+        String value();
+    }
+    @Data
+    public static class User {
+        private Long id;
+        @DefaultValue("未知用户")
+        private String name;
+        @DefaultValue("18")
+        private Integer age;
+    }
+
+```
+
+##### 使用 `NameFilter` 修改字段名
+
+`NameFilter` 可以在序列化时修改字段的名称（例如，改变驼峰命名风格为下划线命名风格）。
+
+```java
+    /**
+     * NameFilter: 修改字段的名称
+     * NameFilter 可以在序列化时修改字段的名称（例如，改变驼峰命名风格为下划线命名风格）。
+     */
+    @Test
+    void testFilter2() {
+        // 序列化
+        FilterEntity2 user = new FilterEntity2();
+        user.setId(1L);
+        user.setUserName("阿腾");
+        user.setAge(25);
+
+        // 使用 NameFilter 将字段名从 "userName" 改为 "user_name"
+        String str = JSON.toJSONString(user, Filter2());
+        System.out.println(str);
+        // 输出: {"age":25,"id":1,"user_name":"阿腾"}
+    }
+    // 实体类定义
+    @Data
+    public static class FilterEntity2 {
+        private Long id;
+        private String userName;
+        private Integer age;
+    }
+    // 定义一个 NameFilter，修改字段名
+    public static NameFilter Filter2() {
+        return (object, name, value) -> {
+            if ("userName".equals(name)) {
+                return "user_name";  // 将 "userName" 字段改为 "user_name"
+            }
+            return name;
+        };
+    }
+```
+
+#### AutoType
+
+##### 基本使用
+
+```java
+    /**
+     * 示例1：基本使用
+     */
+    @Test
+    void testAutoType1() {
+        // 序列化
+        AutoType1 entity = new AutoType1(1L, "ateng");
+        String str = JSONObject.toJSONString(entity, JSONWriter.Feature.WriteClassName);
+        System.out.println(str);
+        // {"@type":"local.ateng.java.fastjson2.JSONObjectTests$AutoType1","id":1L,"name":"ateng"}
+        // 反序列化
+        /*
+        注意开启了AutoType，反序列化时@type字段需要在首位，否则反序列化会报错：
+        java.lang.ClassCastException: class com.alibaba.fastjson2.JSONObject cannot be cast to
+        class local.ateng.java.fastjson2.JSONObjectTests$AutoType1 (com.alibaba.fastjson2.JSONObject
+        and local.ateng.java.fastjson2.JSONObjectTests$AutoType1 are in unnamed module of loader 'app')
+         */
+        String str2 = "{\"id\":1L,\"@type\":\"local.ateng.java.fastjson2.JSONObjectTests$AutoType1\",\"name\":\"ateng\"}";
+        AutoType1 entity2 = (AutoType1) JSON.parseObject(str2, Object.class, JSONReader.Feature.SupportAutoType);
+        // 开启 AutoType ，可以将有@type字段的JSON字符串直接强转类型
+        System.out.println(entity2.getClass());
+        // class local.ateng.java.fastjson2.JSONObjectTests$AutoType1
+        System.out.println(entity2);
+        // JSONObjectTests.AutoType1(id=1, name=ateng)
+    }
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class AutoType1 {
+        private Long id;
+        private String name;
+    }
+```
+
+##### 运行特定类（安全防护）
+
+```java
+    /**
+     * 示例2：运行特定类（安全防护）
+     */
+    @Test
+    void testAutoType2() {
+        String json = "{\"@type\":\"local.ateng.java.fastjson2.JSONObjectTests$AutoType1\",\"id\":1,\"name\":\"ateng\"}";
+        JSONReader.AutoTypeBeforeHandler autoedTypeFilter = JSONReader.autoTypeFilter(
+                // 按需加上需要支持自动类型的类名前缀，范围越小越安全
+                "local.ateng.java."
+        );
+        /*
+        如果带有 @type 字段的数据反序列化时，其类型不在 autoedTypeFilter 范围内会抛出异常
+        java.lang.ClassCastException: class com.alibaba.fastjson2.JSONObject cannot be cast to class 
+        local.ateng.java.fastjson2.JSONObjectTests$AutoType1 (com.alibaba.fastjson2.JSONObject and 
+        local.ateng.java.fastjson2.JSONObjectTests$AutoType1 are in unnamed module of loader 'app')
+         */
+        AutoType1 result = (AutoType1) JSON.parseObject(json, Object.class, autoedTypeFilter);
+        System.out.println(result.getClass());
+        // class local.ateng.java.fastjson2.JSONObjectTests$AutoType1
+        System.out.println(result);
+        // JSONObjectTests.AutoType1(id=1, name=ateng)
+    }
+```
+
+##### 集合类型中使用 AutoType
+
+```java
+    /**
+     * 示例3：集合类型中使用 AutoType
+     * List/Map 中带有 @type 的对象也能正确反序列化。
+     */
+    @Test
+    void testAutoType3() {
+        // 序列化
+        List<AutoType1> list = new ArrayList<>();
+        list.add(new AutoType1(1L, "ateng"));
+        list.add(new AutoType1(2L, "blair"));
+        String json = JSON.toJSONString(list, JSONWriter.Feature.WriteClassName);
+        System.out.println(json);
+        // [{"@type":"local.ateng.java.fastjson2.JSONObjectTests$AutoType1","id":1,"name":"ateng"},{"@type":"local.ateng.java.fastjson2.JSONObjectTests$AutoType1","id":2,"name":"blair"}]
+        // 反序列化
+        JSONReader.AutoTypeBeforeHandler autoedTypeFilter = JSONReader.autoTypeFilter(
+                // 按需加上需要支持自动类型的类名前缀，范围越小越安全
+                "local.ateng.java."
+        );
+        String str = "[{\"@type\":\"local.ateng.java.fastjson2.JSONObjectTests$AutoType1\",\"id\":1,\"name\":\"ateng\"},{\"@type\":\"local.ateng.java.fastjson2.JSONObjectTests$AutoType1\",\"id\":2,\"name\":\"blair\"}]";
+        List<AutoType1> parsed = (List<AutoType1>) JSON.parseObject(str, Object.class, autoedTypeFilter);
+        System.out.println(parsed.getClass());
+        // 这里是 JSONArray，JSONArray 实现了 java.util.List 接口，强转后也可以正常使用
+        // class com.alibaba.fastjson.JSONArray
+        System.out.println(parsed.get(0).getClass());
+        // class local.ateng.java.fastjson2.JSONObjectTests$AutoType1
+        System.out.println(parsed);
+        // [{"id":1,"name":"ateng"},{"id":2,"name":"blair"}]
+        System.out.println(parsed.get(0).getName());
+        // ateng
+    }
+```
+
+
+
+#### 其他部分
+
+##### java对象转JSONObject
 
 ```java
     // java对象转JSONObject
@@ -298,25 +1201,8 @@ public class JSONObjectTests {
                 .city("Example City")
                 .build();
         String str = JSONObject.toJSONString(user);
-        JSONObject jsonObject = JSONObject.parse(str);
+        JSONObject jsonObject = JSONObject.parseObject(str);
         System.out.println(jsonObject);
-    }
-```
-
-#### JSONObject.of创建JSONObject对象
-
-```java
-    // JSONObject.of创建JSONObject对象
-    @Test
-    void test06() {
-        JSONObject object = JSONObject.of(
-                "id", 1001,
-                "name", "DataWorks",
-                "date", "2017-07-14",
-                "createAt1", LocalDateTime.now(),
-                "createAt2", new Date()
-        );
-        System.out.println(object);
     }
 ```
 
@@ -400,8 +1286,9 @@ public class JSONObjectTests {
     // 读取集合多个元素的某个属性
     @Test
     void test01() {
-        List<String> stringList = (List<String>) JSONPath.eval(JSON.toJSONString(list), "$[*].name");
+        JSONArray stringList = (JSONArray) JSONPath.eval(list, "$[*].name");
         System.out.println(stringList);
+        // ["段哲瀚","汪昊然","万修杰", ... ]
     }
 ```
 
@@ -412,44 +1299,50 @@ public class JSONObjectTests {
     @Test
     void test01_2() {
         String json = "{\"students\":[{\"name\":\"John\"},{\"name\":\"Alice\"}]}";
-        List<String> names = (List<String>) JSONPath.eval(json, "$.students[*].name");
+        JSONArray names = (JSONArray) JSONPath.eval(json, "$.students[*].name");
         System.out.println(names);
+        // ["John","Alice"]
     }
     @Test
     void test01_2_1() {
         String json = "{\"张三\":[{\"name\":\"John\"},{\"name\":\"Alice\"}]}";
-        List<String> names = (List<String>) JSONPath.eval(json, "$.张三[*].name");
+        JSONArray names = (JSONArray) JSONPath.eval(json, "$.张三[*].name");
         System.out.println(names);
+        // ["John","Alice"]
     }
     @Test
     void test01_3() {
         // 递归查询
         String json = "{\"students\":[{\"name\":\"John\"},{\"name\":\"Alice\"}]}";
-        List<String> names = (List<String>) JSONPath.eval(json, "$.students..name");
+        JSONArray names = (JSONArray) JSONPath.eval(json, "$.students..name");
         System.out.println(names);
+        // ["John","Alice"]
     }
     @Test
     void test01_04() {
         String jsonString = "{\"students\":[{\"name\":\"John\",\"age\":25,\"gender\":\"Male\"},{\"name\":\"Alice\",\"age\":30,\"gender\":\"Female\"},{\"name\":\"Bob\",\"age\":28,\"gender\":\"Male\"}]}";
         // 使用 JSONPath.eval 获取多条件筛选的结果
-        List<Object> result = (List<Object>) JSONPath.eval(jsonString, "$.students[?(@.age >= 25 && @.age <= 30 && @.gender == 'Male')].name");
+        JSONArray result = (JSONArray) JSONPath.eval(jsonString, "$.students[?(@.age >= 25 && @.age <= 30 && @.gender == 'Male')].name");
         System.out.println(result);
+        // ["John","Bob"]
     }
     @Test
     void test01_05() {
         String jsonString = "{\"students\":[{\"name\":\"John\",\"age\":25,\"gender\":\"Male\"},{\"name\":\"Alice\",\"age\":30,\"gender\":\"Female\"},{\"name\":\"Bob\",\"age\":28,\"gender\":\"Male\"}]}";
         // 使用 JSONPath.eval 获取1条件筛选的结果
-        Object result = JSONPath.eval(jsonString, "$.students[?(@.age >= 25 && @.age <= 30 && @.gender == 'Male')][0]");
+        JSONObject result = (JSONObject) JSONPath.eval(jsonString, "$.students[?(@.age >= 25 && @.age <= 30 && @.gender == 'Male')][0]");
         System.out.println(result);
+        // {"name":"John","age":25,"gender":"Male"}
     }
     @Test
     void test01_06() {
         String jsonString = "[{\"name\":\"高新区管委会\",\"congestionIndex\":1.2,\"realSpeed\":\"60.918\",\"yoy\":0.0,\"mom\":0.0,\"status\":\"畅通\"},{\"name\":\"保税区-B区\",\"congestionIndex\":1.2,\"realSpeed\":\"39.3355\",\"yoy\":-0.1,\"mom\":0.0,\"status\":\"畅通\"},{\"name\":\"康居西城\",\"congestionIndex\":1.3,\"realSpeed\":\"29.8503\",\"yoy\":0.0,\"mom\":0.0,\"status\":\"畅通\"},{\"name\":\"白市驿\",\"congestionIndex\":1.1,\"realSpeed\":\"45.5646\",\"yoy\":-0.1,\"mom\":0.0,\"status\":\"畅通\"},{\"name\":\"金凤\",\"congestionIndex\":1.2,\"realSpeed\":\"44.2227\",\"yoy\":0.0,\"mom\":0.0,\"status\":\"畅通\"},{\"name\":\"保税区-A区\",\"congestionIndex\":1.4,\"realSpeed\":\"30.8192\",\"yoy\":0.0,\"mom\":0.0,\"status\":\"畅通\"},{\"name\":\"高新天街\",\"congestionIndex\":1.4,\"realSpeed\":\"19.2326\",\"yoy\":0.1,\"mom\":0.0,\"status\":\"畅通\"},{\"name\":\"熙街\",\"congestionIndex\":1.6,\"realSpeed\":\"23.2695\",\"yoy\":0.0,\"mom\":0.0,\"status\":\"缓行\"}]";
         // 使用 JSONPath.eval 获取多条件筛选的结果
-        List<BigDecimal> congestionIndexList1 = (List<BigDecimal>) JSONPath.eval(jsonString, "$[?(@.name == '高新区管委会')].congestionIndex");
-        double congestionIndex1 = ObjectUtils.isEmpty(congestionIndexList1) ? 1.0 : congestionIndexList1.get(0).doubleValue();
-        System.out.println(congestionIndex1);
-
+        JSONArray congestionIndexList1 = (JSONArray) JSONPath.eval(jsonString, "$[?(@.name == '高新区管委会')].congestionIndex");
+        System.out.println(congestionIndexList1);
+        // [1.2]
+        System.out.println(congestionIndexList1.getFirst().getClass());
+        // class java.math.BigDecimal
     }
 ```
 
@@ -459,9 +1352,10 @@ public class JSONObjectTests {
     // 返回集合中多个元素
     @Test
     void test02() {
-        Object objectList = JSONPath.eval(JSON.toJSONString(list), "[1,5]"); // 返回下标为1和5的元素
-        List<UserInfoEntity> userList = JSONArray.parse(objectList.toString()).toJavaList(UserInfoEntity.class);
+        JSONArray objectList = (JSONArray) JSONPath.eval(list, "[1,5]"); // 返回下标为1和5的元素
+        List<UserInfoEntity> userList = objectList.toJavaList(UserInfoEntity.class);
         System.out.println(userList);
+        // [UserInfoEntity(id=2, name=宋鹏, age=86, score=48.951, num=null, bi ...
     }
 ```
 
@@ -471,9 +1365,10 @@ public class JSONObjectTests {
     // 按范围返回集合的子集
     @Test
     void test03() {
-        Object objectList = JSONPath.eval(JSON.toJSONString(list), "[1:5]"); // 返回下标从1到5的元素
-        List<UserInfoEntity> userList = JSONArray.parse(objectList.toString()).toJavaList(UserInfoEntity.class);
+        JSONArray objectList = (JSONArray) JSONPath.eval(list, "[1:5]"); // 返回下标从1到5的元素
+        List<UserInfoEntity> userList = objectList.toJavaList(UserInfoEntity.class);
         System.out.println(userList);
+        // [UserInfoEntity(id=2, name=林浩, age=95, score=69.378, num=null, ...
     }
 ```
 
@@ -483,16 +1378,17 @@ public class JSONObjectTests {
     // 通过条件过滤，返回集合的子集
     @Test
     void test04() {
-        Object objectList = JSONPath.eval(JSON.toJSONString(list), "$[?(@.id in (88,99))]"); // 返回下标从1到5的元素
-        List<UserInfoEntity> userList = JSONArray.parse(objectList.toString()).toJavaList(UserInfoEntity.class);
+        JSONArray objectList = (JSONArray) JSONPath.eval(list,"$[?(@.id in (88,99))]"); // 返回下标从1到5的元素
+        List<UserInfoEntity> userList = objectList.toJavaList(UserInfoEntity.class);
         System.out.println(userList);
+        // [UserInfoEntity(id=88, name=方越彬, age=63, score=63.994, num=null,
     }
-    // 通过条件过滤，返回集合的子集
     @Test
     void test04_2() {
-        Object objectList = JSONPath.eval(JSON.toJSONString(list), "$[?(@.age = 88)]"); // 返回列表对象的age=88的数据
-        List<UserInfoEntity> userList = JSONArray.parse(objectList.toString()).toJavaList(UserInfoEntity.class);
+        JSONArray objectList = (JSONArray) JSONPath.eval(list, "$[?(@.age = 88)]"); // 返回列表对象的age=88的数据
+        List<UserInfoEntity> userList = objectList.toJavaList(UserInfoEntity.class);
         System.out.println(userList);
+        // [UserInfoEntity(id=28, name=邵浩然, age=88, score=24.06, num=null, birthday=Tue Jun ...
     }
 ```
 
@@ -502,16 +1398,17 @@ public class JSONObjectTests {
     // 多条件筛选，返回集合的子集
     @Test
     void test04_3() {
-        Object objectList = JSONPath.eval(JSON.toJSONString(list), "$[?(@.age == 88 || @.age == 95)]"); // 返回列表对象的age=88或者=95的数据
-        List<UserInfoEntity> userList = JSONArray.parse(objectList.toString()).toJavaList(UserInfoEntity.class);
+        JSONArray objectList = (JSONArray) JSONPath.eval(list, "$[?(@.age == 88 || @.age == 95)]"); // 返回列表对象的age=88或者=95的数据
+        List<UserInfoEntity> userList = objectList.toJavaList(UserInfoEntity.class);
         System.out.println(userList);
+        // [UserInfoEntity(id=11, name=朱烨磊, age=88, score=66.78, ...
     }
-    // 多条件筛选，返回集合的子集
     @Test
     void test04_4() {
-        Object objectList = JSONPath.eval(JSON.toJSONString(list), "$[?(@.age > 50 && @.age < 95 && @.city='东莞')]");
-        List<UserInfoEntity> userList = JSONArray.parse(objectList.toString()).toJavaList(UserInfoEntity.class);
+        JSONArray objectList = (JSONArray) JSONPath.eval(list, "$[?(@.age > 50 && @.age < 95 && @.city='东莞')]");
+        List<UserInfoEntity> userList = objectList.toJavaList(UserInfoEntity.class);
         System.out.println(userList);
+        // [UserInfoEntity(id=64, name=崔志泽, age=70, score=64.082, num=null ...
     }
 ```
 
@@ -521,1105 +1418,69 @@ public class JSONObjectTests {
     // 通过条件过滤，获取数组长度
     @Test
     void test04_5() {
-        int length = (int) JSONPath.eval(JSON.toJSONString(list), "$[?(@.age = 88)].length()"); // 返回列表对象的age=88的数据的长度
+        Integer length = (Integer) JSONPath.eval(list, "$[?(@.age = 88)].length()"); // 返回列表对象的age=88的数据的长度
         System.out.println(length);
     }
 ```
 
 
 
+### 全局配置
 
-
-## 常用注解及使用方法
-
-### 常用注解
-
-#### 1. `@JSONField` - 指定序列化和反序列化的字段名称
-
-**作用**：用于指定字段在 JSON 中的名称，可以用于字段、getter 或 setter 方法，支持对字段进行更细粒度的配置，如格式化日期、指定序列化特性等。
-
-**示例**：
+在 Springboot 中配置了Fastjson2 的全局配置，那么在使用 JSONObject、JSONArray、JSON 这些时就会生效
 
 ```java
-import com.alibaba.fastjson.annotation.JSONField;
+package local.ateng.java.fastjson2.config;
 
-public class User {
-    private int id;
-
-    @JSONField(name = "full_name")
-    private String name;
-
-    @JSONField(format = "yyyy-MM-dd")
-    private Date birthDate;
-
-    // 省略构造方法、getter 和 setter
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "id": 1,
-    "full_name": "Tom",
-    "birthDate": "1990-01-01"
-}
-```
-
-#### 2. `@JSONField(serialize = false)` - 禁用字段序列化
-
-**作用**：标记某个字段在序列化时被忽略，不会出现在 JSON 输出中。
-
-**示例**：
-
-```java
-import com.alibaba.fastjson.annotation.JSONField;
-
-public class User {
-    private int id;
-
-    @JSONField(serialize = false)
-    private String password;
-
-    // 省略构造方法、getter 和 setter
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "id": 1
-}
-```
-
----
-
-#### 3. `@JSONField(deserialize = false)` - 禁用字段反序列化
-
-**作用**：标记某个字段在反序列化时被忽略，Fastjson 会忽略传入 JSON 中的该字段。
-
-**示例**：
-
-```java
-import com.alibaba.fastjson.annotation.JSONField;
-
-public class User {
-    private int id;
-
-    @JSONField(deserialize = false)
-    private String password;
-
-    // 省略构造方法、getter 和 setter
-}
-```
-
-**反序列化时**，即使 JSON 中包含 `"password"` 字段，Fastjson 会忽略并不会赋值给该字段。
-
----
-
-#### 4. **大整数转字符串** - `@JSONField(serializeFeatures = JSONWriter.Feature.WriteBigDecimalAsPlain)`
-
-**作用**：避免大整数或 BigDecimal 失真，转换为字符串输出。
-
-```java
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.JSONWriter;
-import java.math.BigDecimal;
-
-public class Order {
-    @JSONField(serializeFeatures = JSONWriter.Feature.WriteBigDecimalAsPlain)
-    private BigDecimal amount;
-}
-```
-
-**输入数据**：
-
-```json
-{
-    "amount": 9999999999999999999.99
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "amount": "9999999999999999999.99"
-}
-```
-
----
-
-#### 5. **小数保留固定位数** - `@JSONField(format = "#0.00")`
-
-**作用**：控制小数位数。
-
-```java
-import com.alibaba.fastjson2.annotation.JSONField;
-import java.math.BigDecimal;
-
-public class Product {
-    @JSONField(format = "#0.00")
-    private BigDecimal price;
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "price": "123.46"
-}
-```
-
----
-
-#### 6. **小数转百分比** - `@JSONField(format = "#0.##%")`
-
-**作用**：把小数转换为百分比格式。
-
-```java
-import com.alibaba.fastjson2.annotation.JSONField;
-import java.math.BigDecimal;
-
-public class Rate {
-    @JSONField(format = "#0.##%")
-    private BigDecimal discountRate;
-}
-```
-
-**输入对象**：
-
-```java
-Rate rate = new Rate();
-rate.discountRate = new BigDecimal("0.075");
-```
-
-**序列化结果**：
-
-```json
-{
-    "discountRate": "7.5%"
-}
-```
-
-#### 7. `@JSONField(ordinal = 1)` - 控制字段序列化顺序
-
-**作用**：指定字段在序列化时的顺序，可以通过 `ordinal` 属性来控制。
-
-**示例**：
-
-```java
-import com.alibaba.fastjson.annotation.JSONField;
-
-public class User {
-    @JSONField(ordinal = 2)
-    private int id;
-
-    @JSONField(ordinal = 1)
-    private String name;
-
-    // 省略构造方法、getter 和 setter
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "name": "Tom",
-    "id": 1
-}
-```
-
----
-
-#### 8. `@JSONField(defaultValue = "default")` - 设置默认值
-
-**作用**：为字段设置一个默认值，在序列化或反序列化时，如果字段值为 `null` 或缺失，则使用该默认值。
-
-**示例**：
-
-```java
-import com.alibaba.fastjson.annotation.JSONField;
-
-public class User {
-    private int id;
-
-    @JSONField(defaultValue = "Anonymous")
-    private String name;
-
-    // 省略构造方法、getter 和 setter
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "id": 1,
-    "name": "Anonymous"
-}
-```
-
-#### 9. **自定义序列化** - `@JSONField(serializeUsing = xx.class)`
-
-**作用**：用于指定自定义的序列化逻辑。
-
-```java
-import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.writer.ObjectWriter;
-
-import java.lang.reflect.Type;
-
-public class Product {
-    @JSONField(serializeUsing = PriceSerializer.class)
-    private double price;
-}
-
-// 自定义序列化器
-class PriceSerializer implements ObjectWriter<Double> {
-    @Override
-    public void write(JSONWriter jsonWriter, Object price, Object fieldName, Type fieldType, long features) {
-        jsonWriter.writeString("$" + String.format("%.2f", price));
-    }
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "price": "$99.99"
-}
-```
-
----
-
-#### 10. **自定义反序列化** - `@JSONField(deserializeUsing = xx.class)`
-
-**作用**：用于自定义反序列化逻辑。
-
-```java
+import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.reader.ObjectReader;
-
-import java.lang.reflect.Type;
-
-public class Product {
-    @JSONField(deserializeUsing = PriceDeserializer.class)
-    private double price;
-}
-
-// 自定义反序列化器
-class PriceDeserializer implements ObjectReader<Double> {
-    @Override
-    public Double readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
-        String value = jsonReader.readString();
-        return Double.parseDouble(value.replace("$", ""));
-    }
-}
-```
-
-**输入 JSON**：
-
-```json
-{
-    "price": "$99.99"
-}
-```
-
-**反序列化**：
-
-```java
-Product product = JSON.parseObject(json, Product.class);
-System.out.println(product.price); // 输出: 99.99
-```
-
-#### 11. @JSONType 全局控制类序列化和反序列化
-
-##### **1. `orders` - 指定字段的序列化顺序**
-
-**作用**：控制 JSON 输出时的字段顺序。
-
-```java
-import com.alibaba.fastjson2.annotation.JSONType;
-
-@JSONType(orders = {"name", "age", "id"})
-public class User {
-    private int id;
-    private String name;
-    private int age;
-
-    // 省略构造方法、getter 和 setter
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "name": "Tom",
-    "age": 25,
-    "id": 1
-}
-```
-
-> **注意**：`orders` 指定的字段顺序会优先于 `@JSONField(ordinal = xx)`
-
----
-
-##### **2. `ignores` - 忽略指定字段**
-
-**作用**：不让某些字段出现在 JSON 序列化结果中，相当于 `@JSONField(serialize = false)`。
-
-```java
-import com.alibaba.fastjson2.annotation.JSONType;
-
-@JSONType(ignores = {"password", "phoneNumber"})
-public class User {
-    private int id;
-    private String name;
-    private String password;
-    private String phoneNumber;
-}
-```
-
-**序列化结果**（`password` 和 `phoneNumber` 被忽略）：
-
-```json
-{
-    "id": 1,
-    "name": "Tom"
-}
-```
-
----
-
-##### **3. `naming` - 统一修改字段命名风格**
-
-**作用**：自动转换 JSON 字段的命名风格（如驼峰转下划线）。
-
-```java
-import com.alibaba.fastjson2.annotation.JSONType;
-import com.alibaba.fastjson2.PropertyNamingStrategy;
-
-@JSONType(naming = PropertyNamingStrategy.SnakeCase)
-public class User {
-    private int userId;
-    private String userName;
-}
-```
-
-**序列化结果**（驼峰命名转换为下划线）：
-
-```json
-{
-    "user_id": 1,
-    "user_name": "Tom"
-}
-```
-
-> **支持的命名策略**：
->
-> - `CamelCase`（默认）- 驼峰命名（userName）
-> - `SnakeCase` - 下划线命名（user_name）
-> - `KebabCase` - 短横线命名（user-name）
-> - `UpperCase` - 全大写（USERNAME）
-
----
-
-##### **4. `serializeFeatures` - 启用额外的序列化特性**
-
-**作用**：启用 `Fastjson2` 的特定序列化规则，例如 **忽略 `null` 值等**。
-
-```java
 import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.annotation.JSONType;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.event.EventListener;
+
+/**
+ * 全局配置fastjson2
+ *
+ * @author 孔余
+ * @since 2025-11-06
+ */
+@Configuration
+public class FastJsonConfig {
+
+    @EventListener
+    public void run(ApplicationReadyEvent event) {
+        JSON.configReaderDateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS");
+        JSON.configWriterDateFormat("yyyy-MM-dd HH:mm:ss.SSSSSS");
+        JSON.config(
+                // 序列化输出空值字段
+                JSONWriter.Feature.WriteNulls,
+                // 将空置输出为缺省值，Number类型的null都输出为0，String类型的null输出为""，数组和Collection类型的输出为[]
+                JSONWriter.Feature.NullAsDefaultValue,
+                // 打开循环引用检测
+                JSONWriter.Feature.ReferenceDetection,
+                // 保证 BigDecimal 精度
+                JSONWriter.Feature.WriteBigDecimalAsPlain,
+                // 把 Long 类型转为字符串，避免前端精度丢失
+                JSONWriter.Feature.WriteLongAsString,
+                // 浏览器安全输出（防止前端注入）
+                JSONWriter.Feature.BrowserCompatible,
+                JSONWriter.Feature.BrowserSecure
+        );
+
+        JSON.config(
+                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                JSONReader.Feature.SupportSmartMatch,
+                // 允许字段名不带引号
+                JSONReader.Feature.AllowUnQuotedFieldNames,
+                // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreNoneSerializable,
+                // 防止类型不匹配时报错（更安全）
+                JSONReader.Feature.IgnoreAutoTypeNotMatch
+        );
 
-import java.util.Date;
-
-@JSONType(serializeFeatures = {JSONWriter.Feature.WriteMapNullValue})
-public class Order {
-    private int id;
-    private Date createTime;
-    private String remark; // 可能为 null
-
-    // 省略构造方法、getter 和 setter
-}
-```
-
-**序列化结果**（`null` 字段不被忽略，日期使用 ISO8601 格式）：
-
-```json
-{
-    "id": 1,
-    "createTime": "2024-03-06T15:30:00Z",
-    "remark": null
-}
-```
-
-> **常见 `serializeFeatures`：**
->
-> - `WriteNulls`：输出 `null` 值字段（默认不输出 `null`）。
-> - `WriteBigDecimalAsPlain`：防止 `BigDecimal` 以科学计数法表示。
-> - `PrettyFormat`：格式化 JSON 以便于阅读。
-
----
-
-##### **5. `deserializeFeatures` - 反序列化时启用额外特性**
-
-**作用**：修改 JSON 解析时的行为，比如 **忽略大小写、自动去掉下划线等**。
-
-```java
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.annotation.JSONType;
-
-@JSONType(deserializeFeatures = JSONReader.Feature.SupportSmartMatch)
-public class User {
-    private int userId;
-    private String userName;
-}
-```
-
-**输入 JSON**（即使字段大小写不同或有下划线，也能正确解析）：
-
-```json
-{
-    "User_Id": 1,
-    "USER_NAME": "Tom"
-}
-```
-
-> **常见 `deserializeFeatures`：**
->
-> - `SupportSmartMatch`：忽略字段大小写、下划线等自动匹配字段。
-> - `IgnoreSetNullValue`：如果 JSON 里有 `null`，不会赋值给对象的属性。
-
----
-
-##### **6. `@JSONType` + `@JSONField` 组合使用**
-
-**作用**：`@JSONType` 设置全局规则，`@JSONField` 控制单个字段。
-
-```java
-import com.alibaba.fastjson2.annotation.JSONType;
-import com.alibaba.fastjson2.annotation.JSONField;
-
-@JSONType(naming = PropertyNamingStrategy.SnakeCase, ignores = {"password"})
-public class User {
-    private int userId;
-    private String userName;
-
-    @JSONField(serialize = false)
-    private String password;
-
-    @JSONField(format = "#0.00")
-    private double balance;
-}
-```
-
-**序列化结果**（`password` 被忽略，`balance` 保留两位小数）：
-
-```json
-{
-    "user_id": 1,
-    "user_name": "Tom",
-    "balance": "99.99"
-}
-```
-
-
-
-### 使用方法
-
-#### 创建实体类
-
-```java
-package local.ateng.java.serialize.entity;
-
-import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.PropertyNamingStrategy;
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.annotation.JSONType;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-import java.io.Serial;
-import java.io.Serializable;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
-
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-@JSONType(orders = {"name", "age", "id"}, naming = PropertyNamingStrategy.SnakeCase, serializeFeatures = {JSONWriter.Feature.WriteNulls, JSONWriter.Feature.PrettyFormat})
-public class MyUser implements Serializable {
-
-    @Serial
-    private static final long serialVersionUID = 1L;
-
-    /**
-     * 主键id
-     */
-    @JSONField(ordinal = 1, serializeFeatures = JSONWriter.Feature.WriteLongAsString)
-    private Long id;
-
-    /**
-     * 名称
-     */
-    @JSONField(name = "full_name", label = "User Name")
-    private String name;
-
-    /**
-     * 年龄
-     */
-    private Integer age;
-
-    /**
-     * 手机号码
-     */
-    private String phoneNumber;
-
-    /**
-     * 邮箱
-     */
-    private String email;
-
-    /**
-     * 分数
-     */
-    @JSONField(serializeFeatures = JSONWriter.Feature.WriteBigDecimalAsPlain)
-    private BigDecimal score;
-
-    /**
-     * 比例
-     */
-    @JSONField(format = "##.##%")
-    private Double ratio;
-
-    /**
-     * 生日
-     */
-    @JSONField(format = "yyyy-MM-dd")
-    private LocalDate birthday;
-
-    /**
-     * 所在省份
-     */
-    @JSONField(defaultValue = "Chongqing")
-    private String province;
-
-    /**
-     * 所在城市
-     */
-    private String city;
-
-    /**
-     * 创建时间
-     */
-    @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
-    private LocalDateTime createTime;
-    private Date createTime2;
-    private Date createTime3;
-    private int num;
-    private List<String> list;
-
-}
-```
-
-
-
-#### 使用JSON
-
-使用测试类来进行演示
-
-```java
-package local.ateng.java.serialize;
-
-import com.alibaba.fastjson2.JSONObject;
-import local.ateng.java.serialize.entity.MyUser;
-import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
-public class Fastjson2AnnotationTests {
-
-    @Test
-    public void serialization() {
-        // 创建对象
-        MyUser myUser = MyUser.builder()
-                .id(1L)
-                .name("ateng")
-                .age(25)
-                .phoneNumber("1762306666")
-                .email("kongyu2385569970@gmail.com")
-                .score(new BigDecimal("88.911"))
-                .ratio(0.7147)
-                .birthday(LocalDate.parse("2000-01-01"))
-                .province(null)
-                .city("重庆市")
-                .createTime(LocalDateTime.now())
-                .build();
-        // 进行序列化
-        String json = JSONObject.toJSONString(myUser);
-        System.out.println(json);
-    }
-
-    @Test
-    public void deserialization() {
-        // 创建数据
-        String json = "{\"id\":\"1\",\"age\":25,\"phoneNumber\":\"1762306666\",\"email\":\"kongyu2385569970@gmail.com\",\"score\":\"88.91\",\"ratio\":0.7147,\"birthday\":\"2000-01-01\",\"province\":\"重庆市\",\"city\":\"重庆市\",\"createTime\":\"2025-03-05 11:02:56\",\"full_name\":\"ateng\"}";
-        // 进行反序列化
-        MyUser myUser = JSONObject.parseObject(json, MyUser.class);;
-        System.out.println(myUser);
-    }
-
-}
-```
-
-序列化serialization结果：
-
-```json
-{"age":25,"id":null,"birthday":"2000-01-01","city":"重庆市","create_time":"2025-03-06 10:01:52.693","create_time2":null,"create_time3":null,"email":"kongyu2385569970@gmail.com","full_name":"ateng","num":0,"phone_number":"1762306666","province":null,"ratio":null,"score":88.911}
-```
-
-反序列化deserialization结果
-
-```
-MyUser(id=1, name=ateng, age=25, phoneNumber=null, email=kongyu2385569970@gmail.com, score=88.91, ratio=0.7147, birthday=2000-01-01, province=重庆市, city=重庆市, createTime=null, createTime2=null, createTime3=null, num=0, list=null)
-```
-
-
-
-#### 使用Controller
-
-在 **Spring Web MVC** 中，Jackson 主要用于处理 HTTP 请求和响应的 JSON 序列化与反序列化。当 Controller 返回 Java 对象时，Spring MVC 通过 `MappingJackson2HttpMessageConverter` 将其转换为 JSON 响应给前端，反之，当前端发送 JSON 数据时，Spring MVC 会自动解析，并使用 Jackson 将其转换为 Java 对象。在实际应用中，`@RestController` 或 `@ResponseBody` 注解可以让 Spring 自动调用 Jackson 进行序列化，而 `@RequestBody` 注解则让 Jackson 负责反序列化。
-
-```java
-package local.ateng.java.serialize.controller;
-
-import local.ateng.java.serialize.entity.MyUser;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
-@RestController
-@RequestMapping("/jackson")
-public class JacksonController {
-
-    // 序列化
-    @GetMapping("/serialize")
-    public MyUser serialize() {
-        return MyUser.builder()
-                .id(1L)
-                .name("ateng")
-                .age(25)
-                .phoneNumber("1762306666")
-                .email("kongyu2385569970@gmail.com")
-                .score(new BigDecimal("88.911"))
-                .ratio(0.7147)
-                .birthday(LocalDate.parse("2000-01-01"))
-                .province("重庆市")
-                .city("重庆市")
-                .createTime(LocalDateTime.now())
-                .build();
-    }
-
-    // 反序列化
-    @PostMapping("/deserialize")
-    public String deserialize(@RequestBody MyUser myUser) {
-        System.out.println(myUser);
-        return "ok";
-    }
-
-}
-```
-
-**访问序列化接口**
-
-```
-curl -X GET http://localhost:12014/jackson/serialize
-```
-
-示例输出：
-
-```json
-{"id":"1","age":25,"phoneNumber":"1762306666","email":"kongyu2385569970@gmail.com","score":"88.91","ratio":0.7147,"birthday":"2000-01-01","province":"重庆市","city":"重庆市","createTime":"2025-03-05 11:32:34.043","full_name":"ateng"}
-```
-
-**访问反序列化接口**
-
-```
-curl -X POST http://192.168.100.2:12014/jackson/deserialize \
-     -H "Content-Type: application/json" \
-     -d '{
-           "id": 1,
-           "name": "ateng",
-           "age": 25,
-           "phoneNumber": "1762306666",
-           "email": "kongyu2385569970@gmail.com",
-           "score": 88.911,
-           "ratio": 0.7147,
-           "birthday": "2000-01-01",
-           "province": "Chongqing",
-           "city": "Chongqing",
-           "createTime": "2025-03-05 14:30:00"
-         }'
-```
-
-控制台打印
-
-```
-MyUser(id=1, name=null, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=Chongqing, city=Chongqing, createTime=2025-03-05T14:30)
-```
-
-
-
-## 自定义序列化和反序列化
-
-参考：[官方文档](https://github.com/alibaba/fastjson2/wiki/register_custom_reader_writer_cn)
-
-### 自定义序列化
-
-自定义序列化允许你控制对象在序列化过程中的行为，特别是当你需要将某些对象转换为特殊格式时（如日期、金额、对象的某些字段等）。
-
-#### 1. **实现 `ObjectWriter` 接口自定义序列化**
-
-在 Fastjson2 中，序列化过程是通过实现 `ObjectWriter` 接口来完成的。你可以实现该接口来自定义如何序列化某个类。
-
-**步骤**：
-
-1. 创建自定义的 `ObjectWriter`。
-2. 使用 `@JSONField(serializeUsing = CustomSerializer.class)` 注解指定自定义序列化器。
-
-**示例：自定义金额序列化器**
-
-假设你希望在序列化时将金额字段格式化为 `￥100.00`。
-
-```java
-import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.writer.ObjectWriter;
-
-import java.lang.reflect.Type;
-
-public class Product {
-    private String name;
-    @JSONField(serializeUsing = PriceSerializer.class)  // 指定自定义序列化器
-    private double price;
-
-    public Product(String name, double price) {
-        this.name = name;
-        this.price = price;
     }
 }
 
-// 自定义序列化器：将金额格式化为人民币符号
-class PriceSerializer implements ObjectWriter<Double> {
-    @Override
-    public void write(JSONWriter jsonWriter, Object value, Object fieldName, Type fieldType, long features) {
-        String formattedPrice = "￥" + String.format("%.2f", value);
-        jsonWriter.writeString(formattedPrice);
-    }
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "name": "Laptop",
-    "price": "￥1999.99"
-}
-```
-
----
-
-#### 2. **自定义枚举序列化**
-
-你可能希望将枚举的值自定义为特定的字符串，而不是默认的 `name()` 方法返回值。
-
-**示例：自定义枚举序列化**
-
-```java
-import com.alibaba.fastjson2.annotation.JSONField;
-
-public class Order {
-    private int id;
-    
-    @JSONField(serializeUsing = StatusSerializer.class)
-    private OrderStatus status;
-
-    public Order(int id, OrderStatus status) {
-        this.id = id;
-        this.status = status;
-    }
-}
-
-enum OrderStatus {
-    PENDING,
-    SHIPPED,
-    DELIVERED
-}
-
-// 自定义枚举序列化器
-class StatusSerializer implements ObjectWriter<OrderStatus> {
-    @Override
-    public void write(JSONWriter jsonWriter, Object status, Object fieldName, Type fieldType, long features) {
-        switch (status) {
-            case PENDING:
-                jsonWriter.writeString("Processing");
-                break;
-            case SHIPPED:
-                jsonWriter.writeString("In Transit");
-                break;
-            case DELIVERED:
-                jsonWriter.writeString("Delivered");
-                break;
-            default:
-                jsonWriter.writeString("Unknown");
-                break;
-        }
-    }
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "id": 123,
-    "status": "Processing"
-}
-```
-
----
-
-#### 3. **自定义日期格式化**
-
-如果你需要自定义日期的序列化格式，可以实现 `ObjectWriter` 来定制日期的输出格式。
-
-**示例：自定义日期格式**
-
-```java
-import com.alibaba.fastjson2.JSONWriter;
-import com.alibaba.fastjson2.annotation.JSONField;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-
-public class Event {
-    private String name;
-    
-    @JSONField(serializeUsing = DateSerializer.class)
-    private Date eventDate;
-
-    public Event(String name, Date eventDate) {
-        this.name = name;
-        this.eventDate = eventDate;
-    }
-}
-
-// 自定义日期序列化器：将日期格式化为自定义格式
-class DateSerializer implements ObjectWriter<Date> {
-    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
-    @Override
-    public void write(JSONWriter jsonWriter, Object date, Object fieldName, Type fieldType, long features) {
-        String formattedDate = sdf.format(date);
-        jsonWriter.writeString(formattedDate);
-    }
-}
-```
-
-**序列化结果**：
-
-```json
-{
-    "name": "Conference",
-    "eventDate": "2025-03-06 10:00:00"
-}
-```
-
----
-
-### **自定义反序列化**
-
-自定义反序列化允许你在对象从 JSON 反序列化时，应用特殊的转换逻辑。通过实现 `ObjectReader` 接口，可以定义如何将 JSON 中的某些字段转换为你想要的对象。
-
-#### 1. **实现 `ObjectReader` 接口自定义反序列化**
-
-**步骤**：
-
-1. 创建自定义的 `ObjectReader`。
-2. 使用 `@JSONField(deserializeUsing = CustomDeserializer.class)` 注解指定自定义反序列化器。
-
-**示例：自定义金额反序列化器**
-
-假设你的 JSON 数据包含金额的字符串格式，例如 `"￥100.00"`，你希望将其转换为 `double` 类型。
-
-```java
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.reader.ObjectReader;
-
-import java.lang.reflect.Type;
-
-public class Product {
-    private String name;
-    @JSONField(deserializeUsing = PriceDeserializer.class)  // 指定自定义反序列化器
-    private double price;
-
-    public Product(String name, double price) {
-        this.name = name;
-        this.price = price;
-    }
-}
-
-// 自定义反序列化器：将 "￥100.00" 转换为 double
-class PriceDeserializer implements ObjectReader<Double> {
-    @Override
-    public Double readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
-        String value = jsonReader.readString();
-        return Double.parseDouble(value.replace("￥", ""));
-    }
-}
-```
-
-**反序列化时**：
-
-```java
-String json = "{\"name\":\"Laptop\",\"price\":\"￥1999.99\"}";
-Product product = JSON.parseObject(json, Product.class);
-System.out.println(product.price); // 输出 1999.99
-```
-
----
-
-#### 2. **自定义枚举反序列化**
-
-你也可以自定义枚举类型的反序列化规则。例如，你的 JSON 数据包含 `Processing`、`Shipped` 等字符串，而不是枚举的默认名称。
-
-**示例：自定义枚举反序列化**
-
-```java
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.reader.ObjectReader;
-
-import java.lang.reflect.Type;
-
-public class Order {
-    private int id;
-    
-    @JSONField(deserializeUsing = StatusDeserializer.class)
-    private OrderStatus status;
-
-    public Order(int id, OrderStatus status) {
-        this.id = id;
-        this.status = status;
-    }
-}
-
-enum OrderStatus {
-    PENDING,
-    SHIPPED,
-    DELIVERED
-}
-
-// 自定义反序列化器：将字符串转为枚举
-class StatusDeserializer implements ObjectReader<OrderStatus> {
-    @Override
-    public OrderStatus readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
-        String status = jsonReader.readString();
-        switch (status) {
-            case "Processing":
-                return OrderStatus.PENDING;
-            case "In Transit":
-                return OrderStatus.SHIPPED;
-            case "Delivered":
-                return OrderStatus.DELIVERED;
-            default:
-                return OrderStatus.PENDING;
-        }
-    }
-}
-```
-
-**反序列化时**：
-
-```java
-String json = "{\"id\":123,\"status\":\"In Transit\"}";
-Order order = JSON.parseObject(json, Order.class);
-System.out.println(order.status); // 输出 SHIPPED
-```
-
----
-
-#### 3. **自定义日期反序列化**
-
-如果 JSON 中的日期字段格式与你的 Java 对象不匹配，你可以实现一个自定义的反序列化器来解析它。
-
-**示例：自定义日期反序列化器**
-
-```java
-import com.alibaba.fastjson2.JSONReader;
-import com.alibaba.fastjson2.annotation.JSONField;
-import com.alibaba.fastjson2.reader.ObjectReader;
-
-import java.lang.reflect.Type;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-
-public class Event {
-    private String name;
-    
-    @JSONField(deserializeUsing = DateDeserializer.class)
-    private Date eventDate;
-
-    public Event(String name, Date eventDate) {
-        this.name = name;
-        this.eventDate = eventDate;
-    }
-}
-
-// 自定义日期反序列化器：将 "yyyy-MM-dd HH:mm:ss" 格式的日期字符串解析为 Date
-class DateDeserializer implements ObjectReader<Date> {
-    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
-    @Override
-    public Date readObject(JSONReader jsonReader, Type fieldType, Object fieldName, long features) {
-        String dateStr = jsonReader.readString();
-        try {
-            return sdf.parse(dateStr);
-        } catch (Exception e) {
-            return null;  // 解析失败时返回 null
-       
-
- }
-    }
-}
-```
-
-**反序列化时**：
-
-```java
-String json = "{\"name\":\"Conference\",\"eventDate\":\"2025-03-06 10:00:00\"}";
-Event event = JSON.parseObject(json, Event.class);
-System.out.println(event.eventDate); // 输出：Thu Mar 06 10:00:00 GMT 2025
 ```
 
