@@ -23,5 +23,6 @@
         <module>proxy</module>
         <module>observer</module>
         <module>adapter</module>
+        <module>facade</module>
     </modules>
 </project>
