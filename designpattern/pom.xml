@@ -25,5 +25,6 @@
         <module>adapter</module>
         <module>facade</module>
         <module>chain</module>
+        <module>builder</module>
     </modules>
 </project>
