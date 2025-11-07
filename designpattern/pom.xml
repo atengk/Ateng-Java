@@ -26,5 +26,6 @@
         <module>facade</module>
         <module>chain</module>
         <module>builder</module>
+        <module>prototype</module>
     </modules>
 </project>
