@@ -24,5 +24,6 @@
         <module>observer</module>
         <module>adapter</module>
         <module>facade</module>
+        <module>chain</module>
     </modules>
 </project>
