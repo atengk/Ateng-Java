@@ -28,5 +28,6 @@
         <module>builder</module>
         <module>prototype</module>
         <module>state</module>
+        <module>command</module>
     </modules>
 </project>
