@@ -27,5 +27,6 @@
         <module>chain</module>
         <module>builder</module>
         <module>prototype</module>
+        <module>state</module>
     </modules>
 </project>
