@@ -29,5 +29,6 @@
         <module>prototype</module>
         <module>state</module>
         <module>command</module>
+        <module>composite</module>
     </modules>
 </project>
