@@ -31,5 +31,6 @@
         <module>command</module>
         <module>composite</module>
         <module>iterator</module>
+        <module>abstractfactory</module>
     </modules>
 </project>
