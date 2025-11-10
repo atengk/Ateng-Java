@@ -34,5 +34,6 @@
         <module>abstractfactory</module>
         <module>factorymethod</module>
         <module>bridge</module>
+        <module>mediator</module>
     </modules>
 </project>
