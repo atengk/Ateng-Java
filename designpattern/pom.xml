@@ -32,5 +32,6 @@
         <module>composite</module>
         <module>iterator</module>
         <module>abstractfactory</module>
+        <module>factorymethod</module>
     </modules>
 </project>
