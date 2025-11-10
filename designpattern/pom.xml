@@ -38,5 +38,6 @@
         <module>flyweight</module>
         <module>memento</module>
         <module>interpreter</module>
+        <module>visitor</module>
     </modules>
 </project>
