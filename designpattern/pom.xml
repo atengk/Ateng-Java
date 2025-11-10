@@ -30,5 +30,6 @@
         <module>state</module>
         <module>command</module>
         <module>composite</module>
+        <module>iterator</module>
     </modules>
 </project>
