@@ -20,5 +20,6 @@
         <module>rest-template-jdk8</module>
         <module>rest-client</module>
         <module>httpclient5</module>
+        <module>httpclient4</module>
     </modules>
 </project>
