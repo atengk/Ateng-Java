@@ -9,7 +9,7 @@
     <artifactId>rest-client</artifactId>
     <version>1.0.0</version>
     <name>rest-client</name>
-    <description>RestTemplate是一个用于发送HTTP请求并获取响应的客户端工具</description>
+    <description>Spring Boot 3 全新的同步 HTTP 客户端</description>
     <url>https://atengk.github.io/dev</url>
 
     <!-- 项目属性 -->
