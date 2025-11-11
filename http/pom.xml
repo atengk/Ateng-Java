@@ -18,5 +18,6 @@
         <module>rest-template</module>
         <module>forest</module>
         <module>rest-template-jdk8</module>
+        <module>rest-client</module>
     </modules>
 </project>
