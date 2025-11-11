@@ -9,7 +9,7 @@
     <artifactId>httpclient5</artifactId>
     <version>1.0.0</version>
     <name>httpclient5</name>
-    <description>RestTemplate是一个用于发送HTTP请求并获取响应的客户端工具</description>
+    <description>Apache HttpClient 5 是一款功能强大的 Java HTTP 客户端库，用于发送 HTTP/HTTPS 请求，支持同步和异步操作。</description>
     <url>https://atengk.github.io/dev</url>
 
     <!-- 项目属性 -->
