@@ -9,22 +9,28 @@ Apache HttpClient 5 是一款功能强大的 Java HTTP 客户端库，用于发�
 ## 添加依赖
 
 ```xml
-        <!-- Apache HttpClient 5 HTTP 客户端库 -->
-        <dependency>
-            <groupId>org.apache.httpcomponents.client5</groupId>
-            <artifactId>httpclient5</artifactId>
-        </dependency>
+<properties>
+    <spring.boot.version>3.5.7</spring.boot.version>
+</properties>
+```
+
+```xml
+<!-- Apache HttpClient 5 HTTP 客户端库 -->
+<dependency>
+    <groupId>org.apache.httpcomponents.client5</groupId>
+    <artifactId>httpclient5</artifactId>
+</dependency>
 ```
 
 或者加上版本（Springboot管理了版本，一般情况下不用配置）
 
 ```xml
-        <!-- Apache HttpClient 5 HTTP 客户端库 -->
-        <dependency>
-            <groupId>org.apache.httpcomponents.client5</groupId>
-            <artifactId>httpclient5</artifactId>
-            <version>5.5.1</version>
-        </dependency>
+<!-- Apache HttpClient 5 HTTP 客户端库 -->
+<dependency>
+    <groupId>org.apache.httpcomponents.client5</groupId>
+    <artifactId>httpclient5</artifactId>
+    <version>5.5.1</version>
+</dependency>
 ```
 
 
