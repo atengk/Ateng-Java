@@ -1,7 +1,6 @@
 package io.github.atengk.restclient;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -10,7 +9,6 @@ import org.springframework.web.client.RestClientResponseException;
 import java.util.HashMap;
 import java.util.Map;
 
-@SpringBootTest
 class RestClientApplicationTests {
 
     /**
