@@ -21,5 +21,6 @@
         <module>rest-client</module>
         <module>httpclient5</module>
         <module>httpclient4</module>
+        <module>okhttp</module>
     </modules>
 </project>
