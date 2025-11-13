@@ -5,6 +5,7 @@ import local.ateng.java.customutils.enums.BaseEnum;
 import local.ateng.java.customutils.event.UserRegisterEvent;
 import local.ateng.java.customutils.utils.EnumUtil;
 import local.ateng.java.customutils.utils.SpringUtil;
+import local.ateng.java.customutils.utils.SystemUtil;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -81,6 +82,21 @@ public class DemoController {
 
         String url = SpringUtil.buildUrl("http://localhost:8080/api/user/{id}", queryParams, uriVariables);
         System.out.println(url);
+    }
+
+
+    @GetMapping("/getJvmUptime")
+    public Long getJvmUptime() {
+        return SystemUtil.getJvmUptime();
+    }
+
+    @GetMapping("/net")
+    public void SystemUtil() {
+        System.out.println("主机名: " + SystemUtil.getHostName());
+        System.out.println("IPv4: " + SystemUtil.getLocalIpV4());
+        System.out.println("IPv6: " + SystemUtil.getLocalIpV6());
+        System.out.println("MAC地址: " + SystemUtil.getMacAddress(null));
+        System.out.println("全部网卡信息:\n" + SystemUtil.getAllNetworkInfo());
     }
 
 }

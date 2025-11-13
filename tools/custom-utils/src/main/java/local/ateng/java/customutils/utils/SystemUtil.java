@@ -4,11 +4,11 @@ package local.ateng.java.customutils.utils;
 import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.time.ZonedDateTime;
-import java.util.List;
-import java.util.Locale;
-import java.util.Properties;
-import java.util.TimeZone;
+import java.util.*;
 
 /**
  * 系统工具类
@@ -392,6 +392,146 @@ public final class SystemUtil {
      */
     public static Thread.State getCurrentThreadState() {
         return Thread.currentThread().getState();
+    }
+
+    /**
+     * 获取本机主机名
+     *
+     * @return 主机名，如果无法获取返回 null
+     */
+    public static String getHostName() {
+        try {
+            InetAddress localHost = InetAddress.getLocalHost();
+            return localHost.getHostName();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取本机 IPv4 地址
+     *
+     * @return IPv4 地址（如 192.168.1.10），如果无法获取返回 null
+     */
+    public static String getLocalIpV4() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                if (ni.isLoopback() || !ni.isUp() || ni.isVirtual()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (!addr.isLoopbackAddress() && addr instanceof java.net.Inet4Address) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * 获取本机 IPv6 地址
+     *
+     * @return IPv6 地址（如 fe80::a00:27ff:fe4e:66a1），如果无法获取返回 null
+     */
+    public static String getLocalIpV6() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                if (ni.isLoopback() || !ni.isUp() || ni.isVirtual()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (!addr.isLoopbackAddress() && addr instanceof java.net.Inet6Address) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+        } catch (SocketException ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * 获取指定网卡的 MAC 地址
+     *
+     * @param interfaceName 网卡名称，例如 eth0、en0、wlan0，传 null 表示自动选择可用网卡
+     * @return MAC 地址（格式如 00-1A-2B-3C-4D-5E），无法获取返回 null
+     */
+    public static String getMacAddress(String interfaceName) {
+        try {
+            NetworkInterface ni = (interfaceName == null)
+                    ? getFirstActiveNetworkInterface()
+                    : NetworkInterface.getByName(interfaceName);
+
+            if (ni == null) {
+                return null;
+            }
+
+            byte[] mac = ni.getHardwareAddress();
+            if (mac == null) {
+                return null;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < mac.length; i++) {
+                sb.append(String.format("%02X%s", mac[i], (i < mac.length - 1) ? "-" : ""));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取本机第一个可用的网卡接口
+     *
+     * @return 可用的 NetworkInterface 实例，若找不到则返回 null
+     */
+    private static NetworkInterface getFirstActiveNetworkInterface() throws SocketException {
+        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+        while (interfaces.hasMoreElements()) {
+            NetworkInterface ni = interfaces.nextElement();
+            if (ni.isUp() && !ni.isLoopback() && !ni.isVirtual()) {
+                return ni;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取所有可用网卡及其 IP 地址信息
+     *
+     * @return 格式化后的网卡与 IP 信息字符串
+     */
+    public static String getAllNetworkInfo() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                sb.append("接口名称: ").append(ni.getName())
+                        .append(", 启用: ").append(ni.isUp())
+                        .append(", 虚拟: ").append(ni.isVirtual()).append("\n");
+
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    sb.append("  地址: ").append(addr.getHostAddress()).append("\n");
+                }
+            }
+        } catch (SocketException e) {
+            sb.append("无法获取网络信息: ").append(e.getMessage());
+        }
+        return sb.toString();
     }
 
 }
