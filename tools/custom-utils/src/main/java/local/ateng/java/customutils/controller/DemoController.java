@@ -1,6 +1,7 @@
 package local.ateng.java.customutils.controller;
 
 import local.ateng.java.customutils.ToolsCustomUtilsApplication;
+import local.ateng.java.customutils.enums.BaseEnum;
 import local.ateng.java.customutils.event.UserRegisterEvent;
 import local.ateng.java.customutils.utils.EnumUtil;
 import local.ateng.java.customutils.utils.SpringUtil;
@@ -10,10 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @RestController
 @RequestMapping("/demo")
@@ -42,6 +40,20 @@ public class DemoController {
     public String getResourceReadString() {
         System.out.println(SpringUtil.getResourceReadString("application.yml"));
         return "ok";
+    }
+
+    @GetMapping("/getMainApplicationPackage")
+    public String getMainApplicationPackage() {
+        System.out.println(SpringUtil.getMainApplicationPackage());
+        return "ok";
+    }
+
+    @GetMapping("/scanAllBaseEnums")
+    public void scanAllBaseEnums(String basePackage) {
+        Set<Class<? extends BaseEnum<?, ?>>> enums1 = EnumUtil.scanAllBaseEnums();
+        Set<Class<? extends BaseEnum<?, ?>>> enums2 = EnumUtil.scanAllBaseEnums(basePackage);
+        Set<Class<? extends BaseEnum<?, ?>>> enums3 = EnumUtil.scanAllBaseEnums(basePackage, basePackage);
+        System.out.println(enums2);
     }
 
     @GetMapping("/getAllBaseEnumMap")

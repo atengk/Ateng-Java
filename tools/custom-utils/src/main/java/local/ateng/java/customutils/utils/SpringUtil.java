@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.*;
 import org.springframework.core.ResolvableType;
-import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.Resource;
 import org.springframework.lang.NonNull;
@@ -729,7 +729,7 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
                 for (String beanName : beanNames) {
                     Class<?> beanClass = context.getType(beanName);
                     if (beanClass != null &&
-                            AnnotationUtils.findAnnotation(beanClass, SpringBootApplication.class) != null) {
+                            AnnotatedElementUtils.hasAnnotation(beanClass, SpringBootApplication.class)) {
                         return beanClass.getPackage().getName();
                     }
                 }

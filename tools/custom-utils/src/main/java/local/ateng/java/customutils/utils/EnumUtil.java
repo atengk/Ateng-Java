@@ -527,19 +527,25 @@ public final class EnumUtil {
     }
 
 
+
     /**
-     * 扫描指定包下所有实现 {@link BaseEnum} 接口的枚举类
+     * 扫描指定包下所有实现 {@link BaseEnum} 接口的枚举类。
      *
      * @param basePackage 包名，例如 "com.example.enums"
-     * @return Set&lt;Class&lt;? extends BaseEnum&gt;&gt; 扫描到的枚举类集合
+     * @return 扫描到的枚举类集合
      */
     @SuppressWarnings("unchecked")
     public static Set<Class<? extends BaseEnum<?, ?>>> scanAllBaseEnums(String basePackage) {
+        if (org.springframework.util.ObjectUtils.isEmpty(basePackage)) {
+            throw new IllegalArgumentException("包名不能为空");
+        }
+
         Set<Class<? extends BaseEnum<?, ?>>> result = new HashSet<>();
         char dotChar = '.';
         char slashChar = '/';
         String classPattern = "/**/*.class";
         String classpathAllPrefix = "classpath*:";
+
         try {
             String pattern = basePackage.replace(dotChar, slashChar) + classPattern;
             PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
@@ -549,16 +555,48 @@ public final class EnumUtil {
                 if (resource.isReadable()) {
                     MetadataReader reader = factory.getMetadataReader(resource);
                     String className = reader.getClassMetadata().getClassName();
-                    Class<?> clazz = Class.forName(className);
+                    Class<?> clazz = org.springframework.util.ClassUtils.forName(
+                            className,
+                            Thread.currentThread().getContextClassLoader()
+                    );
                     if (BaseEnum.class.isAssignableFrom(clazz) && clazz.isEnum()) {
                         result.add((Class<? extends BaseEnum<?, ?>>) clazz);
                     }
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException("扫描枚举失败", e);
+            throw new RuntimeException("扫描枚举失败，包路径：" + basePackage, e);
         }
         return result;
+    }
+
+    /**
+     * 扫描多个包下所有实现 {@link BaseEnum} 接口的枚举类。
+     * <p>内部复用 {@link #scanAllBaseEnums(String)} 方法。</p>
+     *
+     * @param basePackages 多个包名，例如 "com.example.enums", "io.github.atengk.enums"
+     * @return 扫描到的枚举类集合
+     */
+    public static Set<Class<? extends BaseEnum<?, ?>>> scanAllBaseEnums(String... basePackages) {
+        Set<Class<? extends BaseEnum<?, ?>>> result = new HashSet<>();
+        if (basePackages == null || basePackages.length == 0) {
+            return result;
+        }
+        for (String basePackage : basePackages) {
+            result.addAll(scanAllBaseEnums(basePackage));
+        }
+        return result;
+    }
+
+    /**
+     * 扫描指定包下所有实现 {@link BaseEnum} 接口的枚举类。
+     * <p>内部复用 {@link #scanAllBaseEnums(String)} 方法</p>
+     *
+     * @return 扫描到的枚举类集合
+     */
+    public static Set<Class<? extends BaseEnum<?, ?>>> scanAllBaseEnums() {
+        // 这里复用单包扫描方法，传入空字符串表示扫描所有包
+        return scanAllBaseEnums("local.ateng.java", "io.github.atengk", "com.brx");
     }
 
     /**

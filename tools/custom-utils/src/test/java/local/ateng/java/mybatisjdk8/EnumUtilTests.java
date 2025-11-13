@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class EnumUtilTests {
 
@@ -52,6 +53,12 @@ public class EnumUtilTests {
         TypeEnum e2 = BaseEnum.fromName(TypeEnum.class, "禁用");
         System.out.println(e1);  // ENABLED
         System.out.println(e2);  // DISABLED
+    }
+
+    @Test
+    void test05() {
+        Set<Class<? extends BaseEnum<?, ?>>> enums = EnumUtil.scanAllBaseEnums("local");
+        System.out.println(enums);
     }
 
 }
