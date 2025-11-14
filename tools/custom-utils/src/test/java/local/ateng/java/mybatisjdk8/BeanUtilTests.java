@@ -5,12 +5,17 @@ import local.ateng.java.customutils.entity.MyUser0;
 import local.ateng.java.customutils.entity.MyUser1;
 import local.ateng.java.customutils.entity.MyUser2;
 import local.ateng.java.customutils.utils.BeanUtil;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class BeanUtilTests {
 
@@ -162,6 +167,186 @@ public class BeanUtilTests {
         Map<String, Object> map = BeanUtil.toDesensitizedMap(myUser1 , Arrays.asList("userName", "createTime", "myUser0","myUser0List"), "*");
         System.out.println(myUser1);
         System.out.println(map);
+    }
+
+
+
+    @Test
+    void testBeanCopy() {
+        SourceEntity source = new SourceEntity();
+        source.setUsername("blair");
+        source.setEmail("blair@example.com");
+        source.setAge(30);
+        source.setUserId(1001L);
+        source.setActive(true);
+        source.setCreateTime(LocalDateTime.now());
+        source.setBalance(new BigDecimal("1234.56"));
+
+        TargetEntity target = new TargetEntity();
+
+        // 拷贝
+        BeanUtil.copy(source, target);
+
+        System.out.println(source);
+        System.out.println(target);
+    }
+    @Data
+    public class SourceEntity {
+        private String username;
+        private String email;
+        private Integer age;
+        private Long userId;
+        private Boolean active;
+        private LocalDateTime createTime;
+        private BigDecimal balance;
+    }
+    @Data
+    public class TargetEntity {
+        private String username;
+        private String email;
+        private Integer age;
+        private Long userId;
+        private Boolean active;
+        private LocalDateTime createTime;
+        private BigDecimal balance;
+    }
+
+
+    @Test
+    void testBeanCopyAdvanced() {
+        SourceEntity2 source = new SourceEntity2();
+        source.setUsername("blair");
+        source.setEmail("blair@example.com");
+        source.setAge(30);
+        source.setUserId(1001L);
+        source.setActive(true);
+        source.setCreateTime(LocalDateTime.now());
+        source.setBalance(new BigDecimal("1234.56"));
+        source.setStatus(Status.ACTIVE);
+
+        Map<String, String> meta = new HashMap<>();
+        meta.put("role", "admin");
+        meta.put("dept", "IT");
+        source.setMeta(meta);
+
+        List<String> tags = Arrays.asList("java", "backend", "spring");
+        source.setTags(tags);
+
+        NestedObject nested = new NestedObject();
+        nested.setField1("nestedField1");
+        nested.setField2(999);
+        source.setNestedObject(nested);
+
+        TargetEntity2 target = new TargetEntity2();
+
+        // 拷贝
+        BeanUtil.copy(source, target);
+
+        System.out.println("Source: " + source);
+        System.out.println("Target: " + target);
+    }
+
+    @Data
+    public static class SourceEntity2 {
+        private String username;
+        private String email;
+        private Integer age;
+        private Long userId;
+        private Boolean active;
+        private LocalDateTime createTime;
+        private BigDecimal balance;
+        private Status status;
+        private Map<String, String> meta;
+        private List<String> tags;
+        private NestedObject nestedObject;
+    }
+
+    @Data
+    public static class TargetEntity2 {
+        private String username;
+        private String email;
+        private Integer age;
+        private Long userId;
+        private Boolean active;
+        private LocalDateTime createTime;
+        private BigDecimal balance;
+        private Status status;
+        private Map<String, String> meta;
+        private List<String> tags;
+        private NestedObject nestedObject;
+    }
+
+    @Data
+    public static class NestedObject {
+        private String field1;
+        private Integer field2;
+    }
+
+    public enum Status {
+        ACTIVE,
+        INACTIVE,
+        LOCKED
+    }
+
+    @Test
+    void testBeanCopyWithLists() {
+        ParentSource parentSource = new ParentSource();
+        parentSource.setName("Parent1");
+        parentSource.setId(101L);
+        parentSource.setAmount(new BigDecimal("500.75"));
+        parentSource.setCreatedAt(LocalDateTime.now());
+
+        // Nested list
+        NestedItem nested1 = new NestedItem("nested1", 10);
+        NestedItem nested2 = new NestedItem("nested2", 20);
+        parentSource.setNestedItems(Arrays.asList(nested1, nested2));
+
+        // Children entity list
+        ChildEntity child1 = new ChildEntity(201L, "child1");
+        ChildEntity child2 = new ChildEntity(202L, "child2");
+        parentSource.setChildren(Arrays.asList(child1, child2));
+
+        ParentTarget parentTarget = new ParentTarget();
+
+        // 拷贝
+        BeanUtil.copy(parentSource, parentTarget);
+
+        System.out.println("Source: " + parentSource);
+        System.out.println("Target: " + parentTarget);
+    }
+
+    @Data
+    public static class ParentSource {
+        private Long id;
+        private String name;
+        private BigDecimal amount;
+        private LocalDateTime createdAt;
+        private List<NestedItem> nestedItems;
+        private List<ChildEntity> children;
+    }
+
+    @Data
+    public static class ParentTarget {
+        private Long id;
+        private String name;
+        private BigDecimal amount;
+        private LocalDateTime createdAt;
+        private List<NestedItem> nestedItems;
+        private List<ChildEntity> children;
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class NestedItem {
+        private String field;
+        private Integer value;
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class ChildEntity {
+        private Long childId;
+        private String childName;
     }
 
 }
