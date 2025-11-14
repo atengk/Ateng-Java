@@ -10,7 +10,7 @@ HttpClient 4 的设计偏向面向对象与易用性，API 清晰、扩展性强
 
 ```xml
 <properties>
-    <spring.boot.version>2.7.18</spring.boot.version>
+    <spring-boot.version>2.7.18</spring-boot.version>
 </properties>
 ```
 

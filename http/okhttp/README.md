@@ -12,7 +12,7 @@ OkHttp 提供丰富的拦截器机制，可统一处理请求头、日志、鉴�
 
 ```xml
 <properties>
-    <spring.boot.version>2.7.18</spring.boot.version>
+    <spring-boot.version>2.7.18</spring-boot.version>
 </properties>
 ```
 

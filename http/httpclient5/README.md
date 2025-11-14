@@ -10,7 +10,7 @@ Apache HttpClient 5 是一款功能强大的 Java HTTP 客户端库，用于发�
 
 ```xml
 <properties>
-    <spring.boot.version>3.5.7</spring.boot.version>
+    <spring-boot.version>3.5.7</spring-boot.version>
 </properties>
 ```
 
