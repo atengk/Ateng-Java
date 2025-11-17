@@ -6,12 +6,15 @@ import local.ateng.java.customutils.event.UserRegisterEvent;
 import local.ateng.java.customutils.utils.EnumUtil;
 import local.ateng.java.customutils.utils.SpringUtil;
 import local.ateng.java.customutils.utils.SystemUtil;
+import local.ateng.java.customutils.utils.ValidateUtil;
+import lombok.Data;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.validation.constraints.NotNull;
 import java.util.*;
 
 @RestController
@@ -97,6 +100,33 @@ public class DemoController {
         System.out.println("IPv6: " + SystemUtil.getLocalIpV6());
         System.out.println("MAC地址: " + SystemUtil.getMacAddress(null));
         System.out.println("全部网卡信息:\n" + SystemUtil.getAllNetworkInfo());
+    }
+
+
+    @GetMapping("/validateFirst")
+    public void validateBean() {
+        User user = new User();
+        String str = ValidateUtil.validateFirst(user);
+        String err = ValidateUtil.validatePropertyFirst(user, "name");
+        System.out.println(str);
+        System.out.println(err);
+    }
+
+    @GetMapping("/validateAll")
+    public void validateBeanAll() {
+        User user = new User();
+        List<String> str = ValidateUtil.validateAll(user);
+        System.out.println(str);
+    }
+
+    @Data
+    static class User {
+        @NotNull(message = "id不能为空")
+        private Long id;
+        @NotNull(message = "名称不能为空")
+        private String name;
+        @NotNull(message = "密码不能为空")
+        private String password;
     }
 
 }
