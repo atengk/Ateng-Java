@@ -1,4 +1,4 @@
-# SpringBoot3启动应用执行代码相关的模块
+# 应用启动
 
 ## Runner
 
@@ -164,5 +164,89 @@ public class MyConfig {
     public void cleanup() {
         log.info("在Bean销毁前执行的方法");
     }
+```
+
+
+
+## SmartLifecycle
+
+`SmartLifecycle` 是 Spring 提供的 **高级生命周期管理接口**，适用于需要在 **Spring 容器启动和停止时执行特定逻辑** 的场景。
+
+和 `Lifecycle` 相比，它具备三大增强点：
+
+| 功能                 | Lifecycle  | SmartLifecycle |
+| -------------------- | ---------- | -------------- |
+| 是否自动启动         | ❌ 默认不会 | ✔ 默认自动启动 |
+| 是否支持优先级 phase | ❌ 不支持   | ✔ 支持         |
+| 是否支持异步启动     | ❌ 不支持   | ✔ 支持         |
+
+> 适用于：**消息队列消费者、线程池、定时器、Socket 服务、资源管理器等**。
+
+### 最小可运行示例
+
+下面示例展示：
+
+- bean 启动时开启消费者线程
+- 容器关闭时优雅停止
+
+```java
+package local.ateng.java.config.runner;
+
+import org.springframework.context.SmartLifecycle;
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+@Component
+public class QueueConsumer implements SmartLifecycle {
+
+    private final AtomicBoolean running = new AtomicBoolean(false);
+    private Thread worker;
+
+    @Override
+    public void start() {
+        if (running.compareAndSet(false, true)) {
+            worker = new Thread(() -> {
+                while (running.get()) {
+                    try {
+                        // 模拟消费
+                        System.out.println("Consuming message...");
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+            }, "queue-consumer-thread");
+
+            worker.start();
+            System.out.println("Consumer started!");
+        }
+    }
+
+    @Override
+    public void stop() {
+        if (running.compareAndSet(true, false)) {
+            System.out.println("Stopping consumer...");
+            worker.interrupt();
+        }
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    @Override
+    public boolean isAutoStartup() {
+        // 自动启动
+        return true;
+    }
+
+    @Override
+    public int getPhase() {
+        // 越小越早启动
+        return 0;
+    }
+}
+
 ```
 
