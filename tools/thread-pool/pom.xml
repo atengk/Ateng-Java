@@ -7,7 +7,7 @@
     <!-- 项目坐标 -->
     <groupId>io.github.atengk</groupId>
     <artifactId>thread-pool</artifactId>
-    <name>okhttp</name>
+    <name>thread-pool</name>
     <version>1.0.0</version>
     <description>SpringBoot2 线程池配置和使用</description>
     <url>https://atengk.github.io/dev</url>
