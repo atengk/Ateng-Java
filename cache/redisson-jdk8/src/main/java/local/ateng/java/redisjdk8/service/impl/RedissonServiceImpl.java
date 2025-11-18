@@ -2266,70 +2266,71 @@ public class RedissonServiceImpl implements RedissonService {
 
     // --------------------- 分布式队列操作 ---------------------
 
-    /**
-     * 将元素添加到指定队列尾部（阻塞方式，队列满时等待）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param value    要入队的元素
-     * @throws InterruptedException 阻塞等待时被中断异常
-     */
     @Override
-    public void enqueueBlocking(String queueKey, Object value) throws InterruptedException {
-        RBlockingQueue<Object> queue = redissonClient.getBlockingQueue(queueKey);
+    public <T> void enqueueBlocking(String queueKey, T value) throws InterruptedException {
+        RBlockingQueue<T> queue = redissonClient.getBlockingQueue(queueKey);
         queue.put(value);
     }
 
-    /**
-     * 将元素添加到指定队列尾部（非阻塞方式）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param value    要入队的元素
-     * @return 是否成功入队，失败可能是队列已满
-     */
     @Override
-    public boolean enqueue(String queueKey, Object value) {
-        RQueue<Object> queue = redissonClient.getQueue(queueKey);
+    public <T> boolean enqueueBlocking(String queueKey, T value, long timeout, TimeUnit timeUnit) throws InterruptedException {
+        RBlockingQueue<T> queue = redissonClient.getBlockingQueue(queueKey);
+        return queue.offer(value, timeout, timeUnit);
+    }
+
+    @Override
+    public <T> boolean enqueue(String queueKey, T value) {
+        RQueue<T> queue = redissonClient.getQueue(queueKey);
         return queue.offer(value);
     }
 
-    /**
-     * 从指定队列头部获取并移除元素（阻塞方式，队列为空时等待）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param timeout  最大等待时间，单位秒
-     * @return 队头元素，超时返回 null
-     * @throws InterruptedException 阻塞等待时被中断异常
-     */
     @Override
-    public Object dequeueBlocking(String queueKey, long timeout) throws InterruptedException {
-        RBlockingQueue<Object> queue = redissonClient.getBlockingQueue(queueKey);
+    public <T> T dequeueBlocking(String queueKey, long timeout) throws InterruptedException {
+        RBlockingQueue<T> queue = redissonClient.getBlockingQueue(queueKey);
         return queue.poll(timeout, TimeUnit.SECONDS);
     }
 
-    /**
-     * 从指定队列头部获取并移除元素（非阻塞方式）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @return 队头元素，若队列为空返回 null
-     */
     @Override
-    public Object dequeue(String queueKey) {
-        RQueue<Object> queue = redissonClient.getQueue(queueKey);
+    public <T> T dequeue(String queueKey) {
+        RQueue<T> queue = redissonClient.getQueue(queueKey);
         return queue.poll();
     }
 
-    /**
-     * 获取队列长度。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @return 当前队列长度
-     */
     @Override
     public long queueSize(String queueKey) {
         RQueue<Object> queue = redissonClient.getQueue(queueKey);
         return queue.size();
     }
 
+    // --------------------- 延迟队列操作 ---------------------
+
+    @Override
+    public <T> void enqueueDelayed(String queueKey, T value, long delay, TimeUnit timeUnit) {
+        RQueue<T> queue = redissonClient.getQueue(queueKey);
+        RDelayedQueue<T> delayedQueue = redissonClient.getDelayedQueue(queue);
+        delayedQueue.offer(value, delay, timeUnit);
+        // 延迟队列使用完后不手动销毁，让 Redisson 管理
+    }
+
+    // --------------------- 队列辅助操作 ---------------------
+
+    @Override
+    public void clearQueue(String queueKey) {
+        RQueue<Object> queue = redissonClient.getQueue(queueKey);
+        queue.clear();
+    }
+
+    @Override
+    public boolean isQueueEmpty(String queueKey) {
+        RQueue<Object> queue = redissonClient.getQueue(queueKey);
+        return queue.isEmpty();
+    }
+
+    @Override
+    public boolean removeFromQueue(String queueKey, Object value) {
+        RQueue<Object> queue = redissonClient.getQueue(queueKey);
+        return queue.remove(value);
+    }
 
     // --------------------- 限流操作 ---------------------
 

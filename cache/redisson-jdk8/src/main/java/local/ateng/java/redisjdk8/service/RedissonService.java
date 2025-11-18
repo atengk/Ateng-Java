@@ -1264,40 +1264,57 @@ public interface RedissonService {
     // --------------------- 分布式队列操作 ---------------------
 
     /**
-     * 将元素添加到指定队列尾部（阻塞方式，队列满时等待）。
+     * 将元素添加到指定队列尾部（阻塞方式，队列满时无限等待）。
      *
      * @param queueKey 队列对应的 Redis 键
      * @param value    要入队的元素
+     * @param <T>      元素类型
      * @throws InterruptedException 阻塞等待时被中断异常
      */
-    void enqueueBlocking(String queueKey, Object value) throws InterruptedException;
+    <T> void enqueueBlocking(String queueKey, T value) throws InterruptedException;
+
+    /**
+     * 将元素添加到指定队列尾部（阻塞方式，队列满时等待超时）。
+     *
+     * @param queueKey 队列对应的 Redis 键
+     * @param value    要入队的元素
+     * @param timeout  最大等待时间
+     * @param timeUnit 时间单位
+     * @param <T>      元素类型
+     * @return 是否成功入队，超时返回 false
+     * @throws InterruptedException 阻塞等待时被中断异常
+     */
+    <T> boolean enqueueBlocking(String queueKey, T value, long timeout, TimeUnit timeUnit) throws InterruptedException;
 
     /**
      * 将元素添加到指定队列尾部（非阻塞方式）。
      *
      * @param queueKey 队列对应的 Redis 键
      * @param value    要入队的元素
+     * @param <T>      元素类型
      * @return 是否成功入队，失败可能是队列已满
      */
-    boolean enqueue(String queueKey, Object value);
+    <T> boolean enqueue(String queueKey, T value);
 
     /**
      * 从指定队列头部获取并移除元素（阻塞方式，队列为空时等待）。
      *
      * @param queueKey 队列对应的 Redis 键
      * @param timeout  最大等待时间，单位秒
+     * @param <T>      元素类型
      * @return 队头元素，超时返回 null
      * @throws InterruptedException 阻塞等待时被中断异常
      */
-    Object dequeueBlocking(String queueKey, long timeout) throws InterruptedException;
+    <T> T dequeueBlocking(String queueKey, long timeout) throws InterruptedException;
 
     /**
      * 从指定队列头部获取并移除元素（非阻塞方式）。
      *
      * @param queueKey 队列对应的 Redis 键
+     * @param <T>      元素类型
      * @return 队头元素，若队列为空返回 null
      */
-    Object dequeue(String queueKey);
+    <T> T dequeue(String queueKey);
 
     /**
      * 获取队列长度。
@@ -1306,6 +1323,45 @@ public interface RedissonService {
      * @return 当前队列长度
      */
     long queueSize(String queueKey);
+
+    // --------------------- 延迟队列操作 ---------------------
+
+    /**
+     * 将元素添加到延迟队列，延迟指定时间后才能被消费。
+     *
+     * @param queueKey 队列对应的 Redis 键
+     * @param value    要入队的元素
+     * @param delay    延迟时间
+     * @param timeUnit 时间单位
+     * @param <T>      元素类型
+     */
+    <T> void enqueueDelayed(String queueKey, T value, long delay, TimeUnit timeUnit);
+
+    // --------------------- 队列辅助操作 ---------------------
+
+    /**
+     * 清空队列中的所有元素
+     *
+     * @param queueKey 队列对应的 Redis 键
+     */
+    void clearQueue(String queueKey);
+
+    /**
+     * 判断队列是否为空
+     *
+     * @param queueKey 队列对应的 Redis 键
+     * @return true 如果队列为空
+     */
+    boolean isQueueEmpty(String queueKey);
+
+    /**
+     * 移除队列中指定元素
+     *
+     * @param queueKey 队列对应的 Redis 键
+     * @param value    要移除的元素
+     * @return true 如果移除成功
+     */
+    boolean removeFromQueue(String queueKey, Object value);
 
     // --------------------- 限流操作 ---------------------
 

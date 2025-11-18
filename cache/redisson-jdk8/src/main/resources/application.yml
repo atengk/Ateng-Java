@@ -55,3 +55,31 @@ redisson:
 #    threads: 16                         # 处理Redis事件的线程数
 #    nettyThreads: 32                    # Netty线程数
 #    codec: !<org.redisson.codec.JsonJacksonCodec> {} # 推荐JSON序列化
+---
+# 线程池配置
+thread-pool:
+  # 是否启用线程池功能
+  enabled: true
+  # 是否将第一个线程池作为默认 @Async 线程池
+  use-first-as-default: false
+  pools:
+    # 默认线程池
+    defaultPool:
+      core-size: 8
+      max-size: 16
+      queue-capacity: 200
+      keep-alive-seconds: 60
+      thread-name-prefix: async-default-
+      allow-core-thread-timeout: false
+      rejected-policy: callerRuns
+      await-termination-seconds: 30
+    # Redisson 队列线程池
+    queuePool:
+      core-size: 2
+      max-size: 4
+      queue-capacity: 100
+      keep-alive-seconds: 60
+      thread-name-prefix: queue-consumer-
+      allow-core-thread-timeout: false
+      rejected-policy: callerRuns
+      await-termination-seconds: 30

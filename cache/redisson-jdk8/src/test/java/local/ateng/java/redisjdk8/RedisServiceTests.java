@@ -5,7 +5,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import local.ateng.java.redisjdk8.entity.UserInfoEntity;
 import local.ateng.java.redisjdk8.init.InitData;
 import local.ateng.java.redisjdk8.service.RedissonService;
-import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RLock;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,9 +17,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @SpringBootTest
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class RedisServiceTests {
-    private final RedissonService redissonService;
+    @Autowired
+    private RedissonService redissonService;
 
     @Test
     void set() {
