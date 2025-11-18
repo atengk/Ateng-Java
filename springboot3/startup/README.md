@@ -250,3 +250,46 @@ public class QueueConsumer implements SmartLifecycle {
 
 ```
 
+### 生命周期表
+
+✅ SmartLifecycle 与 Spring Boot 生命周期重点对照表（专业精简版）
+
+| 生命周期分类                       | 触发方式                                | 相关方法 / 注解                            | 触发时机（Spring Boot）                   | 用途说明                                            |
+| ---------------------------------- | --------------------------------------- | ------------------------------------------ | ----------------------------------------- | --------------------------------------------------- |
+| **Bean 初始化阶段**                | Spring 创建 Bean                        | `@PostConstruct`                           | Bean 完成依赖注入后                       | 初始化资源（如缓存预热、校验配置）                  |
+| **容器刷新完成**                   | Spring Boot 完成所有 Bean 创建          | SmartLifecycle → `getPhase()`              | Bean 初始化完成之后，按 phase 排序        | 控制多个 SmartLifecycle 的启动顺序                  |
+| **生命周期自动启动**               | Spring 自动启动 SmartLifecycle          | SmartLifecycle → `isAutoStartup()`         | 容器准备启动所有生命周期 Bean 时          | 是否自动调用 `start()`                              |
+| **组件启动**                       | Spring Boot 自动调用                    | SmartLifecycle → `start()`                 | Spring Boot 完全启动（Bean 初始化完毕后） | 启动消费者、线程池任务、Socket 服务等               |
+| **组件运行状态查询**               | Spring 检查是否已启动                   | SmartLifecycle → `isRunning()`             | start() 执行后 / stop() 前                | 返回组件是否正在运行                                |
+| **应用准备就绪（可对外提供服务）** | Spring Boot 事件                        | `ApplicationReadyEvent`（可选）            | 内嵌容器（如 Tomcat）启动完成后           | 初始化依赖外部服务的任务（如注册心跳、MQ 动态订阅） |
+| **应用关闭（优雅）**               | Spring 收到关闭信号（Ctrl+C / SIGTERM） | SmartLifecycle → `stop(Runnable callback)` | Spring 优雅停止阶段第一波执行             | 优雅停止消费者、通知 callback                       |
+| **组件停止（非 Callback 版）**     | Spring 停止 Lifecycle                   | SmartLifecycle → `stop()`                  | stop(callback) 之后（作为 fallback）      | 停止线程、释放资源                                  |
+| **停止状态检查**                   | Spring 检查是否停止成功                 | SmartLifecycle → `isRunning()`             | stop() 调用后                             | 若为 true → 重复停止流程                            |
+| **Bean 销毁阶段**                  | Spring 销毁 Bean                        | `@PreDestroy`                              | 所有生命周期组件停止之后                  | 最终资源释放（线程池、连接、文件句柄等）            |
+| **容器关闭完成**                   | JVM 退出                                | （无方法）                                 | @PreDestroy 之后                          | 程序完全退出                                        |
+
+------
+
+🎯 最关键的 6 个生命周期节点（必须记住）
+
+| 排序 | 生命周期节点                     | 方法 / 注解               | 说明                                |
+| ---- | -------------------------------- | ------------------------- | ----------------------------------- |
+| 1    | Bean 初始化完成                  | `@PostConstruct`          | Bean 已准备好，但系统尚未启动       |
+| 2    | SmartLifecycle 组件按 phase 排序 | `getPhase()`              | 决定启动顺序                        |
+| 3    | 自动启动组件                     | `start()`                 | MQ 消费者、线程池、后台任务启动     |
+| 4    | 应用完全启动（对外可用）         | `ApplicationReadyEvent`   | 适用于需要等系统全启动后执行的逻辑  |
+| 5    | 优雅停机开始                     | `stop(Runnable callback)` | 主动调用 callback，允许组件优雅关闭 |
+| 6    | Bean 销毁                        | `@PreDestroy`             | 最终释放资源（连接、线程池）        |
+
+------
+
+🔥 SmartLifecycle 的 5 个核心点（总结版）
+
+| 方法                      | 必要性          | 说明                              |
+| ------------------------- | --------------- | --------------------------------- |
+| `isAutoStartup()`         | ⭐ 必须理解      | 是否自动调用 `start()`            |
+| `getPhase()`              | ⭐ 必须理解      | 控制启动/停止顺序                 |
+| `start()`                 | ⭐ 必须实现      | 启动组件（消费者/线程等）         |
+| `stop(Runnable callback)` | ⭐⭐ 强烈建议实现 | 优雅关停组件（必须调用 callback） |
+| `isRunning()`             | ⭐ 必须实现      | 指示组件是否处于运行状态          |
+
