@@ -908,70 +908,117 @@ public class ParallelStreamExample {
 package local.ateng.java.async.config;
 
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.lang.reflect.Method;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * 线程池配置类
+ * 通用线程池配置（企业级）
+ * <p>
+ * 说明：
+ * 1. 适用于 SpringBoot2 的所有 @Async 异步任务
+ * 2. 兼顾 CPU / IO 混合型任务的常规业务场景
+ * 3. 包含安全关闭、线程超时回收、拒绝策略、异常日志捕获等功能
  *
- * @author 孔余
- * @email 2385569970@qq.com
+ * @author Ateng
  * @since 2025-03-03
  */
+@Slf4j
 @Configuration
-public class ThreadPoolConfig {
+public class ThreadPoolConfig implements AsyncConfigurer {
 
-    // CPU 核心数
-    private final int core = Runtime.getRuntime().availableProcessors();
+    /**
+     * CPU 核数，用于计算线程池默认大小。
+     */
+    private final int cpu = Runtime.getRuntime().availableProcessors();
 
     private ThreadPoolTaskExecutor executor;
 
     /**
-     * 自定义线程池
+     * 通用业务线程池。
      *
-     * @return 线程池执行器
+     * @return ThreadPoolTaskExecutor
      */
     @Bean
     @Primary
     public ThreadPoolTaskExecutor taskExecutor() {
         executor = new ThreadPoolTaskExecutor();
 
-        // 核心线程数
-        executor.setCorePoolSize(core);
+        /*
+         * 线程数量配置
+         * 通用线程池通常包含 IO 任务，因此适度放大核心线程数。
+         */
+        executor.setCorePoolSize(cpu * 2);
+        executor.setMaxPoolSize(cpu * 4);
 
-        // 最大线程数（适当放大以应对高并发）
-        executor.setMaxPoolSize(core * 2);
+        /*
+         * 队列容量
+         * 容量可根据业务量调整，2000 足以覆盖大多数场景。
+         */
+        executor.setQueueCapacity(2000);
 
-        // 任务队列大小
-        executor.setQueueCapacity(core * 10);
+        /*
+         * 空闲线程存活时间（秒）
+         * 允许核心线程超时销毁，可降低系统闲时资源占用。
+         */
+        executor.setKeepAliveSeconds(60);
+        executor.setAllowCoreThreadTimeOut(true);
 
-        // 线程名称前缀
-        executor.setThreadNamePrefix("async-task-");
+        /*
+         * 线程名称前缀，方便排查线程池问题。
+         */
+        executor.setThreadNamePrefix("async-common-");
 
-        // 任务拒绝策略（由调用者线程执行，防止任务丢失）
+        /*
+         * 拒绝策略
+         * CallerRunsPolicy：任务由调用线程执行，保证不丢任务。
+         */
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
 
-        // 初始化线程池
+        /*
+         * 线程池关闭策略
+         */
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+
         executor.initialize();
+        log.info("【ThreadPool】通用线程池初始化完成，核心线程：{}，最大线程：{}", cpu * 2, cpu * 4);
 
         return executor;
     }
 
     /**
-     * 在 Spring 容器销毁时关闭线程池
+     * 捕获 @Async void 方法的未捕获异常。
+     */
+    @Override
+    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return new AsyncUncaughtExceptionHandler() {
+            @Override
+            public void handleUncaughtException(Throwable ex, Method method, Object... params) {
+                log.error("【Async Exception】方法：{}，异常：{}", method.getName(), ex.getMessage(), ex);
+            }
+        };
+    }
+
+    /**
+     * 应用关闭时安全销毁线程池。
      */
     @PreDestroy
     public void destroy() {
         if (executor != null) {
+            log.info("【ThreadPool】通用线程池正在关闭...");
             executor.shutdown();
         }
     }
-
 }
+
 ```
 
 #### 更多配置
@@ -980,102 +1027,135 @@ public class ThreadPoolConfig {
 package local.ateng.java.async.config;
 
 import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.lang.reflect.Method;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * 线程池配置类
+ * 通用线程池配置（企业级）
+ * <p>
+ * 说明：
+ * 1. 适用于 SpringBoot2 的所有 @Async 异步任务
+ * 2. 兼顾 CPU / IO 混合型任务的常规业务场景
+ * 3. 包含安全关闭、线程超时回收、拒绝策略、异常日志捕获等功能
  *
- * @author 孔余
- * @email 2385569970@qq.com
+ * @author Ateng
  * @since 2025-03-03
  */
+@Slf4j
 @Configuration
-public class ThreadPoolConfig {
+public class ThreadPoolConfig implements AsyncConfigurer {
 
-    // CPU 核心数
-    private final int core = Runtime.getRuntime().availableProcessors();
+    /**
+     * CPU 核数，用于计算线程池默认大小。
+     */
+    private final int cpu = Runtime.getRuntime().availableProcessors();
 
     private ThreadPoolTaskExecutor executor;
 
     /**
-     * 自定义线程池
+     * 通用业务线程池。
      *
-     * @return 线程池执行器
+     * @return ThreadPoolTaskExecutor
      */
     @Bean
     @Primary
     public ThreadPoolTaskExecutor taskExecutor() {
         executor = new ThreadPoolTaskExecutor();
 
-        // 核心线程数
-        executor.setCorePoolSize(core);
+        /*
+         * 线程数量配置
+         * 通用线程池通常包含 IO 任务，因此适度放大核心线程数。
+         */
+        executor.setCorePoolSize(cpu * 2);
+        executor.setMaxPoolSize(cpu * 4);
 
-        // 最大线程数（适当放大以应对高并发）
-        executor.setMaxPoolSize(core * 2);
+        /*
+         * 队列容量
+         * 容量可根据业务量调整，2000 足以覆盖大多数场景。
+         */
+        executor.setQueueCapacity(2000);
 
-        // 任务队列大小
-        executor.setQueueCapacity(core * 10);
-
-        // 线程存活时间（非核心线程）
+        /*
+         * 空闲线程存活时间（秒）
+         * 允许核心线程超时销毁，可降低系统闲时资源占用。
+         */
         executor.setKeepAliveSeconds(60);
-
-        // 线程名称前缀
-        executor.setThreadNamePrefix("async-task-");
-
-        // 允许核心线程超时
         executor.setAllowCoreThreadTimeOut(true);
 
-        // 任务拒绝策略（由调用者线程执行，防止任务丢失）
+        /*
+         * 线程名称前缀，方便排查线程池问题。
+         */
+        executor.setThreadNamePrefix("async-common-");
+
+        /*
+         * 拒绝策略
+         * CallerRunsPolicy：任务由调用线程执行，保证不丢任务。
+         */
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
 
-        // 任务装饰器（例如：日志跟踪、异常捕获）
+        /*
+         * 任务装饰器：统一执行前后日志输出
+         */
         executor.setTaskDecorator(runnable -> () -> {
-            Logger logger = LoggerFactory.getLogger(ThreadPoolConfig.class);
             long start = System.currentTimeMillis();
             String threadName = Thread.currentThread().getName();
 
-            logger.info("任务开始: 线程名={}，时间={}", threadName, start);
-
+            log.info("【Task Start】线程={}，开始时间={}", threadName, start);
             try {
                 runnable.run();
             } catch (Exception e) {
-                logger.error("任务执行异常: 线程名={}，异常信息={}", threadName, e.getMessage(), e);
+                log.error("【Task Error】线程={}，异常={}", threadName, e.getMessage(), e);
             } finally {
-                long end = System.currentTimeMillis();
-                logger.info("任务结束: 线程名={}，耗时={} ms", threadName, (end - start));
+                long cost = System.currentTimeMillis() - start;
+                log.info("【Task End】线程={}，耗时={} ms", threadName, cost);
             }
         });
 
-        // 等待所有任务完成再关闭
+        /*
+         * 线程池关闭策略
+         */
         executor.setWaitForTasksToCompleteOnShutdown(true);
-
-        // 关闭线程池时最多等待 60 秒
         executor.setAwaitTerminationSeconds(60);
 
-        // 初始化线程池
         executor.initialize();
+        log.info("【ThreadPool】通用线程池初始化完成，核心线程：{}，最大线程：{}", cpu * 2, cpu * 4);
 
         return executor;
     }
 
     /**
-     * 在 Spring 容器销毁时关闭线程池
+     * 捕获 @Async void 方法的未捕获异常。
+     */
+    @Override
+    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return new AsyncUncaughtExceptionHandler() {
+            @Override
+            public void handleUncaughtException(Throwable ex, Method method, Object... params) {
+                log.error("【Async Exception】方法：{}，异常：{}", method.getName(), ex.getMessage(), ex);
+            }
+        };
+    }
+
+    /**
+     * 应用关闭时安全销毁线程池。
      */
     @PreDestroy
     public void destroy() {
         if (executor != null) {
+            log.info("【ThreadPool】通用线程池正在关闭...");
             executor.shutdown();
         }
     }
-
 }
+
 ```
 
 ### 使用ThreadPoolTaskExecutor
