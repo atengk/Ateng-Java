@@ -79,11 +79,11 @@
 
 ![image-20251117153550464](./assets/image-20251117153550464.png)
 
-如果以上步骤不可行，那么就需要在卸载时清除所有数据，并且还要删除注册表和IDEA相关的数据，可以参考[文档](https://blog.csdn.net/qq_24426227/article/details/144903550)彻底删除IDEA数据。清除完毕后就按照文档步骤安装即可。
+如果以上步骤不可行，就需要完全卸载和清除数据，再重新安装新版 IntelliJ IDEA 即可破解。卸载后删除目录 `C:\Users\%USERNAME%\AppData\Roaming\JetBrains\IntelliJIdea2024.1`
 
-```
-C:\Users\admin\AppData\Roaming\JetBrains\IntelliJIdea2024.1
-```
+![image-20251118092724759](./assets/image-20251118092724759.png)
+
+如果以上步骤还是不可行，说明数据没有清除干净，可以参考 [文档](https://blog.csdn.net/qq_24426227/article/details/144903550) 彻底删除IDEA数据。
 
 
 
