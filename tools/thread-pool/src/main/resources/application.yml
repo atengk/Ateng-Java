@@ -1,0 +1,24 @@
+server:
+  port: 11012
+spring:
+  application:
+    name: ${project.artifactId}
+---
+# 线程池配置
+thread-pool:
+  # 是否启用线程池功能
+  enabled: true
+  # 是否将第一个线程池作为默认 @Async 线程池
+  use-first-as-default: false
+  pools:
+    # 默认线程池
+    defaultPool:
+      core-size: 8
+      max-size: 16
+      queue-capacity: 200
+      keep-alive-seconds: 60
+      thread-name-prefix: async-default-
+      allow-core-thread-timeout: false
+      rejected-policy: callerRuns
+      await-termination-seconds: 30
+

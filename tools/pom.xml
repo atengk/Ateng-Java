@@ -25,5 +25,6 @@
         <module>jackson</module>
         <module>custom-utils</module>
         <module>fast-excel-jdk8</module>
+        <module>thread-pool</module>
     </modules>
 </project>
