@@ -1979,4 +1979,86 @@ public final class StringUtil {
     }
 
 
+    /**
+     * 获取两个分隔符之间的内容（只返回第一个匹配）
+     *
+     * @param text            原始文本
+     * @param startDelimiter  起始分隔符
+     * @param endDelimiter    结束分隔符
+     * @param includeDelimiter 是否输出包含分隔符本身
+     * @return 截取的内容，如果不存在则返回 null
+     */
+    public static String substringBetween(String text,
+                                          String startDelimiter,
+                                          String endDelimiter,
+                                          boolean includeDelimiter) {
+        if (text == null || startDelimiter == null || endDelimiter == null) {
+            return null;
+        }
+
+        int start = text.indexOf(startDelimiter);
+        if (start < 0) {
+            return null;
+        }
+
+        int end = text.indexOf(endDelimiter, start + startDelimiter.length());
+        if (end < 0) {
+            return null;
+        }
+
+        if (includeDelimiter) {
+            return text.substring(start, end + endDelimiter.length());
+        }
+
+        return text.substring(start + startDelimiter.length(), end);
+    }
+
+    /**
+     * 获取所有被分隔符包裹的内容（多个匹配）
+     *
+     * @param text             原始文本
+     * @param startDelimiter   起始分隔符
+     * @param endDelimiter     结束分隔符
+     * @param includeDelimiter 是否输出包含分隔符本身
+     * @return 所有匹配内容的列表，如果无匹配返回空集合
+     */
+    public static List<String> substringsBetween(String text,
+                                                 String startDelimiter,
+                                                 String endDelimiter,
+                                                 boolean includeDelimiter) {
+        if (text == null || startDelimiter == null || endDelimiter == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> result = new ArrayList<>();
+        int pos = 0;
+        int start;
+        int end;
+
+        while (true) {
+            start = text.indexOf(startDelimiter, pos);
+            if (start < 0) {
+                break;
+            }
+
+            end = text.indexOf(endDelimiter, start + startDelimiter.length());
+            if (end < 0) {
+                break;
+            }
+
+            String segment;
+            if (includeDelimiter) {
+                segment = text.substring(start, end + endDelimiter.length());
+            } else {
+                segment = text.substring(start + startDelimiter.length(), end);
+            }
+
+            result.add(segment);
+
+            pos = end + endDelimiter.length();
+        }
+
+        return result;
+    }
+
 }

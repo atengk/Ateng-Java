@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class StringUtilTests {
@@ -59,6 +60,27 @@ public class StringUtilTests {
         System.out.println(StringUtil.trim(null, "--"));
         System.out.println(StringUtil.trim("####", "##"));
         System.out.println(StringUtil.trim("##abc##xyz", "##"));
+    }
+
+    @Test
+    void substringsBetween() {
+        String text = "Hello [Java], welcome to [Spring Boot] and [Redis] world.";
+
+        // 获取第一个
+        String first = StringUtil.substringBetween(text, "[", "]", false);
+        // Java
+        System.out.println(first);
+
+        // 获取所有
+        List<String> list1 = StringUtil.substringsBetween(text, "[", "]", false);
+        // [Java, Spring Boot, Redis]
+        System.out.println(list1);
+
+        // 获取所有（包含分隔符）
+        List<String> list2 = StringUtil.substringsBetween(text, "[", "]", true);
+        // [[Java], [Spring Boot], [Redis]]
+        System.out.println(list2);
+
     }
 
 }
