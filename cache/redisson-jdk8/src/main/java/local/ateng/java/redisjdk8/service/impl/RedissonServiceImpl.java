@@ -39,6 +39,16 @@ public class RedissonServiceImpl implements RedissonService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 获取 RedissonClient 实例。
+     *
+     * @return RedissonClient
+     */
+    @Override
+    public RedissonClient getClient() {
+        return this.redissonClient;
+    }
+
     // -------------------------- 通用 Key 管理 --------------------------
 
     /**

@@ -233,6 +233,13 @@ import java.util.concurrent.TimeUnit;
  */
 public interface RedissonService {
 
+    /**
+     * 获取 RedissonClient 实例。
+     *
+     * @return RedissonClient
+     */
+    RedissonClient getClient();
+    
     // -------------------------- 通用 Key 管理 --------------------------
 
     /**
@@ -1763,6 +1770,16 @@ public class RedissonServiceImpl implements RedissonService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 获取 RedissonClient 实例。
+     *
+     * @return RedissonClient
+     */
+    @Override
+    public RedissonClient getClient() {
+        return this.redissonClient;
+    }
+    
     // -------------------------- 通用 Key 管理 --------------------------
 
     /**
@@ -4476,6 +4493,121 @@ public class RedisServiceTests {
 }
 
 ```
+
+## 分布式锁
+
+### Redisson 分布式锁类型总览表
+
+| 锁类型                     | 类名                        | 是否可重入         | 是否支持自动续期（看门狗） | 是否支持公平性 | 特点说明                            | 典型业务场景                      |
+| -------------------------- | --------------------------- | ------------------ | -------------------------- | -------------- | ----------------------------------- | --------------------------------- |
+| **可重入锁**               | `RLock`                     | 是                 | 是                         | 否             | 最常用，可重入，默认 30s 看门狗续期 | 秒杀、库存扣减、幂等处理          |
+| **公平锁**                 | `RFairLock`                 | 是                 | 是                         | 是             | 按申请顺序排队，避免线程饥饿        | 排队公平要求高的系统，如下单排队  |
+| **读写锁**                 | `RReadWriteLock`            | 是                 | 是                         | 否             | 多读一写模型。读读共享、写独占      | 配置更新、字典表更新              |
+| **红锁（RedLock）**        | `RedissonRedLock`           | 否（实际不可重入） | 部分支持                   | 否             | 基于多个 Redis 节点的高可用锁       | 多 Redis 主从或多 Pod 部署        |
+| **联锁（MultiLock）**      | `RedissonMultiLock`         | 依赖实际锁         | 依赖实际锁                 | 否             | 同时加多个锁，任一失败则全部失败    | 对多个资源同时加锁（如商品+店铺） |
+| **信号量**                 | `RSemaphore`                | 不适用             | 否                         | 否             | 限流器，允许 N 个线程进入           | 比如一个资源只能 3 人访问         |
+| **可过期信号量**           | `RPermitExpirableSemaphore` | -                  | -                          | -              | 信号可自动过期                      | 临时许可证、临时权限控制          |
+| **可重入闭锁（计数器）**   | `RCountDownLatch`           | -                  | -                          | -              | 分布式版 CountDownLatch             | 等待多个节点任务完成              |
+| **原子锁（基于原子操作）** | `RAtomicLong`               | -                  | -                          | -              | 不能算真正的分布式锁，但常配合使用  | 全局递增 ID、库存扣减             |
+
+------
+
+### 关键机制对照表（Redisson 为什么安全）
+
+| 能力                          | 说明                                                     |
+| ----------------------------- | -------------------------------------------------------- |
+| **看门狗（Watchdog）**        | 默认锁租期 30 秒，任务正常执行时自动续期，避免锁提前释放 |
+| **可重入性**                  | 同一线程多次加锁不会死锁                                 |
+| **原子加锁脚本（Lua）**       | Redis 侧保证加锁原子性                                   |
+| **锁 Key 绑定线程标识**       | 防止 A 线程误释放 B 线程的锁                             |
+| **自动尝试获取锁（tryLock）** | 支持等待时间与锁时间分离                                 |
+| **公平性队列（FairLock）**    | 使用有序队列避免抢占不公平                               |
+
+------
+
+### Redisson 常用方法对照表
+
+| 方法                                 | 作用                                                  | 示例解释                 |
+| ------------------------------------ | ----------------------------------------------------- | ------------------------ |
+| `lock()`                             | 阻塞加锁，永久等待                                    | 常用于必须成功的业务     |
+| `lock(leaseTime, unit)`              | 手动指定过期时间（无续期）                            | 适合预计任务时间短的操作 |
+| `tryLock(waitTime, leaseTime, unit)` | 在 waitTime 内尝试获取锁，成功则 leaseTime 后自动释放 | 秒杀等业务常用           |
+| `unlock()`                           | 释放锁                                                | 只能释放自己加的锁       |
+
+------
+
+### 常见 Redisson 锁使用示例
+
+1. **最常用可重入锁 RLock**
+
+```java
+RLock lock = redissonClient.getLock("order:create");
+try {
+    if (lock.tryLock(3, 30, TimeUnit.SECONDS)) {
+        // 业务代码
+    }
+} finally {
+    lock.unlock();
+}
+```
+
+------
+
+2. **公平锁 RFairLock**
+
+```java
+RLock fairLock = redissonClient.getFairLock("queue:lock");
+fairLock.lock();
+try {
+    // 按申请顺序排队执行
+} finally {
+    fairLock.unlock();
+}
+```
+
+------
+
+3. **读写锁 RReadWriteLock**
+
+```java
+RReadWriteLock rwLock = redissonClient.getReadWriteLock("config:rw");
+
+// 写锁
+rwLock.writeLock().lock();
+
+// 读锁
+rwLock.readLock().lock();
+```
+
+------
+
+4. **RedLock（高可用锁）**
+
+```java
+RLock lock1 = client1.getLock("lock");
+RLock lock2 = client2.getLock("lock");
+RLock lock3 = client3.getLock("lock");
+
+RedissonRedLock redLock = new RedissonRedLock(lock1, lock2, lock3);
+
+redLock.lock();
+try {
+    // 高可用
+} finally {
+    redLock.unlock();
+}
+```
+
+------
+
+### Redisson 分布式锁常见问题对照表
+
+| 问题             | 原因                 | 解决方案                            |
+| ---------------- | -------------------- | ----------------------------------- |
+| 锁提前失效       | 忘记开启看门狗       | 使用 `lock()` 或 `tryLock` 默认续期 |
+| 死锁             | 未 unlock 或异常导致 | 用 try-finally                      |
+| 锁不释放         | leaseTime 太长       | 使用合理 leaseTime 或看门狗         |
+| RedLock 获取失败 | 多节点不同步         | 不建议在单 Redis 架构使用 RedLock   |
 
 
 

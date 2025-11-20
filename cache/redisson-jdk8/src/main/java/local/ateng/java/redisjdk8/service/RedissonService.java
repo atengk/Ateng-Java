@@ -1,10 +1,7 @@
 package local.ateng.java.redisjdk8.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import org.redisson.api.RLock;
-import org.redisson.api.RRateLimiter;
-import org.redisson.api.RateIntervalUnit;
-import org.redisson.api.RateType;
+import org.redisson.api.*;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,6 +17,13 @@ import java.util.concurrent.TimeUnit;
  * @since 2025-08-01
  */
 public interface RedissonService {
+
+    /**
+     * 获取 RedissonClient 实例。
+     *
+     * @return RedissonClient
+     */
+    RedissonClient getClient();
 
     // -------------------------- 通用 Key 管理 --------------------------
 
