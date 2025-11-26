@@ -1,6 +1,8 @@
 package local.ateng.java.mybatisjdk8;
 
 import local.ateng.java.customutils.entity.Menu;
+import local.ateng.java.customutils.entity.MyUser;
+import local.ateng.java.customutils.init.InitData;
 import local.ateng.java.customutils.utils.CollectionUtil;
 import local.ateng.java.customutils.utils.JsonUtil;
 import org.junit.jupiter.api.Test;
@@ -227,6 +229,30 @@ public class CollectionUtilTests {
         list.add(0, "A");
 
         System.out.println(list); // 输出: [A, B, C]
+    }
+
+    @Test
+    void groupBy01() {
+        List<String> list = Arrays.asList("a", "bb", "ccc", "dd");
+        Map<Integer, List<String>> result = CollectionUtil.groupBy(list, String::length);
+        System.out.println(result);
+    }
+
+    @Test
+    void groupBy02() {
+        Map<String, List<MyUser>> result = CollectionUtil.groupBy(InitData.getDataList(), MyUser::getProvince);
+        System.out.println(result);
+    }
+
+    @Test
+    void groupBy03() {
+        Map<String, List<MyUser>> result = CollectionUtil.groupBy(InitData.getDataList(), item -> {
+            Integer age = item.getAge();
+            if (age < 18) return "未成年";
+            else if (age < 40) return "青年";
+            else return "中年";
+        });
+        System.out.println(result);
     }
 
 }
