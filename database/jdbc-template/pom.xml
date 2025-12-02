@@ -83,6 +83,12 @@
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
 
+        <!-- Postgresql数据库驱动 -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+
         <!-- Spring JDBC 数据库框架 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

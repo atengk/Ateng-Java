@@ -28,3 +28,30 @@ spring:
     template:
       fetch-size: 1000
       max-rows: 1000
+---
+spring:
+  datasource:
+    mysql:
+      jdbc-url: jdbc:mysql://47.108.128.105:20001/kongyu
+      username: kongyu
+      password: kongyu
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: MysqlHikariPool
+      validation-timeout: 5000
+    postgresql:
+      jdbc-url: jdbc:postgresql://47.108.128.105:20002/kongyu?currentSchema=public&stringtype=unspecified
+      username: kongyu
+      password: kongyu
+      driver-class-name: org.postgresql.Driver
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: PostgresHikariPool
+      validation-timeout: 5000
