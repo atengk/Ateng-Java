@@ -1131,6 +1131,13 @@ private StatusEnum status;
 #      max-active: 1000  # 最大活跃连接数
 #      max-wait: 10000  # 获取连接的最大等待时间，单位毫秒
 #      async-init: true
+```
+
+Druid配置参考
+
+```yaml
+---
+# 数据库的相关配置
 spring:
   datasource:
     dynamic:
@@ -1165,7 +1172,57 @@ spring:
             async-init: true
 ```
 
+Hikari配置参考
+
+```yaml
+---
+# 数据库的相关配置
+spring:
+  datasource:
+    dynamic:
+      primary: mysql
+      strict: false
+      datasource:
+        mysql:
+          url: jdbc:mysql://47.108.128.105:20001/kongyu  # MySQL数据库连接URL
+          username: kongyu  # 数据库用户名
+          password: kongyu  # 数据库密码
+          # driver-class-name: com.mysql.cj.jdbc.Driver  # 数据库驱动类，框架会自动适配
+          type: com.zaxxer.hikari.HikariDataSource  # 使用 HikariCP 数据源
+          hikari:
+            maximum-pool-size: 1000  # 最大连接池大小
+            minimum-idle: 10  # 最小空闲连接数
+            idle-timeout: 30000  # 空闲连接超时时间，单位毫秒
+            connection-timeout: 30000  # 获取连接的最大等待时间，单位毫秒
+        doris:
+          type: com.zaxxer.hikari.HikariDataSource
+          url: jdbc:mysql://47.108.128.105:20125/kongyu
+          # driver-class-name: com.mysql.cj.jdbc.Driver
+          username: kongyu
+          password: kongyu
+          hikari:
+            maximum-pool-size: 1000
+            minimum-idle: 10
+            idle-timeout: 30000
+            connection-timeout: 30000
+        postgresql:
+          type: com.zaxxer.hikari.HikariDataSource
+          url: jdbc:postgresql://47.108.128.105:20002/kongyu?currentSchema=public&stringtype=unspecified
+          # driver-class-name: org.postgresql.Driver
+          username: kongyu
+          password: kongyu
+          hikari:
+            maximum-pool-size: 1000
+            minimum-idle: 10
+            idle-timeout: 30000
+            connection-timeout: 30000
+```
+
 ### 使用多数据源
+
+✔ @DS 不能用于字段
+
+✔ @DS 只能用于类 / 方法
 
 **创建测试类使用第二个指定的数据源**
 
@@ -1188,6 +1245,101 @@ public class UserServiceImpl implements UserService {
     public List selectByCondition() {
         return jdbcTemplate.queryForList("select * from user where age >10");
     }
+}
+```
+
+### 获取相应的JdbcTemplate
+
+**创建JdbcTemplate 提供器**
+
+```java
+package local.ateng.java.mybatisjdk8.utils;
+
+import com.baomidou.dynamic.datasource.DynamicRoutingDataSource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import javax.sql.DataSource;
+import java.sql.SQLException;
+
+/**
+ * JdbcTemplate 提供器
+ * 用于在动态多数据源环境下，根据数据源名称动态创建对应的 JdbcTemplate 实例。
+ * 适用于 P6Spy 装饰后的 DataSource（DecoratedDataSource），必须通过 unwrap 获取动态路由数据源。
+ *
+ * @author 孔余
+ * @since 2025-12-02
+ */
+@Component
+public class JdbcTemplateProvider {
+
+    /**
+     * 项目主数据源（可能被 P6Spy 等框架代理或包装）
+     */
+    private final DataSource primaryDataSource;
+
+    /**
+     * 通过构造方法注入数据源
+     *
+     * @param primaryDataSource 主数据源实例
+     */
+    public JdbcTemplateProvider(DataSource primaryDataSource) {
+        this.primaryDataSource = primaryDataSource;
+    }
+
+    /**
+     * 根据数据源名称获取对应的 JdbcTemplate。
+     * 会自动 unwrap 获取 DynamicRoutingDataSource，避免 P6Spy DecoratedDataSource 导致的类型不匹配问题。
+     *
+     * @param dataSourceName 数据源名称（与 dynamic-datasource 的配置一致）
+     * @return 对应数据源的 JdbcTemplate
+     */
+    public JdbcTemplate getJdbcTemplate(String dataSourceName) {
+        DynamicRoutingDataSource routingDataSource = unwrapDynamicDataSource(primaryDataSource);
+        DataSource targetDataSource = routingDataSource.getDataSource(dataSourceName);
+        return new JdbcTemplate(targetDataSource);
+    }
+
+    /**
+     * 从可能被 P6Spy 装饰的 DataSource 中解包出 DynamicRoutingDataSource。
+     *
+     * @param dataSource 主数据源（被代理或包装）
+     * @return DynamicRoutingDataSource 实例
+     */
+    private DynamicRoutingDataSource unwrapDynamicDataSource(DataSource dataSource) {
+        try {
+            return dataSource.unwrap(DynamicRoutingDataSource.class);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("无法从 DataSource 中 unwrap DynamicRoutingDataSource，请检查是否启用了 P6Spy 代理", ex);
+        }
+    }
+}
+```
+
+**使用**
+
+```java
+package local.ateng.java.mybatisjdk8.controller;
+
+import local.ateng.java.mybatisjdk8.utils.JdbcTemplateProvider;
+import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/jdbc")
+@RequiredArgsConstructor
+public class JDBCTemplateController {
+    private final JdbcTemplateProvider jdbcTemplateProvider;
+
+    @GetMapping("/getJdbcTemplate")
+    public String getJdbcTemplate(String dataSourceName){
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.getJdbcTemplate(dataSourceName);
+        return jdbcTemplate.queryForObject("SELECT VERSION()", String.class);
+    }
+
 }
 ```
 

@@ -92,6 +92,12 @@
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
 
+        <!-- Postgresql数据库驱动 -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+
         <!-- HikariCP 数据源 依赖 -->
         <dependency>
             <groupId>com.zaxxer</groupId>
@@ -128,6 +134,13 @@
             <groupId>com.github.gavlyukovskiy</groupId>
             <artifactId>p6spy-spring-boot-starter</artifactId>
             <version>1.8.1</version>
+        </dependency>
+
+        <!-- MyBatis Plus 多数据源 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>dynamic-datasource-spring-boot-starter</artifactId>
+            <version>4.3.1</version>
         </dependency>
 
     </dependencies>
