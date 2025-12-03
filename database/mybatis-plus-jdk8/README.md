@@ -820,6 +820,8 @@ public enum StatusEnumJackson {
 
 #### Fastjson1 版本
 
+注意枚举字段序列化时，如果枚举实现了接口，那么在序列化时就只会输出`Enum.name()`
+
 ```java
 package local.ateng.java.mybatisjdk8.enums;
 
