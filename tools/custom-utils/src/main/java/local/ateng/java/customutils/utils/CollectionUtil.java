@@ -1444,15 +1444,15 @@ public final class CollectionUtil {
      *     <li>可传入 Comparator 对同级节点排序，支持多字段排序</li>
      * </ul>
      *
-     * @param items           原始列表（平铺结构）
-     * @param idGetter        获取节点 ID 的函数，例如：Menu::getId
-     * @param parentGetter    获取父节点 ID 的函数，例如：Menu::getParentId
-     * @param childrenSetter  设置子节点列表的函数，例如：Menu::setChildren
-     * @param childrenGetter  获取子节点列表的函数，例如：Menu::getChildren
-     * @param rootParentId    根节点父 ID（例如 0 或 null）
-     * @param comparator      同级节点排序规则，支持多字段排序，可为 null 表示不排序
-     * @param <T>             元素类型
-     * @param <K>             ID 类型
+     * @param items          原始列表（平铺结构）
+     * @param idGetter       获取节点 ID 的函数，例如：Menu::getId
+     * @param parentGetter   获取父节点 ID 的函数，例如：Menu::getParentId
+     * @param childrenSetter 设置子节点列表的函数，例如：Menu::setChildren
+     * @param childrenGetter 获取子节点列表的函数，例如：Menu::getChildren
+     * @param rootParentId   根节点父 ID（例如 0 或 null）
+     * @param comparator     同级节点排序规则，支持多字段排序，可为 null 表示不排序
+     * @param <T>            元素类型
+     * @param <K>            ID 类型
      * @return 树形结构根节点列表，如果没有数据返回空列表
      *
      * <p><b>示例实体类：</b></p>
@@ -1518,15 +1518,15 @@ public final class CollectionUtil {
      *     <li>可传入 Comparator 对同级节点排序，支持多字段排序</li>
      * </ul>
      *
-     * @param items           原始列表（平铺结构）
-     * @param idGetter        获取节点 ID 的函数，例如：Menu::getId
-     * @param parentGetter    获取父节点 ID 的函数，例如：Menu::getParentId
-     * @param childrenSetter  设置子节点列表的函数，例如：Menu::setChildren
-     * @param childrenGetter  获取子节点列表的函数，例如：Menu::getChildren
-     * @param rootParentIds   根节点父 ID 集合（任意一个匹配即为根节点，例如 0、-1、null）
-     * @param comparator      同级节点排序规则，支持多字段排序，可为 null 表示不排序
-     * @param <T>             元素类型
-     * @param <K>             ID 类型
+     * @param items          原始列表（平铺结构）
+     * @param idGetter       获取节点 ID 的函数，例如：Menu::getId
+     * @param parentGetter   获取父节点 ID 的函数，例如：Menu::getParentId
+     * @param childrenSetter 设置子节点列表的函数，例如：Menu::setChildren
+     * @param childrenGetter 获取子节点列表的函数，例如：Menu::getChildren
+     * @param rootParentIds  根节点父 ID 集合（任意一个匹配即为根节点，例如 0、-1、null）
+     * @param comparator     同级节点排序规则，支持多字段排序，可为 null 表示不排序
+     * @param <T>            元素类型
+     * @param <K>            ID 类型
      * @return 树形结构根节点列表，如果没有数据返回空列表
      *
      * <p><b>示例实体类：</b></p>
@@ -1647,11 +1647,11 @@ public final class CollectionUtil {
     /**
      * 递归对子节点排序
      *
-     * @param nodes           当前节点列表
-     * @param childrenSetter  设置子节点列表的方法
-     * @param childrenGetter  获取子节点列表的方法
-     * @param comparator      排序规则
-     * @param <T>             元素类型
+     * @param nodes          当前节点列表
+     * @param childrenSetter 设置子节点列表的方法
+     * @param childrenGetter 获取子节点列表的方法
+     * @param comparator     排序规则
+     * @param <T>            元素类型
      */
     private static <T> void sortRecursively(
             List<T> nodes,
@@ -2377,6 +2377,60 @@ public final class CollectionUtil {
         }
 
         return result;
+    }
+
+    /**
+     * 将联表查询后的扁平数据聚合为父对象并填充子对象列表。
+     *
+     * @param flatList          联表后的扁平列表
+     * @param parentIdGetter    获取父主键
+     * @param parentConstructor 父对象构建器（从 flat 对象构建新父对象）
+     * @param childIdGetter     获取子主键（用于去重）
+     * @param childConstructor  子对象构建器（从 flat 对象构建新子对象）
+     * @param childrenGetter    获取父对象下子列表
+     * @param childrenSetter    设置父对象的子列表
+     * @param <F>               扁平记录类型（如联表后的 DTO）
+     * @param <P>               父类型（如 ConfTypeVO）
+     * @param <C>               子类型（如 ConfScoreBaseDTO）
+     * @param <K>               主键类型
+     * @return 聚合后的父对象列表
+     */
+    public static <F, P, C, K> List<P> groupAsParentChildren(
+            List<F> flatList,
+            Function<F, K> parentIdGetter,
+            Function<F, P> parentConstructor,
+            Function<F, K> childIdGetter,
+            Function<F, C> childConstructor,
+            Function<P, List<C>> childrenGetter,
+            BiConsumer<P, List<C>> childrenSetter
+    ) {
+        if (flatList == null || flatList.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<K, P> parentMap = new LinkedHashMap<>();
+        Map<K, Set<K>> childExistMap = new HashMap<>();
+
+        for (F f : flatList) {
+
+            K parentId = parentIdGetter.apply(f);
+            P parent = parentMap.get(parentId);
+
+            if (parent == null) {
+                parent = parentConstructor.apply(f);
+                parentMap.put(parentId, parent);
+                childrenSetter.accept(parent, new ArrayList<>());
+                childExistMap.put(parentId, new HashSet<>());
+            }
+
+            K childId = childIdGetter.apply(f);
+            if (childId != null && childExistMap.get(parentId).add(childId)) {
+                C child = childConstructor.apply(f);
+                childrenGetter.apply(parent).add(child);
+            }
+        }
+
+        return new ArrayList<>(parentMap.values());
     }
 
 }
