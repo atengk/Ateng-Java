@@ -2083,6 +2083,199 @@ SELECT * FROM task_hierarchy;
 
 
 
+## 树状/组织架构表
+
+### 创建表
+
+```sql
+DROP TABLE IF EXISTS t_org_unit;
+CREATE TABLE t_org_unit (
+    id           BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    parent_id    BIGINT NOT NULL DEFAULT 0 COMMENT '父级ID（根节点为0）',
+    name         VARCHAR(255) NOT NULL COMMENT '名称',
+    code         VARCHAR(100) NOT NULL COMMENT '编码，唯一',
+    tree_path    VARCHAR(500) NOT NULL COMMENT '完整路径，如 /1/3/8/',
+    level        INT NOT NULL DEFAULT 1 COMMENT '树层级，从1开始',
+    create_time  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_code (code),
+    INDEX idx_parent_id (parent_id),
+    INDEX idx_tree_path (tree_path)
+) COMMENT = '组织单元（支持上下级/树结构）';
+```
+
+### 插入数据
+
+#### 示例数据（3 层树）
+
+```
+集团公司（id=1）
+ ├─ 职能总部（id=2）
+ │    ├─ 财务部（id=4）
+ │    └─ HR（id=5）
+ └─ 事业部（id=3）
+      ├─ 市场部（id=6）
+      └─ 研发部（id=7）
+```
+
+#### SQL 插入示例数据
+
+```sql
+INSERT INTO t_org_unit (id, parent_id, name, code, tree_path, level) VALUES
+(1, 0, '集团公司', '1000', '/1/', 1),
+(2, 1, '职能总部', '1010', '/1/2/', 2),
+(3, 1, '事业部', '1020', '/1/3/', 2),
+(4, 2, '财务部', '1011', '/1/2/4/', 3),
+(5, 2, '人力资源部', '1012', '/1/2/5/', 3),
+(6, 3, '市场部', '1021', '/1/3/6/', 3),
+(7, 3, '研发部', '1022', '/1/3/7/', 3);
+```
+
+### 常用查询示例
+
+#### 查询某个部门的所有子级（包含所有层级）
+
+比如查询 **职能总部(id=2)** 下的所有部门：
+
+方式 A：使用 `tree_path`（性能最好）
+
+```sql
+SELECT *
+FROM t_org_unit
+WHERE tree_path LIKE '/1/2/%';
+```
+
+------
+
+方式 B：递归 CTE（标准写法）
+
+```sql
+WITH RECURSIVE sub AS (
+    SELECT * FROM t_org_unit WHERE id = 2
+    UNION ALL
+    SELECT c.*
+    FROM t_org_unit c
+    JOIN sub s ON c.parent_id = s.id
+)
+SELECT * FROM sub;
+```
+
+------
+
+#### 查询某个部门的所有上级（从下往上查）
+
+比如查询 **研发部(id=7)** 的所有祖先节点：
+
+方式 A：使用 `tree_path`（性能最好）
+
+```sql
+SELECT *
+FROM t_org_unit
+WHERE '/1/3/7/' LIKE CONCAT(tree_path,'%');
+```
+
+方式 B：递归 CTE（标准写法）
+
+```sql
+WITH RECURSIVE parent_tree AS (
+    SELECT * FROM t_org_unit WHERE id = 7
+    UNION ALL
+    SELECT p.*
+    FROM t_org_unit p
+    JOIN parent_tree ct ON p.id = ct.parent_id
+)
+SELECT * FROM parent_tree;
+```
+
+#### 查询完整路径中文名称（类似“集团公司 / 事业部 / 研发部”）
+
+```sql
+WITH RECURSIVE pt AS (
+    SELECT * FROM t_org_unit WHERE id = 7
+    UNION ALL
+    SELECT t.*
+    FROM t_org_unit t
+    JOIN pt ON t.id = pt.parent_id
+)
+SELECT GROUP_CONCAT(name ORDER BY level SEPARATOR ' / ') AS full_path_name
+FROM pt;
+```
+
+输出：
+
+```
+集团公司 / 事业部 / 研发部
+```
+
+------
+
+#### 查询整棵树并带层级缩进（适合前端渲染树）
+
+```sql
+WITH RECURSIVE tree AS (
+    SELECT id, parent_id, name, level, name AS display_name
+    FROM t_org_unit WHERE parent_id = 0
+    UNION ALL
+    SELECT c.id, c.parent_id, c.name, c.level,
+           CONCAT(REPEAT('  ', c.level - 1), '├─ ', c.name)
+    FROM t_org_unit c
+    JOIN tree t ON c.parent_id = t.id
+)
+SELECT * FROM tree ORDER BY level;
+```
+
+------
+
+#### 查询两个节点是否存在上下级关系
+
+比如：**事业部(id=3)** 是否为 **市场部(id=6)** 的上级？
+
+```sql
+SELECT CASE
+    WHEN '/1/3/' IN (SELECT tree_path FROM t_org_unit WHERE id = 6)
+    THEN 'YES' ELSE 'NO' END AS is_parent;
+```
+
+------
+
+#### 批量查询多个部门的所有子部门
+
+```sql
+WITH RECURSIVE sub AS (
+    SELECT * FROM t_org_unit WHERE id IN (2, 3)
+    UNION ALL
+    SELECT c.*
+    FROM t_org_unit c
+    JOIN sub s ON c.parent_id = s.id
+)
+SELECT * FROM sub;
+```
+
+------
+
+####  查询同级部门
+
+```sql
+SELECT *
+FROM t_org_unit
+WHERE parent_id = (SELECT parent_id FROM t_org_unit WHERE id = 4)
+  AND id <> 4;
+```
+
+------
+
+#### ⭐ 8. 统计每个部门下有多少子部门
+
+```sql
+SELECT p.id, p.name,
+       COUNT(c.id) AS child_count
+FROM t_org_unit p
+LEFT JOIN t_org_unit c ON c.tree_path LIKE CONCAT(p.tree_path, '%')
+GROUP BY p.id, p.name;
+```
+
+
+
 ## 进阶数据修改操作
 
 ### INSERT 与 UPDATE
