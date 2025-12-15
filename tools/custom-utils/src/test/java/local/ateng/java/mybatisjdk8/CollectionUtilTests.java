@@ -258,6 +258,37 @@ public class CollectionUtilTests {
         System.out.println(result);
     }
 
+    @Test
+    void testGroupByMultiFields() {
+        List<Employee> list = Arrays.asList(
+                new Employee("技术部", "后端", "上海"),
+                new Employee("技术部", "前端", "上海"),
+                new Employee("技术部", "后端", "杭州"),
+                new Employee("市场部", "销售", "上海"),
+                new Employee("技术部", "后端", "上海")
+        );
+
+        Map<String, List<Employee>> grouped = CollectionUtil.groupBy(
+                list,
+                e -> e.getDept() + "-" + e.getJob() + "-" + e.getCity()
+        );
+
+        grouped.forEach((k, v) -> {
+            System.out.println("分组：" + k);
+            v.forEach(System.out::println);
+            System.out.println();
+        });
+    }
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class Employee {
+        private String dept;
+        private String job;
+        private String city;
+    }
+
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor

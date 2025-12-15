@@ -26,5 +26,6 @@
         <module>custom-utils</module>
         <module>fast-excel-jdk8</module>
         <module>thread-pool</module>
+        <module>onlyoffice</module>
     </modules>
 </project>
