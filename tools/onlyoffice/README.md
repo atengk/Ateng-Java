@@ -105,6 +105,8 @@ public class OnlyOfficeController {
 
 ### 获取 OnlyOffice 编辑器配置
 
+注意document的key实际使用应为文件的id+版本号，版本号从回调中执行后+1。
+
 ```java
     /**
      * 获取 OnlyOffice 编辑器配置
@@ -163,6 +165,8 @@ public class OnlyOfficeController {
 
 
 ### OnlyOffice 回调接口
+
+fileKey为document的key，保存状态时需要给文件更新（url下载后覆盖原文件）和版本号+1
 
 ```java
     /**

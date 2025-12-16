@@ -1,12 +1,13 @@
 package io.github.atengk.onlyoffice.controller;
 
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.jwt.JWT;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,6 +26,77 @@ import java.util.Map;
 @RequestMapping("/onlyoffice")
 public class OnlyOfficeController {
 
+    /**
+     * ==================== 模拟文件数据 ====================
+     * 实际项目中应来自数据库
+     */
+    private static final List<Map<String, Object>> FILE_LIST = new ArrayList<>();
+
+    /**
+     * 文件访问基础地址（示例：MinIO / 静态文件服务）
+     */
+    private static final String FILE_BASE_URL =
+            "http://47.108.128.105:20006/data/";
+
+    static {
+        // Word
+        FILE_LIST.add(buildFile(
+                "1",
+                "demo.docx",
+                "docx",
+                FILE_BASE_URL + "demo.docx",
+                1
+        ));
+
+        // Excel
+        FILE_LIST.add(buildFile(
+                "2",
+                "demo.xlsx",
+                "xlsx",
+                FILE_BASE_URL + "demo.xlsx",
+                3
+        ));
+
+        // PPT
+        FILE_LIST.add(buildFile(
+                "3",
+                "demo.pptx",
+                "pptx",
+                FILE_BASE_URL + "demo.pptx",
+                2
+        ));
+    }
+
+    /**
+     * 构造一个文件 Map
+     */
+    private static Map<String, Object> buildFile(
+            String fileId,
+            String fileName,
+            String fileType,
+            String fileUrl,
+            Integer version) {
+
+        Map<String, Object> file = new HashMap<>();
+        file.put("fileId", fileId);
+        file.put("fileName", fileName);
+        file.put("fileType", fileType);
+        file.put("fileUrl", fileUrl);
+        file.put("version", version);
+        file.put("updateTime", System.currentTimeMillis());
+        return file;
+    }
+
+    public Map<String, Object> getFileById(String fileId) {
+
+        return FILE_LIST.stream()
+                .filter(file -> fileId.equals(file.get("fileId")))
+                .findFirst()
+                .orElseThrow(() ->
+                        new IllegalArgumentException("文件不存在，fileId=" + fileId)
+                );
+    }
+
     /* ========================= 常量配置区 ========================= */
 
     /**
@@ -37,7 +109,7 @@ public class OnlyOfficeController {
      * 文件访问基础地址（文件必须是 DocumentServer 可直接访问的公网地址）
      * 示例：http://ip:port/data/demo.docx
      */
-    private static final String FILE_BASE_URL = "http://47.108.128.105:20006/data/";
+    //private static final String FILE_BASE_URL = "http://47.108.128.105:20006/data/";
 
     /**
      * OnlyOffice 回调地址
@@ -66,23 +138,22 @@ public class OnlyOfficeController {
     /**
      * 获取 OnlyOffice 编辑器配置
      *
-     * @param fileName 文件名（如 demo.docx / demo.xlsx）
-     * @param fileType 文件类型（docx / xlsx / pptx）
+     * @param fileId   文件名Id（如 demo.docx / demo.xlsx）
      * @return OnlyOffice DocEditor 初始化配置
      */
     @GetMapping("/config")
-    public Map<String, Object> getConfig(@RequestParam String fileName,
-                                         @RequestParam String fileType,
+    public Map<String, Object> getConfig(@RequestParam String fileId,
                                          @RequestParam(defaultValue = "false") Boolean preview) {
 
         /* ---------- 1. document 配置 ---------- */
 
+        Map<String, Object> map = getFileById(fileId);
         Map<String, Object> document = new HashMap<>();
-        document.put("fileType", fileType);
+        document.put("fileType", map.get("fileType"));
         //document.put("key", DigestUtil.md5Hex(fileName)); // 文件唯一标识（同一文件必须固定），注意不要有中文
-        document.put("key", IdUtil.fastSimpleUUID()); // 测试用
-        document.put("title", fileName);
-        document.put("url", FILE_BASE_URL + fileName);
+        document.put("key", fileId + "-" + map.getOrDefault("version", "0")); // 生产使用
+        document.put("title", map.get("fileName"));
+        document.put("url", FILE_BASE_URL + map.get("fileName"));
 
         /* ---------- 2. editorConfig 配置 ---------- */
 
@@ -153,6 +224,9 @@ public class OnlyOfficeController {
             // TODO:
             // 1. 下载 fileUrl
             // 2. 覆盖原文件（本地 / MinIO / OSS）
+            String[] split = fileKey.split("-");
+            Map<String, Object> map = getFileById(split[0]);
+            map.put("version", (int) map.getOrDefault("version", 0) + 1);
         }
 
         Map<String, Object> result = new HashMap<>();
