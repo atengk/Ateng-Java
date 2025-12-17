@@ -7,6 +7,7 @@ import javax.validation.ValidatorFactory;
 import javax.validation.groups.Default;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -119,16 +120,18 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验对象字段，校验失败时抛出指定的异常。
-     * 默认不展示字段名。
+     * 校验对象字段，校验失败时抛出自定义异常。
      *
-     * @param object   校验对象
-     * @param exception 业务自定义异常
+     * @param object 校验对象
+     * @param exceptionSupplier 异常构造器
      */
-    public static void validateThrow(Object object, RuntimeException exception) {
+    public static void validateThrow(
+            Object object,
+            Function<String, ? extends RuntimeException> exceptionSupplier) {
+
         String error = validateFirst(object);
         if (error != null) {
-            throw exception;
+            throw exceptionSupplier.apply(error);
         }
     }
 

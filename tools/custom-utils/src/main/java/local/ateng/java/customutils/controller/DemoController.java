@@ -119,6 +119,14 @@ public class DemoController {
         System.out.println(str);
     }
 
+    @GetMapping("/validateThrow")
+    public void validateThrow() {
+        User user = new User();
+
+        ValidateUtil.validateThrow(user, msg -> new RuntimeException(msg));
+    }
+
+
     @Data
     static class User {
         @NotNull(message = "id不能为空")
