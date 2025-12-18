@@ -24,5 +24,6 @@
         <module>autotable</module>
         <module>mybatis-flex-postgis</module>
         <module>mybatis-plus-jdk8</module>
+        <module>beetl</module>
     </modules>
 </project>

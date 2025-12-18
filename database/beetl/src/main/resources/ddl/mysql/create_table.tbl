@@ -1,0 +1,65 @@
+CREATE TABLE
+<% if(table.ifNotExists != null && table.ifNotExists){ %>
+IF NOT EXISTS
+<% } %>
+${table.tableName} (
+<%
+/* ================= 字段定义 ================= */
+for(col in table.columns){
+%>
+    ${col.name}
+    <% /* ---------- 类型 ---------- */ %>
+    ${col.type}
+    <% if(col.length != null){ %>(${col.length})<% } %>
+    <% if(col.precision != null && col.scale != null){ %>(${col.precision},${col.scale})<% } %>
+    <% if(col.unsigned != null && col.unsigned){ %> UNSIGNED<% } %>
+
+    <% /* ---------- 约束 ---------- */ %>
+    <% if(col.nullable != null && !col.nullable){ %> NOT NULL<% } %>
+    <% if(col.unique != null && col.unique){ %> UNIQUE<% } %>
+    <% if(col.autoIncrement != null && col.autoIncrement){ %> AUTO_INCREMENT<% } %>
+
+    <% /* ---------- 默认值 ---------- */ %>
+    <% if(col.defaultValue != null){ %> DEFAULT ${col.defaultValue}<% } %>
+    <% if(col.onUpdateCurrentTimestamp != null && col.onUpdateCurrentTimestamp){ %> ON UPDATE CURRENT_TIMESTAMP<% } %>
+
+    <% /* ---------- 注释 ---------- */ %>
+    <% if(col.comment != null){ %> COMMENT '${col.comment}'<% } %>
+
+    <% if(!colLP.last){ %>,<% } %>
+<%
+}
+%>
+
+<%
+/* ================= 主键 ================= */
+var hasPk = false;
+for(col in table.columns){
+    if(col.primaryKey != null && col.primaryKey){
+        hasPk = true;
+        break;
+    }
+}
+if(hasPk){
+%>,
+    PRIMARY KEY (
+    <%
+    var first = true;
+    for(col in table.columns){
+        if(col.primaryKey != null && col.primaryKey){
+            if(!first){ %>, <% }
+            %>${col.name}<%
+            first = false;
+        }
+    }
+    %>
+    )
+<%
+}
+%>
+)
+<% /* ================= 表属性 ================= */ %>
+<% if(table.engine != null){ %> ENGINE=${table.engine}<% } %>
+<% if(table.charset != null){ %> DEFAULT CHARSET=${table.charset}<% } %>
+<% if(table.collation != null){ %> COLLATE=${table.collation}<% } %>
+<% if(table.comment != null){ %> COMMENT='${table.comment}'<% } %>;
