@@ -364,4 +364,117 @@ public class CollectionUtilTests {
 
     }
 
+    @Data
+    public static class UserEntity {
+        private Long id;
+        private String name;
+        private Integer age;
+    }
+    @Data
+    public static class UserVO {
+        private Long id;
+        private String name;
+    }
+
+    public static List<UserEntity> buildSourceList() {
+        List<UserEntity> list = new ArrayList<>();
+
+        UserEntity u1 = new UserEntity();
+        u1.setId(1L);
+        u1.setName("张三");
+        u1.setAge(18);
+
+        UserEntity u2 = new UserEntity();
+        u2.setId(2L);
+        u2.setName("李四");
+        u2.setAge(20);
+
+        UserEntity u3 = new UserEntity();
+        u3.setId(3L);
+        u3.setName("王五");
+        u3.setAge(22);
+
+        list.add(u1);
+        list.add(u2);
+        list.add(u3);
+
+        return list;
+    }
+
+    public static List<UserVO> buildTargetList() {
+        List<UserVO> list = new ArrayList<>();
+
+        UserVO v1 = new UserVO();
+        v1.setId(1L);
+
+        UserVO v2 = new UserVO();
+        v2.setId(2L);
+
+        UserVO v3 = new UserVO();
+        v3.setId(4L);
+
+        list.add(v1);
+        list.add(v2);
+        list.add(v3);
+
+        return list;
+    }
+
+    /**
+     * 单字段回填测试
+     */
+    @Test
+    public void testFillNameById() {
+        List<UserEntity> sourceList = buildSourceList();
+        List<UserVO> targetList = buildTargetList();
+
+        CollectionUtil.fillByKey(
+                sourceList,
+                targetList,
+                UserEntity::getId,
+                UserVO::getId,
+                UserEntity::getName,
+                UserVO::setName
+        );
+
+        targetList.forEach(System.out::println);
+    }
+
+    /**
+     * 多字段回填测试
+     */
+    @Test
+    public void testFillMultiField() {
+        List<UserEntity> sourceList = buildSourceList();
+        List<UserVO> targetList = buildTargetList();
+
+        CollectionUtil.fillByKey(
+                sourceList,
+                targetList,
+                UserEntity::getId,
+                UserVO::getId,
+                source -> source,
+                (target, source) -> {
+                    target.setName(source.getName());
+                }
+        );
+
+        targetList.forEach(System.out::println);
+    }
+
+    @Test
+    public void testFillByOrder() {
+        List<UserEntity> sourceList = buildSourceList();
+        List<UserVO> targetList = buildTargetList();
+
+        CollectionUtil.fillByOrder(
+                sourceList,
+                targetList,
+                UserEntity::getName,
+                UserVO::setName
+        );
+
+        targetList.forEach(System.out::println);
+    }
+
 }

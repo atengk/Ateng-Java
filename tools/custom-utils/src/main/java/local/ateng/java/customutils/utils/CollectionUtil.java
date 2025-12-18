@@ -2433,4 +2433,155 @@ public final class CollectionUtil {
         return new ArrayList<>(parentMap.values());
     }
 
+    /**
+     * 根据关联键，将 sourceList 中的指定字段值填充到 targetList 中
+     *
+     * <p>
+     * 典型场景：
+     * 两个列表实体不同，但存在相同业务主键，
+     * 需要将 sourceList 中的某些字段回填到 targetList
+     * </p>
+     *
+     * @param sourceList      数据来源列表
+     * @param targetList      需要被填充的目标列表
+     * @param sourceKeyFunc   source 实体的关联键获取函数
+     * @param targetKeyFunc   target 实体的关联键获取函数
+     * @param valueGetter    source 实体中需要回填的值获取函数
+     * @param valueSetter    target 实体中需要回填的值设置函数
+     * @param <S>             source 实体类型
+     * @param <T>             target 实体类型
+     * @param <K>             关联键类型
+     * @param <V>             回填值类型
+     */
+    public static <S, T, K, V> void fillByKey(
+            Collection<S> sourceList,
+            Collection<T> targetList,
+            Function<S, K> sourceKeyFunc,
+            Function<T, K> targetKeyFunc,
+            Function<S, V> valueGetter,
+            BiConsumer<T, V> valueSetter
+    ) {
+        if (isEmpty(sourceList) || isEmpty(targetList)) {
+            return;
+        }
+
+        Map<K, S> sourceMap = sourceList.stream()
+                .filter(Objects::nonNull)
+                .filter(e -> sourceKeyFunc.apply(e) != null)
+                .collect(Collectors.toMap(
+                        sourceKeyFunc,
+                        Function.identity(),
+                        (oldValue, newValue) -> oldValue
+                ));
+
+        for (T target : targetList) {
+            if (target == null) {
+                continue;
+            }
+
+            K key = targetKeyFunc.apply(target);
+            if (key == null) {
+                continue;
+            }
+
+            S source = sourceMap.get(key);
+            if (source == null) {
+                continue;
+            }
+
+            V value = valueGetter.apply(source);
+            valueSetter.accept(target, value);
+        }
+    }
+
+    /**
+     * 按集合顺序将 sourceList 中的值填充到 targetList
+     *
+     * <p>
+     * 不依赖主键或唯一键，
+     * 按 index 对齐：
+     * sourceList[i] -> targetList[i]
+     * </p>
+     *
+     * @param sourceList   数据来源列表
+     * @param targetList   目标列表
+     * @param valueGetter  source 中值获取函数
+     * @param valueSetter  target 中值设置函数
+     * @param <S>          source 实体类型
+     * @param <T>          target 实体类型
+     * @param <V>          回填值类型
+     */
+    public static <S, T, V> void fillByOrder(
+            List<S> sourceList,
+            List<T> targetList,
+            Function<S, V> valueGetter,
+            BiConsumer<T, V> valueSetter
+    ) {
+        if (isEmpty(sourceList) || isEmpty(targetList)) {
+            return;
+        }
+
+        int size = Math.min(sourceList.size(), targetList.size());
+
+        for (int i = 0; i < size; i++) {
+            S source = sourceList.get(i);
+            T target = targetList.get(i);
+
+            if (source == null || target == null) {
+                continue;
+            }
+
+            V value = valueGetter.apply(source);
+            valueSetter.accept(target, value);
+        }
+    }
+
+    /**
+     * 按集合顺序将 sourceList 中的值填充到 targetList，目标字段为空时才填
+     *
+     * <p>
+     * 不依赖主键或唯一键，
+     * 按 index 对齐：
+     * sourceList[i] -> targetList[i]
+     * </p>
+     *
+     * @param sourceList   数据来源列表
+     * @param targetList   目标列表
+     * @param valueGetter  source 中值获取函数
+     * @param valueSetter  target 中值设置函数
+     * @param <S>          source 实体类型
+     * @param <T>          target 实体类型
+     * @param <V>          回填值类型
+     */
+    public static <S, T, V> void fillByOrderIfAbsent(
+            List<S> sourceList,
+            List<T> targetList,
+            Function<S, V> valueGetter,
+            Function<T, V> targetValueGetter,
+            BiConsumer<T, V> valueSetter
+    ) {
+        if (isEmpty(sourceList) || isEmpty(targetList)) {
+            return;
+        }
+
+        int size = Math.min(sourceList.size(), targetList.size());
+
+        for (int i = 0; i < size; i++) {
+            S source = sourceList.get(i);
+            T target = targetList.get(i);
+
+            if (source == null || target == null) {
+                continue;
+            }
+
+            if (targetValueGetter.apply(target) != null) {
+                continue;
+            }
+
+            V value = valueGetter.apply(source);
+            valueSetter.accept(target, value);
+        }
+    }
+
+
 }
