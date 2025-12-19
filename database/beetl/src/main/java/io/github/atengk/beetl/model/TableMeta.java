@@ -44,4 +44,9 @@ public class TableMeta {
      * 字段列表
      */
     private List<ColumnMeta> columns;
+
+    /**
+     * 索引列表
+     */
+    private List<IndexMeta> indexes;
 }
