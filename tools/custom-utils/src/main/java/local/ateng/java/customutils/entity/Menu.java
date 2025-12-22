@@ -37,6 +37,10 @@ public class Menu {
         this.children = children;
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     @Override
     public String toString() {
         return "Menu{id=" + id + ", name='" + name + "', children=" + children + "}";

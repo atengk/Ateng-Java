@@ -150,6 +150,95 @@ public class CollectionUtilTests {
     }
 
     @Test
+    void operateSubTreeById_test() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        List<Menu> tree = CollectionUtil.buildTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                0
+        );
+
+        // 对 “系统管理(id=1)” 及其所有子节点执行操作
+        CollectionUtil.operateSubTreeById(
+                tree,
+                Menu::getId,
+                Menu::getChildren,
+                2,
+                menu -> menu.setName(menu.getName() + "_copy")
+        );
+        System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+    @Test
+    void operateMatchedNodeAndAncestors_test() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        List<Menu> tree = CollectionUtil.buildTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                0
+        );
+
+        // 命中「用户列表(id=4)」，向上标记
+        CollectionUtil.operateMatchedNodeAndAncestors(
+                tree,
+                menu -> Objects.equals(menu.getId(), 4),
+                Menu::getChildren,
+                menu -> menu.setName(menu.getName() + "-active")
+        );
+        System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+    @Test
+    void operateMatchedNode_test() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        List<Menu> tree = CollectionUtil.buildTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                0
+        );
+
+        // 对 “系统管理(id=1)” 及其所有子节点执行操作
+        CollectionUtil.operateMatchedNode(
+                tree,
+                menu -> Objects.equals(menu.getId(), 1),
+                Menu::getChildren,
+                menu -> menu.setName(menu.getName() + "-copy")
+        );
+        System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+
+    @Test
     void batchProcess() {
         List<Integer> data = new ArrayList<>();
         for (int i = 1; i <= 25; i++) {

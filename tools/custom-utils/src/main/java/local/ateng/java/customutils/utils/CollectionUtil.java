@@ -1761,6 +1761,180 @@ public final class CollectionUtil {
     }
 
     /**
+     * 在树结构中，根据指定的唯一标识，
+     * 对命中的节点及其所有子节点执行指定操作
+     *
+     * @param tree           树结构数据
+     * @param idGetter       获取节点唯一标识
+     * @param childrenGetter 获取子节点集合
+     * @param matchId        需要匹配的 id
+     * @param consumer       对节点执行的操作
+     * @param <T>            节点类型
+     * @param <ID>           主键类型
+     */
+    public static <T, ID> void operateSubTreeById(
+            Collection<T> tree,
+            Function<T, ID> idGetter,
+            Function<T, Collection<T>> childrenGetter,
+            ID matchId,
+            Consumer<T> consumer
+    ) {
+        if (tree == null || tree.isEmpty() || consumer == null) {
+            return;
+        }
+
+        for (T node : tree) {
+            if (node == null) {
+                continue;
+            }
+
+            // 命中节点：对自己和子树执行操作
+            if (Objects.equals(idGetter.apply(node), matchId)) {
+                operateRecursively(node, childrenGetter, consumer);
+                return; // 唯一标识，命中后即可结束
+            }
+
+            // 继续向下查找
+            Collection<T> children = childrenGetter.apply(node);
+            if (children != null && !children.isEmpty()) {
+                operateSubTreeById(children, idGetter, childrenGetter, matchId, consumer);
+            }
+        }
+    }
+
+    /**
+     * 对当前节点及其所有子节点递归执行操作
+     *
+     * @param childrenGetter 获取子节点集合
+     * @param consumer       对节点执行的操作
+     * @param <T>            节点类型
+     */
+    private static <T> void operateRecursively(
+            T node,
+            Function<T, Collection<T>> childrenGetter,
+            Consumer<T> consumer
+    ) {
+        consumer.accept(node);
+
+        Collection<T> children = childrenGetter.apply(node);
+        if (children == null || children.isEmpty()) {
+            return;
+        }
+
+        for (T child : children) {
+            operateRecursively(child, childrenGetter, consumer);
+        }
+    }
+
+    /**
+     * 在树结构中：
+     * 当节点满足匹配条件时，
+     * 对【该节点本身及其所有上级节点】执行指定操作
+     *
+     * @param tree           树结构
+     * @param matcher        节点匹配条件
+     * @param childrenGetter 获取子节点
+     * @param consumer       对节点执行的操作
+     * @param <T>            节点类型
+     */
+    public static <T> void operateMatchedNodeAndAncestors(
+            Collection<T> tree,
+            Predicate<T> matcher,
+            Function<T, Collection<T>> childrenGetter,
+            Consumer<T> consumer
+    ) {
+        if (tree == null || tree.isEmpty() || matcher == null || consumer == null) {
+            return;
+        }
+
+        Deque<T> path = new ArrayDeque<>();
+        for (T node : tree) {
+            traverseForAncestors(node, matcher, childrenGetter, consumer, path);
+        }
+    }
+
+    /**
+     * 深度优先遍历树结构，用于处理「匹配节点及其所有上级节点」的场景。
+     *
+     * @param node           当前遍历的节点
+     * @param matcher        节点匹配条件，用于判断当前节点是否命中
+     * @param childrenGetter 用于获取当前节点的子节点集合
+     * @param consumer       对匹配节点及其祖先节点执行的操作
+     * @param path           当前遍历路径（从根节点到当前节点的栈结构）
+     * @param <T>            节点类型
+     */
+    private static <T> void traverseForAncestors(
+            T node,
+            Predicate<T> matcher,
+            Function<T, Collection<T>> childrenGetter,
+            Consumer<T> consumer,
+            Deque<T> path
+    ) {
+        if (node == null) {
+            return;
+        }
+
+        // 入栈：表示当前路径
+        path.push(node);
+
+        // 如果当前节点命中
+        if (matcher.test(node)) {
+            // 对当前节点及所有祖先执行操作
+            for (T ancestor : path) {
+                consumer.accept(ancestor);
+            }
+        }
+
+        // 继续遍历子节点
+        Collection<T> children = childrenGetter.apply(node);
+        if (children != null && !children.isEmpty()) {
+            for (T child : children) {
+                traverseForAncestors(child, matcher, childrenGetter, consumer, path);
+            }
+        }
+
+        // 出栈
+        path.pop();
+    }
+
+    /**
+     * 在树结构中，仅对【满足条件的节点本身】执行指定操作
+     *
+     * @param tree           树结构数据
+     * @param matcher        节点匹配条件
+     * @param childrenGetter 获取子节点集合
+     * @param consumer       对匹配节点执行的操作
+     * @param <T>            节点类型
+     */
+    public static <T> void operateMatchedNode(
+            Collection<T> tree,
+            Predicate<T> matcher,
+            Function<T, Collection<T>> childrenGetter,
+            Consumer<T> consumer
+    ) {
+        if (tree == null || tree.isEmpty() || matcher == null || consumer == null) {
+            return;
+        }
+
+        for (T node : tree) {
+            if (node == null) {
+                continue;
+            }
+
+            // 只操作“当前节点”
+            if (matcher.test(node)) {
+                consumer.accept(node);
+            }
+
+            // 继续遍历子节点（但不级联操作）
+            Collection<T> children = childrenGetter.apply(node);
+            if (children != null && !children.isEmpty()) {
+                operateMatchedNode(children, matcher, childrenGetter, consumer);
+            }
+        }
+    }
+
+    /**
      * 获取列表中的 Top N 元素（需元素可比较）
      *
      * @param list 原始列表
@@ -2442,16 +2616,16 @@ public final class CollectionUtil {
      * 需要将 sourceList 中的某些字段回填到 targetList
      * </p>
      *
-     * @param sourceList      数据来源列表
-     * @param targetList      需要被填充的目标列表
-     * @param sourceKeyFunc   source 实体的关联键获取函数
-     * @param targetKeyFunc   target 实体的关联键获取函数
-     * @param valueGetter    source 实体中需要回填的值获取函数
-     * @param valueSetter    target 实体中需要回填的值设置函数
-     * @param <S>             source 实体类型
-     * @param <T>             target 实体类型
-     * @param <K>             关联键类型
-     * @param <V>             回填值类型
+     * @param sourceList    数据来源列表
+     * @param targetList    需要被填充的目标列表
+     * @param sourceKeyFunc source 实体的关联键获取函数
+     * @param targetKeyFunc target 实体的关联键获取函数
+     * @param valueGetter   source 实体中需要回填的值获取函数
+     * @param valueSetter   target 实体中需要回填的值设置函数
+     * @param <S>           source 实体类型
+     * @param <T>           target 实体类型
+     * @param <K>           关联键类型
+     * @param <V>           回填值类型
      */
     public static <S, T, K, V> void fillByKey(
             Collection<S> sourceList,
@@ -2503,13 +2677,13 @@ public final class CollectionUtil {
      * sourceList[i] -> targetList[i]
      * </p>
      *
-     * @param sourceList   数据来源列表
-     * @param targetList   目标列表
-     * @param valueGetter  source 中值获取函数
-     * @param valueSetter  target 中值设置函数
-     * @param <S>          source 实体类型
-     * @param <T>          target 实体类型
-     * @param <V>          回填值类型
+     * @param sourceList  数据来源列表
+     * @param targetList  目标列表
+     * @param valueGetter source 中值获取函数
+     * @param valueSetter target 中值设置函数
+     * @param <S>         source 实体类型
+     * @param <T>         target 实体类型
+     * @param <V>         回填值类型
      */
     public static <S, T, V> void fillByOrder(
             List<S> sourceList,
@@ -2545,13 +2719,13 @@ public final class CollectionUtil {
      * sourceList[i] -> targetList[i]
      * </p>
      *
-     * @param sourceList   数据来源列表
-     * @param targetList   目标列表
-     * @param valueGetter  source 中值获取函数
-     * @param valueSetter  target 中值设置函数
-     * @param <S>          source 实体类型
-     * @param <T>          target 实体类型
-     * @param <V>          回填值类型
+     * @param sourceList  数据来源列表
+     * @param targetList  目标列表
+     * @param valueGetter source 中值获取函数
+     * @param valueSetter target 中值设置函数
+     * @param <S>         source 实体类型
+     * @param <T>         target 实体类型
+     * @param <V>         回填值类型
      */
     public static <S, T, V> void fillByOrderIfAbsent(
             List<S> sourceList,
