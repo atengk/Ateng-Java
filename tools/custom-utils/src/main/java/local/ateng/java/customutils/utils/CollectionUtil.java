@@ -1761,6 +1761,106 @@ public final class CollectionUtil {
     }
 
     /**
+     * 在树形结构中根据唯一标识查找节点
+     *
+     * <p>采用深度优先遍历（DFS），一旦匹配立即返回。</p>
+     *
+     * @param roots          树的根节点列表
+     * @param childrenGetter 获取子节点列表的函数，例如：Menu::getChildren
+     * @param keyGetter      获取节点唯一标识的函数，例如：Menu::getId
+     * @param targetKey      要查找的目标标识值
+     * @param <T>            节点类型
+     * @param <K>            唯一标识类型
+     * @return 匹配的节点，未找到返回 null
+     */
+    public static <T, K> T findInTree(List<T> roots,
+                                      Function<T, List<T>> childrenGetter,
+                                      Function<T, K> keyGetter,
+                                      K targetKey) {
+
+        if (roots == null || roots.isEmpty()
+                || keyGetter == null || childrenGetter == null) {
+            return null;
+        }
+
+        for (T node : roots) {
+            if (node == null) {
+                continue;
+            }
+
+            K id = keyGetter.apply(node);
+            if (Objects.equals(id, targetKey)) {
+                return node;
+            }
+
+            List<T> children = childrenGetter.apply(node);
+            if (children != null && !children.isEmpty()) {
+                T found = findInTree(children, childrenGetter, keyGetter, targetKey);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取树形结构中所有节点的唯一标识列表
+     *
+     * <p>采用深度优先遍历（DFS），按遍历顺序收集所有节点的标识值。</p>
+     *
+     * @param roots          树的根节点列表
+     * @param childrenGetter 获取子节点列表的函数，例如：Menu::getChildren
+     * @param keyGetter      获取节点唯一标识的函数，例如：Menu::getId
+     * @param <T>            节点类型
+     * @param <K>            唯一标识类型
+     * @return 所有节点的唯一标识列表，若树为空返回空列表
+     */
+    public static <T, K> List<K> collectTreeKeys(List<T> roots,
+                                                 Function<T, List<T>> childrenGetter,
+                                                 Function<T, K> keyGetter) {
+
+        List<K> result = new ArrayList<>();
+
+        if (roots == null || roots.isEmpty()
+                || keyGetter == null || childrenGetter == null) {
+            return result;
+        }
+
+        collectKeysRecursively(roots, childrenGetter, keyGetter, result);
+
+        return result;
+    }
+
+    /**
+     * 递归收集节点唯一标识
+     *
+     * @param nodes          当前节点列表
+     * @param childrenGetter 获取子节点列表的函数
+     * @param keyGetter      获取节点唯一标识的函数
+     * @param result         结果容器
+     */
+    private static <T, K> void collectKeysRecursively(List<T> nodes,
+                                                      Function<T, List<T>> childrenGetter,
+                                                      Function<T, K> keyGetter,
+                                                      List<K> result) {
+
+        for (T node : nodes) {
+            if (node == null) {
+                continue;
+            }
+
+            result.add(keyGetter.apply(node));
+
+            List<T> children = childrenGetter.apply(node);
+            if (children != null && !children.isEmpty()) {
+                collectKeysRecursively(children, childrenGetter, keyGetter, result);
+            }
+        }
+    }
+
+    /**
      * 在树结构中，根据指定的唯一标识，
      * 对命中的节点及其所有子节点执行指定操作
      *
