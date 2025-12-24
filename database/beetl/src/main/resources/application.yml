@@ -12,7 +12,7 @@ spring:
 spring:
   datasource:
     mysql:
-      jdbc-url: jdbc:mysql://47.108.128.105:20001/kongyu
+      jdbc-url: jdbc:mysql://175.178.193.128:20001/kongyu
       username: kongyu
       password: kongyu
       driver-class-name: com.mysql.cj.jdbc.Driver
@@ -24,7 +24,7 @@ spring:
       pool-name: MysqlHikariPool
       validation-timeout: 5000
     postgresql:
-      jdbc-url: jdbc:postgresql://47.108.128.105:20002/kongyu?currentSchema=public&stringtype=unspecified
+      jdbc-url: jdbc:postgresql://175.178.193.128:20002/kongyu?currentSchema=public&stringtype=unspecified
       username: kongyu
       password: kongyu
       driver-class-name: org.postgresql.Driver

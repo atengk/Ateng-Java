@@ -60,7 +60,6 @@ public class DatabaseBeetlPostgreSQLTests {
         bizNo.setName("biz_no");
         bizNo.setType("varchar");
         bizNo.setLength(64);
-        bizNo.setUnique(true);
         bizNo.setNullable(false);
         bizNo.setComment("业务编号");
 

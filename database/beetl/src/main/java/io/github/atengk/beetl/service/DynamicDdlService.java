@@ -3,6 +3,7 @@ package io.github.atengk.beetl.service;
 import cn.hutool.db.sql.SqlUtil;
 import io.github.atengk.beetl.enums.DatabaseType;
 import io.github.atengk.beetl.model.TableMeta;
+import io.github.atengk.beetl.utils.TableUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.beetl.core.GroupTemplate;
@@ -36,6 +37,9 @@ public class DynamicDdlService {
      * @param tableMeta  表结构
      */
     public void createTable(DataSource dataSource, TableMeta tableMeta) {
+
+        TableUtil.normalizePrimaryIndex(tableMeta);
+
         DatabaseType databaseType = resolveDatabaseType(dataSource);
         String templatePath = resolveCreateTableTemplate(databaseType);
 

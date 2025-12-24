@@ -6,6 +6,9 @@ import java.util.List;
 
 /**
  * 表结构定义
+ *
+ * @author 孔余
+ * @since 2025-12-18
  */
 @Data
 public class TableMeta {

@@ -16,11 +16,10 @@ for(col in table.columns){
 
     <% /* ---------- 约束 ---------- */ %>
     <% if(col.nullable != null && !col.nullable){ %> NOT NULL<% } %>
-    <% if(col.unique != null && col.unique){ %> UNIQUE<% } %>
     <% if(col.autoIncrement != null && col.autoIncrement){ %> AUTO_INCREMENT<% } %>
 
     <% /* ---------- 默认值 ---------- */ %>
-    <% if(col.defaultValue != null){ %> DEFAULT ${col.defaultValue}<% } %>
+    <% if(col.defaultValue != null){ %> DEFAULT (${col.defaultValue})<% } %>
     <% if(col.onUpdateCurrentTimestamp != null && col.onUpdateCurrentTimestamp){ %> ON UPDATE CURRENT_TIMESTAMP<% } %>
 
     <% /* ---------- 注释 ---------- */ %>
@@ -32,32 +31,58 @@ for(col in table.columns){
 %>
 
 <%
-/* ================= 主键 ================= */
-var hasPk = false;
-for(col in table.columns){
-    if(col.primaryKey != null && col.primaryKey){
-        hasPk = true;
-        break;
-    }
-}
-if(hasPk){
+/* ================= 索引定义 ================= */
+if(table.indexes != null && table.indexes.~size > 0){
+    for(idx in table.indexes){
 %>,
+    <% /* ---------- PRIMARY KEY ---------- */ %>
+    <% if(idx.type == "PRIMARY"){ %>
     PRIMARY KEY (
-    <%
-    var first = true;
-    for(col in table.columns){
-        if(col.primaryKey != null && col.primaryKey){
-            if(!first){ %>, <% }
-            %>${col.name}<%
-            first = false;
-        }
-    }
-    %>
+        <%
+        for(c in idx.columns){
+        %>${c.columnName}<% if(c.order != null){ %> ${c.order}<% } %><% if(!cLP.last){ %>, <% } %>
+        <% } %>
     )
+
+    <% /* ---------- UNIQUE ---------- */ %>
+    <% } else if(idx.type == "UNIQUE"){ %>
+    UNIQUE KEY ${idx.name}
+        <% if(idx.using != null){ %> USING ${idx.using}<% } %>
+    (
+        <%
+        for(c in idx.columns){
+        %>${c.columnName}<% if(c.order != null){ %> ${c.order}<% } %><% if(!cLP.last){ %>, <% } %>
+        <% } %>
+    )
+
+    <% /* ---------- FULLTEXT ---------- */ %>
+    <% } else if(idx.type == "FULLTEXT"){ %>
+    FULLTEXT KEY ${idx.name}
+    (
+        <%
+        for(c in idx.columns){
+        %>${c.columnName}<% if(!cLP.last){ %>, <% } %>
+        <% } %>
+    )
+
+    <% /* ---------- NORMAL ---------- */ %>
+    <% } else { %>
+    KEY ${idx.name}
+        <% if(idx.using != null){ %> USING ${idx.using}<% } %>
+    (
+        <%
+        for(c in idx.columns){
+        %>${c.columnName}<% if(c.order != null){ %> ${c.order}<% } %><% if(!cLP.last){ %>, <% } %>
+        <% } %>
+    )
+    <% } %>
 <%
+    }
 }
 %>
+
 )
+
 <% /* ================= 表属性 ================= */ %>
 <% if(table.engine != null){ %> ENGINE=${table.engine}<% } %>
 <% if(table.charset != null){ %> DEFAULT CHARSET=${table.charset}<% } %>

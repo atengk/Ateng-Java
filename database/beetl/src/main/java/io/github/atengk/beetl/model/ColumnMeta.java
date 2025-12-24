@@ -52,11 +52,6 @@ public class ColumnMeta {
     private Boolean autoIncrement;
 
     /**
-     * 是否唯一
-     */
-    private Boolean unique;
-
-    /**
      * 是否允许为空
      */
     private Boolean nullable;
