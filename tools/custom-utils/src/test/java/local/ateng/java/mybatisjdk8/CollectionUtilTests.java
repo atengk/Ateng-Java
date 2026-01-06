@@ -1,6 +1,7 @@
 package local.ateng.java.mybatisjdk8;
 
 import local.ateng.java.customutils.entity.Menu;
+import local.ateng.java.customutils.entity.Menu2;
 import local.ateng.java.customutils.entity.MyUser;
 import local.ateng.java.customutils.init.InitData;
 import local.ateng.java.customutils.utils.CollectionUtil;
@@ -280,6 +281,37 @@ public class CollectionUtilTests {
                 menu -> menu.setName(menu.getName() + "-active")
         );
         System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+    @Test
+    void test0104() {
+        List<Menu2> menus = Arrays.asList(
+                new Menu2(1, 0, "系统管理", false, null),
+                new Menu2(2, 1, "用户管理", false, null),
+                new Menu2(3, 1, "角色管理", false, null),
+                new Menu2(4, 2, "用户列表", false, null),
+                new Menu2(5, 0, "首页"  , false, null  ),
+                new Menu2(6, 3, "权限设置", false, null)
+        );
+
+        List<Menu2> tree = CollectionUtil.buildTree(
+                menus,
+                Menu2::getId,
+                Menu2::getParentId,
+                Menu2::setChildren,
+                0
+        );
+        System.out.println(JsonUtil.toJsonString(tree));
+        List<String> keyList = Arrays.asList("用户列表", "权限设置");
+
+        CollectionUtil.markTreeByChildrenAllMatch(
+                tree,
+                Menu2::getChildren,
+                node -> keyList.contains(node.getName()),
+                node -> node.setDisabled(true)
+        );
+        System.out.println(JsonUtil.toJsonString(tree));
+
     }
 
     @Test

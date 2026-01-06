@@ -2035,6 +2035,63 @@ public final class CollectionUtil {
     }
 
     /**
+     * 根据子节点状态，自底向上递归标记树节点
+     *
+     * <p>规则说明：</p>
+     * <ul>
+     *     <li>叶子节点是否标记，由 {@code leafPredicate} 决定</li>
+     *     <li>非叶子节点：当且仅当其所有直接子节点都被标记时，才会被标记</li>
+     *     <li>标记结果会一直向上递归</li>
+     * </ul>
+     *
+     * @param nodes           当前层节点列表
+     * @param childrenGetter  获取子节点列表的方法
+     * @param leafPredicate   叶子节点判定条件
+     * @param marker          节点标记逻辑
+     * @param <T>             节点类型
+     * @return 当前节点列表是否全部被标记
+     */
+    public static <T> boolean markTreeByChildrenAllMatch(List<T> nodes,
+                                                         Function<T, List<T>> childrenGetter,
+                                                         Predicate<T> leafPredicate,
+                                                         Consumer<T> marker) {
+
+        if (nodes == null || nodes.isEmpty()) {
+            return true;
+        }
+
+        boolean allMarked = true;
+
+        for (T node : nodes) {
+            if (node == null) {
+                continue;
+            }
+
+            List<T> children = childrenGetter.apply(node);
+
+            boolean nodeMarked;
+            if (children == null || children.isEmpty()) {
+                nodeMarked = leafPredicate.test(node);
+            } else {
+                nodeMarked = markTreeByChildrenAllMatch(
+                        children,
+                        childrenGetter,
+                        leafPredicate,
+                        marker
+                );
+            }
+
+            if (nodeMarked) {
+                marker.accept(node);
+            } else {
+                allMarked = false;
+            }
+        }
+
+        return allMarked;
+    }
+
+    /**
      * 获取列表中的 Top N 元素（需元素可比较）
      *
      * @param list 原始列表
