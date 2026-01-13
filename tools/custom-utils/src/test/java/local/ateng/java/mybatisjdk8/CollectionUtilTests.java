@@ -42,6 +42,35 @@ public class CollectionUtilTests {
     }
 
     @Test
+    void fillTreeCode() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        List<Menu> tree = CollectionUtil.buildTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                0
+        );
+
+        CollectionUtil.fillTreeCode(
+                tree,
+                Menu::getChildren,
+                Menu::setTreeCode,
+                "."
+        );
+
+        System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+    @Test
     void buildMultiRootTree() {
         List<Menu> menus = Arrays.asList(
                 new Menu(1, 0, "系统管理"),

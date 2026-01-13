@@ -7,6 +7,7 @@ public class Menu {
     private Integer id;
     private Integer parentId;
     private String name;
+    private String treeCode;
     private List<Menu> children;
 
     public Menu(Integer id, Integer parentId, String name) {
@@ -27,6 +28,14 @@ public class Menu {
 
     public String getName() {
         return name;
+    }
+
+    public String getTreeCode() {
+        return treeCode;
+    }
+
+    public void setTreeCode(String treeCode) {
+        this.treeCode = treeCode;
     }
 
     public List<Menu> getChildren() {

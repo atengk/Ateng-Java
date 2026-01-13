@@ -1645,6 +1645,84 @@ public final class CollectionUtil {
     }
 
     /**
+     * 为树形结构生成层级编号路径，例如：
+     * 1
+     * 1.1
+     * 1.2
+     * 2
+     * 2.1
+     * 2.1.1
+     *
+     * <p>该方法适用于已经构建完成 children 关系的树结构。
+     * 会按照当前节点在同级中的顺序，从 1 开始编号，并通过分隔符拼接成完整路径。</p>
+     *
+     * @param roots        树的根节点集合
+     * @param childrenGetter  获取子节点集合的方法，例如：Menu::getChildren
+     * @param codeSetter      设置编号的方法，例如：Menu::setTreeCode
+     * @param separator       层级分隔符，例如 "."、"-"
+     * @param <T>             节点类型
+     *
+     * <p><b>示例：</b></p>
+     * <pre>{@code
+     * CollectionUtil.fillTreeCode(
+     *     tree,
+     *     Menu::getChildren,
+     *     Menu::setTreeCode,
+     *     "."
+     * );
+     * }</pre>
+     */
+    public static <T> void fillTreeCode(List<T> roots,
+                                        Function<T, List<T>> childrenGetter,
+                                        BiConsumer<T, String> codeSetter,
+                                        String separator) {
+
+        if (roots == null || roots.isEmpty()
+                || childrenGetter == null
+                || codeSetter == null
+                || separator == null) {
+            return;
+        }
+
+        int index = 1;
+        for (T root : roots) {
+            if (root == null) {
+                continue;
+            }
+            String code = String.valueOf(index);
+            codeSetter.accept(root, code);
+            fillChildrenTreeCode(root, code, childrenGetter, codeSetter, separator);
+            index++;
+        }
+    }
+
+    /**
+     * 递归为子节点填充编号路径
+     */
+    private static <T> void fillChildrenTreeCode(T parent,
+                                                 String parentCode,
+                                                 Function<T, List<T>> childrenGetter,
+                                                 BiConsumer<T, String> codeSetter,
+                                                 String separator) {
+
+        List<T> children = childrenGetter.apply(parent);
+        if (children == null || children.isEmpty()) {
+            return;
+        }
+
+        int index = 1;
+        for (T child : children) {
+            if (child == null) {
+                continue;
+            }
+            String code = parentCode + separator + index;
+            codeSetter.accept(child, code);
+            fillChildrenTreeCode(child, code, childrenGetter, codeSetter, separator);
+            index++;
+        }
+    }
+
+    /**
      * 递归对子节点排序
      *
      * @param nodes          当前节点列表
