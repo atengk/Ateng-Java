@@ -1,11 +1,15 @@
 package io.github.atengk.beetl.model;
 
 import lombok.Data;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 索引元数据
+ *
+ * @author 孔余
+ * @since 2025-12-18
  */
 @Data
 public class IndexMeta {
@@ -16,17 +20,17 @@ public class IndexMeta {
     private String name;
 
     /**
-     * 是否主键索引
+     * PRIMARY / UNIQUE / NORMAL / FULLTEXT
      */
-    private Boolean primary;
+    private String type;
 
     /**
-     * 是否唯一索引
+     * BTREE / HASH
      */
-    private Boolean unique;
+    private String using;
 
     /**
      * 索引字段
      */
-    private List<String> columns = new ArrayList<>();
+    private List<IndexColumnMeta> columns = new ArrayList<>();
 }

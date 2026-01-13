@@ -1,6 +1,7 @@
 package local.ateng.java.mybatisjdk8;
 
 import local.ateng.java.customutils.entity.Menu;
+import local.ateng.java.customutils.entity.Menu2;
 import local.ateng.java.customutils.entity.MyUser;
 import local.ateng.java.customutils.init.InitData;
 import local.ateng.java.customutils.utils.CollectionUtil;
@@ -86,7 +87,7 @@ public class CollectionUtilTests {
                 Menu::getId,
                 Menu::getParentId,
                 Menu::setChildren,
-                new HashSet<Integer>(Arrays.asList(0,1))
+                new HashSet<Integer>(Arrays.asList(0, 1))
         );
 
         System.out.println(JsonUtil.toJsonString(tree));
@@ -179,6 +180,80 @@ public class CollectionUtilTests {
     }
 
     @Test
+    void testFindInTree() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        // 构建树
+        List<Menu> tree = CollectionUtil.buildTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                0
+        );
+
+        // 1. 在树中找到id为4的数据
+        Menu target = CollectionUtil.findInTree(
+                tree,
+                Menu::getChildren,
+                Menu::getId,
+                4
+        );
+        System.out.println(JsonUtil.toJsonString(target));
+        // 2. 在树中找到标识为"4-用户列表"的数据
+        Menu target2 = CollectionUtil.findInTree(
+                tree,
+                Menu::getChildren,
+                key -> key.getId() + "-" + key.getName(),
+                "4-用户列表"
+        );
+        System.out.println(JsonUtil.toJsonString(target2));
+    }
+
+    @Test
+    void testCollectTreeKeys() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+
+        // 构建树
+        List<Menu> tree = CollectionUtil.buildTree(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Menu::setChildren,
+                0
+        );
+
+        // 1. 在树中找到id
+        List<Integer> idList = CollectionUtil.collectTreeKeys(
+                tree,
+                Menu::getChildren,
+                Menu::getId
+        );
+        System.out.println(idList);
+        // 2. 在树中找到唯一标识
+        List<String> keyList = CollectionUtil.collectTreeKeys(
+                tree,
+                Menu::getChildren,
+                key -> key.getId() + "-" + key.getName()
+        );
+        System.out.println(keyList);
+    }
+
+    @Test
     void operateSubTreeById_test() {
         List<Menu> menus = Arrays.asList(
                 new Menu(1, 0, "系统管理"),
@@ -235,6 +310,37 @@ public class CollectionUtilTests {
                 menu -> menu.setName(menu.getName() + "-active")
         );
         System.out.println(JsonUtil.toJsonString(tree));
+    }
+
+    @Test
+    void test0104() {
+        List<Menu2> menus = Arrays.asList(
+                new Menu2(1, 0, "系统管理", false, null),
+                new Menu2(2, 1, "用户管理", false, null),
+                new Menu2(3, 1, "角色管理", false, null),
+                new Menu2(4, 2, "用户列表", false, null),
+                new Menu2(5, 0, "首页"  , false, null  ),
+                new Menu2(6, 3, "权限设置", false, null)
+        );
+
+        List<Menu2> tree = CollectionUtil.buildTree(
+                menus,
+                Menu2::getId,
+                Menu2::getParentId,
+                Menu2::setChildren,
+                0
+        );
+        System.out.println(JsonUtil.toJsonString(tree));
+        List<String> keyList = Arrays.asList("用户列表", "权限设置");
+
+        CollectionUtil.markTreeByChildrenAllMatch(
+                tree,
+                Menu2::getChildren,
+                node -> keyList.contains(node.getName()),
+                node -> node.setDisabled(true)
+        );
+        System.out.println(JsonUtil.toJsonString(tree));
+
     }
 
     @Test
@@ -397,6 +503,7 @@ public class CollectionUtilTests {
             System.out.println();
         });
     }
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -420,6 +527,7 @@ public class CollectionUtilTests {
         private Integer scoreValue;
         // getter / setter
     }
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -429,6 +537,7 @@ public class CollectionUtilTests {
         private Integer value;
         // getter / setter
     }
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -440,6 +549,7 @@ public class CollectionUtilTests {
         private List<ConfScoreBaseDTO> scoreList;
         // getter / setter
     }
+
     @Test
     void groupAsParentChildren() {
         List<ConfTypeFlatDTO> flatList = Arrays.asList(
@@ -488,6 +598,7 @@ public class CollectionUtilTests {
         private String name;
         private Integer age;
     }
+
     @Data
     public static class UserVO {
         private Long id;
@@ -593,6 +704,22 @@ public class CollectionUtilTests {
         );
 
         targetList.forEach(System.out::println);
+    }
+
+    @Test
+    public void testIsEqualIgnoreOrder() {
+        List<String> list1 = Arrays.asList("1", "2", "3");
+        List<String> list2 = Arrays.asList("1", "2", "3");
+        boolean result = CollectionUtil.isEqualIgnoreOrder(list1, list2);
+        System.out.println(result);
+        List<String> list12 = Arrays.asList("1", "2", "3");
+        List<String> list22 = Arrays.asList("1", "2", "3", "4");
+        boolean result2 = CollectionUtil.isEqualIgnoreOrder(list12, list22);
+        System.out.println(result2);
+        List<String> list13 = Arrays.asList("1", "2", "3");
+        List<String> list23 = Arrays.asList("1", "3", "2");
+        boolean result3 = CollectionUtil.isEqualIgnoreOrder(list13, list23);
+        System.out.println(result3);
     }
 
 }
