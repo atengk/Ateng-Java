@@ -638,6 +638,77 @@ public final class CollectionUtil {
     }
 
     /**
+     * 将集合元素映射为 Map，支持自定义冲突策略、Map 实现及空值处理
+     *
+     * <p>功能说明：</p>
+     * <ul>
+     *     <li>支持自定义 key 与 value 映射规则</li>
+     *     <li>支持自定义 key 冲突合并策略</li>
+     *     <li>支持指定 Map 实现类型</li>
+     *     <li>支持忽略 null key 或 null value</li>
+     * </ul>
+     *
+     * @param collection        输入集合
+     * @param keyMapper         key 映射函数
+     * @param valueMapper       value 映射函数
+     * @param mergeFunction     key 冲突时的合并策略
+     * @param mapSupplier       Map 实现提供者
+     * @param ignoreNullKey     是否忽略 null key
+     * @param ignoreNullValue   是否忽略 null value
+     * @param <T>               原始元素类型
+     * @param <K>               key 类型
+     * @param <V>               value 类型
+     * @param <M>               Map 实现类型
+     * @return 转换后的 Map，若输入非法返回空 Map
+     */
+    public static <T, K, V, M extends Map<K, V>> M toMap(
+            Collection<T> collection,
+            Function<T, K> keyMapper,
+            Function<T, V> valueMapper,
+            BinaryOperator<V> mergeFunction,
+            Supplier<M> mapSupplier,
+            boolean ignoreNullKey,
+            boolean ignoreNullValue
+    ) {
+
+        if (collection == null || collection.isEmpty()) {
+            return mapSupplier.get();
+        }
+
+        if (keyMapper == null || valueMapper == null || mergeFunction == null || mapSupplier == null) {
+            return mapSupplier.get();
+        }
+
+        M result = mapSupplier.get();
+
+        for (T item : collection) {
+            if (item == null) {
+                continue;
+            }
+
+            K key = keyMapper.apply(item);
+            V value = valueMapper.apply(item);
+
+            if (ignoreNullKey && key == null) {
+                continue;
+            }
+
+            if (ignoreNullValue && value == null) {
+                continue;
+            }
+
+            if (result.containsKey(key)) {
+                V mergedValue = mergeFunction.apply(result.get(key), value);
+                result.put(key, mergedValue);
+            } else {
+                result.put(key, value);
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * 将集合中元素进行扁平化处理（flatMap）
      *
      * @param collection 输入集合

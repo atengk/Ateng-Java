@@ -16,9 +16,68 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class CollectionUtilTests {
+
+    @Test
+    void toMap() {
+        List<Menu> menus = Arrays.asList(
+                new Menu(1, 0, "系统管理"),
+                new Menu(2, 1, "用户管理"),
+                new Menu(3, 1, "角色管理"),
+                new Menu(4, 2, "用户列表"),
+                new Menu(5, 0, "首页"),
+                new Menu(6, 3, "权限设置")
+        );
+        // 等价于你原来的“后覆盖前”
+        Map<Integer, Menu> map = CollectionUtil.toMap(
+                menus,
+                Menu::getId,
+                Function.identity(),
+                (oldVal, newVal) -> newVal,
+                HashMap::new,
+                true,
+                false
+        );
+        System.out.println(map);
+        // 保持插入顺序（LinkedHashMap）
+        Map<Integer, Menu> map2 = CollectionUtil.toMap(
+                menus,
+                Menu::getId,
+                Function.identity(),
+                (v1, v2) -> v2,
+                LinkedHashMap::new,
+                true,
+                true
+        );
+        System.out.println(map2);
+        // key 冲突时报错（更严谨）
+        Map<Integer, Menu> map3 = CollectionUtil.toMap(
+                menus,
+                Menu::getId,
+                Function.identity(),
+                (v1, v2) -> {
+                    throw new IllegalStateException("key 冲突：" + v1);
+                },
+                HashMap::new,
+                true,
+                true
+        );
+        System.out.println(map3);
+        // value 合并（例如数值累加）
+        Map<Integer, Integer> countMap = CollectionUtil.toMap(
+                menus,
+                Menu::getId,
+                Menu::getParentId,
+                Integer::sum,
+                HashMap::new,
+                true,
+                true
+        );
+        System.out.println(countMap);
+    }
 
     @Test
     void buildTree() {
