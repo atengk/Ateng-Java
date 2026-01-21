@@ -479,6 +479,73 @@ public final class CollectionUtil {
     }
 
     /**
+     * 将集合元素按照指定规则进行分组，支持自定义 Map 与 List 实现
+     *
+     * <p>功能说明：</p>
+     * <ul>
+     *     <li>支持自定义 key 映射与 value 映射</li>
+     *     <li>支持指定 Map 实现类型</li>
+     *     <li>支持指定分组 List 实现类型</li>
+     *     <li>支持忽略 null key 或 null value</li>
+     * </ul>
+     *
+     * @param collection        输入集合
+     * @param keyMapper         分组 key 映射函数
+     * @param valueMapper       分组 value 映射函数
+     * @param mapSupplier       Map 实现提供者
+     * @param listSupplier      List 实现提供者
+     * @param ignoreNullKey     是否忽略 null key
+     * @param ignoreNullValue   是否忽略 null value
+     * @param <T>               原始元素类型
+     * @param <K>               分组 key 类型
+     * @param <V>               分组 value 类型
+     * @param <M>               Map 实现类型
+     * @return 分组后的 Map，若输入非法返回空 Map
+     */
+    public static <T, K, V, M extends Map<K, List<V>>> M groupBy(
+            Collection<T> collection,
+            Function<T, K> keyMapper,
+            Function<T, V> valueMapper,
+            Supplier<M> mapSupplier,
+            Supplier<List<V>> listSupplier,
+            boolean ignoreNullKey,
+            boolean ignoreNullValue
+    ) {
+
+        M result = mapSupplier.get();
+
+        if (collection == null || collection.isEmpty()) {
+            return result;
+        }
+
+        if (keyMapper == null || valueMapper == null) {
+            return result;
+        }
+
+        for (T item : collection) {
+            if (item == null) {
+                continue;
+            }
+
+            K key = keyMapper.apply(item);
+            V value = valueMapper.apply(item);
+
+            if (ignoreNullKey && key == null) {
+                continue;
+            }
+
+            if (ignoreNullValue && value == null) {
+                continue;
+            }
+
+            List<V> list = result.computeIfAbsent(key, k -> listSupplier.get());
+            list.add(value);
+        }
+
+        return result;
+    }
+
+    /**
      * 将集合转为 Set（自动去重）
      *
      * @param collection 输入集合

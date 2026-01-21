@@ -542,6 +542,99 @@ public class CollectionUtilTests {
     }
 
     @Test
+    void testGroupByMultiKey() {
+
+        List<MyUser> userList = InitData.getDataList();
+
+        Map<String, List<MyUser>> map = CollectionUtil.groupBy(
+                userList,
+                user -> user.getProvince() + "-" + user.getCity() + "-" + user.getAge(),
+                Function.identity(),
+                LinkedHashMap::new,
+                ArrayList::new,
+                true,
+                false
+        );
+
+        map.forEach((k, v) -> {
+            System.out.println("key = " + k);
+            v.forEach(u -> System.out.println("  " + u.getName()));
+        });
+    }
+
+    @Test
+    void testGroupByProvinceOnlyName() {
+
+        List<MyUser> userList = InitData.getDataList();
+
+        Map<String, List<String>> map = CollectionUtil.groupBy(
+                userList,
+                MyUser::getProvince,
+                MyUser::getName,
+                HashMap::new,
+                ArrayList::new,
+                true,
+                true
+        );
+
+        map.forEach((k, v) -> {
+            System.out.println("province = " + k + ", names = " + v);
+        });
+    }
+
+    @Test
+    void testGroupByProvinceKeepOrder() {
+
+        List<MyUser> userList = InitData.getDataList();
+
+        Map<String, List<MyUser>> map = CollectionUtil.groupBy(
+                userList,
+                MyUser::getProvince,
+                Function.identity(),
+                LinkedHashMap::new,
+                LinkedList::new,
+                true,
+                false
+        );
+
+        map.forEach((k, v) -> {
+            System.out.println("province = " + k);
+            v.forEach(u -> System.out.println("  " + u.getId() + " - " + u.getName()));
+        });
+    }
+
+    @Test
+    void testGroupByAgeRange() {
+
+        List<MyUser> userList = InitData.getDataList();
+
+        Map<String, List<MyUser>> map = CollectionUtil.groupBy(
+                userList,
+                user -> {
+                    if (user.getAge() == null) {
+                        return "UNKNOWN";
+                    }
+                    if (user.getAge() < 18) {
+                        return "UNDER_18";
+                    }
+                    if (user.getAge() <= 30) {
+                        return "18_30";
+                    }
+                    return "30_PLUS";
+                },
+                Function.identity(),
+                HashMap::new,
+                ArrayList::new,
+                true,
+                false
+        );
+
+        map.forEach((k, v) -> {
+            System.out.println("ageRange = " + k + ", count = " + v.size());
+        });
+    }
+
+    @Test
     void testGroupByMultiFields() {
         List<Employee> list = Arrays.asList(
                 new Employee("技术部", "后端", "上海"),
