@@ -27,5 +27,6 @@
         <module>fast-excel-jdk8</module>
         <module>thread-pool</module>
         <module>onlyoffice</module>
+        <module>easy-poi</module>
     </modules>
 </project>
