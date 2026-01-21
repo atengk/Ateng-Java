@@ -1,5 +1,6 @@
 package io.github.atengk.init;
 
+import cn.hutool.core.util.RandomUtil;
 import com.github.javafaker.Faker;
 import io.github.atengk.entity.MyUser;
 import lombok.Getter;
@@ -8,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -22,13 +24,18 @@ import java.util.Locale;
 public class InitData {
 
     public static List<MyUser> getDataList() {
+        return getDataList(1000);
+    }
+
+    public static List<MyUser> getDataList(int total) {
         //生成测试数据
         // 创建一个Java Faker实例，指定Locale为中文
         Faker faker = new Faker(new Locale("zh-CN"));
         List<MyUser> userList = new ArrayList();
-        for (int i = 1; i <= 1000; i++) {
+        for (int i = 1; i <= total; i++) {
             MyUser user = new MyUser();
             user.setId((long) i);
+            user.setNumber(RandomUtil.randomEle(Arrays.asList(1,2,3)));
             user.setName(faker.name().fullName());
             user.setAge(faker.number().numberBetween(1, 100));
             user.setPhoneNumber(faker.phoneNumber().cellPhone());

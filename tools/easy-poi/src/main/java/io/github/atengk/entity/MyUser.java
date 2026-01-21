@@ -90,4 +90,9 @@ public class MyUser implements Serializable {
      */
     @Excel(name = "图片", type = 2, orderNum = "12")
     private Object image;
+
+    // 1→青年 2→中年 3→老年
+    @Excel(name = "年龄段")
+    private Integer number;
+
 }
