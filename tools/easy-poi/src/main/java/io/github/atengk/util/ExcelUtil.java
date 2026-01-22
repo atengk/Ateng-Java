@@ -165,6 +165,26 @@ public final class ExcelUtil {
      * @return 填充完成后的 Workbook
      */
     public static Workbook exportByTemplate(String templatePath, Map<String, Object> data) {
+        return exportByTemplate(templatePath, data, null);
+    }
+
+    /**
+     * 读取 Excel 模板并导出（终极企业版）
+     * <p>
+     * 特点：
+     * - ExcelUtil 不关心你配哪些参数
+     * - 所有 TemplateExportParams 能力全部开放
+     * - 以后 EasyPOI 新增参数，你完全不用改工具类
+     *
+     * @param templatePath 模板路径（相对 resources）
+     * @param data         模板数据
+     * @param configurer   参数配置回调，可为 null
+     */
+    public static Workbook exportByTemplate(
+            String templatePath,
+            Map<String, Object> data,
+            TemplateParamsConfigurer configurer) {
+
         Resource resource = new ClassPathResource(templatePath);
 
         if (!resource.exists()) {
@@ -173,6 +193,11 @@ public final class ExcelUtil {
 
         try (InputStream inputStream = resource.getInputStream()) {
             TemplateExportParams params = new TemplateExportParams(inputStream);
+
+            if (configurer != null) {
+                configurer.configure(params);
+            }
+
             return ExcelExportUtil.exportExcel(params, data);
         } catch (IOException e) {
             throw new IllegalStateException("读取模板文件失败: " + templatePath, e);

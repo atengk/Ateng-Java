@@ -2873,7 +2873,57 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 
 ## 模板导出（Template Export）
 
+| 功能                   | 指令      | 普通变量示例                              | 列表变量示例（$fe 中使用）              |
+| ---------------------- | --------- | ----------------------------------------- | --------------------------------------- |
+| 普通取值               | 无指令    | `{{name}}`                                | `t.name`                                |
+| 数值单元格             | `n:`      | `{{n:age}}`                               | `n:t.age`                               |
+| 时间格式化             | `fd:`     | `{{fd:(createTime;yyyy-MM-dd HH:mm:ss)}}` | `fd:(t.createTime;yyyy-MM-dd HH:mm:ss)` |
+| 数字格式化             | `fn:`     | `{{fn:(score;###.00)}}`                   | `fn:(t.score;###.00)`                   |
+| 字符串长度             | `le:`     | `{{le:(name)}}`                           | `le:(t.name)`                           |
+| 三目运算               | `?:`      | `{{age > 18 ? '成年' : '未成年'}}`        | `t.age > 18 ? '成年' : '未成年'`        |
+| 遍历并新建行           | `fe:`     | 不适用                                    | `{{fe:list t t.name t.age}}`            |
+| 遍历但不新建行         | `!fe:`    | 不适用                                    | `{{!fe:list t t.name}}`                 |
+| 下移插入遍历（最常用） | `$fe:`    | 不适用                                    | `{{ $fe:list t.name t.age t.phone }}`   |
+| 横向遍历               | `#fe:`    | 不适用                                    | `{{#fe:list t.name}}`                   |
+| 横向遍历取值           | `v_fe:`   | 不适用                                    | `{{v_fe:list}}`                         |
+| 删除当前列             | `!if:`    | `{{!if:(age < 18)}}`                      | `!if:(t.age < 18)`                      |
+| 字典转换               | `dict:`   | `{{dict:gender;gender}}`                  | `dict:gender;t.gender`                  |
+| 国际化                 | `i18n:`   | `{{i18n:key}}`                            | `i18n:key`                              |
+| 循环序号               | `&INDEX&` | 不适用                                    | `&INDEX&`                               |
+| 空值占位               | `&NULL&`  | `{{&NULL&}}`                              | `&NULL&`                                |
+| 换行导出               | `]]`      | `{{name]]age}}`                           | `t.name]]t.age`                         |
+| 统计求和               | `sum:`    | `{{sum:score}}`                           | `sum:t.score`                           |
+| 计算表达式             | `cal:`    | `{{cal:(price*count)}}`                   | `cal:(t.price*t.count)`                 |
+| 常量输出               | `'常量'`  | `{{'正常'}}`                              | `'正常'`                                |
+
 ### 创建工具类
+
+**创建函数接口**
+
+```java
+package io.github.atengk.util;
+
+import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
+
+/**
+ * Excel 模板导出参数配置回调接口
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+@FunctionalInterface
+public interface TemplateParamsConfigurer {
+
+    /**
+     * 对 EasyPOI 的 {@link TemplateExportParams} 进行个性化配置
+     *
+     * @param params EasyPOI 模板导出参数对象
+     */
+    void configure(TemplateExportParams params);
+}
+```
+
+**创建工具类**
 
 ```java
 package io.github.atengk.util;
@@ -3043,6 +3093,26 @@ public final class ExcelUtil {
      * @return 填充完成后的 Workbook
      */
     public static Workbook exportByTemplate(String templatePath, Map<String, Object> data) {
+        return exportByTemplate(templatePath, data, null);
+    }
+
+    /**
+     * 读取 Excel 模板并导出（终极企业版）
+     * <p>
+     * 特点：
+     * - ExcelUtil 不关心你配哪些参数
+     * - 所有 TemplateExportParams 能力全部开放
+     * - 以后 EasyPOI 新增参数，你完全不用改工具类
+     *
+     * @param templatePath 模板路径（相对 resources）
+     * @param data         模板数据
+     * @param configurer   参数配置回调，可为 null
+     */
+    public static Workbook exportByTemplate(
+            String templatePath,
+            Map<String, Object> data,
+            TemplateParamsConfigurer configurer) {
+
         Resource resource = new ClassPathResource(templatePath);
 
         if (!resource.exists()) {
@@ -3051,6 +3121,11 @@ public final class ExcelUtil {
 
         try (InputStream inputStream = resource.getInputStream()) {
             TemplateExportParams params = new TemplateExportParams(inputStream);
+
+            if (configurer != null) {
+                configurer.configure(params);
+            }
+
             return ExcelExportUtil.exportExcel(params, data);
         } catch (IOException e) {
             throw new IllegalStateException("读取模板文件失败: " + templatePath, e);
@@ -3099,7 +3174,7 @@ public final class ExcelUtil {
 }
 ```
 
-### 填充简单数据
+### 填充普通变量数据
 
 **创建模版**
 
@@ -3114,6 +3189,11 @@ src
 EasyPOI 模板语法：
 
 - 普通变量：`{{name}}`
+
+```
+姓名：{{ name }}
+年龄：{{ age }}
+```
 
 ![image-20260122173817680](./assets/image-20260122173817680.png)
 
@@ -3137,7 +3217,342 @@ EasyPOI 模板语法：
 
 ![image-20260122174632474](./assets/image-20260122174632474.png)
 
-###  模板中动态表格（List 数据填充）
+###  填充列表变量数据
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_template.xlsx
+```
+
+EasyPOI 模板语法：
+
+- 列表变量：`{{ $fe:  集合名   单个元素别名   第1个字段 第1个字段 ... 第n个字段 }}`
+- 其中 `集合名` 就是data中的list：`data.list`
+
+| 姓名               | 年龄  | 手机号码      | 邮箱    | 分数    | 比例    | 生日       | 所在省份   | 所在城市 | 创建时间        |
+| ------------------ | ----- | ------------- | ------- | ------- | ------- | ---------- | ---------- | -------- | --------------- |
+| {{ $fe:list t.name | t.age | t.phoneNumber | t.email | t.score | t.ratio | t.birthday | t.province | t.city   | t.createTime }} |
+
+```
+姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
+{{ $fe:list t.name	t.age	t.phoneNumber	t.email	t.score	t.ratio	t.birthday	t.province	t.city	t.createTime }}
+```
+
+![image-20260122194802444](./assets/image-20260122194802444.png)
+
+**使用方法**
+
+```java
+    @Test
+    void test2() {
+        List<MyUser> dataList = InitData.getDataList();
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", dataList);
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_list_template.xlsx",
+                data
+        );
+        Path filePath = Paths.get("target", "template_export_list_users.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+        System.out.println("✅ 模板导出成功：" + filePath);
+    }
+```
+
+![image-20260122195643662](./assets/image-20260122195643662.png)
+
+### 填充普通和列表变量数据（混合）
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_mix_template.xlsx
+```
+
+EasyPOI 模板语法：
+
+- 普通变量：`{{name}}`
+- 列表变量：`{{ $fe:  集合名   单个元素别名   第1个字段 第1个字段 ... 第n个字段 }}`
+- 其中 `集合名` 就是data中的list：`data.list`
+
+| 标题：{{ title }}  |       |               |         |         |         |            |                    |                  |                 |
+| ------------------ | ----- | ------------- | ------- | ------- | ------- | ---------- | ------------------ | ---------------- | --------------- |
+|                    |       |               |         |         |         |            |                    |                  |                 |
+| 姓名               | 年龄  | 手机号码      | 邮箱    | 分数    | 比例    | 生日       | 所在省份           | 所在城市         | 创建时间        |
+| {{ $fe:list t.name | t.age | t.phoneNumber | t.email | t.score | t.ratio | t.birthday | t.province         | t.city           | t.createTime }} |
+|                    |       |               |         |         |         |            |                    |                  |                 |
+|                    |       |               |         |         |         |            | 作者：{{ author }} | 时间：{{ time }} |                 |
+
+```
+标题：{{ title }}									
+									
+姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
+{{ $fe:list t.name	t.age	t.phoneNumber	t.email	t.score	t.ratio	t.birthday	t.province	t.city	t.createTime }}
+									
+							作者：{{ author }}	时间：{{ time }}	
+```
+
+![image-20260122201626314](./assets/image-20260122201626314.png)
+
+**使用方法**
+
+```java
+    @Test
+    void test3() {
+        List<MyUser> dataList = InitData.getDataList(10);
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", dataList);
+        data.put("title", "EasyPoi 模版导出混合使用");
+        data.put("author", "Ateng");
+        data.put("time", DateUtil.now());
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_mix_template.xlsx",
+                data
+        );
+        Path filePath = Paths.get("target", "template_export_mix_users.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+        System.out.println("✅ 模板导出成功：" + filePath);
+    }
+```
+
+![image-20260122201926756](./assets/image-20260122201926756.png)
+
+### 格式化
+
+#### 普通变量
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_format_template.xlsx
+```
+
+**模版内容**
+
+```
+字段说明	模板表达式
+姓名	{{name}}
+年龄（数值）	{{n:age}}
+年龄描述（三目）	{{age > 18 ? '成年' : '未成年'}}
+创建时间原始值	{{createTime}}
+创建时间格式化	{{fd:(createTime;yyyy-MM-dd HH:mm:ss)}}
+生日（仅日期）	{{fd:(birthday;yyyy-MM-dd)}}
+分数原始值	{{score}}
+分数两位小数	{{fn:(score;###.00)}}
+比例原始值	{{ratio}}
+比例百分比	{{fn:(ratio;0.00%)}}
+字符串长度	{{le:(name)}}
+```
+
+![image-20260122204111151](./assets/image-20260122204111151.png)
+
+**使用方法**
+
+```java
+    @Test
+    void test4() throws ParseException {
+        Map<String, Object> data = new HashMap<>();
+
+        Date date = new Date();
+        Date formatDate = new SimpleDateFormat("yyyy-MM-dd").parse("1999-06-18");
+
+        data.put("name", "Ateng");
+        data.put("age", 25);
+        data.put("createTime", date);
+        data.put("birthday", formatDate);
+        data.put("score", 87.456);
+        data.put("ratio", 0.8567);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_format_template.xlsx",
+                data
+        );
+
+        Path filePath = Paths.get("target", "template_export_users_format.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+
+        System.out.println("✅ 普通变量格式化模板导出成功：" + filePath);
+    }
+```
+
+![image-20260122204458759](./assets/image-20260122204458759.png)
+
+注意几个“企业级细节”：
+
+| 字段       | 要点                                       |
+| ---------- | ------------------------------------------ |
+| age        | 必须给数字，不要给字符串，否则 `n:` 会失效 |
+| createTime | 必须是 `Date` 或 `LocalDateTime`           |
+| birthday   | 同上                                       |
+| score      | Double / BigDecimal                        |
+| ratio      | 小数 0.8567 → 显示为 85.67%                |
+
+---
+
+#### 普通变量 + dict
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_format_dict_template.xlsx
+```
+
+**模版内容**
+
+```
+字段说明	模板表达式
+性别原始值	{{gender}}
+性别字典翻译(dict)	{{dict:genderDict;gender}}
+```
+
+![image-20260122211524313](./assets/image-20260122211524313.png)
+
+**创建字典处理器**
+
+```java
+package io.github.atengk.handler;
+
+import cn.afterturn.easypoi.handler.inter.IExcelDictHandler;
+
+/**
+ * 性别字典处理器
+ *
+ * 统一维护性别字段的「值 ↔ 显示名称」映射关系：
+ *
+ * 数据库存值：
+ *  1 → 男
+ *  2 → 女
+ *
+ * 使用场景：
+ * 1. 导出时：
+ *    {{dict:genderDict;gender}}
+ *    调用 toName，把 1 / 2 转换为 男 / 女
+ *
+ * 2. 导入时：
+ *    Excel 中是 男 / 女
+ *    调用 toValue，把 男 / 女 转换为 1 / 2
+ *
+ * 这样可以做到：
+ * - Excel 对业务人员友好（看中文）
+ * - 系统内部对数据库友好（存编码）
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+public class GenderDictHandler implements IExcelDictHandler {
+
+    /**
+     * 导出时调用：将“字典值”转换为“显示名称”
+     *
+     * @param dict  字典标识，例如：gender
+     * @param obj   当前行对象
+     * @param name  当前字段名称
+     * @param value 当前字段原始值，例如：1、2
+     * @return 转换后的显示值，例如：男、女
+     */
+    @Override
+    public String toName(String dict, Object obj, String name, Object value) {
+        if (!"genderDict".equals(dict)) {
+            return value == null ? "" : value.toString();
+        }
+
+        if (value == null) {
+            return "";
+        }
+
+        switch (value.toString()) {
+            case "1":
+                return "男";
+            case "2":
+                return "女";
+            default:
+                return "未知";
+        }
+    }
+
+    /**
+     * 导入时调用：将“显示名称”反向转换为“字典值”
+     *
+     * Excel 中如果填写：
+     *  男 → 返回 1
+     *  女 → 返回 2
+     *
+     * @param dict  字典标识，例如：gender
+     * @param obj   当前行对象
+     * @param name  当前字段名称
+     * @param value Excel 中读取到的值，例如：男、女
+     * @return 转换后的字典值，例如：1、2
+     */
+    @Override
+    public String toValue(String dict, Object obj, String name, Object value) {
+        if (!"genderDict".equals(dict)) {
+            return value == null ? "" : value.toString();
+        }
+
+        if (value == null) {
+            return "";
+        }
+
+        switch (value.toString().trim()) {
+            case "男":
+                return "1";
+            case "女":
+                return "2";
+            default:
+                return "";
+        }
+    }
+}
+```
+
+**使用方法**
+
+如有数据需要格式化，只有在业务中处理好，EasyPoi的模版导出的变量只负责渲染数据
+
+```java
+    @Test
+    void test5() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("gender", 1);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_format_dict_template.xlsx",
+                data,
+                params -> params.setDictHandler(new GenderDictHandler())
+        );
+
+        Path filePath = Paths.get("target", "template_export_users_format_dict.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+
+        System.out.println("✅ 普通变量 + dict 格式化模板导出成功：" + filePath);
+    }
+```
+
+![image-20260122211340465](./assets/image-20260122211340465.png)
+
+#### 列表变量xxx
+
+
+
+#### 列表变量 + dict xxx
+
+
 
 ### 模板中图片动态插入
 
