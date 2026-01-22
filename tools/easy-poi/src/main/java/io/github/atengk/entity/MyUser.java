@@ -1,6 +1,8 @@
 package io.github.atengk.entity;
 
 import cn.afterturn.easypoi.excel.annotation.Excel;
+import cn.afterturn.easypoi.excel.annotation.ExcelIgnore;
+import io.github.atengk.enums.UserStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -88,11 +90,22 @@ public class MyUser implements Serializable {
     /**
      * 图片
      */
-    @Excel(name = "图片", type = 2, orderNum = "12")
+    //@Excel(name = "图片", type = 2, orderNum = "12", )
+    @ExcelIgnore
     private Object image;
 
     // 1→青年 2→中年 3→老年
-    @Excel(name = "年龄段")
+//    @Excel(name = "年龄段", dict = "ageDict", addressList = true)
+    //@Excel(name = "年龄段")
+    @ExcelIgnore
     private Integer number;
 
+    /**
+     * 用户状态
+     * enumExportField: 导出 Excel 显示哪个字段
+     * enumImportMethod: 导入 Excel 时通过静态方法将值转换为枚举
+     */
+    //@Excel(name = "状态", enumExportField = "name", enumImportMethod = "getByName")
+    @ExcelIgnore
+    private UserStatus status;
 }

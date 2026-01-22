@@ -10,11 +10,16 @@ import cn.afterturn.easypoi.handler.inter.IWriter;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.http.HttpUtil;
 import io.github.atengk.entity.MyUser;
+import io.github.atengk.enums.UserStatus;
 import io.github.atengk.handler.NumberDataHandler;
 import io.github.atengk.handler.NumberDictHandler;
 import io.github.atengk.init.InitData;
 import io.github.atengk.style.MyExcelStyle;
+import io.github.atengk.util.ExcelStyleUtil;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
@@ -26,7 +31,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class AtengTests {
+public class ExportTests {
 
     @Test
     public void testSimpleExport() throws IOException {
@@ -96,6 +101,36 @@ public class AtengTests {
     }
 
     @Test
+    public void testConditionStyledExport() throws IOException {
+        List<MyUser> userList = InitData.getDataList();
+
+        ExportParams params = new ExportParams();
+        String sheetName = "用户数据（带样式）";
+        params.setSheetName(sheetName);
+
+        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
+
+        // 条件样式
+        ExcelStyleUtil.applyByTitle(workbook, 0, "身份证", 3, (wb, cell) -> {
+            String value = cell.getStringCellValue();
+            if (value == null || value.trim().isEmpty()) {
+                CellStyle style = wb.createCellStyle();
+                style.setFillForegroundColor(IndexedColors.ROSE.getIndex());
+                style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                cell.setCellStyle(style);
+            }
+        });
+
+        String filePath = Paths.get("target", "condition_styled_users.xlsx").toString();
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+        workbook.close();
+
+        System.out.println("✅ 带样式的 Excel 导出成功！路径: " + filePath);
+    }
+
+    @Test
     public void testExportWithDict() throws Exception {
         List<MyUser> userList = InitData.getDataList();
 
@@ -111,6 +146,35 @@ public class AtengTests {
         workbook.close();
 
         System.out.println("导出成功！");
+    }
+
+    @Test
+    public void testSimpleExportWithEnumField() throws IOException {
+        // 1. 准备数据
+        List<MyUser> userList = InitData.getDataList();
+
+        // 随机分配状态
+        UserStatus[] statuses = UserStatus.values();
+        for (int i = 0; i < userList.size(); i++) {
+            userList.get(i).setStatus(statuses[i % statuses.length]);
+        }
+
+        // 2. 导出参数
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+
+        // 3. 导出 Excel
+        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
+
+        // 4. 写入文件
+        String filePath = Paths.get("target", "simple_export_users_enum.xlsx").toString();
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+
+        workbook.close();
+
+        System.out.println("✅ 导出成功！路径: " + filePath);
     }
 
     @Test
@@ -505,6 +569,61 @@ public class AtengTests {
 
         System.out.println("导出成功: " + filePath);
     }
+
+    @Test
+    public void testSimpleExportWithMap_DictAndDropdown() throws IOException {
+        List<MyUser> userList = InitData.getDataList();
+
+        // 1. 转成 List<Map>
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (MyUser user : userList) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", user.getId());
+            map.put("name", user.getName());
+
+            // 假设 number 是数字，后面用字典映射
+            map.put("number", RandomUtil.randomEle(Arrays.asList(1, 2, 3)));
+
+            // 假设 city 是编码，后面用 handler 处理
+            map.put("city", user.getCity());
+
+            dataList.add(map);
+        }
+
+        // 2. 定义表头（key 对应 map 的 key，name 是显示在 Excel 的标题）
+        List<ExcelExportEntity> entityList = new ArrayList<>();
+        entityList.add(new ExcelExportEntity("ID", "id"));
+        entityList.add(new ExcelExportEntity("姓名", "name"));
+
+        // 年龄段列，字典映射 + 下拉
+        ExcelExportEntity ageEntity = new ExcelExportEntity("年龄段", "number");
+        // 显示值_原始值
+        ageEntity.setReplace(new String[]{
+                "青年_1",
+                "中年_2",
+                "老年_3"
+        });
+        // 下拉框，根据 Replace 的值生成
+        ageEntity.setAddressList(true);
+        entityList.add(ageEntity);
+
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+
+        // 3. 导出 Excel
+        Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
+
+        // 4. 写入本地文件
+        String filePath = Paths.get("target", "simple_export_users_map_dict_dropdown.xlsx").toString();
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+
+        workbook.close();
+
+        System.out.println("✅ 导出成功: " + filePath);
+    }
+
 
     @Test
     public void testSimpleExportWithMap_DataHandler() throws IOException {
