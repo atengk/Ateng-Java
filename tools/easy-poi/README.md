@@ -284,6 +284,284 @@ public class InitData {
 }
 ```
 
+## 创建工具类
+
+### 创建函数接口
+
+```java
+package io.github.atengk.util;
+
+import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
+
+/**
+ * Excel 模板导出参数配置回调接口
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+@FunctionalInterface
+public interface TemplateParamsConfigurer {
+
+    /**
+     * 对 EasyPOI 的 {@link TemplateExportParams} 进行个性化配置
+     *
+     * @param params EasyPOI 模板导出参数对象
+     */
+    void configure(TemplateExportParams params);
+}
+```
+
+### 创建 ExcelUtil 工具类
+
+```java
+package io.github.atengk.util;
+
+import cn.afterturn.easypoi.excel.ExcelExportUtil;
+import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+
+/**
+ * Excel 工具类（基于 EasyPOI + Apache POI 封装）
+ *
+ * <p>
+ * 提供企业级 Excel 处理能力的统一入口，主要用于：
+ * </p>
+ *
+ * <ul>
+ *     <li>基于模板（.xlsx）填充数据并生成 Workbook</li>
+ *     <li>支持从 classpath、本地文件、对象存储、网络流等多种来源读取模板</li>
+ *     <li>支持 Workbook 导出到本地文件、HTTP 响应流、文件流等多种场景</li>
+ *     <li>支持对导出完成后的 Workbook 进行二次样式加工（指定列、条件样式、斑马纹、表头高亮等）</li>
+ * </ul>
+ *
+ * <p>
+ * 设计目标：
+ * </p>
+ *
+ * <ul>
+ *     <li>屏蔽 EasyPOI 与 POI 的底层复杂度，对外提供简单、稳定的 API</li>
+ *     <li>所有方法均为静态方法，符合工具类的使用语义</li>
+ *     <li>适用于报表系统、数据导出、运营数据分析、模板化 Excel 生成等企业级场景</li>
+ * </ul>
+ *
+ * <p>
+ * 典型使用流程：
+ * </p>
+ *
+ * <pre>
+ * Workbook workbook = ExcelUtil.exportByTemplate("doc/user_template.xlsx", data);
+ *
+ * ExcelUtil.applyByTitle(workbook, 0, "分数", 1, (wb, cell) -> {
+ *     // 自定义样式处理
+ * });
+ *
+ * ExcelUtil.exportToResponse(workbook, "用户数据.xlsx", response);
+ * </pre>
+ *
+ * <p>
+ * 该类为纯工具类：
+ * </p>
+ * <ul>
+ *     <li>禁止实例化（私有构造方法）</li>
+ *     <li>不保存任何状态，线程安全</li>
+ * </ul>
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+public final class ExcelUtil {
+
+    private ExcelUtil() {
+    }
+
+    /**
+     * 将 Workbook 导出为本地 Excel 文件
+     *
+     * <p>
+     * 适用于：
+     * - 单元测试
+     * - 本地调试
+     * - 定时任务批量生成文件
+     * - 数据归档
+     * </p>
+     *
+     * @param workbook 已生成的 Workbook 对象
+     * @param filePath 目标文件完整路径，例如：target/user.xlsx
+     */
+    public static void exportToFile(Workbook workbook, Path filePath) {
+        if (workbook == null) {
+            throw new IllegalArgumentException("Workbook 不能为空");
+        }
+        if (filePath == null) {
+            throw new IllegalArgumentException("filePath 不能为空");
+        }
+
+        try {
+            // 确保父目录存在
+            Files.createDirectories(filePath.getParent());
+
+            try (OutputStream outputStream = Files.newOutputStream(filePath)) {
+                workbook.write(outputStream);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("导出 Excel 文件失败: " + filePath, e);
+        }
+    }
+
+    /**
+     * 将 Workbook 通过 Spring Boot 接口直接输出给前端下载
+     *
+     * <p>
+     * Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+     * Content-Disposition: attachment; filename="xxx.xlsx"
+     * </p>
+     * <p>
+     * 适用于：
+     * - 浏览器下载 Excel
+     * - 前端点击“导出”按钮
+     * - SaaS 系统在线报表导出
+     *
+     * @param workbook 已生成的 Workbook
+     * @param fileName 下载文件名，例如：用户数据.xlsx
+     * @param response HttpServletResponse
+     */
+    public static void exportToResponse(
+            Workbook workbook,
+            String fileName,
+            HttpServletResponse response) {
+
+        if (workbook == null) {
+            throw new IllegalArgumentException("Workbook 不能为空");
+        }
+        if (fileName == null || fileName.isEmpty()) {
+            throw new IllegalArgumentException("fileName 不能为空");
+        }
+        if (response == null) {
+            throw new IllegalArgumentException("HttpServletResponse 不能为空");
+        }
+
+        try {
+            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name())
+                    .replaceAll("\\+", "%20");
+
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.setContentType(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setHeader(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"" + encodedFileName + "\"");
+
+            try (OutputStream outputStream = response.getOutputStream()) {
+                workbook.write(outputStream);
+                outputStream.flush();
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("通过接口导出 Excel 失败", e);
+        }
+    }
+
+    /**
+     * 读取 Excel 模板并导出
+     *
+     * @param templatePath 模板路径（相对于 resources），如：doc/user_template.xlsx
+     * @param data         模板参数数据
+     * @return 填充完成后的 Workbook
+     */
+    public static Workbook exportByTemplate(String templatePath, Map<String, Object> data) {
+        return exportByTemplate(templatePath, data, null);
+    }
+
+    /**
+     * 读取 Excel 模板并导出（终极企业版）
+     * <p>
+     * 特点：
+     * - ExcelUtil 不关心你配哪些参数
+     * - 所有 TemplateExportParams 能力全部开放
+     * - 以后 EasyPOI 新增参数，你完全不用改工具类
+     *
+     * @param templatePath 模板路径（相对 resources）
+     * @param data         模板数据
+     * @param configurer   参数配置回调，可为 null
+     */
+    public static Workbook exportByTemplate(
+            String templatePath,
+            Map<String, Object> data,
+            TemplateParamsConfigurer configurer) {
+
+        Resource resource = new ClassPathResource(templatePath);
+
+        if (!resource.exists()) {
+            throw new IllegalArgumentException("模板文件不存在: " + templatePath);
+        }
+
+        try (InputStream inputStream = resource.getInputStream()) {
+            TemplateExportParams params = new TemplateExportParams(inputStream);
+
+            if (configurer != null) {
+                configurer.configure(params);
+            }
+
+            return ExcelExportUtil.exportExcel(params, data);
+        } catch (IOException e) {
+            throw new IllegalStateException("读取模板文件失败: " + templatePath, e);
+        }
+    }
+
+    /**
+     * 通过模板文件流导出 Excel
+     *
+     * <p>
+     * 适用于模板来源不固定的场景，例如：
+     * - 文件服务器
+     * - 对象存储（OSS、MinIO）
+     * - 远程下载
+     * - 数据库存储模板
+     * </p>
+     *
+     * <p>
+     * 注意：
+     * - 该方法不会关闭传入的 InputStream，调用方自行管理生命周期
+     * - 适合对流进行复用或统一关闭管理的场景
+     * </p>
+     *
+     * @param templateInputStream 模板文件输入流
+     * @param data                模板参数数据
+     * @return 填充完成后的 Workbook
+     */
+    public static Workbook exportByTemplate(InputStream templateInputStream,
+                                            Map<String, Object> data) {
+
+        if (templateInputStream == null) {
+            throw new IllegalArgumentException("templateInputStream 不能为空");
+        }
+        if (data == null) {
+            throw new IllegalArgumentException("data 不能为空");
+        }
+
+        try {
+            TemplateExportParams params = new TemplateExportParams(templateInputStream);
+            return ExcelExportUtil.exportExcel(params, data);
+        } catch (Exception e) {
+            throw new IllegalStateException("通过模板流导出 Excel 失败", e);
+        }
+    }
+
+}
+```
+
 
 
 ## 导出 Excel（Export）
@@ -3600,8 +3878,8 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 | 遍历并新建行           | `fe:`     | 不适用                                    | `{{fe:list t t.name t.age}}`            |
 | 遍历但不新建行         | `!fe:`    | 不适用                                    | `{{!fe:list t t.name}}`                 |
 | 下移插入遍历（最常用） | `$fe:`    | 不适用                                    | `{{ $fe:list t.name t.age t.phone }}`   |
-| 横向遍历               | `#fe:`    | 不适用                                    | `{{#fe:list t.name}}`                   |
-| 横向遍历取值           | `v_fe:`   | 不适用                                    | `{{v_fe:list}}`                         |
+| 横向遍历（带模板）     | `#fe:`    | 不适用                                    | `{{#fe: colList t.name}}`               |
+| 横向取值（纯数据）     | `v_fe:`   | 不适用                                    | `{{v_fe: colList t.data}}`              |
 | 删除当前列             | `!if:`    | `{{!if:(age < 18)}}`                      | `!if:(t.age < 18)`                      |
 | 字典转换               | `dict:`   | `{{dict:gender;gender}}`                  | `dict:gender;t.gender`                  |
 | 国际化                 | `i18n:`   | `{{i18n:key}}`                            | `i18n:key`                              |
@@ -3611,284 +3889,6 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 | 统计求和               | `sum:`    | `{{sum:score}}`                           | `sum:t.score`                           |
 | 计算表达式             | `cal:`    | `{{cal:(price*count)}}`                   | `cal:(t.price*t.count)`                 |
 | 常量输出               | `'常量'`  | `{{'正常'}}`                              | `'正常'`                                |
-
-### 创建工具类
-
-**创建函数接口**
-
-```java
-package io.github.atengk.util;
-
-import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
-
-/**
- * Excel 模板导出参数配置回调接口
- *
- * @author 孔余
- * @since 2026-01-22
- */
-@FunctionalInterface
-public interface TemplateParamsConfigurer {
-
-    /**
-     * 对 EasyPOI 的 {@link TemplateExportParams} 进行个性化配置
-     *
-     * @param params EasyPOI 模板导出参数对象
-     */
-    void configure(TemplateExportParams params);
-}
-```
-
-**创建工具类**
-
-```java
-package io.github.atengk.util;
-
-import cn.afterturn.easypoi.excel.ExcelExportUtil;
-import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
-
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
-
-/**
- * Excel 工具类（基于 EasyPOI + Apache POI 封装）
- *
- * <p>
- * 提供企业级 Excel 处理能力的统一入口，主要用于：
- * </p>
- *
- * <ul>
- *     <li>基于模板（.xlsx）填充数据并生成 Workbook</li>
- *     <li>支持从 classpath、本地文件、对象存储、网络流等多种来源读取模板</li>
- *     <li>支持 Workbook 导出到本地文件、HTTP 响应流、文件流等多种场景</li>
- *     <li>支持对导出完成后的 Workbook 进行二次样式加工（指定列、条件样式、斑马纹、表头高亮等）</li>
- * </ul>
- *
- * <p>
- * 设计目标：
- * </p>
- *
- * <ul>
- *     <li>屏蔽 EasyPOI 与 POI 的底层复杂度，对外提供简单、稳定的 API</li>
- *     <li>所有方法均为静态方法，符合工具类的使用语义</li>
- *     <li>适用于报表系统、数据导出、运营数据分析、模板化 Excel 生成等企业级场景</li>
- * </ul>
- *
- * <p>
- * 典型使用流程：
- * </p>
- *
- * <pre>
- * Workbook workbook = ExcelUtil.exportByTemplate("doc/user_template.xlsx", data);
- *
- * ExcelUtil.applyByTitle(workbook, 0, "分数", 1, (wb, cell) -> {
- *     // 自定义样式处理
- * });
- *
- * ExcelUtil.exportToResponse(workbook, "用户数据.xlsx", response);
- * </pre>
- *
- * <p>
- * 该类为纯工具类：
- * </p>
- * <ul>
- *     <li>禁止实例化（私有构造方法）</li>
- *     <li>不保存任何状态，线程安全</li>
- * </ul>
- *
- * @author 孔余
- * @since 2026-01-22
- */
-public final class ExcelUtil {
-
-    private ExcelUtil() {
-    }
-
-    /**
-     * 将 Workbook 导出为本地 Excel 文件
-     *
-     * <p>
-     * 适用于：
-     * - 单元测试
-     * - 本地调试
-     * - 定时任务批量生成文件
-     * - 数据归档
-     * </p>
-     *
-     * @param workbook 已生成的 Workbook 对象
-     * @param filePath 目标文件完整路径，例如：target/user.xlsx
-     */
-    public static void exportToFile(Workbook workbook, Path filePath) {
-        if (workbook == null) {
-            throw new IllegalArgumentException("Workbook 不能为空");
-        }
-        if (filePath == null) {
-            throw new IllegalArgumentException("filePath 不能为空");
-        }
-
-        try {
-            // 确保父目录存在
-            Files.createDirectories(filePath.getParent());
-
-            try (OutputStream outputStream = Files.newOutputStream(filePath)) {
-                workbook.write(outputStream);
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("导出 Excel 文件失败: " + filePath, e);
-        }
-    }
-
-    /**
-     * 将 Workbook 通过 Spring Boot 接口直接输出给前端下载
-     *
-     * <p>
-     * Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-     * Content-Disposition: attachment; filename="xxx.xlsx"
-     * </p>
-     * <p>
-     * 适用于：
-     * - 浏览器下载 Excel
-     * - 前端点击“导出”按钮
-     * - SaaS 系统在线报表导出
-     *
-     * @param workbook 已生成的 Workbook
-     * @param fileName 下载文件名，例如：用户数据.xlsx
-     * @param response HttpServletResponse
-     */
-    public static void exportToResponse(
-            Workbook workbook,
-            String fileName,
-            HttpServletResponse response) {
-
-        if (workbook == null) {
-            throw new IllegalArgumentException("Workbook 不能为空");
-        }
-        if (fileName == null || fileName.isEmpty()) {
-            throw new IllegalArgumentException("fileName 不能为空");
-        }
-        if (response == null) {
-            throw new IllegalArgumentException("HttpServletResponse 不能为空");
-        }
-
-        try {
-            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name())
-                    .replaceAll("\\+", "%20");
-
-            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            response.setContentType(
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            response.setHeader(
-                    HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"" + encodedFileName + "\"");
-
-            try (OutputStream outputStream = response.getOutputStream()) {
-                workbook.write(outputStream);
-                outputStream.flush();
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("通过接口导出 Excel 失败", e);
-        }
-    }
-
-    /**
-     * 读取 Excel 模板并导出
-     *
-     * @param templatePath 模板路径（相对于 resources），如：doc/user_template.xlsx
-     * @param data         模板参数数据
-     * @return 填充完成后的 Workbook
-     */
-    public static Workbook exportByTemplate(String templatePath, Map<String, Object> data) {
-        return exportByTemplate(templatePath, data, null);
-    }
-
-    /**
-     * 读取 Excel 模板并导出（终极企业版）
-     * <p>
-     * 特点：
-     * - ExcelUtil 不关心你配哪些参数
-     * - 所有 TemplateExportParams 能力全部开放
-     * - 以后 EasyPOI 新增参数，你完全不用改工具类
-     *
-     * @param templatePath 模板路径（相对 resources）
-     * @param data         模板数据
-     * @param configurer   参数配置回调，可为 null
-     */
-    public static Workbook exportByTemplate(
-            String templatePath,
-            Map<String, Object> data,
-            TemplateParamsConfigurer configurer) {
-
-        Resource resource = new ClassPathResource(templatePath);
-
-        if (!resource.exists()) {
-            throw new IllegalArgumentException("模板文件不存在: " + templatePath);
-        }
-
-        try (InputStream inputStream = resource.getInputStream()) {
-            TemplateExportParams params = new TemplateExportParams(inputStream);
-
-            if (configurer != null) {
-                configurer.configure(params);
-            }
-
-            return ExcelExportUtil.exportExcel(params, data);
-        } catch (IOException e) {
-            throw new IllegalStateException("读取模板文件失败: " + templatePath, e);
-        }
-    }
-
-    /**
-     * 通过模板文件流导出 Excel
-     *
-     * <p>
-     * 适用于模板来源不固定的场景，例如：
-     * - 文件服务器
-     * - 对象存储（OSS、MinIO）
-     * - 远程下载
-     * - 数据库存储模板
-     * </p>
-     *
-     * <p>
-     * 注意：
-     * - 该方法不会关闭传入的 InputStream，调用方自行管理生命周期
-     * - 适合对流进行复用或统一关闭管理的场景
-     * </p>
-     *
-     * @param templateInputStream 模板文件输入流
-     * @param data                模板参数数据
-     * @return 填充完成后的 Workbook
-     */
-    public static Workbook exportByTemplate(InputStream templateInputStream,
-                                            Map<String, Object> data) {
-
-        if (templateInputStream == null) {
-            throw new IllegalArgumentException("templateInputStream 不能为空");
-        }
-        if (data == null) {
-            throw new IllegalArgumentException("data 不能为空");
-        }
-
-        try {
-            TemplateExportParams params = new TemplateExportParams(templateInputStream);
-            return ExcelExportUtil.exportExcel(params, data);
-        } catch (Exception e) {
-            throw new IllegalStateException("通过模板流导出 Excel 失败", e);
-        }
-    }
-
-}
-```
 
 ### 填充普通变量数据
 
@@ -4239,8 +4239,6 @@ public class GenderDictHandler implements IExcelDictHandler {
 
 **使用方法**
 
-如有数据需要格式化，只有在业务中处理好，EasyPoi的模版导出的变量只负责渲染数据
-
 ```java
     @Test
     void test5() {
@@ -4262,11 +4260,444 @@ public class GenderDictHandler implements IExcelDictHandler {
 
 ![image-20260122211340465](./assets/image-20260122211340465.png)
 
-#### 列表变量xxx
+#### 列表变量
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_format_template.xlsx
+```
+
+**模板内容**
+
+```
+序号	姓名	年龄(数值)	年龄描述	生日	成绩	百分比	创建时间	金额
+{{ $fe:list &INDEX&	t.name	n:t.age	t.age > 18 ? '成年': '未成年'	fd:(t.birthday;yyyy-MM-dd)	fn:(t.score;###.00)	fn:(t.ratio;0.00%)	fd:(t.createTime;yyyy-MM-dd HH:mm:ss)	fn:(t.amount;#,###.00) }}
+```
+
+![image-20260123140449694](./assets/image-20260123140449694.png)
+
+**使用方法示例**
+
+```java
+    @Test
+    void testListFormatTemplateExport() throws Exception {
+        Map<String, Object> data = new HashMap<>();
+
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd");
+        Date now = new Date();
+
+        for (int i = 1; i <= 5; i++) {
+            Map<String, Object> u = new HashMap<>();
+            u.put("name", "User-" + i);
+            u.put("age", 15 + i);
+            u.put("birthday", fmt.parse("199" + i + "-06-18"));
+            u.put("createTime", now);
+            u.put("score", 80.8923 + i);
+            u.put("ratio", 0.156 + i * 0.1);
+            u.put("amount", 15000.567 + i * 1000);
+            list.add(u);
+        }
+
+        data.put("list", list);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_list_format_template.xlsx",
+                data
+        );
+
+        Path filePath = Paths.get("target", "template_export_format_users_list.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+
+        System.out.println("📦 列表模板导出成功：" + filePath);
+    }
+```
+
+![image-20260123140530460](./assets/image-20260123140530460.png)
+
+#### 列表变量 + dict
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_format_dict_template.xlsx
+```
+
+**模板内容**
+
+- 字典使用，dict:字典名称:字段名称：dict:genderDict;gender
+
+```
+序号	姓名	性别	年龄(数值)	年龄描述	生日	成绩	百分比	创建时间	金额
+{{ $fe:list &INDEX&	t.name	dict:genderDict;t.gender	n:t.age	t.age > 18 ? '成年': '未成年'	fd:(t.birthday;yyyy-MM-dd)	fn:(t.score;###.00)	fn:(t.ratio;0.00%)	fd:(t.createTime;yyyy-MM-dd HH:mm:ss)	fn:(t.amount;#,###.00) }}
+```
+
+![image-20260123142012561](./assets/image-20260123142012561.png)
+
+**创建字典处理器**
+
+```java
+package io.github.atengk.handler;
+
+import cn.afterturn.easypoi.handler.inter.IExcelDictHandler;
+
+/**
+ * 性别字典处理器
+ *
+ * 统一维护性别字段的「值 ↔ 显示名称」映射关系：
+ *
+ * 数据库存值：
+ *  1 → 男
+ *  2 → 女
+ *
+ * 使用场景：
+ * 1. 导出时：
+ *    {{dict:genderDict;gender}}
+ *    调用 toName，把 1 / 2 转换为 男 / 女
+ *
+ * 2. 导入时：
+ *    Excel 中是 男 / 女
+ *    调用 toValue，把 男 / 女 转换为 1 / 2
+ *
+ * 这样可以做到：
+ * - Excel 对业务人员友好（看中文）
+ * - 系统内部对数据库友好（存编码）
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+public class GenderDictHandler implements IExcelDictHandler {
+
+    /**
+     * 导出时调用：将“字典值”转换为“显示名称”
+     *
+     * @param dict  字典标识，例如：gender
+     * @param obj   当前行对象
+     * @param name  当前字段名称
+     * @param value 当前字段原始值，例如：1、2
+     * @return 转换后的显示值，例如：男、女
+     */
+    @Override
+    public String toName(String dict, Object obj, String name, Object value) {
+        if (!"genderDict".equals(dict)) {
+            return value == null ? "" : value.toString();
+        }
+
+        if (value == null) {
+            return "";
+        }
+
+        switch (value.toString()) {
+            case "1":
+                return "男";
+            case "2":
+                return "女";
+            default:
+                return "未知";
+        }
+    }
+
+    /**
+     * 导入时调用：将“显示名称”反向转换为“字典值”
+     *
+     * Excel 中如果填写：
+     *  男 → 返回 1
+     *  女 → 返回 2
+     *
+     * @param dict  字典标识，例如：gender
+     * @param obj   当前行对象
+     * @param name  当前字段名称
+     * @param value Excel 中读取到的值，例如：男、女
+     * @return 转换后的字典值，例如：1、2
+     */
+    @Override
+    public String toValue(String dict, Object obj, String name, Object value) {
+        if (!"genderDict".equals(dict)) {
+            return value == null ? "" : value.toString();
+        }
+
+        if (value == null) {
+            return "";
+        }
+
+        switch (value.toString().trim()) {
+            case "男":
+                return "1";
+            case "女":
+                return "2";
+            default:
+                return "";
+        }
+    }
+}
+```
+
+**使用方法示例**
+
+```java
+    @Test
+    void testListFormatDictTemplateExport() throws Exception {
+        Map<String, Object> data = new HashMap<>();
+
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd");
+        Date now = new Date();
+
+        for (int i = 1; i <= 5; i++) {
+            Map<String, Object> u = new HashMap<>();
+            u.put("name", "User-" + i);
+            u.put("gender", String.valueOf(RandomUtil.randomInt(1, 2)));
+            u.put("age", 15 + i);
+            u.put("birthday", fmt.parse("199" + i + "-06-18"));
+            u.put("createTime", now);
+            u.put("score", 80.8923 + i);
+            u.put("ratio", 0.156 + i * 0.1);
+            u.put("amount", 15000.567 + i * 1000);
+            list.add(u);
+        }
+
+        data.put("list", list);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_list_format_dict_template.xlsx",
+                data,
+                params -> params.setDictHandler(new GenderDictHandler())
+        );
+
+        Path filePath = Paths.get("target", "template_export_format_dict_users_list.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+
+        System.out.println("📦 列表模板导出成功：" + filePath);
+    }
+```
+
+![image-20260123142108030](./assets/image-20260123142108030.png)
 
 
 
-#### 列表变量 + dict xxx
+### 横向遍历
+
+#### 横向遍历表头
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ dynamic_header_template.xlsx
+```
+
+**模板内容**
+
+```
+{{#fe: titles t.dateStr}}
+```
+
+![image-20260123150300084](./assets/image-20260123150300084.png)
+
+**使用方法示例**
+
+- 需要添加参数：`params -> params.setColForEach(true)`
+
+```java
+    @Test
+    void testDynamicHeaderTemplateExport() throws Exception {
+        Map<String, Object> data = new HashMap<>();
+
+        // 动态表头
+        List<Map<String, Object>> colList = new ArrayList<>();
+
+        int monthCount = RandomUtil.randomInt(3, 8); // 随机 3~7 列
+
+        for (int i = 0; i < monthCount; i++) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("name", "2024-" + (i + 1)); // 表头名称
+            colList.add(m);
+        }
+
+        data.put("colList", colList);
+        System.out.println(data);
+
+        // 导出
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/dynamic_header_template.xlsx",
+                data,
+                params -> params.setColForEach(true)
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/dynamic_header.xlsx")
+        );
+
+        System.out.println("📦 动态表头导出成功");
+    }
+```
+
+![image-20260123150417921](./assets/image-20260123150417921.png)
+
+#### 横向表头合并（merge + 横向遍历）
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ dynamic_header_merge_template.xlsx
+```
+
+**模板内容**
+
+- 需要合并的表头必须使用变量提供
+
+```
+{{tempName}}{{merge:cal:le:(colList) * 1}}
+{{#fe:colList t.name}}
+```
+
+![image-20260123154316559](./assets/image-20260123154316559.png)
+
+------
+
+**使用方法示例**
+
+- 同样需要参数：`params -> params.setColForEach(true)`
+
+```java
+    @Test
+    void testDynamicHeaderMergeTemplateExport()  {
+        Map<String, Object> data = new HashMap<>();
+
+        // 动态表头
+        List<Map<String, Object>> colList = new ArrayList<>();
+
+        int monthCount = RandomUtil.randomInt(3, 8); // 随机 3~7 列
+
+        for (int i = 0; i < monthCount; i++) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("name", "2024-" + (i + 1)); // 表头名称
+            colList.add(m);
+        }
+
+        data.put("tempName", "总表头");
+        data.put("colList", colList);
+
+        // 导出
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/dynamic_header_merge_template.xlsx",
+                data,
+                params -> params.setColForEach(true)
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/dynamic_header_merge.xlsx")
+        );
+
+        System.out.println("📦 横向合并表头导出成功");
+    }
+```
+
+注意这里合并了后有边框样式丢失的问题，暂未找到解决方法。
+
+![image-20260123154405373](./assets/image-20260123154405373.png)
+
+------
+
+#### 横向遍历表头 + 数据（动态）
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ dynamic_header_and_data_template.xlsx
+```
+
+**模板内容**
+
+```
+{{#fe: colList t.name}}
+{{v_fe: colList t.data}}
+```
+
+![image-20260123161555270](./assets/image-20260123161555270.png)
+
+**使用方法示例**
+
+- 需要添加参数：`params -> params.setColForEach(true)`
+
+```java
+    @Test
+    void testDynamicHeaderAndDataTemplateExport() throws Exception {
+        Map<String, Object> data = new HashMap<>();
+
+        // 动态表头 + 每列的数据
+        List<Map<String, Object>> colList = new ArrayList<>();
+
+        int monthCount = RandomUtil.randomInt(3, 8); // 随机 3~7 列
+        int rowCount = RandomUtil.randomInt(3, 6);   // 随机 3~5 行
+
+        for (int i = 0; i < monthCount; i++) {
+            Map<String, Object> col = new HashMap<>();
+            col.put("name", "2024-" + (i + 1)); // 表头名称
+
+            // 这一列下面所有行的数据
+            List<String> colData = new ArrayList<>();
+            for (int j = 0; j < rowCount; j++) {
+                colData.add(i + "" + j);
+            }
+            col.put("data", colData);
+
+            colList.add(col);
+        }
+        data.put("colList", colList);
+
+        System.out.println(data);
+
+        // 导出
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/dynamic_header_and_data_template.xlsx",
+                data,
+                params -> params.setColForEach(true)
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/dynamic_header_and_data.xlsx")
+        );
+
+        System.out.println("📦 横向动态表头 + 动态数据导出成功");
+    }
+```
+
+输出：
+
+> {colList=[{data=[00, 01, 02, 03, 04], name=2024-1}, {data=[10, 11, 12, 13, 14], name=2024-2}, {data=[20, 21, 22, 23, 24], name=2024-3}, {data=[30, 31, 32, 33, 34], name=2024-4}, {data=[40, 41, 42, 43, 44], name=2024-5}, {data=[50, 51, 52, 53, 54], name=2024-6}]}
+> 📦 横向动态表头 + 动态数据导出成功
+
+
+
+#### 横向遍历表头 + 数据（静态 + 动态）
+
+![image-20240514112043719.png](https://i-blog.csdnimg.cn/blog_migrate/169fc65d6e0ecf978ab33f8fcd4c9cbd.png)
 
 
 
