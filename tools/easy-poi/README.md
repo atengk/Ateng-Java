@@ -419,7 +419,7 @@ public class MyUser implements Serializable {
 
 ![image-20260121164012214](./assets/image-20260121164012214.png)
 
-### 自定义列宽、字体、样式
+### 自定义样式
 
 #### 基础使用
 
@@ -2591,7 +2591,7 @@ emailEntity.setDesensitizationRule("1~@");
 
 ![image-20260121204443236](./assets/image-20260121204443236.png)
 
-#### 字典映射
+#### 字典映射 replace
 
 使用ExcelExportEntity.setReplace构建映射：显示值_原始值（String）
 
