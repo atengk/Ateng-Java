@@ -4621,6 +4621,41 @@ src
 
 #### 横向遍历表头 + 数据（动态）
 
+**避坑总结**
+
+0. `#fe`、`v_fe` 的优先级高于 `$fe`
+   必须先铺列，再铺行，否则 `$fe` 没有列可走
+
+1. `$fe` 和 `v_fe` 绝对不能在同一个单元格
+
+```
+{{$fe:data	{{v_fe:titles t.val}}
+```
+
+2. `$fe` 只管“行循环”，`v_fe` 只管“列循环”，职责必须拆开
+
+3. `#fe` 只负责生成横向表头
+
+```
+{{#fe:titles t.name}}
+```
+
+4. `v_fe` 不取值，只负责“横向展开列结构”
+
+5. 真正取值靠 `titles.val`，而且它必须是**表达式字符串**
+
+```java
+title.put("val", "t." + 字段名);
+```
+
+6. EasyPOI 对 `t.val` 会进行二次解析：
+
+```
+"t.2024-1"  →  {{t.2024-1}}  →  row.get("2024-1")
+```
+
+---
+
 **创建模板**
 
 ```
@@ -4634,11 +4669,11 @@ src
 **模板内容**
 
 ```
-{{#fe: colList t.name}}
-{{v_fe: colList t.data}}
+	{{#fe:titles t.name}}
+{{$fe:data	{{v_fe:titles t.val}}
 ```
 
-![image-20260123161555270](./assets/image-20260123161555270.png)
+![image-20260123203628611](./assets/image-20260123203628611.png)
 
 **使用方法示例**
 
@@ -4646,29 +4681,39 @@ src
 
 ```java
     @Test
-    void testDynamicHeaderAndDataTemplateExport() throws Exception {
-        Map<String, Object> data = new HashMap<>();
+    void testDynamicHeaderAndDataTemplateExport() {
 
-        // 动态表头 + 每列的数据
-        List<Map<String, Object>> colList = new ArrayList<>();
+        int monthCount = RandomUtil.randomInt(3, 8);
+        int rowCount = RandomUtil.randomInt(3, 6);
 
-        int monthCount = RandomUtil.randomInt(3, 8); // 随机 3~7 列
-        int rowCount = RandomUtil.randomInt(3, 6);   // 随机 3~5 行
+        List<Map<String, Object>> titles = new ArrayList<>();
 
         for (int i = 0; i < monthCount; i++) {
-            Map<String, Object> col = new HashMap<>();
-            col.put("name", "2024-" + (i + 1)); // 表头名称
+            String date = "2024-" + (i + 1);
 
-            // 这一列下面所有行的数据
-            List<String> colData = new ArrayList<>();
-            for (int j = 0; j < rowCount; j++) {
-                colData.add(i + "" + j);
-            }
-            col.put("data", colData);
+            Map<String, Object> title = new HashMap<>();
+            title.put("name", date);
+            // 关键：这里不是值，是表达式
+            title.put("val", "t." + date);
 
-            colList.add(col);
+            titles.add(title);
         }
-        data.put("colList", colList);
+
+        List<Map<String, Object>> dataList = new ArrayList<>();
+
+        for (int r = 0; r < rowCount; r++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int i = 0; i < monthCount; i++) {
+                String date = "2024-" + (i + 1);
+                row.put(date, i + "" + r);
+            }
+            dataList.add(row);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("titles", titles);
+        data.put("data", dataList);
+
 
         System.out.println(data);
 
@@ -4690,14 +4735,140 @@ src
 
 输出：
 
-> {colList=[{data=[00, 01, 02, 03, 04], name=2024-1}, {data=[10, 11, 12, 13, 14], name=2024-2}, {data=[20, 21, 22, 23, 24], name=2024-3}, {data=[30, 31, 32, 33, 34], name=2024-4}, {data=[40, 41, 42, 43, 44], name=2024-5}, {data=[50, 51, 52, 53, 54], name=2024-6}]}
+> {data=[{2024-5=40, 2024-3=20, 2024-4=30, 2024-1=00, 2024-2=10}, {2024-5=41, 2024-3=21, 2024-4=31, 2024-1=01, 2024-2=11}, {2024-5=42, 2024-3=22, 2024-4=32, 2024-1=02, 2024-2=12}], titles=[{val=t.2024-1, name=2024-1}, {val=t.2024-2, name=2024-2}, {val=t.2024-3, name=2024-3}, {val=t.2024-4, name=2024-4}, {val=t.2024-5, name=2024-5}]}
 > 📦 横向动态表头 + 动态数据导出成功
+
+![image-20260123203801955](./assets/image-20260123203801955.png)
 
 
 
 #### 横向遍历表头 + 数据（静态 + 动态）
 
-![image-20240514112043719.png](https://i-blog.csdnimg.cn/blog_migrate/169fc65d6e0ecf978ab33f8fcd4c9cbd.png)
+**避坑总结**
+
+0. `#fe`、`v_fe` 的优先级高于 `$fe`
+   必须先铺列，再铺行，否则 `$fe` 没有列可走
+
+1. `$fe` 和 `v_fe` 绝对不能在同一个单元格
+
+```
+{{$fe:data	{{v_fe:titles t.val}}
+```
+
+2. `$fe` 只管“行循环”，`v_fe` 只管“列循环”，职责必须拆开
+
+3. `#fe` 只负责生成横向表头
+
+```
+{{#fe:titles t.name}}
+```
+
+4. `v_fe` 不取值，只负责“横向展开列结构”
+
+5. 真正取值靠 `titles.val`，而且它必须是**表达式字符串**
+
+```java
+title.put("val", "t." + 字段名);
+```
+
+6. EasyPOI 对 `t.val` 会进行二次解析：
+
+```
+"t.2024-1"  →  {{t.2024-1}}  →  row.get("2024-1")
+```
+
+---
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ dynamic_header_and_data2_template.xlsx
+```
+
+**模板内容**
+
+```
+{{tempName}}{{merge:cal:le:(titles) + 3}}			
+{{author}}	序号	姓名	{{#fe:titles t.name}}
+	{{$fe:data &INDEX& 	t.name	{{v_fe:titles t.val}}
+```
+
+![image-20260123210225911](./assets/image-20260123210225911.png)
+
+**使用方法示例**
+
+- 需要添加参数：`params -> params.setColForEach(true)`
+
+```java
+    @Test
+    void testDynamicHeaderAndData2TemplateExport() {
+
+        int monthCount = RandomUtil.randomInt(3, 8);
+        int rowCount = RandomUtil.randomInt(3, 6);
+
+        List<Map<String, Object>> titles = new ArrayList<>();
+
+        for (int i = 0; i < monthCount; i++) {
+            String date = "2024-" + (i + 1);
+
+            Map<String, Object> title = new HashMap<>();
+            title.put("name", date);
+            // 关键：这里不是值，是表达式
+            title.put("val", "t." + date);
+
+            titles.add(title);
+        }
+
+        List<Map<String, Object>> dataList = new ArrayList<>();
+
+        for (int r = 0; r < rowCount; r++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int i = 0; i < monthCount; i++) {
+                String date = "2024-" + (i + 1);
+                row.put(date, i + "" + r);
+            }
+
+            row.put("name", "阿腾" + r);
+
+            dataList.add(row);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("titles", titles);
+        data.put("data", dataList);
+        data.put("author", "Ateng");
+        data.put("tempName", "EasyPoi模版导出综合示例");
+
+        System.out.println(data);
+
+        // 导出
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/dynamic_header_and_data2_template.xlsx",
+                data,
+                params -> params.setColForEach(true)
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/dynamic_header_and_data2.xlsx")
+        );
+
+        System.out.println("📦 横向动态表头 + 动态数据导出成功");
+    }
+```
+
+输出：
+
+> {tempName=EasyPoi模版导出综合示例, data=[{2024-5=40, 2024-6=50, 2024-3=20, name=阿腾0, 2024-4=30, 2024-1=00, 2024-2=10}, {2024-5=41, 2024-6=51, 2024-3=21, name=阿腾1, 2024-4=31, 2024-1=01, 2024-2=11}, {2024-5=42, 2024-6=52, 2024-3=22, name=阿腾2, 2024-4=32, 2024-1=02, 2024-2=12}, {2024-5=43, 2024-6=53, 2024-3=23, name=阿腾3, 2024-4=33, 2024-1=03, 2024-2=13}], author=Ateng, titles=[{val=t.2024-1, name=2024-1}, {val=t.2024-2, name=2024-2}, {val=t.2024-3, name=2024-3}, {val=t.2024-4, name=2024-4}, {val=t.2024-5, name=2024-5}, {val=t.2024-6, name=2024-6}]}
+> 📦 横向动态表头 + 动态数据导出成功
+
+注意这里合并了后有边框样式丢失的问题，暂未找到解决方法。
+
+![image-20260123210305647](./assets/image-20260123210305647.png)
 
 
 

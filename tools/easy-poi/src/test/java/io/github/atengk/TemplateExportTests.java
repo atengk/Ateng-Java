@@ -241,29 +241,39 @@ public class TemplateExportTests {
     }
 
     @Test
-    void testDynamicHeaderAndDataTemplateExport() throws Exception {
-        Map<String, Object> data = new HashMap<>();
+    void testDynamicHeaderAndDataTemplateExport() {
 
-        // 动态表头 + 每列的数据
-        List<Map<String, Object>> colList = new ArrayList<>();
+        int monthCount = RandomUtil.randomInt(3, 8);
+        int rowCount = RandomUtil.randomInt(3, 6);
 
-        int monthCount = RandomUtil.randomInt(3, 8); // 随机 3~7 列
-        int rowCount = RandomUtil.randomInt(3, 6);   // 随机 3~5 行
+        List<Map<String, Object>> titles = new ArrayList<>();
 
         for (int i = 0; i < monthCount; i++) {
-            Map<String, Object> col = new HashMap<>();
-            col.put("name", "2024-" + (i + 1)); // 表头名称
+            String date = "2024-" + (i + 1);
 
-            // 这一列下面所有行的数据
-            List<String> colData = new ArrayList<>();
-            for (int j = 0; j < rowCount; j++) {
-                colData.add(i + "" + j);
-            }
-            col.put("data", colData);
+            Map<String, Object> title = new HashMap<>();
+            title.put("name", date);
+            // 关键：这里不是值，是表达式
+            title.put("val", "t." + date);
 
-            colList.add(col);
+            titles.add(title);
         }
-        data.put("colList", colList);
+
+        List<Map<String, Object>> dataList = new ArrayList<>();
+
+        for (int r = 0; r < rowCount; r++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int i = 0; i < monthCount; i++) {
+                String date = "2024-" + (i + 1);
+                row.put(date, i + "" + r);
+            }
+            dataList.add(row);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("titles", titles);
+        data.put("data", dataList);
+
 
         System.out.println(data);
 
@@ -277,6 +287,62 @@ public class TemplateExportTests {
         ExcelUtil.exportToFile(
                 workbook,
                 Paths.get("target/dynamic_header_and_data.xlsx")
+        );
+
+        System.out.println("📦 横向动态表头 + 动态数据导出成功");
+    }
+
+    @Test
+    void testDynamicHeaderAndData2TemplateExport() {
+
+        int monthCount = RandomUtil.randomInt(3, 8);
+        int rowCount = RandomUtil.randomInt(3, 6);
+
+        List<Map<String, Object>> titles = new ArrayList<>();
+
+        for (int i = 0; i < monthCount; i++) {
+            String date = "2024-" + (i + 1);
+
+            Map<String, Object> title = new HashMap<>();
+            title.put("name", date);
+            // 关键：这里不是值，是表达式
+            title.put("val", "t." + date);
+
+            titles.add(title);
+        }
+
+        List<Map<String, Object>> dataList = new ArrayList<>();
+
+        for (int r = 0; r < rowCount; r++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int i = 0; i < monthCount; i++) {
+                String date = "2024-" + (i + 1);
+                row.put(date, i + "" + r);
+            }
+
+            row.put("name", "阿腾" + r);
+
+            dataList.add(row);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("titles", titles);
+        data.put("data", dataList);
+        data.put("author", "Ateng");
+        data.put("tempName", "EasyPoi模版导出综合示例");
+
+        System.out.println(data);
+
+        // 导出
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/dynamic_header_and_data2_template.xlsx",
+                data,
+                params -> params.setColForEach(true)
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/dynamic_header_and_data2.xlsx")
         );
 
         System.out.println("📦 横向动态表头 + 动态数据导出成功");
