@@ -14,7 +14,7 @@ import io.github.atengk.enums.UserStatus;
 import io.github.atengk.handler.NumberDataHandler;
 import io.github.atengk.handler.NumberDictHandler;
 import io.github.atengk.init.InitData;
-import io.github.atengk.style.CustomExcelExportStyler;
+import io.github.atengk.style.CustomConciseExcelExportStyler;
 import io.github.atengk.util.ExcelStyleUtil;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -114,7 +114,7 @@ public class ExportTests {
         params.setSheetName("用户数据（带样式）");
 
         // 设置自定义样式处理器
-        params.setStyle(CustomExcelExportStyler.class);
+        params.setStyle(CustomConciseExcelExportStyler.class);
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
 
