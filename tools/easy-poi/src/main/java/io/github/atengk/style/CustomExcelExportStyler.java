@@ -27,23 +27,35 @@ import org.apache.poi.ss.usermodel.*;
  *
  * <p>基于 EasyPOI 类型常量 {@link BaseTypeConstants} 映射样式。</p>
  *
- * @author
+ * @author 孔余
  * @since 2026-01-22
  */
 public class CustomExcelExportStyler extends AbstractExcelExportStyler {
 
-    /** 表头单元格样式（灰底、加粗、居中对齐） */
+    /**
+     * 表头单元格样式（灰底、加粗、居中对齐）
+     */
     private final CellStyle headerCenterStyle;
 
-    /** 文本单元格样式（左对齐） */
+    /**
+     * 文本单元格样式（左对齐）
+     */
     private final CellStyle textLeftStyle;
 
-    /** 数字单元格样式（右对齐） */
+    /**
+     * 数字单元格样式（右对齐）
+     */
     private final CellStyle numberRightStyle;
 
-    /** 日期单元格样式（居中对齐） */
+    /**
+     * 日期单元格样式（居中对齐）
+     */
     private final CellStyle dateCenterStyle;
 
+    /**
+     * 图片单元格样式（居中对齐）
+     */
+    private final CellStyle imageCenterStyle;
 
     /**
      * 构造函数。
@@ -56,8 +68,8 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
         this.textLeftStyle = createTextStyle();
         this.numberRightStyle = createNumberStyle();
         this.dateCenterStyle = createDateStyle();
+        this.imageCenterStyle = createImageStyle();
     }
-
 
     /**
      * 创建表头样式。
@@ -91,7 +103,6 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
         return style;
     }
 
-
     /**
      * 创建文本类型样式（左对齐）。
      *
@@ -112,7 +123,6 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
 
         return style;
     }
-
 
     /**
      * 创建数字类型样式（右对齐）。
@@ -135,7 +145,6 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
         return style;
     }
 
-
     /**
      * 创建日期类型样式（居中）。
      *
@@ -157,6 +166,18 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
         return style;
     }
 
+    /**
+     * 创建图片样式
+     *
+     * @return 图片样式
+     */
+    private CellStyle createImageStyle() {
+        CellStyle style = workbook.createCellStyle();
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        setThinBorder(style);
+        return style;
+    }
 
     /**
      * 表头样式适配（调用自定义样式）。
@@ -168,7 +189,6 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
     public CellStyle getTitleStyle(short color) {
         return headerCenterStyle;
     }
-
 
     /**
      * 多级表头样式适配。
@@ -184,16 +204,55 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
     /**
      * 样式选择入口（无 Cell 上下文版本）。
      *
-     * <p>该方法一般用于注解模式下的导出场景，框架仅提供字段元数据（entity），
-     * 不提供当前单元格信息，因此样式决策完全依赖字段类型。</p>
+     * <p>该方法用于注解模式导出，框架只提供字段元数据 entity。
+     * 根据源码 type 值判断样式：</p>
+     * <ul>
+     *     <li>1 → 文本</li>
+     *     <li>2 → 图片</li>
+     *     <li>3 → 函数</li>
+     *     <li>10 → 数字</li>
+     *     <li>11 → 特殊符号</li>
+     *     <li>其他/空 → 默认文本</li>
+     * </ul>
      *
-     * @param noneStyler 是否忽略框架默认样式（一般无需关注）
+     * @param noneStyler 是否忽略框架默认样式
      * @param entity     字段元数据对象
      * @return CellStyle 样式实例
      */
     @Override
     public CellStyle getStyles(boolean noneStyler, ExcelExportEntity entity) {
-        return resolveStyleByType(entity != null ? entity.getType() : null);
+        if (entity == null) {
+            return textLeftStyle;
+        }
+
+        Integer type = entity.getType();
+
+        // 定义字段类型常量（替代魔法值）
+        final int TYPE_TEXT = 1;
+        final int TYPE_IMAGE = 2;
+        final int TYPE_FUNCTION = 3;
+        final int TYPE_NUMBER = 10;
+        final int TYPE_SPECIAL = 11;
+
+        if (type == null || type == TYPE_TEXT) {
+            // 文本类型
+            return textLeftStyle;
+        } else if (type == TYPE_IMAGE) {
+            // 图片类型
+            return imageCenterStyle;
+        } else if (type == TYPE_FUNCTION) {
+            // 函数类型（可居中或文本）
+            return textLeftStyle;
+        } else if (type == TYPE_NUMBER) {
+            // 数字类型
+            return numberRightStyle;
+        } else if (type == TYPE_SPECIAL) {
+            // 特殊符号
+            return textLeftStyle;
+        } else {
+            // 默认文本
+            return textLeftStyle;
+        }
     }
 
     /**
@@ -201,7 +260,17 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
      *
      * <p>该方法在动态渲染、Foreach 模板或模板填充模式下触发，
      * 框架会提供 Cell、行号、值等上下文信息。
-     * 样式决策仍基于字段类型进行。</p>
+     * 样式决策基于 Java 数据类型进行，不再依赖框架内部常量。</p>
+     *
+     * <p>样式映射规则：</p>
+     * <ul>
+     *     <li>表头行：headerCenterStyle</li>
+     *     <li>Number 类型 → numberRightStyle（右对齐）</li>
+     *     <li>Date / Calendar → dateCenterStyle（居中）</li>
+     *     <li>Boolean → textLeftStyle（左对齐）</li>
+     *     <li>Byte[] / InputStream → dateCenterStyle（居中，可用于图片）</li>
+     *     <li>其他类型 → textLeftStyle（左对齐）</li>
+     * </ul>
      *
      * @param cell   当前 POI Cell 对象
      * @param row    数据行行号（不含表头）
@@ -212,7 +281,30 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
      */
     @Override
     public CellStyle getStyles(Cell cell, int row, ExcelExportEntity entity, Object obj, Object value) {
-        return resolveStyleByType(entity != null ? entity.getType() : null);
+        // 如果当前行是表头或表头级别（可通过行号判断）
+        if (row < 0) {
+            return headerCenterStyle;
+        }
+
+        // 根据 Java 类型决定样式
+        if (value == null) {
+            return textLeftStyle;
+        }
+        if (value instanceof Number) {
+            return numberRightStyle;
+        }
+        if (value instanceof java.util.Date || value instanceof java.util.Calendar) {
+            return dateCenterStyle;
+        }
+        if (value instanceof Boolean) {
+            return textLeftStyle;
+        }
+        if (value instanceof byte[] || value instanceof java.io.InputStream) {
+            return dateCenterStyle;
+        }
+
+        // 默认文本
+        return textLeftStyle;
     }
 
     /**
@@ -227,37 +319,13 @@ public class CustomExcelExportStyler extends AbstractExcelExportStyler {
      */
     @Override
     public CellStyle getTemplateStyles(boolean isSingle, ExcelForEachParams params) {
-        return textLeftStyle;
-    }
-
-
-    /**
-     * 基于字段类型决定样式（公共逻辑）。
-     *
-     * <p>该方法用于将 BaseTypeConstants 类型映射为对应的单元格样式。
-     * 由于 BaseTypeConstants 为包装类型 Integer，其类型值在运行期才能确定，
-     * 因此采用 if/else 判断而非 switch 常量表达式。</p>
-     *
-     * <p>样式映射规则：</p>
-     * <ul>
-     *     <li>DOUBLE_TYPE → 数字样式（右对齐）</li>
-     *     <li>DATE_TYPE、IMAGE_TYPE → 日期/图片类样式（居中）</li>
-     *     <li>其他或空类型 → 文本样式（左对齐）</li>
-     * </ul>
-     *
-     * @param type BaseTypeConstants 字段类型
-     * @return CellStyle 样式实例
-     */
-    private CellStyle resolveStyleByType(Integer type) {
-        if (type == null) {
-            return textLeftStyle;
+        // 只能基于模板的 CellStyle 或字段类型来返回样式
+        // 因为模板渲染不会传入实际对象值
+        if (params.getCellStyle() != null) {
+            // 优先使用模板自带样式
+            return params.getCellStyle();
         }
-        if (BaseTypeConstants.DOUBLE_TYPE.equals(type)) {
-            return numberRightStyle;
-        }
-        if (BaseTypeConstants.DATE_TYPE.equals(type) || BaseTypeConstants.IMAGE_TYPE.equals(type)) {
-            return dateCenterStyle;
-        }
+        // 默认文本左对齐
         return textLeftStyle;
     }
 

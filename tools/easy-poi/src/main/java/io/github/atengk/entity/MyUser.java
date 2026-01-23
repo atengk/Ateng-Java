@@ -72,13 +72,13 @@ public class MyUser implements Serializable {
     /**
      * 所在省份
      */
-    @Excel(name = "省份", width = 10, groupName = "地理位置", orderNum = "9")
+    @Excel(name = "省份", width = 10, groupName = "地理位置", orderNum = "9", mergeVertical = true)
     private String province;
 
     /**
      * 所在城市
      */
-    @Excel(name = "城市", width = 10, groupName = "地理位置", orderNum = "10")
+    @Excel(name = "城市", width = 10, groupName = "地理位置", orderNum = "10", mergeVertical = true, mergeRely = {9})
     private String city;
 
     /**

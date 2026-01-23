@@ -108,6 +108,39 @@ public class MyUser implements Serializable {
 
 EasyPoi 默认**不会自动映射字段**，必须通过 `@Excel` 显式标注需要导出的字段。
 
+| 参数名                | 类型     | 默认值                | 示例                    | 功能说明                                |
+| --------------------- | -------- | --------------------- | ----------------------- | --------------------------------------- |
+| `name`                | String   | —                     | `"姓名"`                | Excel 列名（必填）                      |
+| `orderNum`            | String   | `"0"`                 | `"1"`                   | 列排序，支持 `a_id` 方式                |
+| `width`               | double   | `10`                  | `20`                    | 列宽（字符单位，1中文=2字符）           |
+| `type`                | int      | `1`                   | `2`                     | 1文本，2图片，3函数，10数字，11特殊符号 |
+| `groupName`           | String   | `""`                  | `"基本信息"`            | 表头分组（双行显示）                    |
+| `suffix`              | String   | `""`                  | `"%"`                   | 显示后缀，如 `90 → 90%`                 |
+| `isWrap`              | boolean  | `true`                | `false`                 | 是否换行（支持`\n`）                    |
+| `mergeVertical`       | boolean  | `false`               | `true`                  | 相同内容自动纵向合并                    |
+| `mergeRely`           | int[]    | `{}`                  | `{1}`                   | 依赖列自动合并                          |
+| `needMerge`           | boolean  | `false`               | `true`                  | List模式下纵向合并                      |
+| `isColumnHidden`      | boolean  | `false`               | `true`                  | 隐藏该列                                |
+| `fixedIndex`          | int      | `-1`                  | `0`                     | 固定列位置                              |
+| `numFormat`           | String   | `""`                  | `"#.##"`                | 数字格式化（DecimalFormat）             |
+| `databaseFormat`      | String   | `"yyyyMMddHHmmss"`    | `"yyyy-MM-dd"`          | DB 字符串日期转换格式                   |
+| `exportFormat`        | String   | `""`                  | `"yyyy-MM-dd"`          | 导出日期格式                            |
+| `importFormat`        | String   | `""`                  | `"yyyy-MM-dd HH:mm:ss"` | 导入日期格式                            |
+| `format`              | String   | `""`                  | `"yyyy-MM-dd"`          | 同时指定 `export+import`                |
+| `timezone`            | String   | `""`                  | `"GMT+8"`               | 日期时区                                |
+| `replace`             | String[] | `{}`                  | `{"男_1","女_2"}`       | 字段替换（导入导出双向）                |
+| `dict`                | String   | `""`                  | `"sex"`                 | 数据字典名称                            |
+| `addressList`         | boolean  | `false`               | `true`                  | 下拉（使用 replace 或 dict）            |
+| `isStatistics`        | boolean  | `false`               | `true`                  | 自动统计数字列（最后一行求和）          |
+| `isHyperlink`         | boolean  | `false`               | `true`                  | 是否超链接，需要实现接口                |
+| `imageType`           | int      | `1`                   | `2`                     | 图片来源：1文件，2数据库                |
+| `savePath`            | String   | `"/excel/upload/img"` | `"/img/save"`           | 图片导入保存路径                        |
+| `isImportField`       | String   | `"false"`             | `"true"`                | 导入字段检查是否存在                    |
+| `enumExportField`     | String   | `""`                  | `"value"`               | 枚举导出字段                            |
+| `enumImportMethod`    | String   | `""`                  | `"getByValue"`          | 枚举导入方法                            |
+| `desensitizationRule` | String   | `""`                  | `"6_4"`                 | 数据脱敏规则（身份证、手机号等）        |
+| `height`              | double   | `10`                  | `15`                    | （Deprecated）建议用样式设置行高        |
+
 ```java
 package io.github.atengk.entity;
 
@@ -418,6 +451,63 @@ public class MyUser implements Serializable {
 ```
 
 ![image-20260121164012214](./assets/image-20260121164012214.png)
+
+### 合并单元格
+
+| 合并方式             | 使用的注解参数         | 行为说明                       |
+| -------------------- | ---------------------- | ------------------------------ |
+| 基于内容相同纵向合并 | `mergeVertical = true` | 同一列连续相同内容自动纵向合并 |
+| 依赖其他列合并       | `mergeRely = {列索引}` | 只有当依赖列也相同时才合并     |
+
+#### 纵向单列合并
+
+- 相同省份 → 合并
+- 相同城市 → 合并
+
+**实体注解添加参数**
+
+```java
+@Excel(name = "省份", width = 10, groupName = "地理位置", orderNum = "9", mergeVertical = true)
+private String province;
+
+@Excel(name = "城市", width = 10, groupName = "地理位置", orderNum = "10", mergeVertical = true)
+private String city;
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testSimpleMergeExport() throws IOException {
+        // 1. 准备数据
+        List<MyUser> userList = InitData.getDataList();
+
+        // 数据按照省份+城市排序
+        userList.sort(Comparator
+                .comparing(MyUser::getProvince)
+                .thenComparing(MyUser::getCity));
+
+        // 2. 配置导出参数
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+
+        // 3. 使用 EasyPoi 生成 Workbook
+        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
+
+        // 4. 写入本地文件
+        String filePath = Paths.get("target", "simple_export_merge_users.xlsx").toString();
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+        workbook.close();
+
+        System.out.println("✅ 导出成功！文件路径: " + filePath);
+    }
+```
+
+![image-20260123102411429](./assets/image-20260123102411429.png)
+
+
 
 ### 自定义样式
 
@@ -1036,6 +1126,356 @@ public class HeaderHighlightCenterAlignExcelStyle extends AbstractExcelExportSty
 ```
 
 ![image-20260122153145866](./assets/image-20260122153145866.png)
+
+#### 通用样式
+
+```java
+package io.github.atengk.style;
+
+import cn.afterturn.easypoi.entity.BaseTypeConstants;
+import cn.afterturn.easypoi.excel.entity.params.ExcelExportEntity;
+import cn.afterturn.easypoi.excel.entity.params.ExcelForEachParams;
+import cn.afterturn.easypoi.excel.export.styler.AbstractExcelExportStyler;
+import org.apache.poi.ss.usermodel.*;
+
+/**
+ * Excel 导出样式策略实现类。
+ *
+ * <p>样式适用范围：</p>
+ * <ul>
+ *     <li>普通导出场景</li>
+ *     <li>模板渲染场景（Foreach）</li>
+ * </ul>
+ *
+ * <p>样式策略说明：</p>
+ * <ul>
+ *     <li>表头类单元格：加粗、灰底、水平垂直居中</li>
+ *     <li>文本类单元格：左对齐</li>
+ *     <li>数字类单元格：右对齐</li>
+ *     <li>日期类单元格：居中</li>
+ *     <li>图片类型单元格：居中</li>
+ *     <li>所有单元格统一配置细边框</li>
+ * </ul>
+ *
+ * <p>基于 EasyPOI 类型常量 {@link BaseTypeConstants} 映射样式。</p>
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+public class CustomExcelExportStyler extends AbstractExcelExportStyler {
+
+    /**
+     * 表头单元格样式（灰底、加粗、居中对齐）
+     */
+    private final CellStyle headerCenterStyle;
+
+    /**
+     * 文本单元格样式（左对齐）
+     */
+    private final CellStyle textLeftStyle;
+
+    /**
+     * 数字单元格样式（右对齐）
+     */
+    private final CellStyle numberRightStyle;
+
+    /**
+     * 日期单元格样式（居中对齐）
+     */
+    private final CellStyle dateCenterStyle;
+
+    /**
+     * 图片单元格样式（居中对齐）
+     */
+    private final CellStyle imageCenterStyle;
+
+    /**
+     * 构造函数。
+     *
+     * @param workbook Excel 工作簿实例
+     */
+    public CustomExcelExportStyler(Workbook workbook) {
+        super.createStyles(workbook);
+        this.headerCenterStyle = createHeaderStyle();
+        this.textLeftStyle = createTextStyle();
+        this.numberRightStyle = createNumberStyle();
+        this.dateCenterStyle = createDateStyle();
+        this.imageCenterStyle = createImageStyle();
+    }
+
+    /**
+     * 创建表头样式。
+     * <p>配置内容：</p>
+     * <ul>
+     *     <li>字体加粗</li>
+     *     <li>灰色背景填充</li>
+     *     <li>水平垂直居中</li>
+     *     <li>细边框</li>
+     * </ul>
+     *
+     * @return 表头样式
+     */
+    private CellStyle createHeaderStyle() {
+        CellStyle style = workbook.createCellStyle();
+
+        Font font = workbook.createFont();
+        font.setFontName("宋体");
+        font.setFontHeightInPoints((short) 11);
+        font.setBold(true);
+        style.setFont(font);
+
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+        setThinBorder(style);
+
+        return style;
+    }
+
+    /**
+     * 创建文本类型样式（左对齐）。
+     *
+     * @return 文本样式
+     */
+    private CellStyle createTextStyle() {
+        CellStyle style = workbook.createCellStyle();
+
+        Font font = workbook.createFont();
+        font.setFontName("宋体");
+        font.setFontHeightInPoints((short) 11);
+        style.setFont(font);
+
+        style.setAlignment(HorizontalAlignment.LEFT);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        setThinBorder(style);
+
+        return style;
+    }
+
+    /**
+     * 创建数字类型样式（右对齐）。
+     *
+     * @return 数字样式
+     */
+    private CellStyle createNumberStyle() {
+        CellStyle style = workbook.createCellStyle();
+
+        Font font = workbook.createFont();
+        font.setFontName("宋体");
+        font.setFontHeightInPoints((short) 11);
+        style.setFont(font);
+
+        style.setAlignment(HorizontalAlignment.RIGHT);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        setThinBorder(style);
+
+        return style;
+    }
+
+    /**
+     * 创建日期类型样式（居中）。
+     *
+     * @return 日期样式
+     */
+    private CellStyle createDateStyle() {
+        CellStyle style = workbook.createCellStyle();
+
+        Font font = workbook.createFont();
+        font.setFontName("宋体");
+        font.setFontHeightInPoints((short) 11);
+        style.setFont(font);
+
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        setThinBorder(style);
+
+        return style;
+    }
+
+    /**
+     * 创建图片样式
+     *
+     * @return 图片样式
+     */
+    private CellStyle createImageStyle() {
+        CellStyle style = workbook.createCellStyle();
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        setThinBorder(style);
+        return style;
+    }
+
+    /**
+     * 表头样式适配（调用自定义样式）。
+     *
+     * @param color 表头颜色（框架传入）
+     * @return 表头样式
+     */
+    @Override
+    public CellStyle getTitleStyle(short color) {
+        return headerCenterStyle;
+    }
+
+    /**
+     * 多级表头样式适配。
+     *
+     * @param color 表头颜色
+     * @return 表头样式
+     */
+    @Override
+    public CellStyle getHeaderStyle(short color) {
+        return headerCenterStyle;
+    }
+
+    /**
+     * 样式选择入口（无 Cell 上下文版本）。
+     *
+     * <p>该方法用于注解模式导出，框架只提供字段元数据 entity。
+     * 根据源码 type 值判断样式：</p>
+     * <ul>
+     *     <li>1 → 文本</li>
+     *     <li>2 → 图片</li>
+     *     <li>3 → 函数</li>
+     *     <li>10 → 数字</li>
+     *     <li>11 → 特殊符号</li>
+     *     <li>其他/空 → 默认文本</li>
+     * </ul>
+     *
+     * @param noneStyler 是否忽略框架默认样式
+     * @param entity     字段元数据对象
+     * @return CellStyle 样式实例
+     */
+    @Override
+    public CellStyle getStyles(boolean noneStyler, ExcelExportEntity entity) {
+        if (entity == null) {
+            return textLeftStyle;
+        }
+
+        Integer type = entity.getType();
+
+        // 定义字段类型常量（替代魔法值）
+        final int TYPE_TEXT = 1;
+        final int TYPE_IMAGE = 2;
+        final int TYPE_FUNCTION = 3;
+        final int TYPE_NUMBER = 10;
+        final int TYPE_SPECIAL = 11;
+
+        if (type == null || type == TYPE_TEXT) {
+            // 文本类型
+            return textLeftStyle;
+        } else if (type == TYPE_IMAGE) {
+            // 图片类型
+            return imageCenterStyle;
+        } else if (type == TYPE_FUNCTION) {
+            // 函数类型（可居中或文本）
+            return textLeftStyle;
+        } else if (type == TYPE_NUMBER) {
+            // 数字类型
+            return numberRightStyle;
+        } else if (type == TYPE_SPECIAL) {
+            // 特殊符号
+            return textLeftStyle;
+        } else {
+            // 默认文本
+            return textLeftStyle;
+        }
+    }
+
+    /**
+     * 样式选择入口（带 Cell 上下文版本）。
+     *
+     * <p>该方法在动态渲染、Foreach 模板或模板填充模式下触发，
+     * 框架会提供 Cell、行号、值等上下文信息。
+     * 样式决策基于 Java 数据类型进行，不再依赖框架内部常量。</p>
+     *
+     * <p>样式映射规则：</p>
+     * <ul>
+     *     <li>表头行：headerCenterStyle</li>
+     *     <li>Number 类型 → numberRightStyle（右对齐）</li>
+     *     <li>Date / Calendar → dateCenterStyle（居中）</li>
+     *     <li>Boolean → textLeftStyle（左对齐）</li>
+     *     <li>Byte[] / InputStream → dateCenterStyle（居中，可用于图片）</li>
+     *     <li>其他类型 → textLeftStyle（左对齐）</li>
+     * </ul>
+     *
+     * @param cell   当前 POI Cell 对象
+     * @param row    数据行行号（不含表头）
+     * @param entity 字段元数据对象
+     * @param obj    当前整行数据对象
+     * @param value  字段对应的原始值
+     * @return CellStyle 样式实例
+     */
+    @Override
+    public CellStyle getStyles(Cell cell, int row, ExcelExportEntity entity, Object obj, Object value) {
+        // 如果当前行是表头或表头级别（可通过行号判断）
+        if (row < 0) {
+            return headerCenterStyle;
+        }
+
+        // 根据 Java 类型决定样式
+        if (value == null) {
+            return textLeftStyle;
+        }
+        if (value instanceof Number) {
+            return numberRightStyle;
+        }
+        if (value instanceof java.util.Date || value instanceof java.util.Calendar) {
+            return dateCenterStyle;
+        }
+        if (value instanceof Boolean) {
+            return textLeftStyle;
+        }
+        if (value instanceof byte[] || value instanceof java.io.InputStream) {
+            return dateCenterStyle;
+        }
+
+        // 默认文本
+        return textLeftStyle;
+    }
+
+    /**
+     * Foreach 模板渲染使用的样式选择。
+     *
+     * <p>该方法在处理 `{{$fe:list t.name}}` 等模板语法时触发，
+     * 字段元数据需从 ExcelForEachParams 中提取，因此与注解模式入口分离。</p>
+     *
+     * @param isSingle 是否为单列渲染（框架内部字段）
+     * @param params   Foreach 参数对象，包含字段元数据
+     * @return CellStyle 样式实例
+     */
+    @Override
+    public CellStyle getTemplateStyles(boolean isSingle, ExcelForEachParams params) {
+        // 只能基于模板的 CellStyle 或字段类型来返回样式
+        // 因为模板渲染不会传入实际对象值
+        if (params.getCellStyle() != null) {
+            // 优先使用模板自带样式
+            return params.getCellStyle();
+        }
+        // 默认文本左对齐
+        return textLeftStyle;
+    }
+
+    /**
+     * 设置细边框，增强单元格视觉边界。
+     *
+     * @param style 单元格样式对象
+     */
+    private void setThinBorder(CellStyle style) {
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+    }
+}
+```
+
+![image-20260123101543171](./assets/image-20260123101543171.png)
 
 ------
 
@@ -2528,6 +2968,65 @@ emailEntity.setDesensitizationRule("1~@");
 ```
 
 ![image-20260121203250589](./assets/image-20260121203250589.png)
+
+#### 合并单元格
+
+使用 `ExcelExportEntity.setMergeVertical(true)` 自动合并内容相同的单元格
+
+```java
+
+    @Test
+    public void testSimpleMergeExportWithMap() throws IOException {
+        List<MyUser> userList = InitData.getDataList();
+
+        userList.sort(
+                Comparator.comparing(MyUser::getProvince)
+                        .thenComparing(MyUser::getCity)
+        );
+
+        // 转成 List<Map>
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (MyUser user : userList) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", user.getId());
+            map.put("name", user.getName());
+            map.put("age", user.getAge());
+            map.put("city", user.getCity());
+            dataList.add(map);
+        }
+
+        // 定义表头（key 对应 map 的 key，name 是显示在 Excel 的标题）
+        List<ExcelExportEntity> entityList = new ArrayList<>();
+        ExcelExportEntity id = new ExcelExportEntity("ID", "id");
+        id.setWidth(20);
+        entityList.add(id);
+        ExcelExportEntity name = new ExcelExportEntity("姓名", "name");
+        name.setWidth(30);
+        entityList.add(name);
+        ExcelExportEntity age = new ExcelExportEntity("年龄", "age");
+        age.setWidth(20);
+        entityList.add(age);
+        ExcelExportEntity city = new ExcelExportEntity("城市", "city");
+        city.setWidth(40);
+        city.setMergeVertical(true);
+        entityList.add(city);
+
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+
+        Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
+
+        String filePath = Paths.get("target", "simple_export_merge_users_map.xlsx").toString();
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+        workbook.close();
+
+        System.out.println("导出成功: " + filePath);
+    }
+```
+
+![image-20260123103821173](./assets/image-20260123103821173.png)
 
 #### 导出图片
 
