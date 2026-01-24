@@ -4340,6 +4340,69 @@ EasyPOI 模板语法：
 
 ![image-20260122201926756](./assets/image-20260122201926756.png)
 
+### 填充多 Sheet
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_multiple_sheet_template.xlsx
+```
+
+Sheet1
+
+```
+用户信息	姓名	{{ name }}
+	年龄	{{ age }}
+	性别	{{ sex }}
+```
+
+![image-20260124151414951](./assets/image-20260124151414951.png)
+
+Sheet2
+
+```
+用户信息	姓名	{{ name }}
+	年龄	{{ age }}
+```
+
+**使用方法**
+
+- 模版导出扫描全部的sheet的变量：params.setScanAllsheet(true)
+- 模版导出扫描指定名称sheet的变量：params.setSheetName(new String[]{"Sheet1", "Sheet2"})
+- 模版导出扫描指定索引sheet的变量：params.setSheetNum(new Integer[]{0,1})
+
+```java
+    @Test
+    void testScanAllSheet() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+        data.put("age", "25");
+        data.put("sex", "25");
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_multiple_sheet_template.xlsx",
+                data,
+                params -> params.setScanAllsheet(true)
+        );
+        Path filePath = Paths.get("target", "template_export_multiple_sheet_users.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+        System.out.println("✅ 模板导出成功：" + filePath);
+    }
+```
+
+Sheet1
+
+![image-20260124151534373](./assets/image-20260124151534373.png)
+
+Sheet2
+
+![image-20260124151602969](./assets/image-20260124151602969.png)
+
+
+
 ### 格式化
 
 #### 普通变量

@@ -34,6 +34,22 @@ public class TemplateExportTests {
     }
 
     @Test
+    void testScanAllSheet() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+        data.put("age", "25");
+        data.put("sex", "25");
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_multiple_sheet_template.xlsx",
+                data,
+                params -> params.setScanAllsheet(true)
+        );
+        Path filePath = Paths.get("target", "template_export_multiple_sheet_users.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+        System.out.println("✅ 模板导出成功：" + filePath);
+    }
+
+    @Test
     void test2() {
         List<MyUser> dataList = InitData.getDataList();
         Map<String, Object> data = new HashMap<>();
