@@ -99,6 +99,8 @@ public final class ExcelUtil {
 
             try (OutputStream outputStream = Files.newOutputStream(filePath)) {
                 workbook.write(outputStream);
+            } finally {
+                workbook.close();
             }
         } catch (IOException e) {
             throw new IllegalStateException("导出 Excel 文件失败: " + filePath, e);
@@ -151,6 +153,8 @@ public final class ExcelUtil {
             try (OutputStream outputStream = response.getOutputStream()) {
                 workbook.write(outputStream);
                 outputStream.flush();
+            } finally {
+                workbook.close();
             }
         } catch (IOException e) {
             throw new IllegalStateException("通过接口导出 Excel 失败", e);

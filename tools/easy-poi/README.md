@@ -415,6 +415,8 @@ public final class ExcelUtil {
 
             try (OutputStream outputStream = Files.newOutputStream(filePath)) {
                 workbook.write(outputStream);
+            } finally {
+                workbook.close();
             }
         } catch (IOException e) {
             throw new IllegalStateException("导出 Excel 文件失败: " + filePath, e);
@@ -467,6 +469,8 @@ public final class ExcelUtil {
             try (OutputStream outputStream = response.getOutputStream()) {
                 workbook.write(outputStream);
                 outputStream.flush();
+            } finally {
+                workbook.close();
             }
         } catch (IOException e) {
             throw new IllegalStateException("通过接口导出 Excel 失败", e);
@@ -3150,6 +3154,246 @@ emailEntity.setDesensitizationRule("1~@");
 
 参考章节：数据映射 / 使用 `IExcelDataHandler` 自定义处理
 
+### 一对多集合导出 @ExcelCollection
+
+`@ExcelCollection` 是 EasyPoi 中用于实现 **一对多集合导出** 的核心注解，适用于以下业务场景：
+
+- 一个订单包含多个商品
+- 一个课程包含多个学生
+- 一张发票包含多条明细
+- 一份采购单包含多个采购项
+
+#### 创建主对象
+
+```java
+package io.github.atengk.entity;
+
+import cn.afterturn.easypoi.excel.annotation.Excel;
+import cn.afterturn.easypoi.excel.annotation.ExcelCollection;
+import lombok.Data;
+
+import java.util.List;
+
+@Data
+public class CourseExcel {
+    @Excel(name = "课程名称", width = 15, needMerge = true, orderNum = "1")
+    private String courseName;
+
+    @ExcelCollection(name = "学生列表", orderNum = "4")
+    private List<Student> students;
+}
+
+```
+
+#### 创建子对象
+
+```java
+package io.github.atengk.entity;
+
+import cn.afterturn.easypoi.excel.annotation.Excel;
+import lombok.Data;
+
+@Data
+public class Student {
+    @Excel(name = "学生姓名", width = 12, orderNum = "1")
+    private String name;
+
+    @Excel(name = "学生年龄", width = 12, orderNum = "2")
+    private Integer age;
+}
+
+```
+
+#### 导出数据创建
+
+```java
+public static List<CourseExcel> getDataList() {
+        List<CourseExcel> list = new ArrayList<>();
+
+        // === 课程 1 ===
+        CourseExcel course1 = new CourseExcel();
+        course1.setCourseName("Java 开发课程");
+        course1.setStudents(Arrays.asList(
+                newStudent("张三", 18),
+                newStudent("李四", 19),
+                newStudent("王五", 20)
+        ));
+
+        // === 课程 2 ===
+        CourseExcel course2 = new CourseExcel();
+        course2.setCourseName("Python 入门课程");
+        course2.setStudents(Arrays.asList(
+                newStudent("小明", 16),
+                newStudent("小红", 17)
+        ));
+
+        // === 课程 3 ===
+        CourseExcel course3 = new CourseExcel();
+        course3.setCourseName("Go 实战课程");
+        course3.setStudents(Arrays.asList(
+                newStudent("Tom", 21),
+                newStudent("Jerry", 22),
+                newStudent("Alice", 23),
+                newStudent("Bob", 24)
+        ));
+
+        list.add(course1);
+        list.add(course2);
+        list.add(course3);
+
+        return list;
+    }
+
+    private static Student newStudent(String name, int age) {
+        Student s = new Student();
+        s.setName(name);
+        s.setAge(age);
+        return s;
+    }
+```
+
+#### 使用示例
+
+```
+    @Test
+    public void testCourseExport() {
+        // 1. 准备数据
+        List<CourseExcel> courseList = getDataList();
+
+        // 2. 配置导出参数
+        ExportParams params = new ExportParams();
+        params.setSheetName("课程数据");
+
+        // 3. 使用 EasyPoi 直接生成 Workbook
+        Workbook workbook = ExcelExportUtil.exportExcel(params, CourseExcel.class, courseList);
+
+        // 4. 写入本地文件
+        Path filePath = Paths.get("target", "export_course_with_students.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+
+        System.out.println("✅ 导出成功！文件路径: " + filePath);
+    }
+```
+
+![image-20260124135258772](./assets/image-20260124135258772.png)
+
+### 嵌套对象支持 @ExcelEntity
+
+`@ExcelEntity` 用于导出对象中 **嵌套的单个子对象属性**，适用于以下业务场景：
+
+- 用户 → 地址信息（省、市、区）
+- 项目 → 公司信息（名称、统一信用代码）
+- 订单 → 收货人信息（姓名、电话、邮编）
+- 课程 → 创建人信息（姓名、邮箱）
+
+区别于 `@ExcelCollection` 的集合展开，`@ExcelEntity` 用于 **一对一对象的字段扁平化导出**。
+
+------
+
+#### 创建主对象
+
+```java
+package io.github.atengk.entity;
+
+import cn.afterturn.easypoi.excel.annotation.Excel;
+import cn.afterturn.easypoi.excel.annotation.ExcelEntity;
+import lombok.Data;
+
+@Data
+public class OrderExcel {
+
+    @Excel(name = "订单编号", width = 18, orderNum = "1")
+    private String orderNo;
+
+    @ExcelEntity(name = "收件人信息")
+    private Receiver receiver;
+}
+```
+
+------
+
+#### 创建嵌套对象
+
+```java
+package io.github.atengk.entity;
+
+import cn.afterturn.easypoi.excel.annotation.Excel;
+import lombok.Data;
+
+@Data
+public class Receiver {
+
+    @Excel(name = "收件人姓名", width = 15, orderNum = "2")
+    private String name;
+
+    @Excel(name = "联系电话", width = 15, orderNum = "3")
+    private String phone;
+
+    @Excel(name = "收件城市", width = 15, orderNum = "4")
+    private String city;
+}
+```
+
+> `@ExcelEntity(name = "...")` 会作为 **表头分组名** 自动插入，但不会影响字段扁平化展开。
+
+------
+
+#### 导出数据创建
+
+```java
+public static List<OrderExcel> buildOrderData() {
+    List<OrderExcel> list = new ArrayList<>();
+
+    list.add(newOrder("NO202601001", "张三", "18800001111", "北京"));
+    list.add(newOrder("NO202601002", "李四", "18800002222", "上海"));
+    list.add(newOrder("NO202601003", "王五", "18800003333", "广州"));
+
+    return list;
+}
+
+private static OrderExcel newOrder(String orderNo, String name, String phone, String city) {
+    OrderExcel order = new OrderExcel();
+    order.setOrderNo(orderNo);
+
+    Receiver r = new Receiver();
+    r.setName(name);
+    r.setPhone(phone);
+    r.setCity(city);
+
+    order.setReceiver(r);
+    return order;
+}
+```
+
+------
+
+#### 使用示例
+
+```java
+@Test
+public void testOrderExport() {
+    // 1. 构造数据
+    List<OrderExcel> list = buildOrderData();
+
+    // 2. 设置导出参数
+    ExportParams params = new ExportParams();
+    params.setSheetName("订单数据");
+
+    // 3. 执行导出
+    Workbook workbook = ExcelExportUtil.exportExcel(params, OrderExcel.class, list);
+
+    // 4. 导出到文件
+    Path filePath = Paths.get("target", "export_orders.xlsx");
+    ExcelUtil.exportToFile(workbook, filePath);
+
+    System.out.println("✅ 导出成功！文件路径: " + filePath);
+}
+```
+
+![image-20260124135706812](./assets/image-20260124135706812.png)
+
+------
+
 ### 导出图片
 
 更新 `MyUser` 实体类，添加图片字段
@@ -3289,15 +3533,13 @@ emailEntity.setDesensitizationRule("1~@");
 
 ![image-20260121195156735](./assets/image-20260121195156735.png)
 
-### 大数据量导出（分批写入，避免内存溢出）
+### 大数据量导出（分批写入）
 
 ```java
     @Test
     public void testBigDataExport() throws IOException {
-        // 1. 生成大数据
-        int total = 500_000;
-        System.out.println("正在生成 " + total + " 条测试数据...");
-        List<MyUser> dataList = InitData.getDataList(total);
+        // 1. 写入多少次
+        int total = 500;
 
         // 2. 创建 IWriter
         ExportParams params = new ExportParams();
@@ -3308,13 +3550,12 @@ emailEntity.setDesensitizationRule("1~@");
 
         // 4. 分批写入
         int batchSize = 1000;
-        for (int i = 0; i < dataList.size(); i += batchSize) {
-            int end = Math.min(i + batchSize, dataList.size());
-            List<MyUser> batch = dataList.subList(i, end);
+        for (int i = 0; i < total; i++) {
+            List<MyUser> batch = InitData.getDataList(batchSize);
 
             writer.write(batch);
 
-            System.out.printf("已写入 %d / %d 行%n", end, dataList.size());
+            System.out.printf("已写入 %d / %d 行%n", batchSize * (i + 1), total * batchSize);
         }
 
         // 5. 获取Workbook 并写入文件
@@ -5121,62 +5362,14 @@ src
 
 ---
 
+## 导入 Excel（Import）
 
+### 基础数据导入
 
-## 参考
+### 自定义校验规则
 
-### 📁 EasyPoi 功能使用目录
+###  导入错误信息收集与反馈
 
-#### 1. 环境准备与依赖引入
-- 添加 Maven/Gradle 依赖
-- 配置 Spring Boot（如适用）
-- 基础注解类说明（@Excel、@ExcelCollection 等）
+### 支持多 Sheet 导入
 
-#### 2. 导出 Excel（Export）
-- 2.1 简单对象导出（单表头）
-- 2.2 多级表头导出（合并单元格）
-- 2.3 自定义列宽、字体、样式
-- 2.4 导出图片（本地路径 / Base64）
-- 2.5 导出为多个 Sheet
-- 2.6 大数据量导出（分批写入，避免内存溢出）
-
-#### 3. 导入 Excel（Import）
-- 3.1 基础数据导入（自动类型转换）
-- 3.2 自定义校验规则（如手机号、邮箱格式）
-- 3.3 导入错误信息收集与反馈
-- 3.4 支持多 Sheet 导入
-- 3.5 导入时忽略空行或无效行
-
-#### 4. 模板导出（Template Export）
-- 4.1 使用 Excel 模板文件（.xlsx）填充数据
-- 4.2 模板中动态表格（List 数据填充）
-- 4.3 模板中图片动态插入
-- 4.4 模板中公式保留与计算
-
-#### 5. 注解详解与高级用法
-- @Excel：字段映射、类型、宽度、格式化等
-- @ExcelCollection：一对多集合导出
-- @ExcelEntity：嵌套对象支持
-- 自定义字典转换（dictHandler）
-- 自定义日期/数字格式
-
-#### 6. Web 场景集成
-- 6.1 Spring Boot 中导出接口（返回文件流）
-- 6.2 前端上传 Excel 文件并解析
-- 6.3 导出文件名中文处理（避免乱码）
-- 6.4 异步导出 + 下载链接通知（可选）
-
-#### 7. 性能与优化
-- 内存控制（SXSSF 模式）
-- 导出进度监听（大数据场景）
-- 缓存模板提升性能
-
-#### 8. 常见问题与解决方案
-- 时间格式不一致
-- 数字被识别为文本
-- 导入时类型转换异常
-- 中文乱码处理
-- Excel 版本兼容性（.xls vs .xlsx）
-
----
-
+### 导入时忽略空行或无效行

@@ -9,13 +9,14 @@ import cn.afterturn.easypoi.excel.export.ExcelExportService;
 import cn.afterturn.easypoi.handler.inter.IWriter;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.http.HttpUtil;
-import io.github.atengk.entity.MyUser;
+import io.github.atengk.entity.*;
 import io.github.atengk.enums.UserStatus;
 import io.github.atengk.handler.NumberDataHandler;
 import io.github.atengk.handler.NumberDictHandler;
 import io.github.atengk.init.InitData;
 import io.github.atengk.style.CustomConciseExcelExportStyler;
 import io.github.atengk.util.ExcelStyleUtil;
+import io.github.atengk.util.ExcelUtil;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.FillPatternType;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -323,10 +325,8 @@ public class ExportTests {
 
     @Test
     public void testBigDataExport() throws IOException {
-        // 1. 生成大数据
-        int total = 500_000;
-        System.out.println("正在生成 " + total + " 条测试数据...");
-        List<MyUser> dataList = InitData.getDataList(total);
+        // 1. 写入多少次
+        int total = 500;
 
         // 2. 创建 IWriter
         ExportParams params = new ExportParams();
@@ -337,13 +337,12 @@ public class ExportTests {
 
         // 4. 分批写入
         int batchSize = 1000;
-        for (int i = 0; i < dataList.size(); i += batchSize) {
-            int end = Math.min(i + batchSize, dataList.size());
-            List<MyUser> batch = dataList.subList(i, end);
+        for (int i = 0; i < total; i++) {
+            List<MyUser> batch = InitData.getDataList(batchSize);
 
             writer.write(batch);
 
-            System.out.printf("已写入 %d / %d 行%n", end, dataList.size());
+            System.out.printf("已写入 %d / %d 行%n", batchSize * (i + 1), total * batchSize);
         }
 
         // 5. 获取Workbook 并写入文件
@@ -631,7 +630,7 @@ public class ExportTests {
             map.put("name", user.getName());
 
             // 假设 number 是数字，后面用字典映射
-            map.put("number", RandomUtil.randomEle(Arrays.asList(1,2,3)));
+            map.put("number", RandomUtil.randomEle(Arrays.asList(1, 2, 3)));
 
             // 假设 city 是编码，后面用 handler 处理
             map.put("city", user.getCity());
@@ -764,6 +763,110 @@ public class ExportTests {
         System.out.println("导出成功: " + filePath);
     }
 
+    public static List<CourseExcel> getDataList() {
+        List<CourseExcel> list = new ArrayList<>();
+
+        // === 课程 1 ===
+        CourseExcel course1 = new CourseExcel();
+        course1.setCourseName("Java 开发课程");
+        course1.setStudents(Arrays.asList(
+                newStudent("张三", 18),
+                newStudent("李四", 19),
+                newStudent("王五", 20)
+        ));
+
+        // === 课程 2 ===
+        CourseExcel course2 = new CourseExcel();
+        course2.setCourseName("Python 入门课程");
+        course2.setStudents(Arrays.asList(
+                newStudent("小明", 16),
+                newStudent("小红", 17)
+        ));
+
+        // === 课程 3 ===
+        CourseExcel course3 = new CourseExcel();
+        course3.setCourseName("Go 实战课程");
+        course3.setStudents(Arrays.asList(
+                newStudent("Tom", 21),
+                newStudent("Jerry", 22),
+                newStudent("Alice", 23),
+                newStudent("Bob", 24)
+        ));
+
+        list.add(course1);
+        list.add(course2);
+        list.add(course3);
+
+        return list;
+    }
+
+    private static Student newStudent(String name, int age) {
+        Student s = new Student();
+        s.setName(name);
+        s.setAge(age);
+        return s;
+    }
+
+    @Test
+    public void testCourseExport() {
+        // 1. 准备数据
+        List<CourseExcel> courseList = getDataList();
+
+        // 2. 配置导出参数
+        ExportParams params = new ExportParams();
+        params.setSheetName("课程数据");
+
+        // 3. 使用 EasyPoi 直接生成 Workbook
+        Workbook workbook = ExcelExportUtil.exportExcel(params, CourseExcel.class, courseList);
+
+        // 4. 写入本地文件
+        Path filePath = Paths.get("target", "export_course_with_students.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+
+        System.out.println("✅ 导出成功！文件路径: " + filePath);
+    }
+
+    public static List<OrderExcel> buildOrderData() {
+        List<OrderExcel> list = new ArrayList<>();
+
+        list.add(newOrder("NO202601001", "张三", "18800001111", "北京"));
+        list.add(newOrder("NO202601002", "李四", "18800002222", "上海"));
+        list.add(newOrder("NO202601003", "王五", "18800003333", "广州"));
+
+        return list;
+    }
+
+    private static OrderExcel newOrder(String orderNo, String name, String phone, String city) {
+        OrderExcel order = new OrderExcel();
+        order.setOrderNo(orderNo);
+
+        Receiver r = new Receiver();
+        r.setName(name);
+        r.setPhone(phone);
+        r.setCity(city);
+
+        order.setReceiver(r);
+        return order;
+    }
+
+    @Test
+    public void testOrderExport() {
+        // 1. 构造数据
+        List<OrderExcel> list = buildOrderData();
+
+        // 2. 设置导出参数
+        ExportParams params = new ExportParams();
+        params.setSheetName("订单数据");
+
+        // 3. 执行导出
+        Workbook workbook = ExcelExportUtil.exportExcel(params, OrderExcel.class, list);
+
+        // 4. 导出到文件
+        Path filePath = Paths.get("target", "export_orders.xlsx");
+        ExcelUtil.exportToFile(workbook, filePath);
+
+        System.out.println("✅ 导出成功！文件路径: " + filePath);
+    }
 
 
 }

@@ -90,8 +90,8 @@ public class MyUser implements Serializable {
     /**
      * 图片
      */
-    @Excel(name = "图片", type = 2, width = 15, height = 30, orderNum = "12")
-//    @ExcelIgnore
+//    @Excel(name = "图片", type = 2, width = 15, height = 30, orderNum = "12")
+    @ExcelIgnore
     private Object image;
 
     // 1→青年 2→中年 3→老年
