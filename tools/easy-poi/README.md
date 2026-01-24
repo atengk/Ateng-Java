@@ -350,6 +350,7 @@ import cn.afterturn.easypoi.excel.ExcelExportUtil;
 import cn.afterturn.easypoi.excel.ExcelImportUtil;
 import cn.afterturn.easypoi.excel.entity.ImportParams;
 import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
+import cn.afterturn.easypoi.excel.entity.result.ExcelImportResult;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -1300,6 +1301,92 @@ public final class ExcelUtil {
             return ExcelImportUtil.importExcel(inputStream, clazz, params);
         } catch (Exception e) {
             throw new IllegalStateException("Excel InputStream 导入失败", e);
+        }
+    }
+
+    /**
+     * 基于 InputStream 导入 Excel 数据（高级模式）
+     *
+     * <p>
+     * 返回 {@link ExcelImportResult}，可获取：
+     * </p>
+     *
+     * <ul>
+     *     <li>成功数据列表：{@link ExcelImportResult#getList()}</li>
+     *     <li>失败数据列表：{@link ExcelImportResult#getFailList()}</li>
+     *     <li>是否存在校验失败：{@link ExcelImportResult#isVerifyFail()}</li>
+     *     <li>失败数据 Excel：{@link ExcelImportResult#getFailWorkbook()}</li>
+     * </ul>
+     *
+     * <p>
+     * 适用于需要错误收集、失败行导出、失败原因回溯等完整导入场景。
+     * </p>
+     *
+     * @param inputStream Excel 文件输入流
+     * @param clazz       Excel 映射的实体类类型
+     * @param <T>         泛型类型
+     * @return Excel 导入完整结果对象
+     */
+    public static <T> ExcelImportResult<T> importMoreFromInputStream(InputStream inputStream,
+                                                                     Class<T> clazz) {
+        return importMoreFromInputStream(inputStream, clazz, null);
+    }
+
+    /**
+     * 基于 InputStream 导入 Excel 数据（高级模式），并支持完整导入结果返回
+     *
+     * <p>
+     * 推荐所有需要错误收集、失败行导出、失败原因定位的导入统一走该方法，
+     * 是整个 Excel 高级导入体系的“核心入口”。
+     * </p>
+     *
+     * <p>
+     * 通过 {@link ImportParamsConfigurer} 可以灵活配置 {@link ImportParams}，例如：
+     * </p>
+     *
+     * <ul>
+     *     <li>开启校验：{@code params.setNeedVerify(true)}</li>
+     *     <li>设置校验处理器：{@code params.setVerifyHandler(new MyUserVerifyHandler())}</li>
+     *     <li>是否忽略空行：{@code params.setIgnoreEmptyRow(true)}</li>
+     *     <li>是否生成失败 Excel：{@code params.setNeedSave(true)}</li>
+     *     <li>设置图片保存路径：{@code params.setSaveUrl("/excel/upload/excelUpload")}</li>
+     * </ul>
+     *
+     * <p>
+     * 注意：
+     * </p>
+     *
+     * <ul>
+     *     <li>InputStream 由调用方负责关闭</li>
+     *     <li>该方法不会主动关闭流，保证流生命周期可控</li>
+     * </ul>
+     *
+     * @param inputStream Excel 文件输入流
+     * @param clazz       Excel 映射的实体类类型
+     * @param configurer  导入参数配置回调，可为 null
+     * @param <T>         泛型类型
+     * @return Excel 导入完整结果对象
+     */
+    public static <T> ExcelImportResult<T> importMoreFromInputStream(InputStream inputStream,
+                                                                     Class<T> clazz,
+                                                                     ImportParamsConfigurer configurer) {
+
+        if (inputStream == null) {
+            throw new IllegalArgumentException("inputStream 不能为空");
+        }
+        if (clazz == null) {
+            throw new IllegalArgumentException("clazz 不能为空");
+        }
+
+        ImportParams params = new ImportParams();
+        if (configurer != null) {
+            configurer.configure(params);
+        }
+
+        try {
+            return ExcelImportUtil.importExcelMore(inputStream, clazz, params);
+        } catch (Exception e) {
+            throw new IllegalStateException("Excel InputStream 高级导入失败", e);
         }
     }
 
