@@ -255,6 +255,27 @@ public class ExportTests {
         System.out.println("✅ 含图片的 Excel 导出成功！路径: " + filePath);
     }
 
+    @Test
+    public void testImage2Export() throws IOException {
+        List<MyUser> userList = InitData.getDataList(5);
+        for (int i = 0; i < userList.size(); i++) {
+            userList.get(i).setImage("https://placehold.co/100x100/png");
+        }
+
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户数据（含图片）");
+
+        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
+
+        String filePath = Paths.get("target", "image2_export_users.xlsx").toString();
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+        workbook.close();
+
+        System.out.println("✅ 含图片的 Excel 导出成功！路径: " + filePath);
+    }
+
 
     @Test
     public void testMultiSheetExport() throws IOException {

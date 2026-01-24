@@ -3140,6 +3140,8 @@ emailEntity.setDesensitizationRule("1~@");
 - 类型也可以是 `byte[]`、`InputStream`、`File`、`URL`、`classpath 资源流`
 - 也可以直接Object，所有类型都支持
 
+#### 基本使用
+
 ```java
     /**
      * 图片
@@ -3179,7 +3181,44 @@ emailEntity.setDesensitizationRule("1~@");
     }
 ```
 
+#### 设置高宽
 
+经过测试，正方形的图片宽高保持 1:2 的比例效果最好，长方形的宽高不定自行调节
+
+```java
+    /**
+     * 图片
+     */
+    @Excel(name = "图片", type = 2, width = 15, height = 30, orderNum = "12")
+    private Object image;
+```
+
+使用方法
+
+```java
+    @Test
+    public void testImage2Export() throws IOException {
+        List<MyUser> userList = InitData.getDataList(5);
+        for (int i = 0; i < userList.size(); i++) {
+            userList.get(i).setImage("https://placehold.co/100x100/png");
+        }
+
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户数据（含图片）");
+
+        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
+
+        String filePath = Paths.get("target", "image2_export_users.xlsx").toString();
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+        workbook.close();
+
+        System.out.println("✅ 含图片的 Excel 导出成功！路径: " + filePath);
+    }
+```
+
+![image-20260124095343224](./assets/image-20260124095343224.png)
 
 ### 导出为多个 Sheet
 
@@ -4872,9 +4911,196 @@ src
 
 
 
-### 模板中图片动态插入
+### 模板中图片动态插入（存在BUG！！！）
 
-### 模板中公式保留与计算
+EasyPOI 中模板图片的本质：
+
+> 模板只是一个变量占位
+>  数据中对应字段必须是 `ImageEntity` 对象
+>  EasyPOI 在渲染阶段将图片写入 Excel 单元格
+
+**模板语法**
+
+普通变量：
+
+```
+{{photo}}
+```
+
+列表变量：
+
+```
+序号	姓名	头像
+{{ $fe:list &INDEX&	t.name	t.photo }}
+```
+
+图片字段与普通字段没有任何区别，只是值类型不同。
+
+| 参数           | 示例值              | 类型     | 说明                                                         | 企业级建议                   |
+| -------------- | ------------------- | -------- | ------------------------------------------------------------ | ---------------------------- |
+| `data`         | `imageBytes`        | `byte[]` | 图片二进制数据，最稳定的输入方式                             | 强烈推荐统一使用 `byte[]`    |
+| `type`         | `ImageEntity.Data`  | `String` | 图片来源类型：`Data` 表示使用 byte[]，`URL` 表示使用网络/本地路径 | 模板导出一律用 `Data`        |
+| `width`        | `800`               | `int`    | 图片在 Excel 中的显示宽度（单位：像素近似）                  | 不宜过大，一般 60~150 已够用 |
+| `height`       | `800`               | `int`    | 图片在 Excel 中的显示高度（单位：像素近似）                  | 和 width 保持比例，避免拉伸  |
+| `rowspan`      | `4`                 | `int`    | 图片纵向占用的行数                                           | 需要配合 Excel 行高          |
+| `colspan`      | `4`                 | `int`    | 图片横向占用的列数                                           | 需要配合 Excel 列宽          |
+| `locationType` | `ImageEntity.EMBED` | `int`    | 图片定位方式：<br>• `EMBED`：嵌入单元格（随单元格移动）<br>• `ABOVE`：浮于单元格上方<br>• `BEHIND`：浮于单元格下方 | Excel 报表场景统一用 `EMBED` |
+
+---
+
+#### 单张图片插入（普通变量）
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_image_template.xlsx
+```
+
+**模板内容**
+
+```
+姓名	头像
+{{name}}	{{photo}}
+```
+
+![image-20260124125206478](./assets/image-20260124125206478.png)
+
+---
+
+**使用示例**
+
+- `image.setWidth(0);` 和 `image.setHeight(0);` 设置了没有作用
+- `image.setRowspan(2);` 和 `image.setColspan(2);` 必须得设置，4.5版本的BUG，详情参考 [博客](https://blog.csdn.net/m0_71008260/article/details/133314850) ，如要解决这个问题可以降低版本为4.2。
+- 设置了这两个参数后会导致单元格合并。
+
+```java
+    @Test
+    void testTemplateImage() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+
+        byte[] imageBytes = HttpUtil.downloadBytes("https://placehold.co/100x100/png");
+
+        ImageEntity image = new ImageEntity();
+        image.setData(imageBytes);
+        image.setType(ImageEntity.Data);
+        // 设置宽高
+        image.setWidth(0);
+        image.setHeight(0);
+        image.setRowspan(2);
+        image.setColspan(2);
+        image.setLocationType(ImageEntity.EMBED);
+
+        data.put("photo", image);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_image_template.xlsx",
+                data
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/template_export_image.xlsx")
+        );
+
+        System.out.println("模板图片插入成功");
+    }
+```
+
+---
+
+**使用 URL 方式插入图片**
+
+```java
+ImageEntity image = new ImageEntity();
+image.setUrl("https://xxx.com/avatar.png");
+image.setType(ImageEntity.URL);
+image.setWidth(120);
+image.setHeight(120);
+image.setRowspan(4);
+image.setColspan(2);
+```
+
+![image-20260124130206877](./assets/image-20260124130206877.png)
+
+---
+
+#### 列表图片插入（$fe 中使用）
+
+**创建模板**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_image_template.xlsx
+```
+
+**模板**
+
+```
+序号	姓名	头像
+{{ $fe:list &INDEX&	t.name	t.photo }}
+```
+
+![image-20260124130817146](./assets/image-20260124130817146.png)
+
+---
+
+**使用示例**
+
+- 因为 BUG ，上一章节单张图片导出都有问题，这个列表导出肯定也不行
+- `image.setRowspan();` 和 `image.setColspan(x);` 设置为2就会报错：Cannot add merged region D4:E5 to sheet because it overlaps with an existing merged region (D3:E4).
+- `image.setRowspan();` 和 `image.setColspan(x);` 设置为1图片就不展示
+
+```java
+    @Test
+    void testTemplateListImage() {
+
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        for (int i = 1; i <= 5; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "User-" + i);
+
+            byte[] imageBytes = HttpUtil.downloadBytes("https://placehold.co/100x100/png");
+
+            ImageEntity image = new ImageEntity();
+            image.setData(imageBytes);
+            image.setType(ImageEntity.Data);
+            image.setWidth(0);
+            image.setHeight(0);
+            image.setRowspan(2);
+            image.setColspan(2);
+            image.setLocationType(ImageEntity.EMBED);
+
+            row.put("photo", image);
+            list.add(row);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_list_image_template.xlsx",
+                data
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/template_export_list_image.xlsx")
+        );
+
+        System.out.println("列表模板图片插入成功");
+    }
+```
+
+---
 
 
 

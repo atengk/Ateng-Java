@@ -1,7 +1,9 @@
 package io.github.atengk;
 
+import cn.afterturn.easypoi.entity.ImageEntity;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.http.HttpUtil;
 import io.github.atengk.entity.MyUser;
 import io.github.atengk.handler.GenderDictHandler;
 import io.github.atengk.init.InitData;
@@ -348,5 +350,76 @@ public class TemplateExportTests {
         System.out.println("📦 横向动态表头 + 动态数据导出成功");
     }
 
+    @Test
+    void testTemplateImage() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+
+        byte[] imageBytes = HttpUtil.downloadBytes("https://placehold.co/100x100/png");
+
+        ImageEntity image = new ImageEntity();
+        image.setData(imageBytes);
+        image.setType(ImageEntity.Data);
+        // 设置宽高
+        image.setWidth(0);
+        image.setHeight(0);
+        image.setRowspan(2);
+        image.setColspan(2);
+        image.setLocationType(ImageEntity.EMBED);
+
+        data.put("photo", image);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_image_template.xlsx",
+                data
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/template_export_image.xlsx")
+        );
+
+        System.out.println("模板图片插入成功");
+    }
+
+    @Test
+    void testTemplateListImage() {
+
+        List<Map<String, Object>> list = new ArrayList<>();
+
+        for (int i = 1; i <= 5; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "User-" + i);
+
+            byte[] imageBytes = HttpUtil.downloadBytes("https://placehold.co/100x100/png");
+
+            ImageEntity image = new ImageEntity();
+            image.setData(imageBytes);
+            image.setType(ImageEntity.Data);
+            image.setWidth(0);
+            image.setHeight(0);
+            image.setRowspan(2);
+            image.setColspan(2);
+            image.setLocationType(ImageEntity.EMBED);
+
+            row.put("photo", image);
+            list.add(row);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+
+        Workbook workbook = ExcelUtil.exportByTemplate(
+                "doc/user_list_image_template.xlsx",
+                data
+        );
+
+        ExcelUtil.exportToFile(
+                workbook,
+                Paths.get("target/template_export_list_image.xlsx")
+        );
+
+        System.out.println("列表模板图片插入成功");
+    }
 
 }
