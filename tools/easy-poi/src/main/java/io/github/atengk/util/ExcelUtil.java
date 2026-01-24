@@ -158,89 +158,108 @@ public final class ExcelUtil {
     }
 
     /**
-     * 读取 Excel 模板并导出
+     * 使用 classpath 模板导出（默认配置）
      *
-     * @param templatePath 模板路径（相对于 resources），如：doc/user_template.xlsx
+     * @param templatePath 模板路径，例如：doc/user_template.xlsx
      * @param data         模板参数数据
-     * @return 填充完成后的 Workbook
+     * @return 填充完成的 Workbook
      */
     public static Workbook exportByTemplate(String templatePath, Map<String, Object> data) {
         return exportByTemplate(templatePath, data, null);
     }
 
     /**
-     * 读取 Excel 模板并导出（终极企业版）
-     * <p>
-     * 特点：
-     * - ExcelUtil 不关心你配哪些参数
-     * - 所有 TemplateExportParams 能力全部开放
-     * - 以后 EasyPOI 新增参数，你完全不用改工具类
+     * 使用 classpath 模板导出（开放 TemplateExportParams 配置）
      *
-     * @param templatePath 模板路径（相对 resources）
+     * @param templatePath 模板路径，相对 classpath
      * @param data         模板数据
      * @param configurer   参数配置回调，可为 null
+     * @return 填充完成的 Workbook
      */
-    public static Workbook exportByTemplate(
-            String templatePath,
-            Map<String, Object> data,
-            TemplateParamsConfigurer configurer) {
+    public static Workbook exportByTemplate(String templatePath,
+                                            Map<String, Object> data,
+                                            TemplateParamsConfigurer configurer) {
+
+        if (templatePath == null || templatePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("模板路径不能为空");
+        }
+        if (data == null) {
+            throw new IllegalArgumentException("模板数据 data 不能为空");
+        }
 
         Resource resource = new ClassPathResource(templatePath);
 
         if (!resource.exists()) {
-            throw new IllegalArgumentException("模板文件不存在: " + templatePath);
+            throw new IllegalStateException("Excel 模板不存在 (请检查路径或资源是否已打包)：路径=" + templatePath);
         }
 
         try (InputStream inputStream = resource.getInputStream()) {
-            TemplateExportParams params = new TemplateExportParams(inputStream);
-
-            if (configurer != null) {
-                configurer.configure(params);
-            }
-
-            return ExcelExportUtil.exportExcel(params, data);
+            return doExport(inputStream, data, configurer);
         } catch (IOException e) {
-            throw new IllegalStateException("读取模板文件失败: " + templatePath, e);
+            throw new IllegalStateException("Excel 模板读取失败(文件 IO 异常)：路径=" + templatePath, e);
         }
     }
 
     /**
-     * 通过模板文件流导出 Excel
-     *
+     * 使用模板流导出（默认配置）
      * <p>
-     * 适用于模板来源不固定的场景，例如：
-     * - 文件服务器
-     * - 对象存储（OSS、MinIO）
-     * - 远程下载
+     * 场景示例：
+     * - OSS/MinIO 下载输入流
+     * - 远程 HTTP 下载流
      * - 数据库存储模板
-     * </p>
-     *
      * <p>
-     * 注意：
-     * - 该方法不会关闭传入的 InputStream，调用方自行管理生命周期
-     * - 适合对流进行复用或统一关闭管理的场景
-     * </p>
+     * 注意：不会关闭传入流，由调用方管理。
      *
-     * @param templateInputStream 模板文件输入流
-     * @param data                模板参数数据
-     * @return 填充完成后的 Workbook
+     * @param templateInputStream 模板输入流
+     * @param data                模板数据
+     */
+    public static Workbook exportByTemplate(InputStream templateInputStream, Map<String, Object> data) {
+        return exportByTemplate(templateInputStream, data, null);
+    }
+
+    /**
+     * 使用模板流导出（开放 TemplateExportParams 配置）
+     *
+     * @param templateInputStream 模板输入流（不会被关闭）
+     * @param data                模板数据
+     * @param configurer          配置回调，可为 null
      */
     public static Workbook exportByTemplate(InputStream templateInputStream,
-                                            Map<String, Object> data) {
+                                            Map<String, Object> data,
+                                            TemplateParamsConfigurer configurer) {
 
         if (templateInputStream == null) {
             throw new IllegalArgumentException("templateInputStream 不能为空");
         }
         if (data == null) {
-            throw new IllegalArgumentException("data 不能为空");
+            throw new IllegalArgumentException("模板数据 data 不能为空");
         }
 
         try {
-            TemplateExportParams params = new TemplateExportParams(templateInputStream);
-            return ExcelExportUtil.exportExcel(params, data);
+            return doExport(templateInputStream, data, configurer);
         } catch (Exception e) {
-            throw new IllegalStateException("通过模板流导出 Excel 失败", e);
+            throw new IllegalStateException("Excel 模板导出失败(模板流处理异常)", e);
         }
+    }
+
+    /**
+     * 核心执行逻辑（统一出口）
+     *
+     * @param templateInputStream 模板流
+     * @param data                模板数据
+     * @param configurer          可选参数配置器
+     */
+    private static Workbook doExport(InputStream templateInputStream,
+                                     Map<String, Object> data,
+                                     TemplateParamsConfigurer configurer) throws IOException {
+
+        TemplateExportParams params = new TemplateExportParams(templateInputStream);
+
+        if (configurer != null) {
+            configurer.configure(params);
+        }
+
+        return ExcelExportUtil.exportExcel(params, data);
     }
 
 }
