@@ -7172,3 +7172,400 @@ EasyPoi 的 Key-Value 导入不是“Excel 表格导入”，
 >
 > {systemName:=用户管理系统, maxUserCount:=5000.0, enableLog:=true, adminEmail:=admin@test.com, role:=[admin, user, guest]}
 
+
+
+## Word 模版导出
+
+模版指令和 Excel 的一样的
+
+### 创建工具类
+
+**创建 WordUtil 工具类**
+
+```java
+package io.github.atengk.util;
+
+import cn.afterturn.easypoi.word.entity.MyXWPFDocument;
+import cn.afterturn.easypoi.word.parse.ParseWord07;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Map;
+
+/**
+ * Word 模板填充工具
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+public final class WordUtil {
+
+    private static final String DOCX_CONTENT_TYPE =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    private WordUtil() {
+        // 工具类不允许实例化
+    }
+
+    /**
+     * 将 InputStream 转为 MyXWPFDocument，并填充 Map 数据。
+     *
+     * @param inputStream Word 模板输入流（必须为 docx）
+     * @param map         数据模型
+     */
+    public static XWPFDocument export(InputStream inputStream, Map<String, Object> map) {
+        if (inputStream == null) {
+            throw new IllegalArgumentException("模板输入流不能为空");
+        }
+        if (map == null) {
+            throw new IllegalArgumentException("数据模型 Map 不能为空");
+        }
+
+        try {
+            // 按你要求这里必须是 MyXWPFDocument
+            XWPFDocument document = new MyXWPFDocument(inputStream);
+
+            // 调用 EasyPoi 填充
+            new ParseWord07().parseWord(document, map);
+
+            return document;
+        } catch (Exception e) {
+            throw new RuntimeException("Word 模板填充失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 将文档写入到指定文件路径。
+     *
+     * <p>内部委托给 {@link #write(XWPFDocument, Path)} 保证逻辑统一。</p>
+     *
+     * @param document Word 文档对象（不能为空）
+     * @param target   文件路径字符串（不能为空、非空白）
+     * @throws IllegalArgumentException 参数为空或路径非法时抛出
+     * @throws RuntimeException         写入失败时抛出
+     */
+    public static void write(XWPFDocument document, String target) {
+        validateDocument(document);
+        if (target == null || target.trim().isEmpty()) {
+            throw new IllegalArgumentException("输出路径 String target 不能为空或空白");
+        }
+
+        try {
+            write(document, Paths.get(target));
+        } catch (Exception e) {
+            throw new RuntimeException("Word 文档写入 String 路径失败：" + target, e);
+        }
+    }
+
+    /**
+     * 将文档写入到指定文件。
+     *
+     * @param document  Word 文档对象（不能为空）
+     * @param target    输出目标文件对象（不能为空）
+     * @throws IllegalArgumentException 参数为空时抛出
+     * @throws RuntimeException         写入失败时抛出
+     */
+    public static void write(XWPFDocument document, File target) {
+        validateDocument(document);
+        if (target == null) {
+            throw new IllegalArgumentException("输出目标 File 不能为空");
+        }
+
+        try (OutputStream os = new FileOutputStream(target)) {
+            document.write(os);
+        } catch (IOException e) {
+            throw new RuntimeException("Word 文档写入文件失败：" + target.getAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * 将文档写入到指定路径。
+     *
+     * @param document  Word 文档对象（不能为空）
+     * @param path      输出路径（不能为空）
+     * @throws IllegalArgumentException 参数为空时抛出
+     * @throws RuntimeException         写入失败时抛出
+     */
+    public static void write(XWPFDocument document, Path path) {
+        validateDocument(document);
+        if (path == null) {
+            throw new IllegalArgumentException("输出目标 Path 不能为空");
+        }
+
+        try (OutputStream os = Files.newOutputStream(path)) {
+            document.write(os);
+        } catch (IOException e) {
+            throw new RuntimeException("Word 文档写入路径失败：" + path.toAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * 将文档写入到指定输出流。
+     *
+     * <p>该方法不负责关闭传入的 {@link OutputStream}，
+     * 调用者需自行管理输出流生命周期。</p>
+     *
+     * @param document  Word 文档对象（不能为空）
+     * @param os        输出流（不能为空）
+     * @throws IllegalArgumentException 参数为空时抛出
+     * @throws RuntimeException         写入失败时抛出
+     */
+    public static void write(XWPFDocument document, OutputStream os) {
+        validateDocument(document);
+        if (os == null) {
+            throw new IllegalArgumentException("输出流 OutputStream 不能为空");
+        }
+
+        try {
+            document.write(os);
+        } catch (IOException e) {
+            throw new RuntimeException("Word 文档写入 OutputStream 失败", e);
+        }
+    }
+
+    /**
+     * 将文档写入到 HTTP 响应中，实现浏览器下载。
+     *
+     * @param document  Word 文档对象（不能为空）
+     * @param response  HTTP 响应对象（不能为空）
+     * @param filename  下载文件名（不能为空，将自动附加 .docx）
+     * @throws IllegalArgumentException 参数为空时抛出
+     * @throws RuntimeException         写入失败时抛出
+     */
+    public static void write(XWPFDocument document, HttpServletResponse response, String filename) {
+        validateDocument(document);
+        if (response == null) {
+            throw new IllegalArgumentException("HttpServletResponse 不能为空");
+        }
+        if (filename == null || filename.trim().isEmpty()) {
+            throw new IllegalArgumentException("下载文件名不能为空");
+        }
+
+        try {
+            response.setContentType(DOCX_CONTENT_TYPE);
+            response.setHeader("Content-Disposition",
+                    "attachment; filename=\"" + encodeFilename(filename) + "\"");
+
+            try (OutputStream os = response.getOutputStream()) {
+                document.write(os);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Word 文档写入 HTTP 响应失败", e);
+        }
+    }
+
+    /**
+     * 校验文档是否为空。
+     */
+    private static void validateDocument(XWPFDocument document) {
+        if (document == null) {
+            throw new IllegalArgumentException("XWPFDocument 文档不能为空");
+        }
+    }
+
+    /**
+     * 处理文件名的基本兼容（仅处理空格与基础字符，复杂场景可自行扩展）。
+     */
+    private static String encodeFilename(String filename) {
+        return filename.trim().replace(" ", "_") + ".docx";
+    }
+
+}
+```
+
+
+
+### 填充普通变量数据
+
+**模版准备**
+
+```
+我
+
+我叫 {{name}}，今年 {{age}} 岁。对我来说，{{age}} 岁是一个既不算年轻、又还未真正成熟的阶段，很多事情都在摸索、尝试和建立中。虽然有时候会迷茫，但我知道成长本来就是在不确定中慢慢找方向。
+现在的 {{name}} 会更关注自己的选择、节奏和目标，也开始意识到生活并不是一味追赶别人，而是要找到适合自己的步伐。
+我相信只要保持学习、保持行动、保持好奇，就能让未来的自己更笃定、更坦然。总之，{{age}} 岁是向上生长的年纪，也是 {{name}} 正在认真面对人生的重要时刻。
+
+
+```
+
+![image-20260125172311532](./assets/image-20260125172311532.png)
+
+**使用方法**
+
+```java
+    @Test
+    void testWordSimpleExport() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+        data.put("age", 25);
+        XWPFDocument document = WordUtil.export(ExcelUtil.getInputStreamFromClasspath("doc/word_template_simple_export.docx"), data);
+        WordUtil.write(document, "target/word_template_simple_export.docx");
+    }
+```
+
+![image-20260125173428810](./assets/image-20260125173428810.png)
+
+
+
+### 填充列表变量数据
+
+**模版准备**
+
+```
+我
+
+我叫 {{name}}，今年 {{age}} 岁。对我来说，{{age}} 岁是一个既不算年轻、又还未真正成熟的阶段，很多事情都在摸索、尝试和建立中。虽然有时候会迷茫，但我知道成长本来就是在不确定中慢慢找方向。
+现在的 {{name}} 会更关注自己的选择、节奏和目标，也开始意识到生活并不是一味追赶别人，而是要找到适合自己的步伐。
+我相信只要保持学习、保持行动、保持好奇，就能让未来的自己更笃定、更坦然。总之，{{age}} 岁是向上生长的年纪，也是 {{name}} 正在认真面对人生的重要时刻。
+
+时间	金额
+{{$fe:list t.time	t.amount}}
+
+
+
+
+```
+
+![image-20260125174547158](./assets/image-20260125174547158.png)
+
+**使用方法**
+
+```java
+    @Test
+    void testWordListExport() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+        data.put("age", 25);
+
+        // ===== 构造列表数据（循环 100 次）=====
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (int i = 1; i <= 100; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("time", LocalDateTime.now());
+            row.put("amount", i * 1000);
+            list.add(row);
+        }
+
+        data.put("list", list);
+
+        XWPFDocument document = WordUtil.export(
+                ExcelUtil.getInputStreamFromClasspath("doc/word_template_list_export.docx"),
+                data
+        );
+        WordUtil.write(document, "target/word_template_list_export.docx");
+    }
+```
+
+![image-20260125190116389](./assets/image-20260125190116389.png)
+
+
+
+### 格式化
+
+**模版准备**
+
+```
+我
+
+我叫 {{name}}，今年 {{age}} 岁（状态：{{age > 18 ? '成年' : '未成年'}}）。
+
+对我来说，{{age}} 岁是一个既不算年轻、又还未真正成熟的阶段，
+很多事情都在摸索、尝试和建立中。虽然有时候会迷茫，但我知道成长本来就是在不确定中慢慢找方向。
+
+现在的 {{name}} 会更关注自己的选择、节奏和目标，
+也开始意识到生活并不是一味追赶别人，而是要找到适合自己的步伐。
+
+我相信只要保持学习、保持行动、保持好奇，
+就能让未来的自己更笃定、更坦然。
+
+补充信息：
+- 创建时间（原始值）：{{createTime}}
+- 创建时间（格式化）：{{fd:(createTime;yyyy-MM-dd HH:mm:ss)}}
+- 生日（格式化，仅日期）：{{fd:(birthday;yyyy-MM-dd)}}
+- 当前分数（原始值）：{{score}}
+- 当前分数（两位小数展示）：{{fn:(score;###.00)}}
+- 完成度（原始值）：{{ratio}}
+- 完成度（百分比）：{{fn:(ratio;0.00%)}}
+- 名字长度值：{{le:(name)}}
+
+总之，{{age}} 岁是向上生长的年纪，
+也是 {{name}} 正在认真面对人生的重要时刻。
+
+
+```
+
+![image-20260125185500904](./assets/image-20260125185500904.png)
+
+**使用方法**
+
+```java
+    @Test
+    void testWordFormatExport() {
+        // ========= 构建数据模型 =========
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");                  // 字符串字段
+        data.put("age", 25);                        // 数值字段
+
+        // 日期字段示例（支持原始值和格式化）
+        data.put("createTime", new Date());         // 当前时间
+        data.put("birthday", new GregorianCalendar(1999, Calendar.JUNE, 5).getTime());
+
+        // 数值字段示例（支持原始与格式化）
+        data.put("score", 89.756);                  // 原始分数
+        data.put("ratio", 0.3765);                  // 比例（用于百分比格式化）
+
+        // ========= 渲染到模板 =========
+        XWPFDocument document = WordUtil.export(
+                ExcelUtil.getInputStreamFromClasspath("doc/word_template_format_export.docx"),
+                data
+        );
+
+        // ========= 写出到目标 =========
+        WordUtil.write(document, "target/word_template_format_export.docx");
+    }
+```
+
+![image-20260125185448958](./assets/image-20260125185448958.png)
+
+
+
+### 填充图片
+
+**模版准备**
+
+```
+我
+
+我叫 {{name}}，今年 {{age}} 岁。对我来说，{{age}} 岁是一个既不算年轻、又还未真正成熟的阶段，很多事情都在摸索、尝试和建立中。虽然有时候会迷茫，但我知道成长本来就是在不确定中慢慢找方向。
+现在的 {{name}} 会更关注自己的选择、节奏和目标，也开始意识到生活并不是一味追赶别人，而是要找到适合自己的步伐。
+我相信只要保持学习、保持行动、保持好奇，就能让未来的自己更笃定、更坦然。总之，{{age}} 岁是向上生长的年纪，也是 {{name}} 正在认真面对人生的重要时刻。
+以下是我的帅照：
+{{image}}
+
+
+```
+
+![image-20260125185945379](./assets/image-20260125185945379.png)
+
+**使用方法**
+
+图片使用 `ImageEntity` 实体类构建
+
+```java
+    @Test
+    void testWordSimpleExport() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+        data.put("age", 25);
+        XWPFDocument document = WordUtil.export(ExcelUtil.getInputStreamFromClasspath("doc/word_template_simple_export.docx"), data);
+        WordUtil.write(document, "target/word_template_simple_export.docx");
+    }
+```
+
+![image-20260125185928963](./assets/image-20260125185928963.png)
+
