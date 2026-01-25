@@ -28,5 +28,6 @@
         <module>thread-pool</module>
         <module>onlyoffice</module>
         <module>easy-poi</module>
+        <module>apache-fesod</module>
     </modules>
 </project>
