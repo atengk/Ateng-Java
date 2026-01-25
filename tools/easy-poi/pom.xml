@@ -75,6 +75,14 @@
             <artifactId>easypoi-spring-boot-starter</artifactId>
             <version>4.5.0</version>
         </dependency>
+
+        <!-- Hibernate Validator 实现 -->
+        <dependency>
+            <groupId>org.hibernate.validator</groupId>
+            <artifactId>hibernate-validator</artifactId>
+            <version>6.2.5.Final</version>
+        </dependency>
+
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->

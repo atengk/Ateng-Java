@@ -6233,14 +6233,942 @@ src
 
 ---
 
-## 导入 Excel（Import）
+
+
+## 导入 Excel（Impot）
+
+`ImportParams` 常用配置
+
+| 参数名            | 默认值 | 作用说明                                   | 典型使用场景                   |
+| ----------------- | ------ | ------------------------------------------ | ------------------------------ |
+| `titleRows`       | 0      | Excel 中标题说明行数（非表头）             | 模板第一行是“导入说明”时设为 1 |
+| `headRows`        | 1      | Excel 表头行数                             | 基本固定为 1                   |
+| `startSheetIndex` | 0      | 从第几个 Sheet 开始读取                    | 多 Sheet 文件读取指定页        |
+| `sheetNum`        | 1      | 读取 Sheet 数量                            | 一个文件多张表一起导入         |
+| `needVerify`      | false  | 是否开启校验（Validation + VerifyHandler） | 导入必须校验时开启             |
+| `verifyHandler`   | null   | 自定义业务校验处理器                       | 跨字段、复杂规则校验           |
+| `ignoreEmptyRow`  | false  | 是否忽略物理空行                           | 防止空行导致导入失败           |
+| `importFields`    | null   | 校验 Excel 是否为合法模板                  | 防止用户乱传 Excel             |
+| `needCheckOrder`  | false  | 是否校验列顺序                             | 强约束模板格式时使用           |
 
 ### 基础数据导入
 
-### 自定义校验规则
+#### 实体类
 
-###  导入错误信息收集与反馈
+**Excel 文件**
 
-### 支持多 Sheet 导入
+![image-20260124200759264](./assets/image-20260124200759264.png)
 
-### 导入时忽略空行或无效行
+**实体类**
+
+```java
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class MyUser implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 主键id
+     */
+    @Excel(name = "用户ID", width = 15, type = 10, orderNum = "1")
+    private Long id;
+
+    /**
+     * 名称
+     */
+    @Excel(name = "姓名", width = 12, orderNum = "2")
+    private String name;
+
+    /**
+     * 年龄
+     */
+    @Excel(name = "年龄", width = 8, type = 10, orderNum = "3")
+    private Integer age;
+
+    /**
+     * 手机号码
+     */
+    @Excel(name = "手机号", width = 15, orderNum = "4")
+    private String phoneNumber;
+
+    /**
+     * 邮箱
+     */
+    @Excel(name = "邮箱", width = 20, orderNum = "5")
+    private String email;
+
+    /**
+     * 分数
+     */
+    @Excel(name = "分数", width = 10, type = 10, format = "#,##0.00", orderNum = "6")
+    private BigDecimal score;
+
+    /**
+     * 比例
+     */
+    @Excel(name = "比例", width = 12, type = 10, format = "0.00000%", orderNum = "7")
+    private Double ratio;
+
+    /**
+     * 生日
+     */
+    @Excel(name = "生日", width = 12, format = "yyyy-MM-dd", orderNum = "8")
+    private LocalDate birthday;
+
+    /**
+     * 所在省份
+     */
+    @Excel(name = "省份", width = 10, orderNum = "9")
+    private String province;
+
+    /**
+     * 所在城市
+     */
+    @Excel(name = "城市", width = 10, orderNum = "10")
+    private String city;
+
+    /**
+     * 创建时间
+     */
+    @Excel(name = "创建时间", width = 20, format = "yyyy-MM-dd HH:mm:ss", orderNum = "11")
+    private LocalDateTime createTime;
+
+}
+```
+
+**使用示例**
+
+```java
+    @Test
+    public void testSimpleImport() {
+        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_users.xlsx", MyUser.class);
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据: [MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null), MyUser(id=6, name=阿腾, age=25, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=null, status=null)]
+
+#### Map
+
+**使用示例**
+
+```java
+    @Test
+    public void testSimpleMapImport() {
+        List<Map> list = ExcelUtil.importFromClasspath("doc/import_simple_users.xlsx", Map.class);
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据: [{用户ID=1, 姓名=尹立诚, 年龄=53, 手机号=15218522992, 邮箱=博超.覃@hotmail.com, 分数=53.17, 比例=0.71522, 生日=2026-01-24, 省份=上海市, 城市=张家港, 创建时间=2026-01-24 17:44:08, excelRowNum=2}, {用户ID=2, 姓名=邵弘文, 年龄=35, 手机号=17623825836, 邮箱=煜祺.谢@gmail.com, 分数=51.84, 比例=0.86246, 生日=2026-01-24, 省份=辽宁省, 城市=太原, 创建时间=2026-01-24 17:44:08, excelRowNum=3}, {用户ID=3, 姓名=邵涛, 年龄=51, 手机号=13552507246, 邮箱=弘文.崔@hotmail.com, 分数=49.71, 比例=0.63432, 生日=2026-01-24, 省份=江苏省, 城市=柳州, 创建时间=2026-01-24 17:44:08, excelRowNum=4}, {用户ID=4, 姓名=侯睿渊, 年龄=19, 手机号=17060335026, 邮箱=鑫鹏.曹@gmail.com, 分数=37.93, 比例=0.68283, 生日=2026-01-24, 省份=广西省, 城市=乌鲁木齐, 创建时间=2026-01-24 17:44:08, excelRowNum=5}, {用户ID=5, 姓名=夏思远, 年龄=22, 手机号=18943981041, 邮箱=涛.尹@hotmail.com, 分数=27.07, 比例=0.96171, 生日=2026-01-24, 省份=江西省, 城市=鄂尔多斯, 创建时间=2026-01-24 17:44:08, excelRowNum=6}, {用户ID=6, 姓名=阿腾, 年龄=25, 手机号=1.7623062936E10, 邮箱=2385569970@qq.com, 分数=100, 比例=1, 生日=Sun Mar 26 00:00:00 CST 2000, 省份=重庆市, 城市=重庆市, 创建时间=Sat Jan 24 20:09:02 CST 2026}]
+
+
+
+### 图片导入
+
+**注意事项**
+
+- 选择"嵌入"模式，必须选择"浮动"模式
+
+- params.setSaveUrl(savePath) 不生效，只有@Excel上的savePath才生效
+- 注解 @Excel(type = 2, savePath = "target/") 设置了才能保存图片到本地指定目录，保存后字段avatarUrl就是文件的本地路径，然后自行处理（上传OSS）
+- 无法使用 params.setDataHandler(handler); 来处理图片的数据，只能由框架处理并保存到本地目录
+
+**实体类**
+
+添加图片字段，使用 String 接受保存的本地图片路径
+
+```java
+    /**
+     * 图片
+     */
+    @Excel(name = "图片", type = 2, savePath = "target/", width = 15, height = 30, orderNum = "12")
+    private String avatarUrl;
+```
+
+**使用示例**
+
+```java
+    @Test
+    public void testSimpleImageImport() {
+        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_image_users.xlsx", MyUser.class);
+        System.out.println("导入成功！数据: " + list);
+        list.forEach(user -> {
+            File file = new File(user.getAvatarUrl());
+            System.out.println(StrUtil.format("姓名：{}，文件大小：{}", user.getName(), FileUtil.readBytes(file).length));
+            FileUtil.del(file);
+        });
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据: [MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=target/\pic68665762057.PNG, number=null, status=null), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=target/\pic87054277356.PNG, number=null, status=null), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=target/\pic59159638419.PNG, number=null, status=null), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=target/\pic72187317844.PNG, number=null, status=null), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=target/\pic95551744705.PNG, number=null, status=null), MyUser(id=6, name=阿腾, age=25, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=target/\pic45999786444.JPG, number=null, status=null)]
+> 姓名：尹立诚，文件大小：1341
+> 姓名：邵弘文，文件大小：1341
+> 姓名：邵涛，文件大小：1341
+> 姓名：侯睿渊，文件大小：1341
+> 姓名：夏思远，文件大小：1341
+> 姓名：阿腾，文件大小：14913
+
+
+
+### 数据映射
+
+#### replace
+
+**实体类定义**
+
+注意：`replace` 数组格式必须是："显示值_实际值"
+
+```
+    // 1→青年 2→中年 3→老年
+    @Excel(name = "年龄段", replace = {"青年_1", "中年_2", "老年_3"})
+    private Integer number;
+```
+
+![image-20260124211405488](./assets/image-20260124211405488.png)
+
+**使用方法**
+
+```java
+    @Test
+    public void testSimpleReplaceImport() {
+        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_replace_users.xlsx", MyUser.class);
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据: [MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=1, status=null), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=3, status=null), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=6, name=阿腾, age=25, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=1, status=null)]
+
+
+
+#### 枚举
+
+**创建枚举**
+
+```java
+package io.github.atengk.enums;
+
+public enum UserStatus {
+    NORMAL(0, "正常"),
+    FROZEN(1, "冻结"),
+    DELETED(2, "已删除");
+
+    private final int code;
+    private final String name;
+
+    UserStatus(int code, String name) {
+        this.code = code;
+        this.name = name;
+    }
+
+    public int getCode() {
+        return code;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * 根据 code 获取 name
+     */
+    public static String getNameByCode(int code) {
+        for (UserStatus status : values()) {
+            if (status.code == code) {
+                return status.name;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 根据 name 获取枚举
+     */
+    public static UserStatus getByName(String name) {
+        for (UserStatus status : values()) {
+            if (status.name.equals(name)) {
+                return status;
+            }
+        }
+        return null;
+    }
+}
+```
+
+**添加字段**
+
+```java
+    /**
+     * 用户状态
+     * enumExportField: 导出 Excel 显示哪个字段
+     * enumImportMethod: 导入 Excel 时通过静态方法将值转换为枚举
+     */
+    @Excel(name = "状态", enumExportField = "name", enumImportMethod = "getByName")
+    private UserStatus status;
+```
+
+![image-20260124211827324](./assets/image-20260124211827324.png)
+
+**使用方法**
+
+```java
+    @Test
+    public void testSimpleEnumImport() {
+        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_enum_users.xlsx", MyUser.class);
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据: [MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=NORMAL), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=FROZEN), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=DELETED), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=NORMAL), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=NORMAL), MyUser(id=6, name=阿腾, age=25, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=null, status=DELETED)]
+
+
+
+#### 字典 IExcelDictHandler
+
+**在字段上加字典标识**
+
+重点是 `dict = "ageDict"` ，这个 key 要和 handler 里保持一致。
+
+```
+@Excel(name = "年龄段", dict = "ageDict")
+private Integer number;
+```
+
+![image-20260124211405488](./assets/image-20260124211405488.png)
+
+**实现 `IExcelDictHandler`**
+
+```java
+package io.github.atengk.handler;
+
+import cn.afterturn.easypoi.handler.inter.IExcelDictHandler;
+
+public class NumberDictHandler implements IExcelDictHandler {
+
+    @Override
+    public String toName(String dict, Object obj, String name, Object value) {
+        if ("ageDict".equals(dict)) {
+            if (value == null) {
+                return "";
+            }
+            switch (value.toString()) {
+                case "1": return "青年";
+                case "2": return "中年";
+                case "3": return "老年";
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public String toValue(String dict, Object obj, String name, Object value) {
+        if ("ageDict".equals(dict)) {
+            if (value == null) {
+                return null;
+            }
+            switch (value.toString()) {
+                case "青年": return "1";
+                case "中年": return "2";
+                case "老年": return "3";
+            }
+        }
+        return null;
+    }
+}
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testSimpleDictImport() {
+        List<MyUser> list = ExcelUtil.importFromClasspath(
+                "doc/import_simple_dict_users.xlsx",
+                MyUser.class,
+                params -> params.setDictHandler(new NumberDictHandler())
+        );
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据: [MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=1, status=null), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=3, status=null), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=6, name=阿腾, age=25, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=1, status=null)]
+
+#### 自定义处理 IExcelDataHandler
+
+**字段配置**
+
+```
+@Excel(name = "年龄段")
+private Integer number;
+```
+
+![image-20260124211405488](./assets/image-20260124211405488.png)
+
+**实现 `IExcelDataHandler`**
+
+```java
+package io.github.atengk.handler;
+
+import cn.afterturn.easypoi.handler.inter.IExcelDataHandler;
+import org.apache.poi.ss.usermodel.CreationHelper;
+import org.apache.poi.ss.usermodel.Hyperlink;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * number 字段导入导出的自定义处理器
+ *
+ * 功能：
+ * - 导出：1 -> 一号、2 -> 二号、3 -> 三号
+ * - 导入：一号 -> 1、二号 -> 2、三号 -> 3
+ *
+ * 注意点：
+ * - 实现 IExcelDataHandler 全部方法
+ */
+public class NumberDataHandler implements IExcelDataHandler<Object> {
+
+    private String[] needHandlerFields;
+
+    /**
+     * 字典映射（可改）
+     */
+    private static final Map<String, String> EXPORT_MAP = new HashMap<>();
+    private static final Map<String, String> IMPORT_MAP = new HashMap<>();
+
+    static {
+        EXPORT_MAP.put("1", "一号");
+        EXPORT_MAP.put("2", "二号");
+        EXPORT_MAP.put("3", "三号");
+
+        IMPORT_MAP.put("一号", "1");
+        IMPORT_MAP.put("二号", "2");
+        IMPORT_MAP.put("三号", "3");
+    }
+
+    @Override
+    public Object exportHandler(Object obj, String name, Object value) {
+        if (!match(name)) {
+            return value;
+        }
+        if (value == null) {
+            return null;
+        }
+        String raw = String.valueOf(value);
+        return EXPORT_MAP.getOrDefault(raw, raw);
+    }
+
+    @Override
+    public Object importHandler(Object obj, String name, Object value) {
+        if (!match(name)) {
+            return value;
+        }
+        if (value == null) {
+            return null;
+        }
+        String raw = String.valueOf(value);
+        return IMPORT_MAP.getOrDefault(raw, raw);
+    }
+
+    @Override
+    public String[] getNeedHandlerFields() {
+        return needHandlerFields;
+    }
+
+    @Override
+    public void setNeedHandlerFields(String[] fields) {
+        this.needHandlerFields = fields;
+    }
+
+    @Override
+    public void setMapValue(Map<String, Object> map, String originKey, Object value) {
+        if (!match(originKey)) {
+            map.put(originKey, value);
+            return;
+        }
+
+        if (value != null) {
+            String raw = String.valueOf(value);
+            map.put(originKey, IMPORT_MAP.getOrDefault(raw, raw));
+        } else {
+            map.put(originKey, null);
+        }
+    }
+
+    @Override
+    public Hyperlink getHyperlink(CreationHelper creationHelper, Object obj, String name, Object value) {
+        // 这里通常不用超链接，返回 null 即可
+        return null;
+    }
+
+    /**
+     * 判断字段是否在处理范围
+     */
+    private boolean match(String name) {
+        if (needHandlerFields == null) {
+            return false;
+        }
+        for (String field : needHandlerFields) {
+            if (field.equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testSimpleHandlerImport() {
+        NumberDataHandler handler = new NumberDataHandler();
+        // 指定要处理的字段，注意是Excel的字段名（表头）
+        handler.setNeedHandlerFields(new String[]{"年龄段"});
+
+        List<MyUser> list = ExcelUtil.importFromClasspath(
+                "doc/import_simple_handler_users.xlsx",
+                MyUser.class,
+                params -> params.setDataHandler(handler)
+        );
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据: [MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=1, status=null), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=3, status=null), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=2, status=null), MyUser(id=6, name=阿腾, age=25, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=1, status=null)]
+
+
+
+### 导入错误收集（失败行、失败原因）
+
+#### 基础配置
+
+**添加依赖**
+
+如果是SpringBoot环境直接导入 spring-boot-starter-validation
+
+```xml
+        <!-- Hibernate Validator 实现 -->
+        <dependency>
+            <groupId>org.hibernate.validator</groupId>
+            <artifactId>hibernate-validator</artifactId>
+            <version>6.2.5.Final</version>
+        </dependency>
+```
+
+**实体类实现 IExcelModel**
+
+实现 IExcelModel, IExcelDataModel
+
+```java
+public class MyUser implements Serializable, IExcelModel, IExcelDataModel {
+
+    @ExcelIgnore
+    private String errorMsg;
+
+    /**
+     * 获取错误数据
+     *
+     * @return 错误数据
+     */
+    @Override
+    public String getErrorMsg() {
+        return errorMsg;
+    }
+
+    /**
+     * 设置错误信息
+     *
+     * @param errorMsg 错误数据
+     */
+    @Override
+    public void setErrorMsg(String errorMsg) {
+        this.errorMsg = errorMsg;
+    }
+
+    @ExcelIgnore
+    private Integer rowNum;
+
+    /**
+     * 获取行号
+     *
+     * @return 数据行号
+     */
+    @Override
+    public Integer getRowNum() {
+        return rowNum;
+    }
+
+    /**
+     * 设置行号
+     *
+     * @param rowNum 数据行号
+     */
+    @Override
+    public void setRowNum(Integer rowNum) {
+        this.rowNum = rowNum;
+    }
+
+}
+```
+
+
+
+#### 使用 Hibernate Validator 效验
+
+**实体添加注解效验**
+
+```java
+    /**
+     * 名称
+     */
+    @Excel(name = "姓名", width = 12, orderNum = "2")
+    @NotBlank(message = "姓名不能为空")
+    private String name;
+
+    /**
+     * 年龄
+     */
+    @Excel(name = "年龄", width = 8, type = 10, orderNum = "3")
+    @NotNull(message = "年龄不能为空")
+    @Min(value = 0, message = "年龄不能小于 0")
+    @Max(value = 120, message = "年龄不能大于 120")
+    private Integer age;
+
+    /**
+     * 手机号码
+     */
+    @Excel(name = "手机号", width = 15, orderNum = "4")
+    @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式不正确")
+    private String phoneNumber;
+
+    /**
+     * 分数
+     */
+    @Excel(name = "分数", width = 10, type = 10, format = "#,##0.00", orderNum = "6")
+    @NotNull(message = "分数不能为空")
+    @Min(value = 0, message = "分数不能小于 0")
+    @Max(value = 100, message = "分数不能大于 100")
+    private BigDecimal score;
+```
+
+注意导入的Excel中最后两行故意写错，测试错误收集
+
+![image-20260124215215378](./assets/image-20260124215215378.png)
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportWithHibernateErrorCollect() {
+        ExcelImportResult<MyUser> result = ExcelUtil.importMoreFromInputStream(
+                ExcelUtil.getInputStreamFromClasspath("doc/import_error_users.xlsx"),
+                MyUser.class,
+                params -> params.setNeedVerify(true)
+        );
+
+        System.out.println("是否存在校验失败：" + result.isVerifyFail());
+        System.out.println("成功条数：" + result.getList().size());
+        System.out.println("成功数据：" + result.getList());
+        System.out.println("失败条数：" + result.getFailList().size());
+        System.out.println("失败数据：" + result.getFailList());
+
+        // 打印错误数据
+        if (result.isVerifyFail() && result.getFailList() != null && !result.getFailList().isEmpty()) {
+            result.getFailList().forEach(item -> System.out.println(StrUtil.format("第{}行，错误信息：{}", item.getRowNum(), item.getErrorMsg())));
+        }
+
+        // 把成功 Excel 导出来
+        if (result.getWorkbook() != null) {
+            ExcelUtil.exportToFile(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
+            System.out.println("成功详情 Excel 已生成：target/import_success_result.xlsx");
+        }
+        // 把失败 Excel 导出来
+        if (result.getFailWorkbook() != null) {
+            ExcelUtil.exportToFile(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
+            System.out.println("失败详情 Excel 已生成：target/import_error_result.xlsx");
+        }
+    }
+```
+
+> 输出：
+>
+> 是否存在校验失败：true
+> 成功条数：5
+> 成功数据：[MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=1), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=2), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=3), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=4), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=5)]
+> 失败条数：2
+> 失败数据：[MyUser(id=6, name=阿腾, age=125, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=null, status=null, errorMsg=年龄年龄不能大于 120, rowNum=6), MyUser(id=7, name=null, age=18, phoneNumber=17623062936, email=2385569970@qq.com, score=10010, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=null, status=null, errorMsg=分数分数不能大于 100,姓名姓名不能为空, rowNum=7)]
+> 第6行，错误信息：年龄年龄不能大于 120
+> 第7行，错误信息：分数分数不能大于 100,姓名姓名不能为空
+> 失败详情 Excel 已生成：target/import_error_result.xlsx
+> 失败详情 Excel 已生成：target/import_error_result.xlsx
+
+成功 Excel
+
+![image-20260124222838778](./assets/image-20260124222838778.png)
+
+失败 Excel
+
+![image-20260124222906665](./assets/image-20260124222906665.png)
+
+
+
+#### 校验处理器 IExcelVerifyHandler
+
+**编写校验处理器 IExcelVerifyHandler**
+
+```java
+package io.github.atengk.handler;
+
+import cn.afterturn.easypoi.excel.entity.result.ExcelVerifyHandlerResult;
+import cn.afterturn.easypoi.handler.inter.IExcelVerifyHandler;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.entity.MyUser;
+
+import java.math.BigDecimal;
+
+public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
+
+    @Override
+    public ExcelVerifyHandlerResult verifyHandler(MyUser user) {
+
+        // 1. 姓名必填
+        if (StrUtil.isBlank(user.getName())) {
+            return new ExcelVerifyHandlerResult(false, "姓名不能为空");
+        }
+
+        // 2. 年龄范围
+        if (user.getAge() == null || user.getAge() < 0 || user.getAge() > 120) {
+            return new ExcelVerifyHandlerResult(false, "年龄必须在 0~120 之间");
+        }
+
+        // 3. 手机号格式
+        if (!StrUtil.isBlank(user.getPhoneNumber())
+                && !user.getPhoneNumber().matches("^1[3-9]\\d{9}$")) {
+            return new ExcelVerifyHandlerResult(false, "手机号格式不正确");
+        }
+
+        // 4. 分数范围
+        if (user.getScore() != null && user.getScore().compareTo(new BigDecimal("100")) > 0) {
+            return new ExcelVerifyHandlerResult(false, "分数不能大于 100");
+        }
+
+        return new ExcelVerifyHandlerResult(true);
+    }
+}
+```
+
+注意导入的Excel中最后两行故意写错，测试错误收集
+
+![image-20260124215215378](./assets/image-20260124215215378.png)
+
+**使用方法**
+
+配置了 `params.setVerifyHandler(new MyUserVerifyHandler());` 就不会走 Hibernate Validator 效验
+
+```java
+    @Test
+    public void testImportWithErrorCollect() {
+        ExcelImportResult<MyUser> result = ExcelUtil.importMoreFromInputStream(
+                ExcelUtil.getInputStreamFromClasspath("doc/import_error_users.xlsx"),
+                MyUser.class,
+                params -> {
+                    params.setNeedVerify(true);
+                    params.setVerifyHandler(new MyUserVerifyHandler());
+                }
+        );
+
+        System.out.println("是否存在校验失败：" + result.isVerifyFail());
+        System.out.println("成功条数：" + result.getList().size());
+        System.out.println("成功数据：" + result.getList());
+        System.out.println("失败条数：" + result.getFailList().size());
+        System.out.println("失败数据：" + result.getFailList());
+
+        // 打印错误数据
+        if (result.isVerifyFail() && result.getFailList() != null && !result.getFailList().isEmpty()) {
+            result.getFailList().forEach(item -> System.out.println(StrUtil.format("第{}行，错误信息：{}", item.getRowNum(), item.getErrorMsg())));
+        }
+
+        // 把成功 Excel 导出来
+        if (result.getWorkbook() != null) {
+            ExcelUtil.exportToFile(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
+            System.out.println("成功详情 Excel 已生成：target/import_success_result.xlsx");
+        }
+        // 把失败 Excel 导出来
+        if (result.getFailWorkbook() != null) {
+            ExcelUtil.exportToFile(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
+            System.out.println("失败详情 Excel 已生成：target/import_error_result.xlsx");
+        }
+    }
+```
+
+> 输出：
+>
+> 是否存在校验失败：true
+> 成功条数：5
+> 成功数据：[MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=1), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=2), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=3), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=4), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=5)]
+> 失败条数：2
+> 失败数据：[MyUser(id=6, name=阿腾, age=125, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=null, status=null, errorMsg=年龄年龄不能大于 120,年龄必须在 0~120 之间, rowNum=6), MyUser(id=7, name=null, age=18, phoneNumber=17623062936, email=2385569970@qq.com, score=10010, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=null, status=null, errorMsg=姓名姓名不能为空,分数分数不能大于 100,姓名不能为空, rowNum=7)]
+> 第6行，错误信息：年龄年龄不能大于 120,年龄必须在 0~120 之间
+> 第7行，错误信息：姓名姓名不能为空,分数分数不能大于 100,姓名不能为空
+> 成功详情 Excel 已生成：target/import_success_result.xlsx
+> 失败详情 Excel 已生成：target/import_error_result.xlsx
+
+成功 Excel
+
+![image-20260124215700582](./assets/image-20260124215700582.png)
+
+失败 Excel
+
+![image-20260124215633658](./assets/image-20260124215633658.png)
+
+### 多线程导入
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportWithMultiThread() {
+        List<MyUser> list = ExcelUtil.importFromClasspath(
+                "doc/import_simple_users.xlsx",
+                MyUser.class,
+                params -> {
+                    /**
+                     * 开启多线程
+                     */
+                    params.setConcurrentTask(true);
+                    /**
+                     * 每个并发任务处理多少条数据
+                     * 默认 1000，建议 500 ~ 2000
+                     */
+                    params.setCritical(500);
+                }
+        );
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+### 多 Sheet 导入
+
+#### 读取多个连续 Sheet
+
+准备一个多 Sheet 的数据，但是每个 Sheet 的数据格式都是一样的。前3个 Sheet 有7条数据。
+
+![image-20260125080050276](./assets/image-20260125080050276.png)
+
+**使用示例**
+
+```java
+    @Test
+    public void testImportMultipleSheet1() {
+        List<MyUser> list = ExcelUtil.importFromClasspath(
+                "doc/import_multi_sheet_users.xlsx",
+                MyUser.class,
+                params -> {
+                    // 表头行数,默认1
+                    params.setHeadRows(2);
+                    // 开始读取的sheet位置,默认为0
+                    params.setStartSheetIndex(0);
+                    // 上传表格需要读取的sheet 数量,默认为1
+                    params.setSheetNum(3);
+                }
+        );
+        System.out.println("导入成功！数据条数: " + list.size());
+        System.out.println("导入成功！数据: " + list);
+    }
+```
+
+> 输出：
+>
+> 导入成功！数据条数: 7
+> 导入成功！数据: [MyUser(id=null, name=马俊驰, age=80, phoneNumber=15184764540, email=明杰.邓@gmail.com, score=90.7, ratio=0.34432, birthday=2026-01-25, province=湖北省, city=潮州, createTime=2026-01-25T07:55:09, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=2), MyUser(id=null, name=曹炫明, age=14, phoneNumber=15862470324, email=鹏.邹@yahoo.com, score=18.54, ratio=0.44461, birthday=2026-01-25, province=湖北省, city=天津, createTime=2026-01-25T07:55:09, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=3), MyUser(id=null, name=林哲瀚, age=78, phoneNumber=15830651507, email=明.郝@yahoo.com, score=30.8, ratio=0.58629, birthday=2026-01-25, province=新疆, city=银川, createTime=2026-01-25T07:55:09, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=2), MyUser(id=null, name=韩鹏飞, age=27, phoneNumber=14789970992, email=思.张@gmail.com, score=84.45, ratio=0.67831, birthday=2026-01-25, province=新疆, city=汕头, createTime=2026-01-25T07:55:09, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=3), MyUser(id=null, name=萧晟睿, age=62, phoneNumber=15099272259, email=煜城.薛@hotmail.com, score=11.78, ratio=0.45664, birthday=2026-01-25, province=河南省, city=常德, createTime=2026-01-25T07:55:09, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=2), MyUser(id=null, name=邓思淼, age=19, phoneNumber=15194415536, email=懿轩.高@yahoo.com, score=84.7, ratio=0.81993, birthday=2026-01-25, province=河南省, city=三门峡, createTime=2026-01-25T07:55:09, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=3), MyUser(id=null, name=赵明, age=12, phoneNumber=15521006147, email=锦程.韦@hotmail.com, score=79.37, ratio=0.16474, birthday=2026-01-25, province=河南省, city=常德, createTime=2026-01-25T07:55:09, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=4)]
+
+#### 多 Sheet，多实体
+
+准备一个多 Sheet 的数据，但是每个 Sheet 的数据格式都是不一样的。
+
+![image-20260125081136569](./assets/image-20260125081136569.png)
+
+![image-20260125081147879](./assets/image-20260125081147879.png)
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportMultipleSheet2() {
+        String classPathExcel = "doc/import_multi_sheet.xlsx";
+        // 用户列表
+        List<MyUser> userList = ExcelUtil.importFromClasspath(
+                classPathExcel,
+                MyUser.class,
+                params -> params.setSheetName("用户列表")
+        );
+        System.out.println("导入成功！用户列表: " + userList);
+        // 学生列表
+        List<Student> studentList = ExcelUtil.importFromClasspath(
+                classPathExcel,
+                Student.class,
+                params -> params.setSheetName("学生列表")
+        );
+        System.out.println("导入成功！学生列表: " + studentList);
+    }
+```
+
+> 输出：
+>
+> 导入成功！用户列表: [MyUser(id=1, name=尹立诚, age=53, phoneNumber=15218522992, email=博超.覃@hotmail.com, score=53.17, ratio=0.71522, birthday=2026-01-24, province=上海市, city=张家港, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=1), MyUser(id=2, name=邵弘文, age=35, phoneNumber=17623825836, email=煜祺.谢@gmail.com, score=51.84, ratio=0.86246, birthday=2026-01-24, province=辽宁省, city=太原, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=2), MyUser(id=3, name=邵涛, age=51, phoneNumber=13552507246, email=弘文.崔@hotmail.com, score=49.71, ratio=0.63432, birthday=2026-01-24, province=江苏省, city=柳州, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=3), MyUser(id=4, name=侯睿渊, age=19, phoneNumber=17060335026, email=鑫鹏.曹@gmail.com, score=37.93, ratio=0.68283, birthday=2026-01-24, province=广西省, city=乌鲁木齐, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=4), MyUser(id=5, name=夏思远, age=22, phoneNumber=18943981041, email=涛.尹@hotmail.com, score=27.07, ratio=0.96171, birthday=2026-01-24, province=江西省, city=鄂尔多斯, createTime=2026-01-24T17:44:08, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=5), MyUser(id=6, name=阿腾, age=25, phoneNumber=17623062936, email=2385569970@qq.com, score=100, ratio=1.0, birthday=2000-03-26, province=重庆市, city=重庆市, createTime=2026-01-24T20:09:02, image=null, avatarUrl=null, number=null, status=null, errorMsg=null, rowNum=6)]
+> ...
+> 导入成功！学生列表: [Student(name=马俊驰, age=80), Student(name=曹炫明, age=14), Student(name=冯峻熙, age=78), Student(name=孙致远, age=3), Student(name=余天磊, age=2), Student(name=莫金鑫, age=6), Student(name=姜锦程, age=90), Student(name=阿腾, age=25)]
+
+
+
+### 导入获取Key-Value
+
+EasyPoi 的 Key-Value 导入不是“Excel 表格导入”，
+ 而是“基于 Excel 的配置文件解析器”，
+ `titleRows` = 扫描深度，而不是表头行数。
+
+![image-20260125090419637](./assets/image-20260125090419637.png)
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportKeyValue() {
+        ExcelImportResult<Map> result = ExcelUtil.importMoreFromInputStream(
+                ExcelUtil.getInputStreamFromClasspath("doc/import_key_value.xlsx"),
+                Map.class,
+                params -> {
+                    params.setSheetName("配置区");
+                    params.setKeyMark(":");
+                    params.setReadSingleCell(true);
+                    // 从第 0 行开始，最多向下扫描 titleRows 行
+                    params.setTitleRows(10);
+                }
+        );
+        System.out.println(result.getMap());
+    }
+```
+
+> 输出：
+>
+> {systemName:=用户管理系统, maxUserCount:=5000.0, enableLog:=true, adminEmail:=admin@test.com, role:=[admin, user, guest]}
+
