@@ -288,28 +288,55 @@ public class InitData {
 
 ### 创建函数接口
 
-**模版导出函数接口**
+**导出函数接口**
 
 ```java
 package io.github.atengk.util;
 
-import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
+import cn.afterturn.easypoi.excel.entity.ExportParams;
 
 /**
- * Excel 模板导出参数配置回调接口
+ * Excel 导出参数配置回调接口
  *
  * @author 孔余
  * @since 2026-01-22
  */
 @FunctionalInterface
-public interface TemplateParamsConfigurer {
+public interface ExportParamsConfigurer {
 
     /**
-     * 对 EasyPOI 的 {@link TemplateExportParams} 进行个性化配置
+     * 对 EasyPOI 的 {@link ExportParams} 进行个性化配置
      *
-     * @param params EasyPOI 模板导出参数对象
+     * @param params EasyPOI 导入参数对象
      */
-    void configure(TemplateExportParams params);
+    void configure(ExportParams params);
+
+}
+```
+
+**模版导出函数接口**
+
+```java
+package io.github.atengk.util;
+
+import cn.afterturn.easypoi.excel.entity.ExportParams;
+
+/**
+ * Excel 导出参数配置回调接口
+ *
+ * @author 孔余
+ * @since 2026-01-22
+ */
+@FunctionalInterface
+public interface ExportParamsConfigurer {
+
+    /**
+     * 对 EasyPOI 的 {@link ExportParams} 进行个性化配置
+     *
+     * @param params EasyPOI 导入参数对象
+     */
+    void configure(ExportParams params);
+
 }
 ```
 
@@ -348,6 +375,7 @@ package io.github.atengk.util;
 
 import cn.afterturn.easypoi.excel.ExcelExportUtil;
 import cn.afterturn.easypoi.excel.ExcelImportUtil;
+import cn.afterturn.easypoi.excel.entity.ExportParams;
 import cn.afterturn.easypoi.excel.entity.ImportParams;
 import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
 import cn.afterturn.easypoi.excel.entity.result.ExcelImportResult;
@@ -363,6 +391,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
@@ -395,7 +424,7 @@ import java.util.Map;
  * </p>
  *
  * <pre>
- * Workbook workbook = ExcelUtil.exportByTemplate("doc/user_template.xlsx", data);
+ * Workbook workbook = ExcelUtil.exportExcelByTemplate("doc/user_template.xlsx", data);
  *
  * ExcelUtil.applyByTitle(workbook, 0, "分数", 1, (wb, cell) -> {
  *     // 自定义样式处理
@@ -421,6 +450,241 @@ public final class ExcelUtil {
     }
 
     /**
+     * 基于实体注解导出数据（默认参数），返回 Workbook。
+     *
+     * <p>该方法适用于使用 @Excel 注解映射的实体类，将对象列表转换为 Excel Workbook，
+     * 调用方可选择自行保存文件或进一步加工。</p>
+     *
+     * <p>注意：返回的 Workbook 由调用方负责关闭，或使用 {@link #write(Workbook, File)} /
+     * {@link #write(Workbook, Path)} / {@link #write(Workbook, String, HttpServletResponse)}
+     * 等方法统一输出并关闭。</p>
+     *
+     * @param clazz 实体类型（需使用 @Excel 注解）
+     * @param data  数据集合，不能为空
+     * @param <T>   实体类型泛型
+     * @return 填充后的 Workbook 对象（未关闭）
+     */
+    public static <T> Workbook exportExcel(Class<T> clazz, List<T> data) {
+        return exportExcel(clazz, data, null);
+    }
+
+    /**
+     * 基于实体注解导出数据（支持函数式配置 ExportParams），返回 Workbook。
+     *
+     * <p>该方法允许通过 Lambda 对 {@link ExportParams} 进行个性化配置，例如：</p>
+     *
+     * <pre>{@code
+     * Workbook wb = ExcelUtil.exportExcel(User.class, list, p -> {
+     *     p.setTitle("用户报表");
+     *     p.setSheetName("用户列表");
+     * });
+     * }</pre>
+     *
+     * <p>注意：返回的 Workbook 由调用方负责关闭或通过统一 write 方法输出并关闭。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合，不能为空
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        实体类型泛型
+     * @return 填充后的 Workbook 对象（未关闭）
+     */
+    public static <T> Workbook exportExcel(Class<T> clazz,
+                                           List<T> data,
+                                           ExportParamsConfigurer configurer) {
+
+        if (clazz == null) {
+            throw new IllegalArgumentException("clazz 不能为空");
+        }
+        if (data == null) {
+            throw new IllegalArgumentException("data 不能为空");
+        }
+
+        ExportParams params = new ExportParams();
+        if (configurer != null) {
+            configurer.configure(params);
+        }
+
+        try {
+            return ExcelExportUtil.exportExcel(params, clazz, data);
+        } catch (Exception e) {
+            throw new IllegalStateException("Excel 导出失败（对象注解模式）", e);
+        }
+    }
+
+    /**
+     * 基于实体注解导出数据到本地文件（基于字符串文件路径，支持函数式配置 ExportParams）。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>从配置文件或运行参数中传入文件路径</li>
+     *     <li>无需手动构建 File / Path 对象的快速落盘场景</li>
+     *     <li>单元测试、定时任务、数据归档等业务逻辑</li>
+     * </ul>
+     *
+     * <p>内部会自动创建父目录，并调用 {@link #write(Workbook, Path)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param filePath   本地文件路径（相对或绝对），例如："target/users.xlsx"
+     * @param configurer 导出参数配置回调，可为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       String filePath,
+                                       ExportParamsConfigurer configurer) {
+
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("filePath 不能为空");
+        }
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, Paths.get(filePath));
+    }
+
+    /**
+     * 基于实体注解导出数据到本地文件（支持函数式配置 ExportParams）。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>单元测试导出验证</li>
+     *     <li>服务器本地报表生成</li>
+     *     <li>定时任务落盘归档</li>
+     * </ul>
+     *
+     * <p>内部会调用 {@link #write(Workbook, File)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param file       导出目标文件对象，例如：new File("user.xlsx")
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       File file,
+                                       ExportParamsConfigurer configurer) {
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, file);
+    }
+
+    /**
+     * 基于实体注解导出数据到本地路径（支持函数式配置 ExportParams）。
+     *
+     * <p>适用于基于 NIO 的本地磁盘操作，与本工具类的 File 写法保持一致。</p>
+     *
+     * <p>内部会调用 {@link #write(Workbook, Path)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param filePath   导出文件路径，例如：Paths.get("target/user.xlsx")
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       Path filePath,
+                                       ExportParamsConfigurer configurer) {
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, filePath);
+    }
+
+    /**
+     * 基于实体注解导出数据到浏览器（支持函数式配置 ExportParams）。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>前端点击“导出 Excel”按钮</li>
+     *     <li>SaaS 系统在线数据下载</li>
+     *     <li>报表服务 HTTP 文件输出</li>
+     * </ul>
+     *
+     * <p>内部会调用 {@link #write(Workbook, String, HttpServletResponse)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param fileName   下载文件名，例如：“用户列表.xlsx”
+     * @param response   HttpServletResponse
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       String fileName,
+                                       HttpServletResponse response,
+                                       ExportParamsConfigurer configurer) {
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, fileName, response);
+    }
+
+    /**
+     * 基于实体注解导出数据（支持函数式配置 ExportParams），输出为 byte[] 数组。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>微服务之间通过接口返回 Excel 二进制</li>
+     *     <li>Redis / 缓存存储 Excel 数据</li>
+     *     <li>上传 OSS / MinIO / COS 对象存储</li>
+     *     <li>消息队列（MQ）通过二进制传输 Excel 文件</li>
+     * </ul>
+     *
+     * <p>内部使用内存缓冲，不会产生磁盘 IO，性能高且适用于云原生环境。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param configurer 导出参数配置回调，可为 null
+     * @param <T>        泛型类型
+     * @return Excel 文件的二进制数据 byte[]
+     */
+    public static <T> byte[] exportExcelToBytes(Class<T> clazz,
+                                                List<T> data,
+                                                ExportParamsConfigurer configurer) {
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+            workbook.write(bos);
+            return bos.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("Excel 导出为 byte[] 失败", e);
+        } finally {
+            try {
+                workbook.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    /**
+     * 基于实体注解导出数据（支持函数式配置 ExportParams），输出为 InputStream。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>上传 OSS / MinIO / COS（大多要求 InputStream）</li>
+     *     <li>第三方 SDK 接收流式数据处理</li>
+     *     <li>HTTP 响应中作为 Streaming 输出</li>
+     *     <li>云原生无磁盘环境</li>
+     * </ul>
+     *
+     * <p>输出为字节流包装的 {@link ByteArrayInputStream}，
+     * 调用方负责关闭 InputStream。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param configurer 导出参数配置回调，可为 null
+     * @param <T>        泛型类型
+     * @return Excel 内容的输入流对象（调用方负责关闭）
+     */
+    public static <T> InputStream exportExcelToStream(Class<T> clazz,
+                                                      List<T> data,
+                                                      ExportParamsConfigurer configurer) {
+
+        byte[] bytes = exportExcelToBytes(clazz, data, configurer);
+        return new ByteArrayInputStream(bytes);
+    }
+
+    /**
      * 将 Workbook 导出为本地 Excel 文件
      *
      * <p>
@@ -434,7 +698,7 @@ public final class ExcelUtil {
      * @param workbook 已生成的 Workbook 对象
      * @param filePath 目标文件完整路径，例如：target/user.xlsx
      */
-    public static void exportToFile(Workbook workbook, Path filePath) {
+    public static void write(Workbook workbook, Path filePath) {
         if (workbook == null) {
             throw new IllegalArgumentException("Workbook 不能为空");
         }
@@ -477,7 +741,7 @@ public final class ExcelUtil {
      * @param workbook 已生成的 Workbook 对象
      * @param file     目标文件对象，例如：new File("target/user.xlsx")
      */
-    public static void exportToFile(Workbook workbook, File file) {
+    public static void write(Workbook workbook, File file) {
         if (workbook == null) {
             throw new IllegalArgumentException("Workbook 不能为空");
         }
@@ -521,7 +785,7 @@ public final class ExcelUtil {
      * @param fileName 下载文件名，例如：用户数据.xlsx
      * @param response HttpServletResponse
      */
-    public static void exportToResponse(
+    public static void write(
             Workbook workbook,
             String fileName,
             HttpServletResponse response) {
@@ -565,8 +829,8 @@ public final class ExcelUtil {
      * @param data         模板参数数据
      * @return 填充完成的 Workbook
      */
-    public static Workbook exportByTemplate(String templatePath, Map<String, Object> data) {
-        return exportByTemplate(templatePath, data, null);
+    public static Workbook exportExcelByTemplate(String templatePath, Map<String, Object> data) {
+        return exportExcelByTemplate(templatePath, data, null);
     }
 
     /**
@@ -577,7 +841,7 @@ public final class ExcelUtil {
      * @param configurer   参数配置回调，可为 null
      * @return 填充完成的 Workbook
      */
-    public static Workbook exportByTemplate(String templatePath,
+    public static Workbook exportExcelByTemplate(String templatePath,
                                             Map<String, Object> data,
                                             TemplateParamsConfigurer configurer) {
 
@@ -595,7 +859,7 @@ public final class ExcelUtil {
         }
 
         try (InputStream inputStream = resource.getInputStream()) {
-            return doExport(inputStream, data, configurer);
+            return doExportExcelByTemplate(inputStream, data, configurer);
         } catch (IOException e) {
             throw new IllegalStateException("Excel 模板读取失败(文件 IO 异常)：路径=" + templatePath, e);
         }
@@ -614,8 +878,8 @@ public final class ExcelUtil {
      * @param templateInputStream 模板输入流
      * @param data                模板数据
      */
-    public static Workbook exportByTemplate(InputStream templateInputStream, Map<String, Object> data) {
-        return exportByTemplate(templateInputStream, data, null);
+    public static Workbook exportExcelByTemplate(InputStream templateInputStream, Map<String, Object> data) {
+        return exportExcelByTemplate(templateInputStream, data, null);
     }
 
     /**
@@ -625,7 +889,7 @@ public final class ExcelUtil {
      * @param data                模板数据
      * @param configurer          配置回调，可为 null
      */
-    public static Workbook exportByTemplate(InputStream templateInputStream,
+    public static Workbook exportExcelByTemplate(InputStream templateInputStream,
                                             Map<String, Object> data,
                                             TemplateParamsConfigurer configurer) {
 
@@ -637,7 +901,7 @@ public final class ExcelUtil {
         }
 
         try {
-            return doExport(templateInputStream, data, configurer);
+            return doExportExcelByTemplate(templateInputStream, data, configurer);
         } catch (Exception e) {
             throw new IllegalStateException("Excel 模板导出失败(模板流处理异常)", e);
         }
@@ -650,9 +914,9 @@ public final class ExcelUtil {
      * @param data                模板数据
      * @param configurer          可选参数配置器
      */
-    private static Workbook doExport(InputStream templateInputStream,
-                                     Map<String, Object> data,
-                                     TemplateParamsConfigurer configurer) throws IOException {
+    private static Workbook doExportExcelByTemplate(InputStream templateInputStream,
+                                                    Map<String, Object> data,
+                                                    TemplateParamsConfigurer configurer) throws IOException {
 
         TemplateExportParams params = new TemplateExportParams(templateInputStream);
 
@@ -851,8 +1115,8 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的数据集合
      */
-    public static <T> List<T> importFromFile(File file, Class<T> clazz) {
-        return importFromFile(file, clazz, null);
+    public static <T> List<T> importExcel(File file, Class<T> clazz) {
+        return importExcel(file, clazz, null);
     }
 
     /**
@@ -864,9 +1128,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的数据集合
      */
-    public static <T> List<T> importFromFile(File file,
-                                             Class<T> clazz,
-                                             ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(File file,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (file == null) {
             throw new IllegalArgumentException("file 不能为空");
@@ -910,8 +1174,8 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromPath(Path path, Class<T> clazz) {
-        return importFromPath(path, clazz, null);
+    public static <T> List<T> importExcel(Path path, Class<T> clazz) {
+        return importExcel(path, clazz, null);
     }
 
     /**
@@ -945,9 +1209,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromPath(Path path,
-                                             Class<T> clazz,
-                                             ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(Path path,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (path == null) {
             throw new IllegalArgumentException("path 不能为空");
@@ -991,9 +1255,9 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromMultipartFile(MultipartFile file,
-                                                      Class<T> clazz) {
-        return importFromMultipartFile(file, clazz, null);
+    public static <T> List<T> importExcel(MultipartFile file,
+                                          Class<T> clazz) {
+        return importExcel(file, clazz, null);
     }
 
     /**
@@ -1027,9 +1291,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromMultipartFile(MultipartFile file,
-                                                      Class<T> clazz,
-                                                      ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(MultipartFile file,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (file == null) {
             throw new IllegalArgumentException("multipartFile 不能为空");
@@ -1076,8 +1340,8 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromBytes(byte[] bytes, Class<T> clazz) {
-        return importFromBytes(bytes, clazz, null);
+    public static <T> List<T> importExcel(byte[] bytes, Class<T> clazz) {
+        return importExcel(bytes, clazz, null);
     }
 
     /**
@@ -1116,9 +1380,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromBytes(byte[] bytes,
-                                              Class<T> clazz,
-                                              ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(byte[] bytes,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (bytes == null || bytes.length == 0) {
             throw new IllegalArgumentException("bytes 不能为空");
@@ -1136,87 +1400,6 @@ public final class ExcelUtil {
             return ExcelImportUtil.importExcel(inputStream, clazz, params);
         } catch (Exception e) {
             throw new IllegalStateException("Excel 二进制数据导入失败", e);
-        }
-    }
-
-    /**
-     * 从 ClassPath 路径导入 Excel 数据
-     *
-     * <p>
-     * 适用于以下场景：
-     * </p>
-     *
-     * <ul>
-     *     <li>Excel 模板或测试数据文件位于 resources 目录下</li>
-     *     <li>单元测试、集成测试环境下读取内置 Excel 文件</li>
-     *     <li>随应用一起打包发布的固定 Excel 资源文件</li>
-     * </ul>
-     *
-     * <p>
-     * 例如：
-     * </p>
-     *
-     * <pre>
-     * importFromClasspath("excel/import_users.xlsx", MyUser.class);
-     * </pre>
-     *
-     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
-     * @param clazz             Excel 映射的实体类类型
-     * @param <T>               泛型类型
-     * @return 导入后的数据列表
-     */
-    public static <T> List<T> importFromClasspath(String classpathLocation,
-                                                  Class<T> clazz) {
-        return importFromClasspath(classpathLocation, clazz, null);
-    }
-
-    /**
-     * 从 ClassPath 路径导入 Excel 数据，并支持自定义导入参数配置
-     *
-     * <p>
-     * 通过 {@link ImportParamsConfigurer} 可对 {@link ImportParams} 进行灵活配置，例如：
-     * </p>
-     *
-     * <ul>
-     *     <li>是否需要校验：setNeedVerify(true)</li>
-     *     <li>是否保存图片：setSaveUrl(...)</li>
-     *     <li>标题行数：setTitleRows(...)</li>
-     *     <li>表头行数：setHeadRows(...)</li>
-     *     <li>开始导入行号：setStartRows(...)</li>
-     *     <li>是否开启多 Sheet 导入：setNeedAllSheets(true)</li>
-     * </ul>
-     *
-     * <p>
-     * 该方法内部基于 InputStream 读取，不依赖真实文件路径，
-     * 非常适合云原生与容器化环境。
-     * </p>
-     *
-     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
-     * @param clazz             Excel 映射的实体类类型
-     * @param configurer        导入参数配置回调，可为 null
-     * @param <T>               泛型类型
-     * @return 导入后的数据列表
-     */
-    public static <T> List<T> importFromClasspath(String classpathLocation,
-                                                  Class<T> clazz,
-                                                  ImportParamsConfigurer configurer) {
-
-        if (classpathLocation == null || classpathLocation.trim().isEmpty()) {
-            throw new IllegalArgumentException("classpathLocation 不能为空");
-        }
-        if (clazz == null) {
-            throw new IllegalArgumentException("clazz 不能为空");
-        }
-
-        ImportParams params = new ImportParams();
-        if (configurer != null) {
-            configurer.configure(params);
-        }
-
-        try (InputStream inputStream = getInputStreamFromClasspath(classpathLocation)) {
-            return ExcelImportUtil.importExcel(inputStream, clazz, params);
-        } catch (Exception e) {
-            throw new IllegalStateException("Excel ClassPath 导入失败: " + classpathLocation, e);
         }
     }
 
@@ -1242,9 +1425,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return 导入后的数据列表
      */
-    public static <T> List<T> importFromInputStream(InputStream inputStream,
-                                                    Class<T> clazz) {
-        return importFromInputStream(inputStream, clazz, null);
+    public static <T> List<T> importExcel(InputStream inputStream,
+                                          Class<T> clazz) {
+        return importExcel(inputStream, clazz, null);
     }
 
     /**
@@ -1281,9 +1464,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return 导入后的数据列表
      */
-    public static <T> List<T> importFromInputStream(InputStream inputStream,
-                                                    Class<T> clazz,
-                                                    ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(InputStream inputStream,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (inputStream == null) {
             throw new IllegalArgumentException("inputStream 不能为空");
@@ -1301,6 +1484,87 @@ public final class ExcelUtil {
             return ExcelImportUtil.importExcel(inputStream, clazz, params);
         } catch (Exception e) {
             throw new IllegalStateException("Excel InputStream 导入失败", e);
+        }
+    }
+
+    /**
+     * 从 ClassPath 路径导入 Excel 数据
+     *
+     * <p>
+     * 适用于以下场景：
+     * </p>
+     *
+     * <ul>
+     *     <li>Excel 模板或测试数据文件位于 resources 目录下</li>
+     *     <li>单元测试、集成测试环境下读取内置 Excel 文件</li>
+     *     <li>随应用一起打包发布的固定 Excel 资源文件</li>
+     * </ul>
+     *
+     * <p>
+     * 例如：
+     * </p>
+     *
+     * <pre>
+     * importFromClasspath("excel/import_users.xlsx", MyUser.class);
+     * </pre>
+     *
+     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
+     * @param clazz             Excel 映射的实体类类型
+     * @param <T>               泛型类型
+     * @return 导入后的数据列表
+     */
+    public static <T> List<T> importExcelFromClasspath(String classpathLocation,
+                                                       Class<T> clazz) {
+        return importExcelFromClasspath(classpathLocation, clazz, null);
+    }
+
+    /**
+     * 从 ClassPath 路径导入 Excel 数据，并支持自定义导入参数配置
+     *
+     * <p>
+     * 通过 {@link ImportParamsConfigurer} 可对 {@link ImportParams} 进行灵活配置，例如：
+     * </p>
+     *
+     * <ul>
+     *     <li>是否需要校验：setNeedVerify(true)</li>
+     *     <li>是否保存图片：setSaveUrl(...)</li>
+     *     <li>标题行数：setTitleRows(...)</li>
+     *     <li>表头行数：setHeadRows(...)</li>
+     *     <li>开始导入行号：setStartRows(...)</li>
+     *     <li>是否开启多 Sheet 导入：setNeedAllSheets(true)</li>
+     * </ul>
+     *
+     * <p>
+     * 该方法内部基于 InputStream 读取，不依赖真实文件路径，
+     * 非常适合云原生与容器化环境。
+     * </p>
+     *
+     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
+     * @param clazz             Excel 映射的实体类类型
+     * @param configurer        导入参数配置回调，可为 null
+     * @param <T>               泛型类型
+     * @return 导入后的数据列表
+     */
+    public static <T> List<T> importExcelFromClasspath(String classpathLocation,
+                                                       Class<T> clazz,
+                                                       ImportParamsConfigurer configurer) {
+
+        if (classpathLocation == null || classpathLocation.trim().isEmpty()) {
+            throw new IllegalArgumentException("classpathLocation 不能为空");
+        }
+        if (clazz == null) {
+            throw new IllegalArgumentException("clazz 不能为空");
+        }
+
+        ImportParams params = new ImportParams();
+        if (configurer != null) {
+            configurer.configure(params);
+        }
+
+        try (InputStream inputStream = getInputStreamFromClasspath(classpathLocation)) {
+            return ExcelImportUtil.importExcel(inputStream, clazz, params);
+        } catch (Exception e) {
+            throw new IllegalStateException("Excel ClassPath 导入失败: " + classpathLocation, e);
         }
     }
 
@@ -1327,9 +1591,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return Excel 导入完整结果对象
      */
-    public static <T> ExcelImportResult<T> importMoreFromInputStream(InputStream inputStream,
-                                                                     Class<T> clazz) {
-        return importMoreFromInputStream(inputStream, clazz, null);
+    public static <T> ExcelImportResult<T> importExcelMore(InputStream inputStream,
+                                                           Class<T> clazz) {
+        return importExcelMore(inputStream, clazz, null);
     }
 
     /**
@@ -1367,9 +1631,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return Excel 导入完整结果对象
      */
-    public static <T> ExcelImportResult<T> importMoreFromInputStream(InputStream inputStream,
-                                                                     Class<T> clazz,
-                                                                     ImportParamsConfigurer configurer) {
+    public static <T> ExcelImportResult<T> importExcelMore(InputStream inputStream,
+                                                           Class<T> clazz,
+                                                           ImportParamsConfigurer configurer) {
 
         if (inputStream == null) {
             throw new IllegalArgumentException("inputStream 不能为空");
@@ -1401,27 +1665,14 @@ public final class ExcelUtil {
 
 ```java
     @Test
-    public void testSimpleExport() throws IOException {
-        // 1. 准备数据
+    public void testSimpleExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        // 3. 使用 EasyPoi 直接生成 Workbook
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入本地文件
-        String filePath = Paths.get("target", "simple_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-
-        // 5. 关闭 workbook（释放资源）
-        workbook.close();
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_users.xlsx",
+                params -> params.setSheetName("用户列表")
+        );
     }
 ```
 
@@ -1537,25 +1788,14 @@ public class MyUser implements Serializable {
 
 ```java
     @Test
-    public void testMultiHeaderExport() throws IOException {
-        // 1. 准备数据
+    public void testMultiHeaderExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（多级表头）");
-
-        // 3. 导出
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入文件
-        String filePath = Paths.get("target", "multi_header_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 多级表头导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/multi_header_users.xlsx",
+                params -> params.setSheetName("用户数据（多级表头）")
+        );
     }
 ```
 
@@ -1587,30 +1827,19 @@ private String city;
 
 ```java
     @Test
-    public void testSimpleMergeExport() throws IOException {
-        // 1. 准备数据
+    public void testSimpleMergeExport() {
         List<MyUser> userList = InitData.getDataList();
-
         // 数据按照省份+城市排序
         userList.sort(Comparator
                 .comparing(MyUser::getProvince)
                 .thenComparing(MyUser::getCity));
 
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        // 3. 使用 EasyPoi 生成 Workbook
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入本地文件
-        String filePath = Paths.get("target", "simple_export_merge_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_merge_users.xlsx",
+                params -> params.setSheetName("用户列表")
+        );
     }
 ```
 
@@ -1775,24 +2004,18 @@ public class MyExcelStyle extends AbstractExcelExportStyler {
 
 ```java
     @Test
-    public void testStyledExport() throws IOException {
+    public void testStyledExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（带样式）");
-
-        // 设置自定义样式处理器
-        params.setStyle(MyExcelStyle.class);
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "styled_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 带样式的 Excel 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/styled_users.xlsx",
+                params -> {
+                    params.setSheetName("用户数据（带样式）");
+                    // 设置自定义样式处理器
+                    params.setStyle(CustomConciseExcelExportStyler.class);
+                }
+        );
     }
 ```
 
@@ -3054,15 +3277,13 @@ public final class ExcelStyleUtil {
 
 ```java
     @Test
-    public void testConditionStyledExport() throws IOException {
+    public void testConditionStyledExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams();
-        String sheetName = "用户数据（带样式）";
-        params.setSheetName(sheetName);
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
+        Workbook workbook =  ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                params -> params.setSheetName("用户数据（带样式）")
+        );
         // 条件样式
         ExcelStyleUtil.applyByTitle(workbook, "分数", (wb, cell) -> {
             int score;
@@ -3095,14 +3316,8 @@ public final class ExcelStyleUtil {
             style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             cell.setCellStyle(style);
         });
-
-        String filePath = Paths.get("target", "condition_styled_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 带样式的 Excel 导出成功！路径: " + filePath);
+        // 导出
+        ExcelUtil.write(workbook, "target/condition_styled_users.xlsx");
     }
 ```
 
@@ -3112,14 +3327,13 @@ public final class ExcelStyleUtil {
 
 ```java
     @Test
-    public void testConditionStyledExport() throws IOException {
+    public void testConditionStyledExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（带样式）");
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
+        Workbook workbook =  ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                params -> params.setSheetName("用户数据（带样式）")
+        );
         // 条件样式
         ExcelStyleUtil.applyByTitle(workbook, 0, "分数", 3,(wb, cell) -> {
             int score;
@@ -3152,14 +3366,8 @@ public final class ExcelStyleUtil {
             style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             cell.setCellStyle(style);
         });
-
-        String filePath = Paths.get("target", "condition_styled_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 带样式的 Excel 导出成功！路径: " + filePath);
+        // 导出
+        ExcelUtil.write(workbook, "target/condition_styled_users.xlsx");
     }
 ```
 
@@ -3169,15 +3377,14 @@ public final class ExcelStyleUtil {
 
 ```java
     @Test
-    public void testConditionStyledExport() throws IOException {
+    public void testConditionStyledExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams();
         String sheetName = "用户数据（带样式）";
-        params.setSheetName(sheetName);
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
+        Workbook workbook =  ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                params -> params.setSheetName(sheetName)
+        );
         // 条件样式
         ExcelStyleUtil.applyByTitle(workbook, sheetName, "分数", 3,(wb, cell) -> {
             int score;
@@ -3210,14 +3417,8 @@ public final class ExcelStyleUtil {
             style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             cell.setCellStyle(style);
         });
-
-        String filePath = Paths.get("target", "condition_styled_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 带样式的 Excel 导出成功！路径: " + filePath);
+        // 导出
+        ExcelUtil.write(workbook, "target/condition_styled_users.xlsx");
     }
 ```
 
@@ -3524,21 +3725,18 @@ public class NumberDictHandler implements IExcelDictHandler {
 
 ```java
     @Test
-    public void testExportWithDict() throws Exception {
+    public void testExportWithDict() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams("用户列表", "sheet1");
-        params.setDictHandler(new NumberDictHandler());
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "dict_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功！");
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/dict_export_users.xlsx",
+                params -> {
+                    params.setSheetName("sheet1");
+                    params.setTitle("用户列表");
+                    params.setDictHandler(new NumberDictHandler());
+                }
+        );
     }
 ```
 
@@ -3671,27 +3869,24 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 
 ```java
     @Test
-    public void testSimpleExportWithHandler() throws Exception {
-
+    public void testSimpleExportWithHandler() {
         List<MyUser> userList = InitData.getDataList();
 
-        ExportParams params = new ExportParams("用户列表", "sheet1");
-
         NumberDataHandler handler = new NumberDataHandler();
-
         // 指定要处理的字段，注意是Excel的字段名（表头）
         handler.setNeedHandlerFields(new String[]{"年龄段"});
 
-        // 设置给导出参数
-        params.setDataHandler(handler);
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "data_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/data_export_users.xlsx",
+                params -> {
+                    params.setSheetName("sheet1");
+                    params.setTitle("用户列表");
+                    // 设置给导出参数
+                    params.setDataHandler(handler);
+                }
+        );
     }
 ```
 
@@ -3767,32 +3962,20 @@ public enum UserStatus {
 
 ```java
     @Test
-    public void testSimpleExportWithEnumField() throws IOException {
-        // 1. 准备数据
+    public void testSimpleExportWithEnumField() {
         List<MyUser> userList = InitData.getDataList();
-
         // 随机分配状态
         UserStatus[] statuses = UserStatus.values();
         for (int i = 0; i < userList.size(); i++) {
             userList.get(i).setStatus(statuses[i % statuses.length]);
         }
 
-        // 2. 导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        // 3. 导出 Excel
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入文件
-        String filePath = Paths.get("target", "simple_export_users_enum.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-
-        workbook.close();
-
-        System.out.println("✅ 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_users_enum.xlsx",
+                params -> params.setTitle("用户列表")
+        );
     }
 ```
 
@@ -3902,21 +4085,18 @@ public class NumberDictHandler implements IExcelDictHandler {
 
 ```java
     @Test
-    public void testExportWithDict() throws Exception {
+    public void testExportWithDict() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams("用户列表", "sheet1");
-        params.setDictHandler(new NumberDictHandler());
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "dict_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功！");
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/dict_export_users.xlsx",
+                params -> {
+                    params.setSheetName("sheet1");
+                    params.setTitle("用户列表");
+                    params.setDictHandler(new NumberDictHandler());
+                }
+        );
     }
 ```
 
@@ -4065,21 +4245,13 @@ public static List<CourseExcel> getDataList() {
 ```
     @Test
     public void testCourseExport() {
-        // 1. 准备数据
         List<CourseExcel> courseList = getDataList();
-
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("课程数据");
-
-        // 3. 使用 EasyPoi 直接生成 Workbook
-        Workbook workbook = ExcelExportUtil.exportExcel(params, CourseExcel.class, courseList);
-
-        // 4. 写入本地文件
-        Path filePath = Paths.get("target", "export_course_with_students.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                CourseExcel.class,
+                courseList,
+                "target/export_course_with_students.xlsx",
+                params -> params.setTitle("课程数据")
+        );
     }
 ```
 
@@ -4178,24 +4350,16 @@ private static OrderExcel newOrder(String orderNo, String name, String phone, St
 #### 使用示例
 
 ```java
-@Test
-public void testOrderExport() {
-    // 1. 构造数据
-    List<OrderExcel> list = buildOrderData();
-
-    // 2. 设置导出参数
-    ExportParams params = new ExportParams();
-    params.setSheetName("订单数据");
-
-    // 3. 执行导出
-    Workbook workbook = ExcelExportUtil.exportExcel(params, OrderExcel.class, list);
-
-    // 4. 导出到文件
-    Path filePath = Paths.get("target", "export_orders.xlsx");
-    ExcelUtil.exportToFile(workbook, filePath);
-
-    System.out.println("✅ 导出成功！文件路径: " + filePath);
-}
+    @Test
+    public void testOrderExport() {
+        List<OrderExcel> list = buildOrderData();
+        ExcelUtil.exportExcel(
+                OrderExcel.class,
+                list,
+                "target/export_orders.xlsx",
+                params -> params.setTitle("订单数据")
+        );
+    }
 ```
 
 ![image-20260124135706812](./assets/image-20260124135706812.png)
@@ -4225,7 +4389,7 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testImageExport() throws IOException {
+    public void testImageExport() {
         List<Object> imagePool = Arrays.asList(
                 "D:/Temp/images/1.jpg",                               // 本地
                 "https://fuss10.elemecdn.com/e/5d/4a731a90594a4af544c0c25941171jpeg.jpeg",   // 网络
@@ -4237,18 +4401,12 @@ public void testOrderExport() {
             userList.get(i).setImage(imagePool.get(i % imagePool.size()));
         }
 
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（含图片）");
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "image_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 含图片的 Excel 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/image_export_users.xlsx",
+                params -> params.setTitle("用户数据（含图片）")
+        );
     }
 ```
 
@@ -4268,24 +4426,18 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testImage2Export() throws IOException {
+    public void testImage2Export() {
         List<MyUser> userList = InitData.getDataList(5);
         for (int i = 0; i < userList.size(); i++) {
             userList.get(i).setImage("https://placehold.co/100x100/png");
         }
 
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（含图片）");
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "image2_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 含图片的 Excel 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/image_export_users.xlsx",
+                params -> params.setTitle("用户数据（含图片）")
+        );
     }
 ```
 
@@ -4295,7 +4447,7 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testMultiSheetExport() throws IOException {
+    public void testMultiSheetExport() {
         // 1. 获取原始数据
         List<MyUser> userList = InitData.getDataList();
 
@@ -4329,13 +4481,7 @@ public void testOrderExport() {
         Workbook workbook = ExcelExportUtil.exportExcel(sheets, ExcelType.XSSF);
 
         // 5. 写入文件
-        String filePath = Paths.get("target", "multi_sheet_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 多 Sheet 导出成功！共 " + sheets.size() + " 个省份，路径: " + filePath);
+        ExcelUtil.write(workbook, "target/multi_sheet_users.xlsx");
     }
 ```
 
@@ -4345,7 +4491,7 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testBigDataExport() throws IOException {
+    public void testBigDataExport() {
         // 1. 写入多少次
         int total = 500;
 
@@ -4368,12 +4514,7 @@ public void testOrderExport() {
 
         // 5. 获取Workbook 并写入文件
         Workbook workbook = writer.get();
-        try (FileOutputStream fos = new FileOutputStream("target/big_data_users.xlsx")) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 大数据导出成功！");
+        ExcelUtil.write(workbook, "target/big_data_users.xlsx");
     }
 ```
 
@@ -4385,49 +4526,7 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testSimpleExportWithMap() throws IOException {
-        List<MyUser> userList = InitData.getDataList();
-
-        // 转成 List<Map>
-        List<Map<String, Object>> dataList = new ArrayList<>();
-        for (MyUser user : userList) {
-            Map<String, Object> map = new LinkedHashMap<>();
-            map.put("id", user.getId());
-            map.put("name", user.getName());
-            map.put("age", user.getAge());
-            map.put("city", user.getCity());
-            dataList.add(map);
-        }
-
-        // 定义表头（key 对应 map 的 key，name 是显示在 Excel 的标题）
-        List<ExcelExportEntity> entityList = new ArrayList<>();
-        entityList.add(new ExcelExportEntity("ID", "id"));
-        entityList.add(new ExcelExportEntity("姓名", "name"));
-        entityList.add(new ExcelExportEntity("年龄", "age"));
-        entityList.add(new ExcelExportEntity("城市", "city"));
-
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_users_map.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
-    }
-```
-
-![image-20260121201011767](./assets/image-20260121201011767.png)
-
-#### 调整列宽
-
-```java
-    @Test
-    public void testSimpleExportWithMap() throws IOException {
+    public void testSimpleExportWithMap() {
         List<MyUser> userList = InitData.getDataList();
 
         // 转成 List<Map>
@@ -4460,14 +4559,56 @@ public void testOrderExport() {
         params.setSheetName("用户列表");
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
+        ExcelUtil.write(workbook, "target/simple_export_users_map.xlsx");
+    }
+```
 
-        String filePath = Paths.get("target", "simple_export_users_map.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
+![image-20260121201011767](./assets/image-20260121201011767.png)
+
+#### 调整列宽
+
+```java
+    @Test
+    public void testSimpleMergeExportWithMap() {
+        List<MyUser> userList = InitData.getDataList();
+
+        userList.sort(
+                Comparator.comparing(MyUser::getProvince)
+                        .thenComparing(MyUser::getCity)
+        );
+
+        // 转成 List<Map>
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (MyUser user : userList) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", user.getId());
+            map.put("name", user.getName());
+            map.put("age", user.getAge());
+            map.put("city", user.getCity());
+            dataList.add(map);
         }
-        workbook.close();
 
-        System.out.println("导出成功: " + filePath);
+        // 定义表头（key 对应 map 的 key，name 是显示在 Excel 的标题）
+        List<ExcelExportEntity> entityList = new ArrayList<>();
+        ExcelExportEntity id = new ExcelExportEntity("ID", "id");
+        id.setWidth(20);
+        entityList.add(id);
+        ExcelExportEntity name = new ExcelExportEntity("姓名", "name");
+        name.setWidth(30);
+        entityList.add(name);
+        ExcelExportEntity age = new ExcelExportEntity("年龄", "age");
+        age.setWidth(20);
+        entityList.add(age);
+        ExcelExportEntity city = new ExcelExportEntity("城市", "city");
+        city.setWidth(40);
+        city.setMergeVertical(true);
+        entityList.add(city);
+
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+
+        Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
+        ExcelUtil.write(workbook, "target/simple_export_merge_users_map.xlsx");
     }
 ```
 
@@ -4477,7 +4618,7 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testMultiSheetDifferentHeadersSingleMethod() throws IOException {
+    public void testMultiSheetDifferentHeadersSingleMethod() {
         // ====== 准备数据 ======
         List<MyUser> userList1 = InitData.getDataList();
         List<MyUser> userList2 = InitData.getDataList();
@@ -4545,13 +4686,7 @@ public void testOrderExport() {
         Workbook workbook = createWorkbookForMapSheets(sheets, ExcelType.XSSF);
 
         // ====== 写入文件 ======
-        String filePath = Paths.get("target", "multi_sheet_diff_headers.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 多 Sheet 导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/multi_sheet_diff_headers.xlsx");
     }
 
     /**
@@ -4576,9 +4711,8 @@ public void testOrderExport() {
 使用 `ExcelExportEntity.setMergeVertical(true)` 自动合并内容相同的单元格
 
 ```java
-
     @Test
-    public void testSimpleMergeExportWithMap() throws IOException {
+    public void testSimpleMergeExportWithMap() {
         List<MyUser> userList = InitData.getDataList();
 
         userList.sort(
@@ -4617,14 +4751,7 @@ public void testOrderExport() {
         params.setSheetName("用户列表");
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_merge_users_map.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_merge_users_map.xlsx");
     }
 ```
 
@@ -4635,9 +4762,8 @@ public void testOrderExport() {
 图片列需要先下载成 byte[]
 
 ```java
-
     @Test
-    public void testSimpleExportWithMapAndImage() throws IOException {
+    public void testSimpleExportWithMapAndImage() {
         List<MyUser> userList = InitData.getDataList(10);
 
         // 图片 URL
@@ -4680,13 +4806,7 @@ public void testOrderExport() {
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
 
         // ====== 写入文件 ======
-        String filePath = Paths.get("target", "simple_export_users_map_with_image.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_with_image.xlsx");
     }
 ```
 
@@ -4698,7 +4818,7 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testSimpleExportWithMap_Dict() throws IOException {
+    public void testSimpleExportWithMap_Dict() {
         List<MyUser> userList = InitData.getDataList();
 
         // 转成 List<Map>
@@ -4709,7 +4829,7 @@ public void testOrderExport() {
             map.put("name", user.getName());
 
             // 假设 number 是数字，后面用字典映射
-            map.put("number", RandomUtil.randomEle(Arrays.asList(1,2,3)));
+            map.put("number", RandomUtil.randomEle(Arrays.asList(1, 2, 3)));
 
             // 假设 city 是编码，后面用 handler 处理
             map.put("city", user.getCity());
@@ -4736,14 +4856,7 @@ public void testOrderExport() {
         params.setSheetName("用户列表");
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_users_map_dict.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_dict.xlsx");
     }
 ```
 
@@ -4753,7 +4866,7 @@ public void testOrderExport() {
 
 ```java
     @Test
-    public void testSimpleExportWithMap_DictAndDropdown() throws IOException {
+    public void testSimpleExportWithMap_DictAndDropdown() {
         List<MyUser> userList = InitData.getDataList();
 
         // 1. 转成 List<Map>
@@ -4796,14 +4909,7 @@ public void testOrderExport() {
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
 
         // 4. 写入本地文件
-        String filePath = Paths.get("target", "simple_export_users_map_dict_dropdown.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-
-        workbook.close();
-
-        System.out.println("✅ 导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_dict_dropdown.xlsx");
     }
 ```
 
@@ -4929,7 +5035,7 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 
 ```java
     @Test
-    public void testSimpleExportWithMap_DataHandler() throws IOException {
+    public void testSimpleExportWithMap_DataHandler() {
         List<MyUser> userList = InitData.getDataList();
 
         // 转成 List<Map>
@@ -4959,14 +5065,7 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
         params.setDataHandler(handler); // 设置 handler
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_users_map_datahandler.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_datahandler.xlsx");
     }
 ```
 
@@ -5028,12 +5127,12 @@ EasyPOI 模板语法：
         Map<String, Object> data = new HashMap<>();
         data.put("name", "Ateng");
         data.put("age", "25");
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_template.xlsx",
                 data
         );
         Path filePath = Paths.get("target", "template_export_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 ```
@@ -5076,12 +5175,12 @@ EasyPOI 模板语法：
         List<MyUser> dataList = InitData.getDataList();
         Map<String, Object> data = new HashMap<>();
         data.put("list", dataList);
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_template.xlsx",
                 data
         );
         Path filePath = Paths.get("target", "template_export_list_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 ```
@@ -5136,12 +5235,12 @@ EasyPOI 模板语法：
         data.put("title", "EasyPoi 模版导出混合使用");
         data.put("author", "Ateng");
         data.put("time", DateUtil.now());
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_mix_template.xlsx",
                 data
         );
         Path filePath = Paths.get("target", "template_export_mix_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 ```
@@ -5190,13 +5289,13 @@ Sheet2
         data.put("name", "Ateng");
         data.put("age", "25");
         data.put("sex", "25");
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_multiple_sheet_template.xlsx",
                 data,
                 params -> params.setScanAllsheet(true)
         );
         Path filePath = Paths.get("target", "template_export_multiple_sheet_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 ```
@@ -5261,13 +5360,13 @@ src
         data.put("score", 87.456);
         data.put("ratio", 0.8567);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_format_template.xlsx",
                 data
         );
 
         Path filePath = Paths.get("target", "template_export_users_format.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("✅ 普通变量格式化模板导出成功：" + filePath);
     }
@@ -5415,14 +5514,14 @@ public class GenderDictHandler implements IExcelDictHandler {
         Map<String, Object> data = new HashMap<>();
         data.put("gender", 1);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_format_dict_template.xlsx",
                 data,
                 params -> params.setDictHandler(new GenderDictHandler())
         );
 
         Path filePath = Paths.get("target", "template_export_users_format_dict.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("✅ 普通变量 + dict 格式化模板导出成功：" + filePath);
     }
@@ -5477,13 +5576,13 @@ src
 
         data.put("list", list);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_format_template.xlsx",
                 data
         );
 
         Path filePath = Paths.get("target", "template_export_format_users_list.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("📦 列表模板导出成功：" + filePath);
     }
@@ -5639,14 +5738,14 @@ public class GenderDictHandler implements IExcelDictHandler {
 
         data.put("list", list);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_format_dict_template.xlsx",
                 data,
                 params -> params.setDictHandler(new GenderDictHandler())
         );
 
         Path filePath = Paths.get("target", "template_export_format_dict_users_list.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("📦 列表模板导出成功：" + filePath);
     }
@@ -5702,13 +5801,13 @@ src
         System.out.println(data);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header.xlsx")
         );
@@ -5768,13 +5867,13 @@ src
         data.put("colList", colList);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_merge_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header_merge.xlsx")
         );
@@ -5888,13 +5987,13 @@ src
         System.out.println(data);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_and_data_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header_and_data.xlsx")
         );
@@ -6016,13 +6115,13 @@ src
         System.out.println(data);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_and_data2_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header_and_data2.xlsx")
         );
@@ -6128,12 +6227,12 @@ src
 
         data.put("photo", image);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_image_template.xlsx",
                 data
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/template_export_image.xlsx")
         );
@@ -6217,12 +6316,12 @@ src
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_image_template.xlsx",
                 data
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/template_export_list_image.xlsx")
         );
@@ -6344,7 +6443,7 @@ public class MyUser implements Serializable {
 ```java
     @Test
     public void testSimpleImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
     }
 ```
@@ -6360,7 +6459,7 @@ public class MyUser implements Serializable {
 ```java
     @Test
     public void testSimpleMapImport() {
-        List<Map> list = ExcelUtil.importFromClasspath("doc/import_simple_users.xlsx", Map.class);
+        List<Map> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_users.xlsx", Map.class);
         System.out.println("导入成功！数据: " + list);
     }
 ```
@@ -6398,7 +6497,7 @@ public class MyUser implements Serializable {
 ```java
     @Test
     public void testSimpleImageImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_image_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_image_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
         list.forEach(user -> {
             File file = new File(user.getAvatarUrl());
@@ -6441,7 +6540,7 @@ public class MyUser implements Serializable {
 ```java
     @Test
     public void testSimpleReplaceImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_replace_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_replace_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
     }
 ```
@@ -6525,7 +6624,7 @@ public enum UserStatus {
 ```java
     @Test
     public void testSimpleEnumImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_enum_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_enum_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
     }
 ```
@@ -6595,7 +6694,7 @@ public class NumberDictHandler implements IExcelDictHandler {
 ```java
     @Test
     public void testSimpleDictImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_simple_dict_users.xlsx",
                 MyUser.class,
                 params -> params.setDictHandler(new NumberDictHandler())
@@ -6742,7 +6841,7 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
         // 指定要处理的字段，注意是Excel的字段名（表头）
         handler.setNeedHandlerFields(new String[]{"年龄段"});
 
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_simple_handler_users.xlsx",
                 MyUser.class,
                 params -> params.setDataHandler(handler)
@@ -6879,7 +6978,7 @@ public class MyUser implements Serializable, IExcelModel, IExcelDataModel {
 ```java
     @Test
     public void testImportWithHibernateErrorCollect() {
-        ExcelImportResult<MyUser> result = ExcelUtil.importMoreFromInputStream(
+        ExcelImportResult<MyUser> result = ExcelUtil.importExcelMore(
                 ExcelUtil.getInputStreamFromClasspath("doc/import_error_users.xlsx"),
                 MyUser.class,
                 params -> params.setNeedVerify(true)
@@ -6898,12 +6997,12 @@ public class MyUser implements Serializable, IExcelModel, IExcelDataModel {
 
         // 把成功 Excel 导出来
         if (result.getWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
+            ExcelUtil.write(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
             System.out.println("成功详情 Excel 已生成：target/import_success_result.xlsx");
         }
         // 把失败 Excel 导出来
         if (result.getFailWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
+            ExcelUtil.write(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
             System.out.println("失败详情 Excel 已生成：target/import_error_result.xlsx");
         }
     }
@@ -6987,7 +7086,7 @@ public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
 ```java
     @Test
     public void testImportWithErrorCollect() {
-        ExcelImportResult<MyUser> result = ExcelUtil.importMoreFromInputStream(
+        ExcelImportResult<MyUser> result = ExcelUtil.importExcelMore(
                 ExcelUtil.getInputStreamFromClasspath("doc/import_error_users.xlsx"),
                 MyUser.class,
                 params -> {
@@ -7009,12 +7108,12 @@ public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
 
         // 把成功 Excel 导出来
         if (result.getWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
+            ExcelUtil.write(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
             System.out.println("成功详情 Excel 已生成：target/import_success_result.xlsx");
         }
         // 把失败 Excel 导出来
         if (result.getFailWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
+            ExcelUtil.write(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
             System.out.println("失败详情 Excel 已生成：target/import_error_result.xlsx");
         }
     }
@@ -7047,7 +7146,7 @@ public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
 ```java
     @Test
     public void testImportWithMultiThread() {
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_simple_users.xlsx",
                 MyUser.class,
                 params -> {
@@ -7079,7 +7178,7 @@ public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
 ```java
     @Test
     public void testImportMultipleSheet1() {
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_multi_sheet_users.xlsx",
                 MyUser.class,
                 params -> {
@@ -7116,14 +7215,14 @@ public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
     public void testImportMultipleSheet2() {
         String classPathExcel = "doc/import_multi_sheet.xlsx";
         // 用户列表
-        List<MyUser> userList = ExcelUtil.importFromClasspath(
+        List<MyUser> userList = ExcelUtil.importExcelFromClasspath(
                 classPathExcel,
                 MyUser.class,
                 params -> params.setSheetName("用户列表")
         );
         System.out.println("导入成功！用户列表: " + userList);
         // 学生列表
-        List<Student> studentList = ExcelUtil.importFromClasspath(
+        List<Student> studentList = ExcelUtil.importExcelFromClasspath(
                 classPathExcel,
                 Student.class,
                 params -> params.setSheetName("学生列表")
@@ -7153,7 +7252,7 @@ EasyPoi 的 Key-Value 导入不是“Excel 表格导入”，
 ```java
     @Test
     public void testImportKeyValue() {
-        ExcelImportResult<Map> result = ExcelUtil.importMoreFromInputStream(
+        ExcelImportResult<Map> result = ExcelUtil.importExcelMore(
                 ExcelUtil.getInputStreamFromClasspath("doc/import_key_value.xlsx"),
                 Map.class,
                 params -> {

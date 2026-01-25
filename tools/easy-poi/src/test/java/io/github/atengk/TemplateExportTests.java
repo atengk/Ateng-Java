@@ -24,12 +24,12 @@ public class TemplateExportTests {
         Map<String, Object> data = new HashMap<>();
         data.put("name", "Ateng");
         data.put("age", "25");
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_template.xlsx",
                 data
         );
         Path filePath = Paths.get("target", "template_export_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 
@@ -39,13 +39,13 @@ public class TemplateExportTests {
         data.put("name", "Ateng");
         data.put("age", "25");
         data.put("sex", "25");
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_multiple_sheet_template.xlsx",
                 data,
                 params -> params.setScanAllsheet(true)
         );
         Path filePath = Paths.get("target", "template_export_multiple_sheet_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 
@@ -54,12 +54,12 @@ public class TemplateExportTests {
         List<MyUser> dataList = InitData.getDataList();
         Map<String, Object> data = new HashMap<>();
         data.put("list", dataList);
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_template.xlsx",
                 data
         );
         Path filePath = Paths.get("target", "template_export_list_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 
@@ -71,12 +71,12 @@ public class TemplateExportTests {
         data.put("title", "EasyPoi 模版导出混合使用");
         data.put("author", "Ateng");
         data.put("time", DateUtil.now());
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_mix_template.xlsx",
                 data
         );
         Path filePath = Paths.get("target", "template_export_mix_users.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
         System.out.println("✅ 模板导出成功：" + filePath);
     }
 
@@ -94,13 +94,13 @@ public class TemplateExportTests {
         data.put("score", 87.456);
         data.put("ratio", 0.8567);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_format_template.xlsx",
                 data
         );
 
         Path filePath = Paths.get("target", "template_export_users_format.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("✅ 普通变量格式化模板导出成功：" + filePath);
     }
@@ -110,14 +110,14 @@ public class TemplateExportTests {
         Map<String, Object> data = new HashMap<>();
         data.put("gender", 1);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_format_dict_template.xlsx",
                 data,
                 params -> params.setDictHandler(new GenderDictHandler())
         );
 
         Path filePath = Paths.get("target", "template_export_users_format_dict.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("✅ 普通变量 + dict 格式化模板导出成功：" + filePath);
     }
@@ -145,13 +145,13 @@ public class TemplateExportTests {
 
         data.put("list", list);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_format_template.xlsx",
                 data
         );
 
         Path filePath = Paths.get("target", "template_export_format_users_list.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("📦 列表模板导出成功：" + filePath);
     }
@@ -180,14 +180,14 @@ public class TemplateExportTests {
 
         data.put("list", list);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_format_dict_template.xlsx",
                 data,
                 params -> params.setDictHandler(new GenderDictHandler())
         );
 
         Path filePath = Paths.get("target", "template_export_format_dict_users_list.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
+        ExcelUtil.write(workbook, filePath);
 
         System.out.println("📦 列表模板导出成功：" + filePath);
     }
@@ -211,13 +211,13 @@ public class TemplateExportTests {
         System.out.println(data);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header.xlsx")
         );
@@ -244,13 +244,13 @@ public class TemplateExportTests {
         data.put("colList", colList);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_merge_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header_merge.xlsx")
         );
@@ -296,13 +296,13 @@ public class TemplateExportTests {
         System.out.println(data);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_and_data_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header_and_data.xlsx")
         );
@@ -352,13 +352,13 @@ public class TemplateExportTests {
         System.out.println(data);
 
         // 导出
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/dynamic_header_and_data2_template.xlsx",
                 data,
                 params -> params.setColForEach(true)
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/dynamic_header_and_data2.xlsx")
         );
@@ -385,12 +385,12 @@ public class TemplateExportTests {
 
         data.put("photo", image);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_image_template.xlsx",
                 data
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/template_export_image.xlsx")
         );
@@ -425,12 +425,12 @@ public class TemplateExportTests {
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
 
-        Workbook workbook = ExcelUtil.exportByTemplate(
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
                 "doc/user_list_image_template.xlsx",
                 data
         );
 
-        ExcelUtil.exportToFile(
+        ExcelUtil.write(
                 workbook,
                 Paths.get("target/template_export_list_image.xlsx")
         );

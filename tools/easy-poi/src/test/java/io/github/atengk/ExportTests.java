@@ -18,220 +18,169 @@ import io.github.atengk.style.CustomConciseExcelExportStyler;
 import io.github.atengk.util.ExcelStyleUtil;
 import io.github.atengk.util.ExcelUtil;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.IndexedColors;
-import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class ExportTests {
 
     @Test
-    public void testSimpleExport() throws IOException {
-        // 1. 准备数据
+    public void testSimpleExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        // 3. 使用 EasyPoi 直接生成 Workbook
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入本地文件
-        String filePath = Paths.get("target", "simple_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-
-        // 5. 关闭 workbook（释放资源）
-        workbook.close();
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_users.xlsx",
+                params -> params.setSheetName("用户列表")
+        );
     }
 
     @Test
-    public void testMultiHeaderExport() throws IOException {
-        // 1. 准备数据
+    public void testMultiHeaderExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（多级表头）");
-
-        // 3. 导出
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入文件
-        String filePath = Paths.get("target", "multi_header_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 多级表头导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/multi_header_users.xlsx",
+                params -> params.setSheetName("用户数据（多级表头）")
+        );
     }
 
     @Test
-    public void testSimpleMergeExport() throws IOException {
-        // 1. 准备数据
+    public void testSimpleMergeExport() {
         List<MyUser> userList = InitData.getDataList();
-
         // 数据按照省份+城市排序
         userList.sort(Comparator
                 .comparing(MyUser::getProvince)
                 .thenComparing(MyUser::getCity));
 
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        // 3. 使用 EasyPoi 生成 Workbook
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入本地文件
-        String filePath = Paths.get("target", "simple_export_merge_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_merge_users.xlsx",
+                params -> params.setSheetName("用户列表")
+        );
     }
 
     @Test
-    public void testStyledExport() throws IOException {
+    public void testStyledExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（带样式）");
-
-        // 设置自定义样式处理器
-        params.setStyle(CustomConciseExcelExportStyler.class);
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "styled_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 带样式的 Excel 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/styled_users.xlsx",
+                params -> {
+                    params.setSheetName("用户数据（带样式）");
+                    // 设置自定义样式处理器
+                    params.setStyle(CustomConciseExcelExportStyler.class);
+                }
+        );
     }
 
     @Test
-    public void testConditionStyledExport() throws IOException {
+    public void testConditionStyledExport() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams();
         String sheetName = "用户数据（带样式）";
-        params.setSheetName(sheetName);
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
+        Workbook workbook =  ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                params -> params.setSheetName(sheetName)
+        );
         // 条件样式
-        ExcelStyleUtil.applyByTitle(workbook, 0, "身份证", 3, (wb, cell) -> {
-            String value = cell.getStringCellValue();
-            if (value == null || value.trim().isEmpty()) {
-                CellStyle style = wb.createCellStyle();
-                style.setFillForegroundColor(IndexedColors.ROSE.getIndex());
-                style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-                cell.setCellStyle(style);
+        ExcelStyleUtil.applyByTitle(workbook, sheetName, "分数", 3,(wb, cell) -> {
+            int score;
+            try {
+                if (cell.getCellType() == CellType.NUMERIC) {
+                    score = (int) cell.getNumericCellValue();
+                } else {
+                    score = Integer.parseInt(cell.getStringCellValue());
+                }
+            } catch (Exception e) {
+                return;
             }
+
+            CellStyle style = wb.createCellStyle();
+            style.setAlignment(HorizontalAlignment.CENTER);
+            style.setVerticalAlignment(VerticalAlignment.CENTER);
+            style.setBorderTop(BorderStyle.THIN);
+            style.setBorderBottom(BorderStyle.THIN);
+            style.setBorderLeft(BorderStyle.THIN);
+            style.setBorderRight(BorderStyle.THIN);
+
+            if (score < 60) {
+                style.setFillForegroundColor(IndexedColors.ROSE.getIndex());
+            } else if (score > 90) {
+                style.setFillForegroundColor(IndexedColors.LIGHT_GREEN.getIndex());
+            } else {
+                style.setFillForegroundColor(IndexedColors.BLUE_GREY.getIndex());
+            }
+
+            style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            cell.setCellStyle(style);
         });
-
-        String filePath = Paths.get("target", "condition_styled_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 带样式的 Excel 导出成功！路径: " + filePath);
+        // 导出
+        ExcelUtil.write(workbook, "target/condition_styled_users.xlsx");
     }
 
     @Test
-    public void testExportWithDict() throws Exception {
+    public void testExportWithDict() {
         List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams("用户列表", "sheet1");
-        params.setDictHandler(new NumberDictHandler());
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "dict_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功！");
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/dict_export_users.xlsx",
+                params -> {
+                    params.setSheetName("sheet1");
+                    params.setTitle("用户列表");
+                    params.setDictHandler(new NumberDictHandler());
+                }
+        );
     }
 
     @Test
-    public void testSimpleExportWithEnumField() throws IOException {
-        // 1. 准备数据
+    public void testSimpleExportWithHandler() {
         List<MyUser> userList = InitData.getDataList();
 
+        NumberDataHandler handler = new NumberDataHandler();
+        // 指定要处理的字段，注意是Excel的字段名（表头）
+        handler.setNeedHandlerFields(new String[]{"年龄段"});
+
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/data_export_users.xlsx",
+                params -> {
+                    params.setSheetName("sheet1");
+                    params.setTitle("用户列表");
+                    // 设置给导出参数
+                    params.setDataHandler(handler);
+                }
+        );
+    }
+
+    @Test
+    public void testSimpleExportWithEnumField() {
+        List<MyUser> userList = InitData.getDataList();
         // 随机分配状态
         UserStatus[] statuses = UserStatus.values();
         for (int i = 0; i < userList.size(); i++) {
             userList.get(i).setStatus(statuses[i % statuses.length]);
         }
 
-        // 2. 导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        // 3. 导出 Excel
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入文件
-        String filePath = Paths.get("target", "simple_export_users_enum.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-
-        workbook.close();
-
-        System.out.println("✅ 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_users_enum.xlsx",
+                params -> params.setTitle("用户列表")
+        );
     }
 
     @Test
-    public void testSimpleExportWithHandler() throws Exception {
-
-        List<MyUser> userList = InitData.getDataList();
-
-        ExportParams params = new ExportParams("用户列表", "sheet1");
-
-        NumberDataHandler handler = new NumberDataHandler();
-
-        // 指定要处理的字段，注意是Excel的字段名（表头）
-        handler.setNeedHandlerFields(new String[]{"年龄段"});
-
-        // 设置给导出参数
-        params.setDataHandler(handler);
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "data_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-    }
-
-    @Test
-    public void testImageExport() throws IOException {
+    public void testImageExport() {
         List<Object> imagePool = Arrays.asList(
                 "D:/Temp/images/1.jpg",                               // 本地
                 "https://fuss10.elemecdn.com/e/5d/4a731a90594a4af544c0c25941171jpeg.jpeg",   // 网络
@@ -243,44 +192,32 @@ public class ExportTests {
             userList.get(i).setImage(imagePool.get(i % imagePool.size()));
         }
 
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（含图片）");
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "image_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 含图片的 Excel 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/image_export_users.xlsx",
+                params -> params.setTitle("用户数据（含图片）")
+        );
     }
 
     @Test
-    public void testImage2Export() throws IOException {
+    public void testImage2Export() {
         List<MyUser> userList = InitData.getDataList(5);
         for (int i = 0; i < userList.size(); i++) {
             userList.get(i).setImage("https://placehold.co/100x100/png");
         }
 
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户数据（含图片）");
-
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        String filePath = Paths.get("target", "image2_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 含图片的 Excel 导出成功！路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/image_export_users.xlsx",
+                params -> params.setTitle("用户数据（含图片）")
+        );
     }
 
 
     @Test
-    public void testMultiSheetExport() throws IOException {
+    public void testMultiSheetExport() {
         // 1. 获取原始数据
         List<MyUser> userList = InitData.getDataList();
 
@@ -314,17 +251,11 @@ public class ExportTests {
         Workbook workbook = ExcelExportUtil.exportExcel(sheets, ExcelType.XSSF);
 
         // 5. 写入文件
-        String filePath = Paths.get("target", "multi_sheet_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 多 Sheet 导出成功！共 " + sheets.size() + " 个省份，路径: " + filePath);
+        ExcelUtil.write(workbook, "target/multi_sheet_users.xlsx");
     }
 
     @Test
-    public void testBigDataExport() throws IOException {
+    public void testBigDataExport() {
         // 1. 写入多少次
         int total = 500;
 
@@ -347,40 +278,22 @@ public class ExportTests {
 
         // 5. 获取Workbook 并写入文件
         Workbook workbook = writer.get();
-        try (FileOutputStream fos = new FileOutputStream("target/big_data_users.xlsx")) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 大数据导出成功！");
+        ExcelUtil.write(workbook, "target/big_data_users.xlsx");
     }
 
     @Test
-    public void testSimpleExport2() throws IOException {
-        // 1. 准备数据
+    public void testSimpleExport2() {
         List<MyUser> userList = InitData.getDataList();
-
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("用户列表");
-
-        // 3. 使用 EasyPoi 直接生成 Workbook
-        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
-
-        // 4. 写入本地文件
-        String filePath = Paths.get("target", "simple_export_users.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-
-        // 5. 关闭 workbook（释放资源）
-        workbook.close();
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_users.xlsx",
+                params -> params.setSheetName("用户列表")
+        );
     }
 
     @Test
-    public void testSimpleExportWithMap() throws IOException {
+    public void testSimpleExportWithMap() {
         List<MyUser> userList = InitData.getDataList();
 
         // 转成 List<Map>
@@ -413,18 +326,11 @@ public class ExportTests {
         params.setSheetName("用户列表");
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_users_map.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map.xlsx");
     }
 
     @Test
-    public void testSimpleMergeExportWithMap() throws IOException {
+    public void testSimpleMergeExportWithMap() {
         List<MyUser> userList = InitData.getDataList();
 
         userList.sort(
@@ -463,18 +369,11 @@ public class ExportTests {
         params.setSheetName("用户列表");
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_merge_users_map.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_merge_users_map.xlsx");
     }
 
     @Test
-    public void testMultiSheetDifferentHeadersSingleMethod() throws IOException {
+    public void testMultiSheetDifferentHeadersSingleMethod() {
         // ====== 准备数据 ======
         List<MyUser> userList1 = InitData.getDataList();
         List<MyUser> userList2 = InitData.getDataList();
@@ -542,13 +441,7 @@ public class ExportTests {
         Workbook workbook = createWorkbookForMapSheets(sheets, ExcelType.XSSF);
 
         // ====== 写入文件 ======
-        String filePath = Paths.get("target", "multi_sheet_diff_headers.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 多 Sheet 导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/multi_sheet_diff_headers.xlsx");
     }
 
     /**
@@ -566,7 +459,7 @@ public class ExportTests {
     }
 
     @Test
-    public void testSimpleExportWithMapAndImage() throws IOException {
+    public void testSimpleExportWithMapAndImage() {
         List<MyUser> userList = InitData.getDataList(10);
 
         // 图片 URL
@@ -609,17 +502,11 @@ public class ExportTests {
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
 
         // ====== 写入文件 ======
-        String filePath = Paths.get("target", "simple_export_users_map_with_image.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("✅ 导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_with_image.xlsx");
     }
 
     @Test
-    public void testSimpleExportWithMap_Dict() throws IOException {
+    public void testSimpleExportWithMap_Dict() {
         List<MyUser> userList = InitData.getDataList();
 
         // 转成 List<Map>
@@ -657,18 +544,11 @@ public class ExportTests {
         params.setSheetName("用户列表");
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_users_map_dict.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_dict.xlsx");
     }
 
     @Test
-    public void testSimpleExportWithMap_DictAndDropdown() throws IOException {
+    public void testSimpleExportWithMap_DictAndDropdown() {
         List<MyUser> userList = InitData.getDataList();
 
         // 1. 转成 List<Map>
@@ -711,19 +591,11 @@ public class ExportTests {
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
 
         // 4. 写入本地文件
-        String filePath = Paths.get("target", "simple_export_users_map_dict_dropdown.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-
-        workbook.close();
-
-        System.out.println("✅ 导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_dict_dropdown.xlsx");
     }
 
-
     @Test
-    public void testSimpleExportWithMap_DataHandler() throws IOException {
+    public void testSimpleExportWithMap_DataHandler() {
         List<MyUser> userList = InitData.getDataList();
 
         // 转成 List<Map>
@@ -753,14 +625,7 @@ public class ExportTests {
         params.setDataHandler(handler); // 设置 handler
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
-
-        String filePath = Paths.get("target", "simple_export_users_map_datahandler.xlsx").toString();
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
-            workbook.write(fos);
-        }
-        workbook.close();
-
-        System.out.println("导出成功: " + filePath);
+        ExcelUtil.write(workbook, "target/simple_export_users_map_datahandler.xlsx");
     }
 
     public static List<CourseExcel> getDataList() {
@@ -809,21 +674,13 @@ public class ExportTests {
 
     @Test
     public void testCourseExport() {
-        // 1. 准备数据
         List<CourseExcel> courseList = getDataList();
-
-        // 2. 配置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("课程数据");
-
-        // 3. 使用 EasyPoi 直接生成 Workbook
-        Workbook workbook = ExcelExportUtil.exportExcel(params, CourseExcel.class, courseList);
-
-        // 4. 写入本地文件
-        Path filePath = Paths.get("target", "export_course_with_students.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                CourseExcel.class,
+                courseList,
+                "target/export_course_with_students.xlsx",
+                params -> params.setTitle("课程数据")
+        );
     }
 
     public static List<OrderExcel> buildOrderData() {
@@ -851,22 +708,13 @@ public class ExportTests {
 
     @Test
     public void testOrderExport() {
-        // 1. 构造数据
         List<OrderExcel> list = buildOrderData();
-
-        // 2. 设置导出参数
-        ExportParams params = new ExportParams();
-        params.setSheetName("订单数据");
-
-        // 3. 执行导出
-        Workbook workbook = ExcelExportUtil.exportExcel(params, OrderExcel.class, list);
-
-        // 4. 导出到文件
-        Path filePath = Paths.get("target", "export_orders.xlsx");
-        ExcelUtil.exportToFile(workbook, filePath);
-
-        System.out.println("✅ 导出成功！文件路径: " + filePath);
+        ExcelUtil.exportExcel(
+                OrderExcel.class,
+                list,
+                "target/export_orders.xlsx",
+                params -> params.setTitle("订单数据")
+        );
     }
-
 
 }

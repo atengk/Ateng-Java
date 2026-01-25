@@ -20,19 +20,19 @@ public class ImportTests {
 
     @Test
     public void testSimpleImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
     }
 
     @Test
     public void testSimpleMapImport() {
-        List<Map> list = ExcelUtil.importFromClasspath("doc/import_simple_users.xlsx", Map.class);
+        List<Map> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_users.xlsx", Map.class);
         System.out.println("导入成功！数据: " + list);
     }
 
     @Test
     public void testSimpleImageImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_image_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_image_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
         list.forEach(user -> {
             File file = new File(user.getAvatarUrl());
@@ -43,19 +43,19 @@ public class ImportTests {
 
     @Test
     public void testSimpleReplaceImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_replace_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_replace_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
     }
 
     @Test
     public void testSimpleEnumImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath("doc/import_simple_enum_users.xlsx", MyUser.class);
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath("doc/import_simple_enum_users.xlsx", MyUser.class);
         System.out.println("导入成功！数据: " + list);
     }
 
     @Test
     public void testSimpleDictImport() {
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_simple_dict_users.xlsx",
                 MyUser.class,
                 params -> params.setDictHandler(new NumberDictHandler())
@@ -69,7 +69,7 @@ public class ImportTests {
         // 指定要处理的字段，注意是Excel的字段名（表头）
         handler.setNeedHandlerFields(new String[]{"年龄段"});
 
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_simple_handler_users.xlsx",
                 MyUser.class,
                 params -> params.setDataHandler(handler)
@@ -79,7 +79,7 @@ public class ImportTests {
 
     @Test
     public void testImportWithErrorCollect() {
-        ExcelImportResult<MyUser> result = ExcelUtil.importMoreFromInputStream(
+        ExcelImportResult<MyUser> result = ExcelUtil.importExcelMore(
                 ExcelUtil.getInputStreamFromClasspath("doc/import_error_users.xlsx"),
                 MyUser.class,
                 params -> {
@@ -101,19 +101,19 @@ public class ImportTests {
 
         // 把成功 Excel 导出来
         if (result.getWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
+            ExcelUtil.write(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
             System.out.println("成功详情 Excel 已生成：target/import_success_result.xlsx");
         }
         // 把失败 Excel 导出来
         if (result.getFailWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
+            ExcelUtil.write(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
             System.out.println("失败详情 Excel 已生成：target/import_error_result.xlsx");
         }
     }
 
     @Test
     public void testImportWithHibernateErrorCollect() {
-        ExcelImportResult<MyUser> result = ExcelUtil.importMoreFromInputStream(
+        ExcelImportResult<MyUser> result = ExcelUtil.importExcelMore(
                 ExcelUtil.getInputStreamFromClasspath("doc/import_error_users.xlsx"),
                 MyUser.class,
                 params -> params.setNeedVerify(true)
@@ -132,19 +132,19 @@ public class ImportTests {
 
         // 把成功 Excel 导出来
         if (result.getWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
+            ExcelUtil.write(result.getWorkbook(), Paths.get("target", "import_success_result.xlsx"));
             System.out.println("成功详情 Excel 已生成：target/import_success_result.xlsx");
         }
         // 把失败 Excel 导出来
         if (result.getFailWorkbook() != null) {
-            ExcelUtil.exportToFile(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
+            ExcelUtil.write(result.getFailWorkbook(), Paths.get("target", "import_error_result.xlsx"));
             System.out.println("失败详情 Excel 已生成：target/import_error_result.xlsx");
         }
     }
 
     @Test
     public void testImportWithMultiThread() {
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_simple_users.xlsx",
                 MyUser.class,
                 params -> {
@@ -164,7 +164,7 @@ public class ImportTests {
 
     @Test
     public void testImportMultipleSheet1() {
-        List<MyUser> list = ExcelUtil.importFromClasspath(
+        List<MyUser> list = ExcelUtil.importExcelFromClasspath(
                 "doc/import_multi_sheet_users.xlsx",
                 MyUser.class,
                 params -> {
@@ -184,14 +184,14 @@ public class ImportTests {
     public void testImportMultipleSheet2() {
         String classPathExcel = "doc/import_multi_sheet.xlsx";
         // 用户列表
-        List<MyUser> userList = ExcelUtil.importFromClasspath(
+        List<MyUser> userList = ExcelUtil.importExcelFromClasspath(
                 classPathExcel,
                 MyUser.class,
                 params -> params.setSheetName("用户列表")
         );
         System.out.println("导入成功！用户列表: " + userList);
         // 学生列表
-        List<Student> studentList = ExcelUtil.importFromClasspath(
+        List<Student> studentList = ExcelUtil.importExcelFromClasspath(
                 classPathExcel,
                 Student.class,
                 params -> params.setSheetName("学生列表")
@@ -201,7 +201,7 @@ public class ImportTests {
 
     @Test
     public void testImportKeyValue() {
-        ExcelImportResult<Map> result = ExcelUtil.importMoreFromInputStream(
+        ExcelImportResult<Map> result = ExcelUtil.importExcelMore(
                 ExcelUtil.getInputStreamFromClasspath("doc/import_key_value.xlsx"),
                 Map.class,
                 params -> {

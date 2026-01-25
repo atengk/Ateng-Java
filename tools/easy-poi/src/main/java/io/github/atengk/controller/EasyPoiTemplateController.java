@@ -31,7 +31,7 @@ public class EasyPoiTemplateController {
 
         Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
 
-        ExcelUtil.exportToResponse(workbook, "用户列表", response);
+        ExcelUtil.write(workbook, "用户列表", response);
 
         ThreadUtil.sleep(20000);
     }

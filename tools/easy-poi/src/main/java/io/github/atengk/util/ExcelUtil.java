@@ -2,6 +2,7 @@ package io.github.atengk.util;
 
 import cn.afterturn.easypoi.excel.ExcelExportUtil;
 import cn.afterturn.easypoi.excel.ExcelImportUtil;
+import cn.afterturn.easypoi.excel.entity.ExportParams;
 import cn.afterturn.easypoi.excel.entity.ImportParams;
 import cn.afterturn.easypoi.excel.entity.TemplateExportParams;
 import cn.afterturn.easypoi.excel.entity.result.ExcelImportResult;
@@ -17,6 +18,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +51,7 @@ import java.util.Map;
  * </p>
  *
  * <pre>
- * Workbook workbook = ExcelUtil.exportByTemplate("doc/user_template.xlsx", data);
+ * Workbook workbook = ExcelUtil.exportExcelByTemplate("doc/user_template.xlsx", data);
  *
  * ExcelUtil.applyByTitle(workbook, 0, "分数", 1, (wb, cell) -> {
  *     // 自定义样式处理
@@ -75,6 +77,270 @@ public final class ExcelUtil {
     }
 
     /**
+     * 基于实体注解导出数据（默认参数），返回 Workbook。
+     *
+     * <p>该方法适用于使用 @Excel 注解映射的实体类，将对象列表转换为 Excel Workbook，
+     * 调用方可选择自行保存文件或进一步加工。</p>
+     *
+     * <p>注意：返回的 Workbook 由调用方负责关闭，或使用 {@link #write(Workbook, File)} /
+     * {@link #write(Workbook, Path)} / {@link #write(Workbook, String, HttpServletResponse)}
+     * 等方法统一输出并关闭。</p>
+     *
+     * @param clazz 实体类型（需使用 @Excel 注解）
+     * @param data  数据集合，不能为空
+     * @param <T>   实体类型泛型
+     * @return 填充后的 Workbook 对象（未关闭）
+     */
+    public static <T> Workbook exportExcel(Class<T> clazz, List<T> data) {
+        return exportExcel(clazz, data, null);
+    }
+
+    /**
+     * 基于实体注解导出数据（支持函数式配置 ExportParams），返回 Workbook。
+     *
+     * <p>该方法允许通过 Lambda 对 {@link ExportParams} 进行个性化配置，例如：</p>
+     *
+     * <pre>{@code
+     * Workbook wb = ExcelUtil.exportExcel(User.class, list, p -> {
+     *     p.setTitle("用户报表");
+     *     p.setSheetName("用户列表");
+     * });
+     * }</pre>
+     *
+     * <p>注意：返回的 Workbook 由调用方负责关闭或通过统一 write 方法输出并关闭。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合，不能为空
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        实体类型泛型
+     * @return 填充后的 Workbook 对象（未关闭）
+     */
+    public static <T> Workbook exportExcel(Class<T> clazz,
+                                           List<T> data,
+                                           ExportParamsConfigurer configurer) {
+
+        if (clazz == null) {
+            throw new IllegalArgumentException("clazz 不能为空");
+        }
+        if (data == null) {
+            throw new IllegalArgumentException("data 不能为空");
+        }
+
+        ExportParams params = new ExportParams();
+        if (configurer != null) {
+            configurer.configure(params);
+        }
+
+        try {
+            return ExcelExportUtil.exportExcel(params, clazz, data);
+        } catch (Exception e) {
+            throw new IllegalStateException("Excel 导出失败（对象注解模式）", e);
+        }
+    }
+
+    /**
+     * 基于实体注解导出数据到本地文件（基于字符串文件路径，支持函数式配置 ExportParams）。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>从配置文件或运行参数中传入文件路径</li>
+     *     <li>无需手动构建 File / Path 对象的快速落盘场景</li>
+     *     <li>单元测试、定时任务、数据归档等业务逻辑</li>
+     * </ul>
+     *
+     * <p>内部会自动创建父目录，并调用 {@link #write(Workbook, Path)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param filePath   本地文件路径（相对或绝对），例如："target/users.xlsx"
+     * @param configurer 导出参数配置回调，可为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       String filePath,
+                                       ExportParamsConfigurer configurer) {
+
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("filePath 不能为空");
+        }
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, Paths.get(filePath));
+    }
+
+    /**
+     * 基于实体注解导出数据到本地文件（支持函数式配置 ExportParams）。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>单元测试导出验证</li>
+     *     <li>服务器本地报表生成</li>
+     *     <li>定时任务落盘归档</li>
+     * </ul>
+     *
+     * <p>内部会调用 {@link #write(Workbook, File)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param file       导出目标文件对象，例如：new File("user.xlsx")
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       File file,
+                                       ExportParamsConfigurer configurer) {
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, file);
+    }
+
+    /**
+     * 基于实体注解导出数据到本地路径（支持函数式配置 ExportParams）。
+     *
+     * <p>适用于基于 NIO 的本地磁盘操作，与本工具类的 File 写法保持一致。</p>
+     *
+     * <p>内部会调用 {@link #write(Workbook, Path)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param filePath   导出文件路径，例如：Paths.get("target/user.xlsx")
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       Path filePath,
+                                       ExportParamsConfigurer configurer) {
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, filePath);
+    }
+
+    /**
+     * 基于实体注解导出数据到浏览器（支持函数式配置 ExportParams）。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>前端点击“导出 Excel”按钮</li>
+     *     <li>SaaS 系统在线数据下载</li>
+     *     <li>报表服务 HTTP 文件输出</li>
+     * </ul>
+     *
+     * <p>内部会调用 {@link #write(Workbook, String, HttpServletResponse)} 写入并关闭 Workbook。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param fileName   下载文件名，例如：“用户列表.xlsx”
+     * @param response   HttpServletResponse
+     * @param configurer 导出参数配置回调，允许为 null
+     * @param <T>        泛型类型
+     */
+    public static <T> void exportExcel(Class<T> clazz,
+                                       List<T> data,
+                                       String fileName,
+                                       HttpServletResponse response,
+                                       ExportParamsConfigurer configurer) {
+
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        write(workbook, fileName, response);
+    }
+
+    /**
+     * 基于实体注解导出数据（支持函数式配置 ExportParams），输出为 byte[] 数组。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>微服务之间通过接口返回 Excel 二进制</li>
+     *     <li>Redis / 缓存存储 Excel 数据</li>
+     *     <li>上传 OSS / MinIO / COS 对象存储</li>
+     *     <li>消息队列（MQ）通过二进制传输 Excel 文件</li>
+     * </ul>
+     *
+     * <p>内部使用内存缓冲，不会产生磁盘 IO，性能高且适用于云原生环境。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param configurer 导出参数配置回调，可为 null
+     * @param <T>        泛型类型
+     * @return Excel 文件的二进制数据 byte[]
+     */
+    public static <T> byte[] exportExcelToBytes(Class<T> clazz,
+                                                List<T> data,
+                                                ExportParamsConfigurer configurer) {
+        Workbook workbook = exportExcel(clazz, data, configurer);
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+            workbook.write(bos);
+            return bos.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("Excel 导出为 byte[] 失败", e);
+        } finally {
+            try {
+                workbook.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    /**
+     * 基于实体注解导出数据（支持函数式配置 ExportParams），输出为 InputStream。
+     *
+     * <p>适用于以下场景：</p>
+     * <ul>
+     *     <li>上传 OSS / MinIO / COS（大多要求 InputStream）</li>
+     *     <li>第三方 SDK 接收流式数据处理</li>
+     *     <li>HTTP 响应中作为 Streaming 输出</li>
+     *     <li>云原生无磁盘环境</li>
+     * </ul>
+     *
+     * <p>输出为字节流包装的 {@link ByteArrayInputStream}，
+     * 调用方负责关闭 InputStream。</p>
+     *
+     * @param clazz      实体类型（需使用 @Excel 注解）
+     * @param data       数据集合
+     * @param configurer 导出参数配置回调，可为 null
+     * @param <T>        泛型类型
+     * @return Excel 内容的输入流对象（调用方负责关闭）
+     */
+    public static <T> InputStream exportExcelToStream(Class<T> clazz,
+                                                      List<T> data,
+                                                      ExportParamsConfigurer configurer) {
+
+        byte[] bytes = exportExcelToBytes(clazz, data, configurer);
+        return new ByteArrayInputStream(bytes);
+    }
+
+    /**
+     * 将 Workbook 导出为本地 Excel 文件（基于字符串路径）
+     *
+     * <p>
+     * 适用于：
+     * <ul>
+     *     <li>从配置文件或运行参数中获取文件路径</li>
+     *     <li>无需显式构建 Path 对象的快速导出场景</li>
+     *     <li>单元测试、本地调试、定时任务等落盘需求</li>
+     * </ul>
+     *
+     * <p>
+     * 注意：
+     * <ul>
+     *     <li>内部会自动创建父目录</li>
+     *     <li>Workbook 会在写入完成后自动关闭</li>
+     * </ul>
+     * </p>
+     *
+     * @param workbook 已生成的 Workbook 对象
+     * @param filePath 目标文件路径（相对或绝对），例如："target/user.xlsx"
+     */
+    public static void write(Workbook workbook, String filePath) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("filePath 不能为空");
+        }
+        write(workbook, Paths.get(filePath));
+    }
+
+    /**
      * 将 Workbook 导出为本地 Excel 文件
      *
      * <p>
@@ -88,7 +354,7 @@ public final class ExcelUtil {
      * @param workbook 已生成的 Workbook 对象
      * @param filePath 目标文件完整路径，例如：target/user.xlsx
      */
-    public static void exportToFile(Workbook workbook, Path filePath) {
+    public static void write(Workbook workbook, Path filePath) {
         if (workbook == null) {
             throw new IllegalArgumentException("Workbook 不能为空");
         }
@@ -131,7 +397,7 @@ public final class ExcelUtil {
      * @param workbook 已生成的 Workbook 对象
      * @param file     目标文件对象，例如：new File("target/user.xlsx")
      */
-    public static void exportToFile(Workbook workbook, File file) {
+    public static void write(Workbook workbook, File file) {
         if (workbook == null) {
             throw new IllegalArgumentException("Workbook 不能为空");
         }
@@ -175,7 +441,7 @@ public final class ExcelUtil {
      * @param fileName 下载文件名，例如：用户数据.xlsx
      * @param response HttpServletResponse
      */
-    public static void exportToResponse(
+    public static void write(
             Workbook workbook,
             String fileName,
             HttpServletResponse response) {
@@ -219,8 +485,8 @@ public final class ExcelUtil {
      * @param data         模板参数数据
      * @return 填充完成的 Workbook
      */
-    public static Workbook exportByTemplate(String templatePath, Map<String, Object> data) {
-        return exportByTemplate(templatePath, data, null);
+    public static Workbook exportExcelByTemplate(String templatePath, Map<String, Object> data) {
+        return exportExcelByTemplate(templatePath, data, null);
     }
 
     /**
@@ -231,7 +497,7 @@ public final class ExcelUtil {
      * @param configurer   参数配置回调，可为 null
      * @return 填充完成的 Workbook
      */
-    public static Workbook exportByTemplate(String templatePath,
+    public static Workbook exportExcelByTemplate(String templatePath,
                                             Map<String, Object> data,
                                             TemplateParamsConfigurer configurer) {
 
@@ -249,7 +515,7 @@ public final class ExcelUtil {
         }
 
         try (InputStream inputStream = resource.getInputStream()) {
-            return doExport(inputStream, data, configurer);
+            return doExportExcelByTemplate(inputStream, data, configurer);
         } catch (IOException e) {
             throw new IllegalStateException("Excel 模板读取失败(文件 IO 异常)：路径=" + templatePath, e);
         }
@@ -268,8 +534,8 @@ public final class ExcelUtil {
      * @param templateInputStream 模板输入流
      * @param data                模板数据
      */
-    public static Workbook exportByTemplate(InputStream templateInputStream, Map<String, Object> data) {
-        return exportByTemplate(templateInputStream, data, null);
+    public static Workbook exportExcelByTemplate(InputStream templateInputStream, Map<String, Object> data) {
+        return exportExcelByTemplate(templateInputStream, data, null);
     }
 
     /**
@@ -279,7 +545,7 @@ public final class ExcelUtil {
      * @param data                模板数据
      * @param configurer          配置回调，可为 null
      */
-    public static Workbook exportByTemplate(InputStream templateInputStream,
+    public static Workbook exportExcelByTemplate(InputStream templateInputStream,
                                             Map<String, Object> data,
                                             TemplateParamsConfigurer configurer) {
 
@@ -291,7 +557,7 @@ public final class ExcelUtil {
         }
 
         try {
-            return doExport(templateInputStream, data, configurer);
+            return doExportExcelByTemplate(templateInputStream, data, configurer);
         } catch (Exception e) {
             throw new IllegalStateException("Excel 模板导出失败(模板流处理异常)", e);
         }
@@ -304,9 +570,9 @@ public final class ExcelUtil {
      * @param data                模板数据
      * @param configurer          可选参数配置器
      */
-    private static Workbook doExport(InputStream templateInputStream,
-                                     Map<String, Object> data,
-                                     TemplateParamsConfigurer configurer) throws IOException {
+    private static Workbook doExportExcelByTemplate(InputStream templateInputStream,
+                                                    Map<String, Object> data,
+                                                    TemplateParamsConfigurer configurer) throws IOException {
 
         TemplateExportParams params = new TemplateExportParams(templateInputStream);
 
@@ -505,8 +771,8 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的数据集合
      */
-    public static <T> List<T> importFromFile(File file, Class<T> clazz) {
-        return importFromFile(file, clazz, null);
+    public static <T> List<T> importExcel(File file, Class<T> clazz) {
+        return importExcel(file, clazz, null);
     }
 
     /**
@@ -518,9 +784,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的数据集合
      */
-    public static <T> List<T> importFromFile(File file,
-                                             Class<T> clazz,
-                                             ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(File file,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (file == null) {
             throw new IllegalArgumentException("file 不能为空");
@@ -564,8 +830,8 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromPath(Path path, Class<T> clazz) {
-        return importFromPath(path, clazz, null);
+    public static <T> List<T> importExcel(Path path, Class<T> clazz) {
+        return importExcel(path, clazz, null);
     }
 
     /**
@@ -599,9 +865,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromPath(Path path,
-                                             Class<T> clazz,
-                                             ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(Path path,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (path == null) {
             throw new IllegalArgumentException("path 不能为空");
@@ -645,9 +911,9 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromMultipartFile(MultipartFile file,
-                                                      Class<T> clazz) {
-        return importFromMultipartFile(file, clazz, null);
+    public static <T> List<T> importExcel(MultipartFile file,
+                                          Class<T> clazz) {
+        return importExcel(file, clazz, null);
     }
 
     /**
@@ -681,9 +947,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromMultipartFile(MultipartFile file,
-                                                      Class<T> clazz,
-                                                      ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(MultipartFile file,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (file == null) {
             throw new IllegalArgumentException("multipartFile 不能为空");
@@ -730,8 +996,8 @@ public final class ExcelUtil {
      * @param <T>   泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromBytes(byte[] bytes, Class<T> clazz) {
-        return importFromBytes(bytes, clazz, null);
+    public static <T> List<T> importExcel(byte[] bytes, Class<T> clazz) {
+        return importExcel(bytes, clazz, null);
     }
 
     /**
@@ -770,9 +1036,9 @@ public final class ExcelUtil {
      * @param <T>        泛型类型
      * @return 导入后的对象集合
      */
-    public static <T> List<T> importFromBytes(byte[] bytes,
-                                              Class<T> clazz,
-                                              ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(byte[] bytes,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (bytes == null || bytes.length == 0) {
             throw new IllegalArgumentException("bytes 不能为空");
@@ -790,87 +1056,6 @@ public final class ExcelUtil {
             return ExcelImportUtil.importExcel(inputStream, clazz, params);
         } catch (Exception e) {
             throw new IllegalStateException("Excel 二进制数据导入失败", e);
-        }
-    }
-
-    /**
-     * 从 ClassPath 路径导入 Excel 数据
-     *
-     * <p>
-     * 适用于以下场景：
-     * </p>
-     *
-     * <ul>
-     *     <li>Excel 模板或测试数据文件位于 resources 目录下</li>
-     *     <li>单元测试、集成测试环境下读取内置 Excel 文件</li>
-     *     <li>随应用一起打包发布的固定 Excel 资源文件</li>
-     * </ul>
-     *
-     * <p>
-     * 例如：
-     * </p>
-     *
-     * <pre>
-     * importFromClasspath("excel/import_users.xlsx", MyUser.class);
-     * </pre>
-     *
-     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
-     * @param clazz             Excel 映射的实体类类型
-     * @param <T>               泛型类型
-     * @return 导入后的数据列表
-     */
-    public static <T> List<T> importFromClasspath(String classpathLocation,
-                                                  Class<T> clazz) {
-        return importFromClasspath(classpathLocation, clazz, null);
-    }
-
-    /**
-     * 从 ClassPath 路径导入 Excel 数据，并支持自定义导入参数配置
-     *
-     * <p>
-     * 通过 {@link ImportParamsConfigurer} 可对 {@link ImportParams} 进行灵活配置，例如：
-     * </p>
-     *
-     * <ul>
-     *     <li>是否需要校验：setNeedVerify(true)</li>
-     *     <li>是否保存图片：setSaveUrl(...)</li>
-     *     <li>标题行数：setTitleRows(...)</li>
-     *     <li>表头行数：setHeadRows(...)</li>
-     *     <li>开始导入行号：setStartRows(...)</li>
-     *     <li>是否开启多 Sheet 导入：setNeedAllSheets(true)</li>
-     * </ul>
-     *
-     * <p>
-     * 该方法内部基于 InputStream 读取，不依赖真实文件路径，
-     * 非常适合云原生与容器化环境。
-     * </p>
-     *
-     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
-     * @param clazz             Excel 映射的实体类类型
-     * @param configurer        导入参数配置回调，可为 null
-     * @param <T>               泛型类型
-     * @return 导入后的数据列表
-     */
-    public static <T> List<T> importFromClasspath(String classpathLocation,
-                                                  Class<T> clazz,
-                                                  ImportParamsConfigurer configurer) {
-
-        if (classpathLocation == null || classpathLocation.trim().isEmpty()) {
-            throw new IllegalArgumentException("classpathLocation 不能为空");
-        }
-        if (clazz == null) {
-            throw new IllegalArgumentException("clazz 不能为空");
-        }
-
-        ImportParams params = new ImportParams();
-        if (configurer != null) {
-            configurer.configure(params);
-        }
-
-        try (InputStream inputStream = getInputStreamFromClasspath(classpathLocation)) {
-            return ExcelImportUtil.importExcel(inputStream, clazz, params);
-        } catch (Exception e) {
-            throw new IllegalStateException("Excel ClassPath 导入失败: " + classpathLocation, e);
         }
     }
 
@@ -896,9 +1081,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return 导入后的数据列表
      */
-    public static <T> List<T> importFromInputStream(InputStream inputStream,
-                                                    Class<T> clazz) {
-        return importFromInputStream(inputStream, clazz, null);
+    public static <T> List<T> importExcel(InputStream inputStream,
+                                          Class<T> clazz) {
+        return importExcel(inputStream, clazz, null);
     }
 
     /**
@@ -935,9 +1120,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return 导入后的数据列表
      */
-    public static <T> List<T> importFromInputStream(InputStream inputStream,
-                                                    Class<T> clazz,
-                                                    ImportParamsConfigurer configurer) {
+    public static <T> List<T> importExcel(InputStream inputStream,
+                                          Class<T> clazz,
+                                          ImportParamsConfigurer configurer) {
 
         if (inputStream == null) {
             throw new IllegalArgumentException("inputStream 不能为空");
@@ -955,6 +1140,87 @@ public final class ExcelUtil {
             return ExcelImportUtil.importExcel(inputStream, clazz, params);
         } catch (Exception e) {
             throw new IllegalStateException("Excel InputStream 导入失败", e);
+        }
+    }
+
+    /**
+     * 从 ClassPath 路径导入 Excel 数据
+     *
+     * <p>
+     * 适用于以下场景：
+     * </p>
+     *
+     * <ul>
+     *     <li>Excel 模板或测试数据文件位于 resources 目录下</li>
+     *     <li>单元测试、集成测试环境下读取内置 Excel 文件</li>
+     *     <li>随应用一起打包发布的固定 Excel 资源文件</li>
+     * </ul>
+     *
+     * <p>
+     * 例如：
+     * </p>
+     *
+     * <pre>
+     * importFromClasspath("excel/import_users.xlsx", MyUser.class);
+     * </pre>
+     *
+     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
+     * @param clazz             Excel 映射的实体类类型
+     * @param <T>               泛型类型
+     * @return 导入后的数据列表
+     */
+    public static <T> List<T> importExcelFromClasspath(String classpathLocation,
+                                                       Class<T> clazz) {
+        return importExcelFromClasspath(classpathLocation, clazz, null);
+    }
+
+    /**
+     * 从 ClassPath 路径导入 Excel 数据，并支持自定义导入参数配置
+     *
+     * <p>
+     * 通过 {@link ImportParamsConfigurer} 可对 {@link ImportParams} 进行灵活配置，例如：
+     * </p>
+     *
+     * <ul>
+     *     <li>是否需要校验：setNeedVerify(true)</li>
+     *     <li>是否保存图片：setSaveUrl(...)</li>
+     *     <li>标题行数：setTitleRows(...)</li>
+     *     <li>表头行数：setHeadRows(...)</li>
+     *     <li>开始导入行号：setStartRows(...)</li>
+     *     <li>是否开启多 Sheet 导入：setNeedAllSheets(true)</li>
+     * </ul>
+     *
+     * <p>
+     * 该方法内部基于 InputStream 读取，不依赖真实文件路径，
+     * 非常适合云原生与容器化环境。
+     * </p>
+     *
+     * @param classpathLocation classpath 下的文件路径，例如：excel/import_users.xlsx
+     * @param clazz             Excel 映射的实体类类型
+     * @param configurer        导入参数配置回调，可为 null
+     * @param <T>               泛型类型
+     * @return 导入后的数据列表
+     */
+    public static <T> List<T> importExcelFromClasspath(String classpathLocation,
+                                                       Class<T> clazz,
+                                                       ImportParamsConfigurer configurer) {
+
+        if (classpathLocation == null || classpathLocation.trim().isEmpty()) {
+            throw new IllegalArgumentException("classpathLocation 不能为空");
+        }
+        if (clazz == null) {
+            throw new IllegalArgumentException("clazz 不能为空");
+        }
+
+        ImportParams params = new ImportParams();
+        if (configurer != null) {
+            configurer.configure(params);
+        }
+
+        try (InputStream inputStream = getInputStreamFromClasspath(classpathLocation)) {
+            return ExcelImportUtil.importExcel(inputStream, clazz, params);
+        } catch (Exception e) {
+            throw new IllegalStateException("Excel ClassPath 导入失败: " + classpathLocation, e);
         }
     }
 
@@ -981,9 +1247,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return Excel 导入完整结果对象
      */
-    public static <T> ExcelImportResult<T> importMoreFromInputStream(InputStream inputStream,
-                                                                     Class<T> clazz) {
-        return importMoreFromInputStream(inputStream, clazz, null);
+    public static <T> ExcelImportResult<T> importExcelMore(InputStream inputStream,
+                                                           Class<T> clazz) {
+        return importExcelMore(inputStream, clazz, null);
     }
 
     /**
@@ -1021,9 +1287,9 @@ public final class ExcelUtil {
      * @param <T>         泛型类型
      * @return Excel 导入完整结果对象
      */
-    public static <T> ExcelImportResult<T> importMoreFromInputStream(InputStream inputStream,
-                                                                     Class<T> clazz,
-                                                                     ImportParamsConfigurer configurer) {
+    public static <T> ExcelImportResult<T> importExcelMore(InputStream inputStream,
+                                                           Class<T> clazz,
+                                                           ImportParamsConfigurer configurer) {
 
         if (inputStream == null) {
             throw new IllegalArgumentException("inputStream 不能为空");
