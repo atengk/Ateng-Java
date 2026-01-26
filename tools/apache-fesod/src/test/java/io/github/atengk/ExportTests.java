@@ -2,10 +2,7 @@ package io.github.atengk;
 
 import cn.hutool.core.util.RandomUtil;
 import io.github.atengk.entity.MyUser;
-import io.github.atengk.handler.CellMergeHandler;
-import io.github.atengk.handler.CommentHandler;
-import io.github.atengk.handler.DropdownHandler;
-import io.github.atengk.handler.FreezeHeadHandler;
+import io.github.atengk.handler.*;
 import io.github.atengk.init.InitData;
 import io.github.atengk.util.ExcelStyleUtil;
 import org.apache.fesod.sheet.ExcelWriter;
@@ -18,6 +15,9 @@ import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 
 public class ExportTests {
@@ -153,11 +153,11 @@ public class ExportTests {
         List<MyUser> list = InitData.getDataList();
 
         // 默认表头字体大小（磅）
-         Short DEFAULT_HEADER_FONT_SIZE = 14;
+        Short DEFAULT_HEADER_FONT_SIZE = 14;
         // 默认内容字体大小（磅）
-         Short DEFAULT_CONTENT_FONT_SIZE = 12;
+        Short DEFAULT_CONTENT_FONT_SIZE = 12;
         // 默认内容字体
-         String DEFAULT_CONTENT_FONT_NAME = "微软雅黑";
+        String DEFAULT_CONTENT_FONT_NAME = "微软雅黑";
         HorizontalCellStyleStrategy cellStyleStrategy = ExcelStyleUtil.buildCustomStyleStrategy(
                 // 表头字体大小（单位：磅）
                 DEFAULT_HEADER_FONT_SIZE,
@@ -206,5 +206,57 @@ public class ExportTests {
                 .doWrite(list);
     }
 
+    @Test
+    void testExportConditionStyle() {
+        String fileName = "target/export_condition_style.xlsx";
+
+        ConditionStyleHandler handler = new ConditionStyleHandler();
+
+        // 数字判断，示例：第3列年龄 > 10000 则背景黄+字体红+加粗
+        handler.addRule(1, new ConditionStyleHandler.ConditionRule(v -> {
+                    if (v instanceof Number) {
+                        return ((Number) v).doubleValue() > 60;
+                    }
+                    return false;
+                }).backgroundColor(IndexedColors.YELLOW.getIndex())
+                        .fontColor(IndexedColors.RED.getIndex())
+                        .bold(true)
+        );
+
+        // 字符串判断
+        handler.addRule(8, new ConditionStyleHandler.ConditionRule(v ->
+                v instanceof String && "重庆".equals(v))
+                .backgroundColor(IndexedColors.RED.getIndex())
+                .fontColor(IndexedColors.WHITE.getIndex())
+                .bold(true)
+        );
+
+        // 时间判断，示例：第 9 列是 LocalDateTime 类型，但 Excel 中会以 Double 存储
+        handler.addRule(9, new ConditionStyleHandler.ConditionRule(v -> {
+                    if (!(v instanceof Double)) {
+                        return false;
+                    }
+
+                    LocalDateTime time = excelDateToLocalDateTime((Double) v);
+
+                    // 判断逻辑
+                    return time.isAfter(LocalDateTime.of(2026, 1, 26, 0, 0));
+                }).backgroundColor(IndexedColors.BLUE.getIndex())
+                        .fontColor(IndexedColors.GREEN.getIndex())
+                        .bold(true)
+        );
+
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .registerWriteHandler(handler)
+                .sheet("用户列表")
+                .doWrite(InitData.getDataList());
+    }
+
+    private static LocalDateTime excelDateToLocalDateTime(double excelDate) {
+        // 25569 是 1970-01-01 和 1900-01-01 的天数差
+        long epochSecond = (long) ((excelDate - 25569) * 86400);
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSecond), ZoneId.systemDefault());
+    }
 
 }
