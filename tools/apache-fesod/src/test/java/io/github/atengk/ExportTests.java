@@ -5,10 +5,17 @@ import io.github.atengk.entity.MyUser;
 import io.github.atengk.handler.CellMergeHandler;
 import io.github.atengk.handler.CommentHandler;
 import io.github.atengk.handler.DropdownHandler;
+import io.github.atengk.handler.FreezeHeadHandler;
 import io.github.atengk.init.InitData;
+import io.github.atengk.util.ExcelStyleUtil;
 import org.apache.fesod.sheet.ExcelWriter;
 import org.apache.fesod.sheet.FesodSheet;
 import org.apache.fesod.sheet.write.metadata.WriteSheet;
+import org.apache.fesod.sheet.write.style.HorizontalCellStyleStrategy;
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -108,6 +115,96 @@ public class ExportTests {
                 .doWrite(Collections.emptyList());
     }
 
+    @Test
+    void testExportConverter() {
+        List<MyUser> list = InitData.getDataList();
+        list.forEach(item -> item.setGender(RandomUtil.randomEle(Arrays.asList(0, 1, 2))));
+        String fileName = "target/export_converter_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .sheet("用户列表")
+                .doWrite(list);
+    }
+
+    @Test
+    void testExportFreezeHead() {
+        List<MyUser> list = InitData.getDataList();
+        String fileName = "target/export_freeze_head_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .registerWriteHandler(new FreezeHeadHandler())
+                .sheet("用户列表")
+                .doWrite(list);
+    }
+
+    @Test
+    void testExportStyle() {
+        List<MyUser> list = InitData.getDataList();
+        String fileName = "target/export_style_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .registerWriteHandler(ExcelStyleUtil.getDefaultStyleStrategy())
+                .sheet("用户列表")
+                .doWrite(list);
+    }
+
+    @Test
+    void testExportCustomStyle() {
+        List<MyUser> list = InitData.getDataList();
+
+        // 默认表头字体大小（磅）
+         Short DEFAULT_HEADER_FONT_SIZE = 14;
+        // 默认内容字体大小（磅）
+         Short DEFAULT_CONTENT_FONT_SIZE = 12;
+        // 默认内容字体
+         String DEFAULT_CONTENT_FONT_NAME = "微软雅黑";
+        HorizontalCellStyleStrategy cellStyleStrategy = ExcelStyleUtil.buildCustomStyleStrategy(
+                // 表头字体大小（单位：磅）
+                DEFAULT_HEADER_FONT_SIZE,
+                // 表头是否加粗
+                false,
+                // 表头是否斜体
+                false,
+                // 表头字体颜色（使用 IndexedColors 枚举值）
+                IndexedColors.BLACK.getIndex(),
+                // 表头字体名称
+                DEFAULT_CONTENT_FONT_NAME,
+                // 表头背景色（设置为浅灰色）
+                IndexedColors.GREY_40_PERCENT.getIndex(),
+                // 表头边框样式
+                BorderStyle.DOUBLE,
+                // 表头水平居中对齐
+                HorizontalAlignment.CENTER,
+                // 表头垂直居中对齐
+                VerticalAlignment.CENTER,
+                // 内容字体大小
+                DEFAULT_CONTENT_FONT_SIZE,
+                // 内容是否加粗
+                false,
+                // 内容是否斜体
+                false,
+                // 内容字体颜色（黑色）
+                IndexedColors.BLACK.getIndex(),
+                // 内容字体名称
+                DEFAULT_CONTENT_FONT_NAME,
+                // 内容背景色（为空表示不设置背景色）
+                null,
+                // 内容边框样式
+                BorderStyle.DOUBLE,
+                // 内容水平居中对齐
+                HorizontalAlignment.CENTER,
+                // 内容垂直居中对齐
+                VerticalAlignment.CENTER,
+                // 内容是否自动换行
+                true
+        );
+        String fileName = "target/export_custom_style_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .registerWriteHandler(cellStyleStrategy)
+                .sheet("用户列表")
+                .doWrite(list);
+    }
 
 
 }

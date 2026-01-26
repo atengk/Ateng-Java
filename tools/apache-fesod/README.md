@@ -524,6 +524,169 @@ public class MyUser implements Serializable {
 
 ![image-20260126094235955](./assets/image-20260126094235955.png)
 
+### 数据映射（Converter 转换器）
+
+#### 创建Converter 
+
+```java
+package io.github.atengk.util;
+
+import org.apache.fesod.sheet.converters.Converter;
+import org.apache.fesod.sheet.enums.CellDataTypeEnum;
+import org.apache.fesod.sheet.metadata.GlobalConfiguration;
+import org.apache.fesod.sheet.metadata.data.ReadCellData;
+import org.apache.fesod.sheet.metadata.data.WriteCellData;
+import org.apache.fesod.sheet.metadata.property.ExcelContentProperty;
+
+/**
+ * 性别字段 Excel 映射转换器
+ * <p>
+ * 功能说明：
+ * 1. 导出时：将 Java 中的性别编码转换为 Excel 可读文本
+ * 2. 导入时：将 Excel 中的性别文本转换为 Java 性别编码
+ * <p>
+ * 映射规则：
+ * Java -> Excel
+ * 1  -> 男
+ * 2  -> 女
+ * 0  -> 未知
+ * <p>
+ * Excel -> Java
+ * 男   -> 1
+ * 女   -> 2
+ * 未知 -> 0
+ * <p>
+ * 使用方式：
+ * 在实体字段上配置：
+ *
+ * @author 孔余
+ * @ExcelProperty(value = "性别", converter = GenderConverter.class)
+ * <p>
+ * 适用场景：
+ * - 枚举字段导入导出
+ * - 字典字段导入导出
+ * - 固定映射规则字段
+ * @since 2026-01-26
+ */
+public class GenderConverter implements Converter<Integer> {
+
+    /**
+     * 返回当前转换器支持的 Java 类型
+     *
+     * @return Java 字段类型
+     */
+    @Override
+    public Class<?> supportJavaTypeKey() {
+        return Integer.class;
+    }
+
+    /**
+     * 返回当前转换器支持的 Excel 单元格类型
+     *
+     * @return Excel 单元格类型枚举
+     */
+    @Override
+    public CellDataTypeEnum supportExcelTypeKey() {
+        return CellDataTypeEnum.STRING;
+    }
+
+    /**
+     * Excel -> Java 数据转换
+     * <p>
+     * 在 Excel 导入时执行：
+     * 将单元格中的文本转换为 Java 字段值
+     *
+     * @param cellData            Excel 单元格数据
+     * @param contentProperty     字段内容属性
+     * @param globalConfiguration 全局配置
+     * @return Java 字段值
+     */
+    @Override
+    public Integer convertToJavaData(ReadCellData<?> cellData,
+                                     ExcelContentProperty contentProperty,
+                                     GlobalConfiguration globalConfiguration) {
+
+        String value = cellData.getStringValue();
+
+        if ("男".equals(value)) {
+            return 1;
+        }
+
+        if ("女".equals(value)) {
+            return 2;
+        }
+
+        if ("未知".equals(value)) {
+            return 0;
+        }
+
+        return null;
+    }
+
+    /**
+     * Java -> Excel 数据转换
+     * <p>
+     * 在 Excel 导出时执行：
+     * 将 Java 字段值转换为 Excel 单元格显示文本
+     *
+     * @param value               Java 字段值
+     * @param contentProperty     字段内容属性
+     * @param globalConfiguration 全局配置
+     * @return Excel 单元格数据对象
+     */
+    @Override
+    public WriteCellData<?> convertToExcelData(Integer value,
+                                               ExcelContentProperty contentProperty,
+                                               GlobalConfiguration globalConfiguration) {
+
+        String text;
+
+        if (value == null) {
+            text = "";
+        } else if (value == 1) {
+            text = "男";
+        } else if (value == 2) {
+            text = "女";
+        } else if (value == 0) {
+            text = "未知";
+        } else {
+            text = "未知";
+        }
+
+        return new WriteCellData<>(text);
+    }
+}
+```
+
+#### 添加字段
+
+```java
+    /**
+     * 性别
+     */
+    @ExcelProperty(value = "性别", converter = GenderConverter.class)
+    private Integer gender;
+```
+
+#### 使用方法
+
+```java
+    @Test
+    void testExportConverter() {
+        List<MyUser> list = InitData.getDataList();
+        list.forEach(item -> item.setGender(RandomUtil.randomEle(Arrays.asList(0, 1, 2))));
+        String fileName = "target/export_converter_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .sheet("用户列表")
+                .doWrite(list);
+    }
+```
+
+![image-20260126151836969](./assets/image-20260126151836969.png)
+
+
+
 ### 导出图片
 
 如果图片的字段是String，可以按照本章节操作。如果是 文件、流、字节数组、URL 就直接使用，不用配置 Converter
@@ -1295,5 +1458,453 @@ public class CommentHandler implements SheetWriteHandler {
 
 ![image-20260126141121014](./assets/image-20260126141121014.png)
 
-### 数据映射
+### 冻结表头
 
+#### 创建处理器
+
+```java
+package io.github.atengk.handler;
+
+import org.apache.fesod.sheet.write.handler.SheetWriteHandler;
+import org.apache.fesod.sheet.write.handler.context.SheetWriteHandlerContext;
+import org.apache.poi.ss.usermodel.Sheet;
+
+/**
+ * Excel 冻结表头处理器（自动适配多级表头）
+ * <p>
+ * 功能说明：
+ * 1. 只冻结表头区域
+ * 2. 自动识别多级表头（单级 / 二级 / 三级…）
+ * 3. 不冻结任何列
+ * <p>
+ * 冻结规则：
+ * - 冻结行数 = Fesod 自动计算出的表头总行数
+ * - 冻结列数 = 0
+ * <p>
+ * 适用场景：
+ * - 导出模板
+ * - 导入模板
+ * - 多级表头 Excel
+ * <p>
+ * 使用示例：
+ * FesodSheet.write(fileName, MyUser.class)
+ * .registerWriteHandler(new FreezeHeadHandler())
+ * .sheet("用户列表")
+ * .doWrite(data);
+ *
+ * @author 孔余
+ * @since 2026-01-26
+ */
+public class FreezeHeadHandler implements SheetWriteHandler {
+
+    @Override
+    public void afterSheetCreate(SheetWriteHandlerContext context) {
+        Sheet sheet = context.getWriteSheetHolder().getSheet();
+        if (sheet == null) {
+            return;
+        }
+
+        /*
+         * Fesod 已经帮我们算好了真实表头行数：
+         * 单级表头 → 1
+         * 二级表头 → 2
+         * 三级表头 → 3
+         * …
+         */
+        int headRowNumber = context.getWriteSheetHolder()
+                .getExcelWriteHeadProperty()
+                .getHeadRowNumber();
+
+        if (headRowNumber <= 0) {
+            return;
+        }
+
+        /*
+         * 只冻结行，不冻结列：
+         * colSplit = 0
+         * rowSplit = 表头总行数
+         */
+        sheet.createFreezePane(0, headRowNumber);
+    }
+}
+```
+
+#### 使用方法
+
+```java
+    @Test
+    void testExportFreezeHead() {
+        List<MyUser> list = InitData.getDataList();
+        String fileName = "target/export_freeze_head_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .registerWriteHandler(new FreezeHeadHandler())
+                .sheet("用户列表")
+                .doWrite(list);
+    }
+```
+
+![image-20260126155732959](./assets/image-20260126155732959.png)
+
+### 自定义样式
+
+#### 创建样式工具类
+
+```java
+package io.github.atengk.util;
+
+import org.apache.fesod.common.util.StringUtils;
+import org.apache.fesod.sheet.write.metadata.style.WriteCellStyle;
+import org.apache.fesod.sheet.write.metadata.style.WriteFont;
+import org.apache.fesod.sheet.write.style.HorizontalCellStyleStrategy;
+import org.apache.poi.ss.usermodel.*;
+
+/**
+ * Excel 样式工具类（基于 Apache Fesod）
+ * <p>
+ * 统一管理 Excel 导出中表头与内容的样式策略构建逻辑。
+ * 对外只提供样式策略构建能力，内部实现全部封装。
+ * </p>
+ *
+ * @author 孔余
+ * @since 2026-01-26
+ */
+public final class ExcelStyleUtil {
+
+    /**
+     * 禁止实例化工具类
+     */
+    private ExcelStyleUtil() {
+        throw new UnsupportedOperationException("工具类不可实例化");
+    }
+
+    /**
+     * 默认表头字体大小（磅）
+     */
+    public static final short DEFAULT_HEADER_FONT_SIZE = 11;
+
+    /**
+     * 默认内容字体大小（磅）
+     */
+    public static final short DEFAULT_CONTENT_FONT_SIZE = 11;
+
+    /**
+     * 默认字体名称
+     */
+    public static final String DEFAULT_FONT_NAME = "宋体";
+
+    /**
+     * 构建默认样式策略（推荐直接使用）
+     *
+     * @return 默认的表头 + 内容样式策略
+     */
+    public static HorizontalCellStyleStrategy getDefaultStyleStrategy() {
+        return buildCustomStyleStrategy(
+                DEFAULT_HEADER_FONT_SIZE,
+                true,
+                false,
+                IndexedColors.BLACK.getIndex(),
+                DEFAULT_FONT_NAME,
+                IndexedColors.WHITE.getIndex(),
+                BorderStyle.THIN,
+                HorizontalAlignment.CENTER,
+                VerticalAlignment.CENTER,
+
+                DEFAULT_CONTENT_FONT_SIZE,
+                false,
+                false,
+                IndexedColors.BLACK.getIndex(),
+                DEFAULT_FONT_NAME,
+                null,
+                BorderStyle.THIN,
+                HorizontalAlignment.CENTER,
+                VerticalAlignment.CENTER,
+                false
+        );
+    }
+
+    /**
+     * 构建完全可配置的 Excel 样式策略。
+     * <p>
+     * 该方法用于一次性构建“表头样式 + 内容样式”的组合策略，
+     * 支持字体、颜色、背景、边框、对齐方式、是否自动换行等所有常用样式配置，
+     * 适用于导出 Excel 时对整体风格进行统一控制。
+     * </p>
+     *
+     * @param headFontSize           表头字体大小（单位：磅）
+     * @param headBold               表头字体是否加粗
+     * @param headItalic             表头字体是否斜体
+     * @param headFontColor          表头字体颜色（IndexedColors 枚举值）
+     * @param headFontName           表头字体名称，如“微软雅黑”
+     * @param headBackgroundColor    表头背景色（IndexedColors 枚举值），为 null 表示不设置背景色
+     * @param headBorderStyle        表头单元格边框样式
+     * @param headHorizontalAlign    表头水平对齐方式
+     * @param headVerticalAlign      表头垂直对齐方式
+     * @param contentFontSize        内容字体大小（单位：磅）
+     * @param contentBold            内容字体是否加粗
+     * @param contentItalic          内容字体是否斜体
+     * @param contentFontColor       内容字体颜色（IndexedColors 枚举值）
+     * @param contentFontName        内容字体名称
+     * @param contentBackgroundColor 内容背景色（IndexedColors 枚举值），为 null 表示不设置背景色
+     * @param contentBorderStyle     内容单元格边框样式
+     * @param contentHorizontalAlign 内容水平对齐方式
+     * @param contentVerticalAlign   内容垂直对齐方式
+     * @param contentWrapped         内容是否自动换行
+     * @return 水平样式策略对象（包含表头样式 + 内容样式）
+     */
+    public static HorizontalCellStyleStrategy buildCustomStyleStrategy(
+            short headFontSize,
+            boolean headBold,
+            boolean headItalic,
+            short headFontColor,
+            String headFontName,
+            Short headBackgroundColor,
+            BorderStyle headBorderStyle,
+            HorizontalAlignment headHorizontalAlign,
+            VerticalAlignment headVerticalAlign,
+
+            short contentFontSize,
+            boolean contentBold,
+            boolean contentItalic,
+            short contentFontColor,
+            String contentFontName,
+            Short contentBackgroundColor,
+            BorderStyle contentBorderStyle,
+            HorizontalAlignment contentHorizontalAlign,
+            VerticalAlignment contentVerticalAlign,
+            boolean contentWrapped
+    ) {
+
+        WriteCellStyle headStyle = buildCellStyle(
+                headHorizontalAlign,
+                headVerticalAlign,
+                headBackgroundColor,
+                headFontSize,
+                headBold,
+                headItalic,
+                headFontColor,
+                headFontName,
+                headBorderStyle,
+                false
+        );
+
+        WriteCellStyle contentStyle = buildCellStyle(
+                contentHorizontalAlign,
+                contentVerticalAlign,
+                contentBackgroundColor,
+                contentFontSize,
+                contentBold,
+                contentItalic,
+                contentFontColor,
+                contentFontName,
+                contentBorderStyle,
+                contentWrapped
+        );
+
+        return new HorizontalCellStyleStrategy(headStyle, contentStyle);
+    }
+
+    /**
+     * 构建单个单元格的写入样式对象。
+     * <p>
+     * 该方法为内部通用构建方法，用于根据参数组合生成 WriteCellStyle，
+     * 同时完成对齐方式、背景色、字体样式、边框样式以及是否自动换行的统一设置。
+     * </p>
+     *
+     * @param horizontalAlignment 水平对齐方式
+     * @param verticalAlignment   垂直对齐方式
+     * @param backgroundColor     背景色（IndexedColors 枚举值），为 null 表示不设置背景
+     * @param fontSize            字体大小（磅）
+     * @param bold                是否加粗
+     * @param italic              是否斜体
+     * @param fontColor           字体颜色（IndexedColors 枚举值）
+     * @param fontName            字体名称
+     * @param borderStyle         边框样式
+     * @param wrapped             是否自动换行
+     * @return 构建完成的 WriteCellStyle 对象
+     */
+    private static WriteCellStyle buildCellStyle(
+            HorizontalAlignment horizontalAlignment,
+            VerticalAlignment verticalAlignment,
+            Short backgroundColor,
+            short fontSize,
+            boolean bold,
+            boolean italic,
+            short fontColor,
+            String fontName,
+            BorderStyle borderStyle,
+            boolean wrapped
+    ) {
+        WriteCellStyle style = new WriteCellStyle();
+        style.setHorizontalAlignment(horizontalAlignment);
+        style.setVerticalAlignment(verticalAlignment);
+        style.setWrapped(wrapped);
+
+        applyBackground(style, backgroundColor);
+        style.setWriteFont(buildFont(fontSize, bold, italic, fontColor, fontName));
+        applyBorder(style, borderStyle);
+
+        return style;
+    }
+
+    /**
+     * 构建字体样式对象。
+     * <p>
+     * 统一封装字体大小、加粗、斜体、颜色及字体名称的设置逻辑，
+     * 供单元格样式构建过程复用。
+     * </p>
+     *
+     * @param fontSize  字体大小（磅）
+     * @param bold      是否加粗
+     * @param italic    是否斜体
+     * @param fontColor 字体颜色（IndexedColors 枚举值）
+     * @param fontName  字体名称
+     * @return 构建完成的 WriteFont 对象
+     */
+    private static WriteFont buildFont(
+            short fontSize,
+            boolean bold,
+            boolean italic,
+            short fontColor,
+            String fontName
+    ) {
+        WriteFont font = new WriteFont();
+        font.setFontHeightInPoints(fontSize);
+        font.setBold(bold);
+        font.setItalic(italic);
+        font.setColor(fontColor);
+
+        if (StringUtils.isNotBlank(fontName)) {
+            font.setFontName(fontName);
+        }
+
+        return font;
+    }
+
+    /**
+     * 设置单元格背景色。
+     * <p>
+     * 若 backgroundColor 不为 null，则设置填充颜色并启用实心填充模式；
+     * 若为 null，则表示不设置背景色，采用无填充模式。
+     * </p>
+     *
+     * @param style           单元格写入样式对象
+     * @param backgroundColor 背景色（IndexedColors 枚举值），可为 null
+     */
+    private static void applyBackground(WriteCellStyle style, Short backgroundColor) {
+        if (backgroundColor != null) {
+            style.setFillForegroundColor(backgroundColor);
+            style.setFillPatternType(FillPatternType.SOLID_FOREGROUND);
+        } else {
+            style.setFillPatternType(FillPatternType.NO_FILL);
+        }
+    }
+
+    /**
+     * 设置单元格四个方向的边框样式。
+     * <p>
+     * 包括：上、下、左、右四条边统一使用同一种边框样式，
+     * 用于快速构建风格统一的表格边框效果。
+     * </p>
+     *
+     * @param style       单元格写入样式对象
+     * @param borderStyle 边框样式枚举（如 THIN、MEDIUM、DASHED、DOUBLE 等）
+     */
+    private static void applyBorder(WriteCellStyle style, BorderStyle borderStyle) {
+        style.setBorderTop(borderStyle);
+        style.setBorderBottom(borderStyle);
+        style.setBorderLeft(borderStyle);
+        style.setBorderRight(borderStyle);
+    }
+
+}
+```
+
+#### 使用方法
+
+**使用默认配置**
+
+```java
+    @Test
+    void testExportStyle() {
+        List<MyUser> list = InitData.getDataList();
+        String fileName = "target/export_style_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .registerWriteHandler(ExcelStyleUtil.getDefaultStyleStrategy())
+                .sheet("用户列表")
+                .doWrite(list);
+    }
+```
+
+![image-20260126171849203](./assets/image-20260126171849203.png)
+
+**自定义配置**
+
+```java
+    @Test
+    void testExportCustomStyle() {
+        List<MyUser> list = InitData.getDataList();
+
+        // 默认表头字体大小（磅）
+         Short DEFAULT_HEADER_FONT_SIZE = 14;
+        // 默认内容字体大小（磅）
+         Short DEFAULT_CONTENT_FONT_SIZE = 12;
+        // 默认内容字体
+         String DEFAULT_CONTENT_FONT_NAME = "微软雅黑";
+        HorizontalCellStyleStrategy cellStyleStrategy = ExcelStyleUtil.buildCustomStyleStrategy(
+                // 表头字体大小（单位：磅）
+                DEFAULT_HEADER_FONT_SIZE,
+                // 表头是否加粗
+                false,
+                // 表头是否斜体
+                false,
+                // 表头字体颜色（使用 IndexedColors 枚举值）
+                IndexedColors.BLACK.getIndex(),
+                // 表头字体名称
+                DEFAULT_CONTENT_FONT_NAME,
+                // 表头背景色（设置为浅灰色）
+                IndexedColors.GREY_40_PERCENT.getIndex(),
+                // 表头边框样式
+                BorderStyle.DOUBLE,
+                // 表头水平居中对齐
+                HorizontalAlignment.CENTER,
+                // 表头垂直居中对齐
+                VerticalAlignment.CENTER,
+                // 内容字体大小
+                DEFAULT_CONTENT_FONT_SIZE,
+                // 内容是否加粗
+                false,
+                // 内容是否斜体
+                false,
+                // 内容字体颜色（黑色）
+                IndexedColors.BLACK.getIndex(),
+                // 内容字体名称
+                DEFAULT_CONTENT_FONT_NAME,
+                // 内容背景色（为空表示不设置背景色）
+                null,
+                // 内容边框样式
+                BorderStyle.DOUBLE,
+                // 内容水平居中对齐
+                HorizontalAlignment.CENTER,
+                // 内容垂直居中对齐
+                VerticalAlignment.CENTER,
+                // 内容是否自动换行
+                true
+        );
+        String fileName = "target/export_custom_style_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .registerWriteHandler(cellStyleStrategy)
+                .sheet("用户列表")
+                .doWrite(list);
+    }
+```
+
+![image-20260126172242970](./assets/image-20260126172242970.png)
+
+### 条件样式
+
+### 使用 `List<Map>` 导出（无实体类）
+
+### 导出CSV

@@ -117,4 +117,11 @@ public class MyUser implements Serializable {
     @ExcelIgnore
     private String imageUrl;
 
+    /**
+     * 性别
+     */
+    //@ExcelProperty(value = "性别", converter = GenderConverter.class)
+    @ExcelIgnore
+    private Integer gender;
+
 }
