@@ -148,8 +148,9 @@ public class MyUser implements Serializable {
 | **@ContentFontStyle** | 同 `@HeadFontStyle`                                          | —                            | 内容单元格字体样式参数               | 用法同上([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
 | **@HeadStyle**        | `horizontalAlignment`                                        | `HorizontalAlignmentEnum`    | 水平对齐枚举                         | —([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
 |                       | `verticalAlignment`                                          | `VerticalAlignmentEnum`      | 垂直对齐枚举                         | —([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
+|                       | `verticalAlignment`                                          | `VerticalAlignmentEnum`      | 垂直对齐枚举                         | —([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
 |                       | `fillForegroundColor`                                        | `short/int`                  | 单元格填充前景色                     | —([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
-|                       | `fillBackgroundColor`                                        | `short/int`                  | 单元格背景色                         | —([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
+|                       | `wrapped`                                                    | `BooleanEnum.DEFAULT`        | 设置文本是否在单元格内自动换行       | —([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
 |                       | `borderLeft` / `borderRight` / `borderTop` / `borderBottom`  | `BorderStyleEnum`            | 边框样式                             | —([Apache Fesod](https://fesod.apache.org/docs/sheet/write/style?utm_source=chatgpt.com)) |
 | *其他可选样式属性*    | `dataFormat`, `hidden`, `locked`, `quotePrefix`, `wrapped`, `rotation`, `indent`, `leftBorderColor`, `rightBorderColor`, `topBorderColor`, `bottomBorderColor`, `fillPatternType` | 多种类型                     | 详细可参考 POI 样式及 EasyExcel 文档 | 注：Fesod 也支持类似参数，但官方文档未全部列出，需要根据 POI 和源码使用([CSDN博客](https://blog.csdn.net/weixin_45151960/article/details/109095332?utm_source=chatgpt.com)) |
 | **@ContentStyle**     | 同 `@HeadStyle`                                              | —                            | 内容单元格样式参数                   | 同样支持 POI 样式多数参数([CSDN博客](https://blog.csdn.net/weixin_45151960/article/details/109095332?utm_source=chatgpt.com)) |
@@ -185,8 +186,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @HeadFontStyle(fontName = "宋体", fontHeightInPoints = 11, bold = BooleanEnum.TRUE)
 @ContentFontStyle(fontName = "宋体", fontHeightInPoints = 11, bold = BooleanEnum.FALSE)
-@HeadStyle(horizontalAlignment = HorizontalAlignmentEnum.CENTER, verticalAlignment = VerticalAlignmentEnum.CENTER, fillBackgroundColor = 9, fillForegroundColor = 9, borderLeft = BorderStyleEnum.THIN, borderRight = BorderStyleEnum.THIN, borderTop = BorderStyleEnum.THIN, borderBottom = BorderStyleEnum.THIN)
-@ContentStyle(horizontalAlignment = HorizontalAlignmentEnum.CENTER, verticalAlignment = VerticalAlignmentEnum.CENTER, fillBackgroundColor = 9, fillForegroundColor = 9, borderLeft = BorderStyleEnum.THIN, borderRight = BorderStyleEnum.THIN, borderTop = BorderStyleEnum.THIN, borderBottom = BorderStyleEnum.THIN)
+@HeadStyle(wrapped = BooleanEnum.TRUE, horizontalAlignment = HorizontalAlignmentEnum.CENTER, verticalAlignment = VerticalAlignmentEnum.CENTER, fillBackgroundColor = 9, fillForegroundColor = 9, borderLeft = BorderStyleEnum.THIN, borderRight = BorderStyleEnum.THIN, borderTop = BorderStyleEnum.THIN, borderBottom = BorderStyleEnum.THIN)
+@ContentStyle(wrapped = BooleanEnum.TRUE, horizontalAlignment = HorizontalAlignmentEnum.CENTER, verticalAlignment = VerticalAlignmentEnum.CENTER, fillBackgroundColor = 9, fillForegroundColor = 9, borderLeft = BorderStyleEnum.THIN, borderRight = BorderStyleEnum.THIN, borderTop = BorderStyleEnum.THIN, borderBottom = BorderStyleEnum.THIN)
 @HeadRowHeight(25)  // 设置表头行高
 @ContentRowHeight(20)  // 设置数据内容行高
 @ColumnWidth(15)       // 设置列宽
