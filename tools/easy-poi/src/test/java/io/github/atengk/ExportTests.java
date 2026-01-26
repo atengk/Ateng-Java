@@ -19,6 +19,8 @@ import io.github.atengk.util.ExcelStyleUtil;
 import io.github.atengk.util.ExcelUtil;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFRichTextString;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +39,85 @@ public class ExportTests {
                 "target/simple_export_users.xlsx",
                 params -> params.setSheetName("用户列表")
         );
+    }
+
+    @Test
+    public void testSimpleExportTemplate() {
+        List<MyUser> userList = InitData.getDataList(0);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_users_template.xlsx",
+                params -> params.setSheetName("用户列表")
+        );
+    }
+
+    @Test
+    public void testSimpleExportTemplateAndComment() {
+        List<MyUser> userList = InitData.getDataList(1);
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
+
+        // 使用者提供批注
+        Map<Integer, String> commentMap = new HashMap<>();
+        commentMap.put(1, "请输入用户姓名，必填");
+        commentMap.put(2, "请输入年龄，必须是正整数");
+        commentMap.put(3, "手机号格式：11 位数字");
+        commentMap.put(5, "分数范围：0 ~ 100");
+
+        // 添加批注的行数：第 0 行（从 0 开始算）是表头
+        int headerRowIndex = 0;
+        // 执行批注添加
+        addCommentsToHeader(workbook, headerRowIndex, commentMap);
+
+        ExcelUtil.write(workbook, "target/simple_export_users_template_comment.xlsx");
+    }
+
+    /**
+     * 给指定表头行的指定列添加批注
+     *
+     * @param workbook       导出后的 Workbook (仅支持 XSSFWorkbook)
+     * @param headerRowIndex 表头所在的行（从0开始）
+     * @param commentMap     列索引 → 批注内容
+     */
+    public static void addCommentsToHeader(Workbook workbook, int headerRowIndex, Map<Integer, String> commentMap) {
+        if (!(workbook instanceof XSSFWorkbook)) {
+            throw new IllegalArgumentException("仅支持 XLSX 格式（XSSFWorkbook）");
+        }
+
+        XSSFWorkbook xssfWorkbook = (XSSFWorkbook) workbook;
+        Sheet sheet = xssfWorkbook.getSheetAt(0);
+
+        Row headerRow = sheet.getRow(headerRowIndex);
+        if (headerRow == null) {
+            throw new IllegalArgumentException("指定的表头行不存在: " + headerRowIndex);
+        }
+
+        Drawing<?> drawing = sheet.createDrawingPatriarch();
+
+        for (Map.Entry<Integer, String> entry : commentMap.entrySet()) {
+            int colIndex = entry.getKey();
+            String commentText = entry.getValue();
+
+            Cell cell = headerRow.getCell(colIndex);
+            if (cell == null) {
+                // 若没有单元格则创建（表头一般都有）
+                cell = headerRow.createCell(colIndex);
+            }
+
+            // 批注窗口大小，可调
+            ClientAnchor anchor = new XSSFClientAnchor(
+                    0, 0, 0, 0,
+                    (short) colIndex, headerRowIndex,
+                    (short) (colIndex + 3), headerRowIndex + 4
+            );
+
+            Comment comment = drawing.createCellComment(anchor);
+            comment.setString(new XSSFRichTextString(commentText));
+            comment.setAuthor("系统");
+            cell.setCellComment(comment);
+        }
     }
 
     @Test

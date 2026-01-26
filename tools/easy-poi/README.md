@@ -1678,6 +1678,25 @@ public final class ExcelUtil {
 
 ![image-20260121163310928](./assets/image-20260121163310928.png)
 
+### `导入模版` 导出
+
+导出一个只有表头或只有少量示例数据的一个模版，用于用户后续导入使用
+
+```java
+    @Test
+    public void testSimpleExportTemplate() {
+        List<MyUser> userList = InitData.getDataList(0);
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                userList,
+                "target/simple_export_users_template.xlsx",
+                params -> params.setSheetName("用户列表")
+        );
+    }
+```
+
+![image-20260126142400840](./assets/image-20260126142400840.png)
+
 ### 多级表头导出（合并单元格）
 
 在 EasyPoi 中，多级表头通过 `@Excel` 注解的 `groupName` 属性实现。同一 `groupName` 的字段会被归到一个父级表头下，并自动合并单元格。
@@ -4101,6 +4120,82 @@ public class NumberDictHandler implements IExcelDictHandler {
 ```
 
 ![image-20260122090213563](./assets/image-20260122090213563.png)
+
+### 添加批注
+
+**使用方法**
+
+```java
+    @Test
+    public void testSimpleExportTemplateAndComment() {
+        List<MyUser> userList = InitData.getDataList(1);
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+        Workbook workbook = ExcelExportUtil.exportExcel(params, MyUser.class, userList);
+
+        // 使用者提供批注
+        Map<Integer, String> commentMap = new HashMap<>();
+        commentMap.put(1, "请输入用户姓名，必填");
+        commentMap.put(2, "请输入年龄，必须是正整数");
+        commentMap.put(3, "手机号格式：11 位数字");
+        commentMap.put(5, "分数范围：0 ~ 100");
+
+        // 添加批注的行数：第 0 行（从 0 开始算）是表头
+        int headerRowIndex = 0;
+        // 执行批注添加
+        addCommentsToHeader(workbook, headerRowIndex, commentMap);
+
+        ExcelUtil.write(workbook, "target/simple_export_users_template_comment.xlsx");
+    }
+
+    /**
+     * 给指定表头行的指定列添加批注
+     *
+     * @param workbook       导出后的 Workbook (仅支持 XSSFWorkbook)
+     * @param headerRowIndex 表头所在的行（从0开始）
+     * @param commentMap     列索引 → 批注内容
+     */
+    public static void addCommentsToHeader(Workbook workbook, int headerRowIndex, Map<Integer, String> commentMap) {
+        if (!(workbook instanceof XSSFWorkbook)) {
+            throw new IllegalArgumentException("仅支持 XLSX 格式（XSSFWorkbook）");
+        }
+
+        XSSFWorkbook xssfWorkbook = (XSSFWorkbook) workbook;
+        Sheet sheet = xssfWorkbook.getSheetAt(0);
+
+        Row headerRow = sheet.getRow(headerRowIndex);
+        if (headerRow == null) {
+            throw new IllegalArgumentException("指定的表头行不存在: " + headerRowIndex);
+        }
+
+        Drawing<?> drawing = sheet.createDrawingPatriarch();
+
+        for (Map.Entry<Integer, String> entry : commentMap.entrySet()) {
+            int colIndex = entry.getKey();
+            String commentText = entry.getValue();
+
+            Cell cell = headerRow.getCell(colIndex);
+            if (cell == null) {
+                // 若没有单元格则创建（表头一般都有）
+                cell = headerRow.createCell(colIndex);
+            }
+
+            // 批注窗口大小，可调
+            ClientAnchor anchor = new XSSFClientAnchor(
+                    0, 0, 0, 0,
+                    (short) colIndex, headerRowIndex,
+                    (short) (colIndex + 3), headerRowIndex + 4
+            );
+
+            Comment comment = drawing.createCellComment(anchor);
+            comment.setString(new XSSFRichTextString(commentText));
+            comment.setAuthor("系统");
+            cell.setCellComment(comment);
+        }
+    }
+```
+
+![image-20260126150309446](./assets/image-20260126150309446.png)
 
 ### 数据脱敏
 
