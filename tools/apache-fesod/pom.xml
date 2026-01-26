@@ -90,13 +90,13 @@
                 <scope>import</scope>
             </dependency>
             <!-- 使用 Fesod BOM 管理依赖 -->
-            <dependency>
+            <!--<dependency>
                 <groupId>org.apache.fesod</groupId>
                 <artifactId>fesod-bom</artifactId>
                 <version>${fesod.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>
+            </dependency>-->
         </dependencies>
     </dependencyManagement>
 

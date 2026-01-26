@@ -109,4 +109,12 @@ public class MyUser implements Serializable {
     @ColumnWidth(30) // 单独设置列宽
     private LocalDateTime createTime;
 
+    /**
+     * 图片
+     */
+    //@ExcelProperty(value = "图片", converter = StringUrlImageConverter.class)
+    //@ColumnWidth(20)
+    @ExcelIgnore
+    private String imageUrl;
+
 }
