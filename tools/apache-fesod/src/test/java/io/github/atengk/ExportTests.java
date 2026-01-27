@@ -1,10 +1,13 @@
 package io.github.atengk;
 
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.http.HttpUtil;
+import cn.hutool.json.JSONUtil;
 import io.github.atengk.entity.MyUser;
 import io.github.atengk.handler.*;
 import io.github.atengk.init.InitData;
 import io.github.atengk.util.ExcelStyleUtil;
+import io.github.atengk.util.ExcelUtil;
 import org.apache.fesod.sheet.ExcelWriter;
 import org.apache.fesod.sheet.FesodSheet;
 import org.apache.fesod.sheet.write.metadata.WriteSheet;
@@ -30,6 +33,15 @@ public class ExportTests {
                 .write(fileName, MyUser.class)
                 .sheet("用户列表")
                 .doWrite(list);
+    }
+
+    @Test
+    void testExportTemplate() {
+        String fileName = "target/export_template_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .sheet("用户列表")
+                .doWrite(Collections.emptyList());
     }
 
     @Test
@@ -259,4 +271,172 @@ public class ExportTests {
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSecond), ZoneId.systemDefault());
     }
 
+    @Test
+    void testExportDynamic() {
+        // 动态生成一级表头
+        List<String> headers = new ArrayList<>();
+        int randomInt = RandomUtil.randomInt(1, 20);
+        for (int i = 0; i < randomInt; i++) {
+            headers.add("表头" + (i + 1));
+        }
+        System.out.println(headers);
+
+        // 动态生成 Map 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int j = 0; j < headers.size(); j++) {
+                row.put(headers.get(j), "数据" + (i + 1) + "-" + (j + 1));
+            }
+            dataList.add(row);
+        }
+        System.out.println(dataList);
+
+        // 导出
+        ExcelUtil.exportDynamicSimple(
+                ExcelUtil.toOutputStream("target/export_dynamic.xlsx"),
+                headers,
+                dataList,
+                "用户列表"
+        );
+    }
+
+    @Test
+    void testExportDynamicImage() {
+        // 表头
+        List<ExcelUtil.HeaderItem> headers = new ArrayList<>();
+        headers.add(new ExcelUtil.HeaderItem(
+                Collections.singletonList("姓名"), "name"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Collections.singletonList("年龄"), "age"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Collections.singletonList("图片"), "image"));
+        System.out.println(JSONUtil.toJsonStr(headers));
+
+        // 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "用户" + (i + 1));
+            row.put("age", 20 + i);
+            row.put("image", HttpUtil.downloadBytes("https://placehold.co/100x100/png"));
+            dataList.add(row);
+        }
+        //System.out.println(JSONUtil.toJsonStr(dataList));
+
+        // 导出
+        ExcelUtil.exportDynamic(
+                ExcelUtil.toOutputStream("target/export_dynamic_image.xlsx"),
+                headers,
+                dataList,
+                "用户列表"
+        );
+    }
+
+    @Test
+    void testExportDynamicMultiHead() {
+        // 多级表头（一级 + 二级）
+        List<ExcelUtil.HeaderItem> headers = new ArrayList<>();
+        headers.add(new ExcelUtil.HeaderItem(
+                Arrays.asList("用户信息", "姓名"), "name"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Arrays.asList("用户信息", "年龄"), "age"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Arrays.asList("系统信息", "登录次数"), "loginCount"));
+        System.out.println(JSONUtil.toJsonStr(headers));
+
+        // 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "用户" + (i + 1));
+            row.put("age", 20 + i);
+            row.put("loginCount", 100 + i);
+            dataList.add(row);
+        }
+        System.out.println(JSONUtil.toJsonStr(dataList));
+
+        // 导出
+        ExcelUtil.exportDynamicComplex(
+                ExcelUtil.toOutputStream("target/export_dynamic_multi_head.xlsx"),
+                headers,
+                dataList,
+                "用户列表"
+        );
+    }
+
+    @Test
+    void testExportDynamicMultiSheet() {
+        // 表头
+        List<ExcelUtil.HeaderItem> headers = Arrays.asList(
+                new ExcelUtil.HeaderItem(Collections.singletonList("姓名"), "name"),
+                new ExcelUtil.HeaderItem(Collections.singletonList("年龄"), "age"),
+                new ExcelUtil.HeaderItem(Collections.singletonList("登录次数"), "loginCount")
+        );
+        // 数据
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "用户" + (i + 1));
+            row.put("age", 20 + i);
+            row.put("loginCount", 100 + i);
+            rows.add(row);
+        }
+        // Sheet
+        List<ExcelUtil.SheetData> sheets = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            sheets.add(new ExcelUtil.SheetData("用户列表" + i, headers, rows));
+        }
+        System.out.println(sheets);
+        // 导出
+        ExcelUtil.exportDynamicMultiSheet(
+                ExcelUtil.toOutputStream("target/export_dynamic_multi_sheet.xlsx"),
+                sheets
+        );
+    }
+
+    @Test
+    void testExportDynamicRowColumn() {
+        // 动态生成一级表头
+        List<String> headers = new ArrayList<>();
+        int randomInt = RandomUtil.randomInt(1, 20);
+        for (int i = 0; i < randomInt; i++) {
+            headers.add("表头" + (i + 1));
+        }
+        System.out.println(headers);
+
+        // 动态生成 Map 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int j = 0; j < headers.size(); j++) {
+                row.put(headers.get(j), "数据" + (i + 1) + "-" + (j + 1));
+            }
+            dataList.add(row);
+        }
+        System.out.println(dataList);
+
+        // 设置列宽
+        Map<Integer, Integer> columnWidthMap = new HashMap<>();
+        columnWidthMap.put(0, 20);
+        columnWidthMap.put(1, 30);
+        columnWidthMap.put(2, 25);
+
+        // 设置表头、内容高度
+        RowColumnDimensionHandler handler = new RowColumnDimensionHandler(
+                (short) 50,
+                (short) 30,
+                columnWidthMap
+        );
+
+        // 导出
+        ExcelUtil.exportDynamicSimple(
+                ExcelUtil.toOutputStream("target/export_dynamic_row_column.xlsx"),
+                headers,
+                dataList,
+                "用户列表",
+                handler,
+                ExcelStyleUtil.getDefaultStyleStrategy()
+        );
+    }
 }

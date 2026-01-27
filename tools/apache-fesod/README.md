@@ -354,6 +354,23 @@ public class InitData {
 
 ![image-20260125143734313](./assets/image-20260125143734313.png)
 
+### `导入模版` 导出
+
+导出一个只有表头或只有少量示例数据的一个模版，用于用户后续导入使用
+
+```java
+    @Test
+    void testExportTemplate() {
+        String fileName = "target/export_template_users.xlsx";
+        FesodSheet
+                .write(fileName, MyUser.class)
+                .sheet("用户列表")
+                .doWrite(Collections.emptyList());
+    }
+```
+
+![image-20260127142142461](./assets/image-20260127142142461.png)
+
 ### 多级表头导出（合并单元格）
 
 多级表头通过 `@ExcelProperty` 注解指定主标题和子标题，并自动合并单元格。
@@ -2184,4 +2201,434 @@ public class ConditionStyleHandler implements CellWriteHandler {
 
 ### 使用 `List<Map>` 导出（无实体类）
 
+#### 简单动态数据
+
+**使用方法**
+
+```java
+    @Test
+    void testExportDynamic() {
+        // 动态生成一级表头
+        List<String> headers = new ArrayList<>();
+        int randomInt = RandomUtil.randomInt(1, 20);
+        for (int i = 0; i < randomInt; i++) {
+            headers.add("表头" + (i + 1));
+        }
+        System.out.println(headers);
+
+        // 动态生成 Map 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int j = 0; j < headers.size(); j++) {
+                row.put(headers.get(j), "数据" + (i + 1) + "-" + (j + 1));
+            }
+            dataList.add(row);
+        }
+        System.out.println(dataList);
+
+        // 导出
+        ExcelUtil.exportDynamicSimple(
+                ExcelUtil.toOutputStream("target/export_dynamic.xlsx"),
+                headers,
+                dataList,
+                "用户列表"
+        );
+    }
+```
+
+> 输出：
+>
+> [表头1, 表头2, 表头3, 表头4, 表头5, 表头6, 表头7, 表头8, 表头9, 表头10]
+> [{表头6=数据1-6, 表头7=数据1-7, 表头4=数据1-4, 表头5=数据1-5, 表头8=数据1-8, 表头9=数据1-9, 表头10=数据1-10, 表头2=数据1-2, 表头3=数据1-3, 表头1=数据1-1}, {表头6=数据2-6, 表头7=数据2-7, 表头4=数据2-4, 表头5=数据2-5, 表头8=数据2-8, 表头9=数据2-9, 表头10=数据2-10, 表头2=数据2-2, 表头3=数据2-3, 表头1=数据2-1}, {表头6=数据3-6, 表头7=数据3-7, 表头4=数据3-4, 表头5=数据3-5, 表头8=数据3-8, 表头9=数据3-9, 表头10=数据3-10, 表头2=数据3-2, 表头3=数据3-3, 表头1=数据3-1}, {表头6=数据4-6, 表头7=数据4-7, 表头4=数据4-4, 表头5=数据4-5, 表头8=数据4-8, 表头9=数据4-9, 表头10=数据4-10, 表头2=数据4-2, 表头3=数据4-3, 表头1=数据4-1}, {表头6=数据5-6, 表头7=数据5-7, 表头4=数据5-4, 表头5=数据5-5, 表头8=数据5-8, 表头9=数据5-9, 表头10=数据5-10, 表头2=数据5-2, 表头3=数据5-3, 表头1=数据5-1}, {表头6=数据6-6, 表头7=数据6-7, 表头4=数据6-4, 表头5=数据6-5, 表头8=数据6-8, 表头9=数据6-9, 表头10=数据6-10, 表头2=数据6-2, 表头3=数据6-3, 表头1=数据6-1}, {表头6=数据7-6, 表头7=数据7-7, 表头4=数据7-4, 表头5=数据7-5, 表头8=数据7-8, 表头9=数据7-9, 表头10=数据7-10, 表头2=数据7-2, 表头3=数据7-3, 表头1=数据7-1}, {表头6=数据8-6, 表头7=数据8-7, 表头4=数据8-4, 表头5=数据8-5, 表头8=数据8-8, 表头9=数据8-9, 表头10=数据8-10, 表头2=数据8-2, 表头3=数据8-3, 表头1=数据8-1}, {表头6=数据9-6, 表头7=数据9-7, 表头4=数据9-4, 表头5=数据9-5, 表头8=数据9-8, 表头9=数据9-9, 表头10=数据9-10, 表头2=数据9-2, 表头3=数据9-3, 表头1=数据9-1}, {表头6=数据10-6, 表头7=数据10-7, 表头4=数据10-4, 表头5=数据10-5, 表头8=数据10-8, 表头9=数据10-9, 表头10=数据10-10, 表头2=数据10-2, 表头3=数据10-3, 表头1=数据10-1}]
+
+![image-20260127102136641](./assets/image-20260127102136641.png)
+
+#### 导出图片
+
+**使用方法**
+
+字段是二进制就会转换成图片
+
+```java
+    @Test
+    void testExportDynamicImage() {
+        // 表头
+        List<ExcelUtil.HeaderItem> headers = new ArrayList<>();
+        headers.add(new ExcelUtil.HeaderItem(
+                Collections.singletonList("姓名"), "name"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Collections.singletonList("年龄"), "age"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Collections.singletonList("图片"), "image"));
+        System.out.println(JSONUtil.toJsonStr(headers));
+
+        // 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "用户" + (i + 1));
+            row.put("age", 20 + i);
+            row.put("image", HttpUtil.downloadBytes("https://placehold.co/100x100/png"));
+            dataList.add(row);
+        }
+        //System.out.println(JSONUtil.toJsonStr(dataList));
+
+        // 导出
+        ExcelUtil.exportDynamic(
+                ExcelUtil.toOutputStream("target/export_dynamic_image.xlsx"),
+                headers,
+                dataList,
+                "用户列表"
+        );
+    }
+```
+
+> 输出：
+>
+> [{"path":["姓名"],"field":"name"},{"path":["年龄"],"field":"age"},{"path":["图片"],"field":"image"}]
+
+![image-20260127103027017](./assets/image-20260127103027017.png)
+
+#### 多级表头
+
+**使用方法**
+
+```java
+    @Test
+    void testExportDynamicMultiHead() {
+        // 多级表头（一级 + 二级）
+        List<ExcelUtil.HeaderItem> headers = new ArrayList<>();
+        headers.add(new ExcelUtil.HeaderItem(
+                Arrays.asList("用户信息", "姓名"), "name"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Arrays.asList("用户信息", "年龄"), "age"));
+        headers.add(new ExcelUtil.HeaderItem(
+                Arrays.asList("系统信息", "登录次数"), "loginCount"));
+        System.out.println(JSONUtil.toJsonStr(headers));
+
+        // 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "用户" + (i + 1));
+            row.put("age", 20 + i);
+            row.put("loginCount", 100 + i);
+            dataList.add(row);
+        }
+        System.out.println(JSONUtil.toJsonStr(dataList));
+
+        // 导出
+        ExcelUtil.exportDynamicComplex(
+                ExcelUtil.toOutputStream("target/export_dynamic_multi_head.xlsx"),
+                headers,
+                dataList,
+                "用户列表"
+        );
+    }
+```
+
+> 输出：
+>
+> [{"path":["用户信息","姓名"],"field":"name"},{"path":["用户信息","年龄"],"field":"age"},{"path":["系统信息","登录次数"],"field":"loginCount"}]
+> [{"name":"用户1","age":20,"loginCount":100},{"name":"用户2","age":21,"loginCount":101},{"name":"用户3","age":22,"loginCount":102},{"name":"用户4","age":23,"loginCount":103},{"name":"用户5","age":24,"loginCount":104},{"name":"用户6","age":25,"loginCount":105},{"name":"用户7","age":26,"loginCount":106},{"name":"用户8","age":27,"loginCount":107},{"name":"用户9","age":28,"loginCount":108},{"name":"用户10","age":29,"loginCount":109}]
+
+![image-20260127102358005](./assets/image-20260127102358005.png)
+
+#### 多 Sheet
+
+**使用方法**
+
+```java
+    @Test
+    void testExportDynamicMultiSheet() {
+        // 表头
+        List<ExcelUtil.HeaderItem> headers = Arrays.asList(
+                new ExcelUtil.HeaderItem(Collections.singletonList("姓名"), "name"),
+                new ExcelUtil.HeaderItem(Collections.singletonList("年龄"), "age"),
+                new ExcelUtil.HeaderItem(Collections.singletonList("登录次数"), "loginCount")
+        );
+        // 数据
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "用户" + (i + 1));
+            row.put("age", 20 + i);
+            row.put("loginCount", 100 + i);
+            rows.add(row);
+        }
+        // Sheet
+        List<ExcelUtil.SheetData> sheets = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            sheets.add(new ExcelUtil.SheetData("用户列表" + i, headers, rows));
+        }
+        System.out.println(sheets);
+        // 导出
+        ExcelUtil.exportDynamicMultiSheet(
+                ExcelUtil.toOutputStream("target/export_dynamic_multi_sheet.xlsx"),
+                sheets
+        );
+    }
+```
+
+![image-20260127102449064](./assets/image-20260127102449064.png)
+
+#### 调整列宽
+
+##### 创建处理器
+
+```java
+package io.github.atengk.handler;
+
+import org.apache.fesod.sheet.write.handler.SheetWriteHandler;
+import org.apache.fesod.sheet.write.handler.context.SheetWriteHandlerContext;
+import org.apache.fesod.sheet.write.metadata.holder.WriteSheetHolder;
+import org.apache.fesod.sheet.write.metadata.holder.WriteWorkbookHolder;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+
+import java.util.Collections;
+import java.util.Map;
+
+/**
+ * Sheet 级别行高、列宽统一处理器。
+ * <p>
+ * 功能：
+ * <ul>
+ *     <li>自动识别表头行数（支持多级表头）</li>
+ *     <li>设置表头行高</li>
+ *     <li>设置内容行高</li>
+ *     <li>设置指定列的列宽</li>
+ * </ul>
+ * <p>
+ * 设计原则：
+ * <ul>
+ *     <li>列宽在 Sheet 创建时设置</li>
+ *     <li>行高在 Sheet 写入完成后设置</li>
+ *     <li>列宽单位使用“字符宽度”，内部自动 *256</li>
+ *     <li>使用者不需要关心表头是几级</li>
+ * </ul>
+ *
+ * @author 孔余
+ * @since 2026-01-26
+ */
+public class RowColumnDimensionHandler implements SheetWriteHandler {
+
+    /**
+     * 表头行高（单位：磅）
+     */
+    private final short headRowHeight;
+
+    /**
+     * 内容行高（单位：磅）
+     */
+    private final short contentRowHeight;
+
+    /**
+     * 指定列宽配置
+     * key：列索引（从 0 开始）
+     * value：列宽（字符宽度，不需要乘 256）
+     */
+    private final Map<Integer, Integer> columnWidthMap;
+
+    public RowColumnDimensionHandler(short headRowHeight,
+                                     short contentRowHeight,
+                                     Map<Integer, Integer> columnWidthMap) {
+        this.headRowHeight = headRowHeight;
+        this.contentRowHeight = contentRowHeight;
+        this.columnWidthMap = columnWidthMap == null ? Collections.emptyMap() : columnWidthMap;
+    }
+
+    /**
+     * Sheet 创建完成后回调。
+     * <p>
+     * 此时 Row 还未创建，只能做 Sheet 结构类操作：
+     * <ul>
+     *     <li>列宽</li>
+     *     <li>冻结窗格</li>
+     *     <li>打印设置</li>
+     * </ul>
+     */
+    @Override
+    public void afterSheetCreate(WriteWorkbookHolder writeWorkbookHolder,
+                                 WriteSheetHolder writeSheetHolder) {
+
+        Sheet sheet = writeSheetHolder.getSheet();
+        setColumnWidth(sheet);
+    }
+
+    /**
+     * Sheet 写入完成后的回调。
+     * <p>
+     * 此时：
+     * <ul>
+     *     <li>所有 Row 已存在</li>
+     *     <li>可以安全设置行高</li>
+     * </ul>
+     */
+    @Override
+    public void afterSheetDispose(SheetWriteHandlerContext context) {
+        Sheet sheet = context.getWriteSheetHolder().getSheet();
+        setRowHeight(sheet, context.getWriteSheetHolder());
+    }
+
+    /**
+     * 设置列宽（字符宽度 → Excel 单位 *256）
+     */
+    private void setColumnWidth(Sheet sheet) {
+        if (columnWidthMap.isEmpty()) {
+            return;
+        }
+
+        for (Map.Entry<Integer, Integer> entry : columnWidthMap.entrySet()) {
+            Integer columnIndex = entry.getKey();
+            Integer columnWidth = entry.getValue();
+
+            if (columnIndex == null || columnWidth == null || columnWidth <= 0) {
+                continue;
+            }
+
+            sheet.setColumnWidth(columnIndex, columnWidth * 256);
+        }
+    }
+
+    /**
+     * 设置行高，自动区分表头行和内容行。
+     */
+    private void setRowHeight(Sheet sheet, WriteSheetHolder writeSheetHolder) {
+
+        int headRowCount = writeSheetHolder
+                .getExcelWriteHeadProperty()
+                .getHeadRowNumber();
+
+        int lastRowNum = sheet.getLastRowNum();
+
+        for (int rowIndex = 0; rowIndex <= lastRowNum; rowIndex++) {
+            Row row = sheet.getRow(rowIndex);
+            if (row == null) {
+                continue;
+            }
+
+            if (rowIndex < headRowCount) {
+                row.setHeightInPoints(headRowHeight);
+            } else {
+                row.setHeightInPoints(contentRowHeight);
+            }
+        }
+    }
+}
+```
+
+##### 使用方法
+
+```java
+    @Test
+    void testExportDynamicRowColumn() {
+        // 动态生成一级表头
+        List<String> headers = new ArrayList<>();
+        int randomInt = RandomUtil.randomInt(1, 20);
+        for (int i = 0; i < randomInt; i++) {
+            headers.add("表头" + (i + 1));
+        }
+        System.out.println(headers);
+
+        // 动态生成 Map 数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int j = 0; j < headers.size(); j++) {
+                row.put(headers.get(j), "数据" + (i + 1) + "-" + (j + 1));
+            }
+            dataList.add(row);
+        }
+        System.out.println(dataList);
+
+        // 设置列宽
+        Map<Integer, Integer> columnWidthMap = new HashMap<>();
+        columnWidthMap.put(0, 20);
+        columnWidthMap.put(1, 30);
+        columnWidthMap.put(2, 25);
+
+        // 设置表头、内容高度
+        RowColumnDimensionHandler handler = new RowColumnDimensionHandler(
+                (short) 50,
+                (short) 30,
+                columnWidthMap
+        );
+
+        // 导出
+        ExcelUtil.exportDynamicSimple(
+                ExcelUtil.toOutputStream("target/export_dynamic_row_column.xlsx"),
+                headers,
+                dataList,
+                "用户列表",
+                handler,
+                ExcelStyleUtil.getDefaultStyleStrategy()
+        );
+    }
+```
+
+![image-20260127141509063](./assets/image-20260127141509063.png)
+
+
+
 ### 导出CSV
+
+
+
+## SpringBoot 使用
+
+### 导出数据
+
+### 导出动态数据
+
+**使用方法**
+
+```java
+package io.github.atengk.controller;
+
+import io.github.atengk.util.ExcelUtil;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.servlet.http.HttpServletResponse;
+import java.util.*;
+
+@RestController
+@RequestMapping("/excel/export")
+public class ExcelExportController {
+
+    /**
+     * 动态导出 Excel（一级表头）到浏览器
+     */
+    @GetMapping("/dynamic")
+    public void exportDynamic(HttpServletResponse response) {
+
+        // 生成随机表头
+        List<String> headers = new ArrayList<>();
+        int randomInt = new Random().nextInt(20) + 1;
+        for (int i = 0; i < randomInt; i++) {
+            headers.add("表头" + (i + 1));
+        }
+
+        // 生成随机数据
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Object> row = new HashMap<>();
+            for (int j = 0; j < headers.size(); j++) {
+                row.put(headers.get(j), "数据" + (i + 1) + "-" + (j + 1));
+            }
+            dataList.add(row);
+        }
+
+        // 导出文件
+        String fileName = "动态导出.xlsx";
+        ExcelUtil.exportDynamicSimpleToResponse(response, fileName, headers, dataList, "用户列表");
+    }
+
+}
+```
+
+![image-20260127112241102](./assets/image-20260127112241102.png)
+
