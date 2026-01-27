@@ -1,5 +1,7 @@
 package io.github.atengk.controller;
 
+import io.github.atengk.entity.MyUser;
+import io.github.atengk.init.InitData;
 import io.github.atengk.util.ExcelUtil;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,7 +15,23 @@ import java.util.*;
 public class ExcelExportController {
 
     /**
-     * 动态导出 Excel（一级表头）到浏览器
+     * 导出Excel
+     */
+    @GetMapping("/entity")
+    public void exportEntity(HttpServletResponse response) {
+        List<MyUser> list = InitData.getDataList();
+        String fileName = "用户列表.xlsx";
+        ExcelUtil.exportToResponse(
+                response,
+                fileName,
+                list,
+                MyUser.class,
+                "用户列表"
+        );
+    }
+
+    /**
+     * 动态导出 Excel
      */
     @GetMapping("/dynamic")
     public void exportDynamic(HttpServletResponse response) {
@@ -37,7 +55,13 @@ public class ExcelExportController {
 
         // 导出文件
         String fileName = "动态导出.xlsx";
-        ExcelUtil.exportDynamicSimpleToResponse(response, fileName, headers, dataList, "用户列表");
+        ExcelUtil.exportDynamicSimpleToResponse(
+                response,
+                fileName,
+                headers,
+                dataList,
+                "用户列表"
+        );
     }
 
 }

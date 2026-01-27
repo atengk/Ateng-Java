@@ -34,13 +34,195 @@ public class ExcelUtil {
 
     private static final Logger log = LoggerFactory.getLogger(ExcelUtil.class);
 
-    /**
-     * 工具类：动态无实体 Excel 导出（支持多 Sheet、动态表头、可选 WriteHandler）
-     * <p>
-     * 基于 FesodSheet 封装，简化导出操作
-     */
     private ExcelUtil() {
     }
+
+    /*---------------------------------------------
+     * 实体导出方法区域
+     *---------------------------------------------*/
+
+    /**
+     * 实体导出（单 Sheet）
+     *
+     * <p>
+     * 使用 Fesod 注解驱动模式，将实体列表直接导出为 Excel。
+     * 表头、样式、格式全部由实体类上的注解控制。
+     * </p>
+     *
+     * @param out        输出流（不可为空）
+     * @param dataList   实体数据列表（可为空）
+     * @param clazz      实体类型（不可为空）
+     * @param sheetName  Sheet 名称（不可为空）
+     * @param handlers   可选 WriteHandler 扩展
+     * @param <T>        实体泛型类型
+     */
+    public static <T> void export(OutputStream out,
+                                  List<T> dataList,
+                                  Class<T> clazz,
+                                  String sheetName,
+                                  WriteHandler... handlers) {
+
+        if (out == null) {
+            log.error("[export] 输出流不能为空");
+            throw new IllegalArgumentException("输出流不能为空");
+        }
+        if (clazz == null) {
+            log.error("[export] 实体类型 clazz 不能为空");
+            throw new IllegalArgumentException("实体类型不能为空");
+        }
+
+        List<T> rows = dataList == null ? Collections.emptyList() : dataList;
+
+        log.info("[export] 开始实体单 Sheet 导出，entity={}，rows={}",
+                clazz.getSimpleName(), rows.size());
+
+        ExcelWriterSheetBuilder writer = FesodSheet.write(out, clazz)
+                .sheet(sheetName);
+
+        if (handlers != null && handlers.length > 0) {
+            for (WriteHandler handler : handlers) {
+                if (handler != null) {
+                    writer.registerWriteHandler(handler);
+                }
+            }
+        }
+
+        writer.doWrite(rows);
+        log.info("[export] 实体单 Sheet 导出完成");
+    }
+
+    /**
+     * 实体导出（多 Sheet）
+     *
+     * <p>
+     * 每个 Sheet 对应一个实体类型及其数据集合，
+     * 适用于一个 Excel 中包含多个不同结构实体的场景。
+     * </p>
+     *
+     * @param out           输出流（不可为空）
+     * @param sheetDataList 多 Sheet 数据集合（不可为空/空集合）
+     * @param handlers      可选全局 WriteHandler
+     */
+    public static void exportMultiSheet(OutputStream out,
+                                        List<EntitySheetData<?>> sheetDataList,
+                                        WriteHandler... handlers) {
+
+        if (out == null) {
+            log.error("[exportMultiSheet] 输出流不能为空");
+            throw new IllegalArgumentException("输出流不能为空");
+        }
+        if (sheetDataList == null || sheetDataList.isEmpty()) {
+            log.error("[exportMultiSheet] Sheet 数据不能为空");
+            throw new IllegalArgumentException("Sheet 数据不能为空");
+        }
+
+        log.info("[exportMultiSheet] 开始实体多 Sheet 导出，共 {} 个 Sheet", sheetDataList.size());
+
+        ExcelWriterBuilder builder = FesodSheet.write(out);
+
+        if (handlers != null && handlers.length > 0) {
+            for (WriteHandler handler : handlers) {
+                if (handler != null) {
+                    builder.registerWriteHandler(handler);
+                }
+            }
+        }
+
+        try (ExcelWriter excelWriter = builder.build()) {
+
+            for (int i = 0; i < sheetDataList.size(); i++) {
+                EntitySheetData<?> sd = sheetDataList.get(i);
+
+                if (sd == null) {
+                    log.warn("[exportMultiSheet] 第 {} 个 SheetData 为 null，已跳过", i);
+                    continue;
+                }
+                if (sd.getClazz() == null) {
+                    log.error("[exportMultiSheet] 第 {} 个 Sheet 的 clazz 为空", i);
+                    throw new IllegalArgumentException("Sheet 实体类型不能为空");
+                }
+
+                List<?> rows = sd.getDataList() == null
+                        ? Collections.emptyList()
+                        : sd.getDataList();
+
+                WriteSheet sheet = FesodSheet.writerSheet(i, sd.getSheetName())
+                        .head(sd.getClazz())
+                        .build();
+
+                excelWriter.write(rows, sheet);
+
+                log.info("[exportMultiSheet] Sheet[{}] 导出成功，名称='{}'，实体={}，行数={}",
+                        i, sd.getSheetName(),
+                        sd.getClazz().getSimpleName(),
+                        rows.size());
+            }
+        }
+
+        log.info("[exportMultiSheet] 实体多 Sheet 导出完成");
+    }
+
+    /**
+     * 实体导出到浏览器（单 Sheet）
+     *
+     * @param response  HttpServletResponse 对象（不可为空）
+     * @param fileName  下载文件名，例如 "用户列表.xlsx"（不可为空）
+     * @param dataList  实体数据列表（可为空）
+     * @param clazz     实体类型（不可为空）
+     * @param sheetName Sheet 名称（不可为空）
+     * @param handlers  可选 WriteHandler
+     * @param <T>       实体泛型类型
+     */
+    public static <T> void exportToResponse(HttpServletResponse response,
+                                            String fileName,
+                                            List<T> dataList,
+                                            Class<T> clazz,
+                                            String sheetName,
+                                            WriteHandler... handlers) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            export(out, dataList, clazz, sheetName, handlers);
+            out.flush();
+            log.info("[exportToResponse] 浏览器实体下载成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportToResponse] 实体 Excel 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("实体 Excel 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 实体多 Sheet 导出到浏览器
+     *
+     * <p>
+     * 使用场景：
+     * - 一个 Excel 文件中包含多个 Sheet
+     * - 每个 Sheet 可以是不同的实体类型
+     * - 每个实体通过 Fesod 注解自动解析表头和样式
+     * </p>
+     *
+     * @param response      HttpServletResponse 对象（不可为空）
+     * @param fileName      下载文件名，例如 "多实体导出.xlsx"（不可为空）
+     * @param sheetDataList 多 Sheet 实体数据集合（不可为空/空集合）
+     * @param handlers      可选全局 WriteHandler 扩展参数
+     */
+    public static void exportMultiSheetToResponse(HttpServletResponse response,
+                                                  String fileName,
+                                                  List<EntitySheetData<?>> sheetDataList,
+                                                  WriteHandler... handlers) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportMultiSheet(out, sheetDataList, handlers);
+            out.flush();
+            log.info("[exportMultiSheetToResponse] 浏览器实体多 Sheet 下载成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportMultiSheetToResponse] 实体多 Sheet Excel 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("实体多 Sheet Excel 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /*---------------------------------------------
+     * 转换输出流工具方法区域
+     *---------------------------------------------*/
 
     /**
      * 根据文件路径创建 FileOutputStream
@@ -621,6 +803,49 @@ public class ExcelUtil {
         }
 
         public List<Map<String, Object>> getDataList() {
+            return dataList;
+        }
+    }
+
+    /**
+     * 实体 Sheet 数据载体，用于多 Sheet 实体导出场景
+     *
+     * @param <T> 实体类型
+     */
+    public static class EntitySheetData<T> {
+
+        /**
+         * Sheet 名称
+         */
+        private final String sheetName;
+
+        /**
+         * 实体类型
+         */
+        private final Class<T> clazz;
+
+        /**
+         * 实体数据列表
+         */
+        private final List<T> dataList;
+
+        public EntitySheetData(String sheetName,
+                               Class<T> clazz,
+                               List<T> dataList) {
+            this.sheetName = sheetName;
+            this.clazz = clazz;
+            this.dataList = dataList;
+        }
+
+        public String getSheetName() {
+            return sheetName;
+        }
+
+        public Class<T> getClazz() {
+            return clazz;
+        }
+
+        public List<T> getDataList() {
             return dataList;
         }
     }

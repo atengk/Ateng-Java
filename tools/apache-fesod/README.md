@@ -2580,27 +2580,35 @@ public class RowColumnDimensionHandler implements SheetWriteHandler {
 
 ### 导出数据
 
+**使用方法**
+
+```java
+    /**
+     * 导出Excel
+     */
+    @GetMapping("/entity")
+    public void exportEntity(HttpServletResponse response) {
+        List<MyUser> list = InitData.getDataList();
+        String fileName = "用户列表.xlsx";
+        ExcelUtil.exportToResponse(
+                response,
+                fileName,
+                list,
+                MyUser.class,
+                "用户列表"
+        );
+    }
+```
+
+![image-20260127153438525](./assets/image-20260127153438525.png)
+
 ### 导出动态数据
 
 **使用方法**
 
 ```java
-package io.github.atengk.controller;
-
-import io.github.atengk.util.ExcelUtil;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import javax.servlet.http.HttpServletResponse;
-import java.util.*;
-
-@RestController
-@RequestMapping("/excel/export")
-public class ExcelExportController {
-
     /**
-     * 动态导出 Excel（一级表头）到浏览器
+     * 动态导出 Excel
      */
     @GetMapping("/dynamic")
     public void exportDynamic(HttpServletResponse response) {
@@ -2624,10 +2632,14 @@ public class ExcelExportController {
 
         // 导出文件
         String fileName = "动态导出.xlsx";
-        ExcelUtil.exportDynamicSimpleToResponse(response, fileName, headers, dataList, "用户列表");
+        ExcelUtil.exportDynamicSimpleToResponse(
+                response, 
+                fileName, 
+                headers, 
+                dataList, 
+                "用户列表"
+        );
     }
-
-}
 ```
 
 ![image-20260127112241102](./assets/image-20260127112241102.png)
