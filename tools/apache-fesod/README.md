@@ -2708,19 +2708,86 @@ src
 **模版内容**
 
 ```
-用户信息	姓名：	{name}
-	年龄：	{age}
+姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
+{.name}	{.age}	{.phoneNumber}	{.email}	{.score}	{.ratio}	{.birthday}	{.province}	{.city}	{.createTime}
 ```
 
-
+![image-20260127204556311](./assets/image-20260127204556311.png)
 
 **使用方法**
 
 ```java
+    @Test
+    void testTemplateListExport() {
+        List<MyUser> dataList = InitData.getDataList();
+
+        FesodSheet
+                .write("target/export_template_user_list.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_user_list.xlsx"))
+                .sheet()
+                .doFill(dataList);
+    }
+```
+
+![image-20260127204655916](./assets/image-20260127204655916.png)
+
+### 填充多个列表变量数据
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ template_user_multi_list.xlsx
+```
+
+**模版内容**
+
+```
+姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
+{userList.name}	{userList.age}	{userList.phoneNumber}	{userList.email}	{userList.score}	{userList.ratio}	{userList.birthday}	{userList.province}	{userList.city}	{userList.createTime}
+									
+									
+类型	数量								
+{otherList.type}	{otherList.count}								
 
 ```
 
+![image-20260127210304476](./assets/image-20260127210304476.png)
 
+**使用方法**
+
+```java
+    @Test
+    void testTemplateMultiListExport() {
+        // 准备数据
+        List<MyUser> userList = InitData.getDataList(2);
+        List<Map<String, Object>> otherList = new ArrayList<>();
+        otherList.add(new HashMap<String, Object>(){{
+            put("type", "类型1");
+            put("count", 10);
+        }});
+        otherList.add(new HashMap<String, Object>(){{
+            put("type", "类型2");
+            put("count", 20);
+        }});
+
+        // 导出多列
+        try (ExcelWriter writer = FesodSheet
+                .write("target/export_template_multi_user_list.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_user_multi_list.xlsx")).build()
+        ) {
+            WriteSheet writeSheet = FesodSheet.writerSheet().build();
+            // 使用 FillWrapper 进行多列表填充
+            writer.fill(new FillWrapper("userList", userList), writeSheet);
+            writer.fill(new FillWrapper("otherList", otherList), writeSheet);
+        }
+    }
+```
+
+![image-20260127210248195](./assets/image-20260127210248195.png)
 
 ### 填充普通和列表变量数据（混合）
 
@@ -2731,52 +2798,76 @@ src
  └─ main
     └─ resources
        └─ doc
-          └─ user_list_template.xlsx
+          └─ template_user_mix.xlsx
 ```
 
 **模版内容**
 
 ```
-用户信息    姓名： {name}
-    年龄： {age}
+姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
+{userList.name}	{userList.age}	{userList.phoneNumber}	{userList.email}	{userList.score}	{userList.ratio}	{userList.birthday}	{userList.province}	{userList.city}	{userList.createTime}
+									
+									
+类型	数量								
+{otherList.type}	{otherList.count}								
+									
+			作者：	{author}					
+			作者（中文）：	{authorZh}					
+			创建时间：	{createTime}					
+			创建时间（字符串）：	{createTimeStr}					
+
 ```
 
-
+![image-20260127212006238](./assets/image-20260127212006238.png)
 
 **使用方法**
 
 ```java
+    @Test
+    void testTemplateMixExport() {
+        // 准备数据
+        List<MyUser> userList = InitData.getDataList(2);
+        List<Map<String, Object>> otherList = new ArrayList<>();
+        otherList.add(new HashMap<String, Object>(){{
+            put("type", "类型1");
+            put("count", 10);
+        }});
+        otherList.add(new HashMap<String, Object>(){{
+            put("type", "类型2");
+            put("count", 20);
+        }});
+        HashMap<String, Object> data = new HashMap<>();
+        data.put("createTime", LocalDateTime.now());
+        data.put("createTimeStr", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        data.put("author", "Ateng");
+        data.put("authorZh", "阿腾");
 
+        // 导出多列
+        try (ExcelWriter writer = FesodSheet
+                .write("target/export_template_mix.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_user_mix.xlsx")).build()
+        ) {
+            WriteSheet writeSheet = FesodSheet.writerSheet().build();
+            // 使用 FillWrapper 进行多列表填充
+            writer.fill(new FillWrapper("userList", userList), writeSheet);
+            writer.fill(new FillWrapper("otherList", otherList), writeSheet);
+            // 填充普通变量数据
+            writer.fill(data, writeSheet);
+        }
+    }
 ```
+
+- 注意时间类型的数据格式会变
+
+![image-20260127212026097](./assets/image-20260127212026097.png)
+
+
 
 ### 填充多 Sheet
 
-**创建模版**
+好的，我来按照你的风格补充 **Apache Fesod 填充多 Sheet 数据** 的完整示例，包含模板结构、代码和效果说明。
 
-```
-src
- └─ main
-    └─ resources
-       └─ doc
-          └─ user_list_template.xlsx
-```
-
-**模版内容**
-
-```
-用户信息    姓名： {name}
-    年龄： {age}
-```
-
-
-
-**使用方法**
-
-```java
-
-```
-
-### 格式化
+### 填充多Sheet数据
 
 **创建模版**
 
@@ -2785,23 +2876,124 @@ src
  └─ main
     └─ resources
        └─ doc
-          └─ user_list_template.xlsx
+          └─ multi_sheet_template.xlsx
 ```
 
-**模版内容**
+**模版结构说明**
+这个Excel模板文件包含两个预设的Sheet页：
 
+*   **第一个Sheet (默认名称为 `Sheet1`)**：
+    ```
+    部门销售数据
+    部门：	{department}
+    季度：	{quarter}
+    
+    产品名称	销售额（万元）	完成率
+    {salesList.productName}	{salesList.amount}	{salesList.completionRate}
+    ```
+    *用途：填充某个部门的季度销售明细列表。*
+
+![image-20260127213431972](./assets/image-20260127213431972.png)
+
+* **第二个Sheet (我们将手动将其名称改为 `Summary`)**：
+
+  ```
+  部门季度汇总
+  总计销售额（万元）：	{totalAmount}
+  平均完成率：	{averageRate}
+  
+  排名	部门	综合得分
+  {summaryList.rank}	{summaryList.department}	{summaryList.score}
+  ```
+  *用途：填充各部门的汇总数据和排名列表。*
+
+![image-20260127213451817](./assets/image-20260127213451817.png)
+
+**辅助数据类**
+
+```java
+    // 第一个Sheet的列表数据对象
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public class SalesData {
+        private String productName;
+        private Double amount;
+        private String completionRate;
+    }
+
+    // 第二个Sheet的列表数据对象
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public class SummaryData {
+        private Integer rank;
+        private String department;
+        private Double score;
+    }
 ```
-用户信息    姓名： {name}
-    年龄： {age}
-```
-
-
 
 **使用方法**
 
 ```java
-
+@Test
+void testTemplateMultiSheetExport() {
+    // ---------- 准备第一个Sheet的数据 ----------
+    // 1. 普通变量数据
+    Map<String, Object> sheet1Data = new HashMap<>();
+    sheet1Data.put("department", "华东大区");
+    sheet1Data.put("quarter", "2025年第四季度");
+    
+    // 2. 列表数据
+    List<SalesData> salesList = new ArrayList<>();
+    salesList.add(new SalesData("产品A", 450.5, "112.6%"));
+    salesList.add(new SalesData("产品B", 380.0, "95.0%"));
+    salesList.add(new SalesData("产品C", 520.3, "130.1%"));
+    
+    // ---------- 准备第二个Sheet的数据 ----------
+    // 1. 普通变量数据
+    Map<String, Object> sheet2Data = new HashMap<>();
+    sheet2Data.put("totalAmount", 1350.8);
+    sheet2Data.put("averageRate", "112.6%");
+    
+    // 2. 列表数据
+    List<SummaryData> summaryList = new ArrayList<>();
+    summaryList.add(new SummaryData(1, "华东大区", 98.5));
+    summaryList.add(new SummaryData(2, "华北大区", 92.0));
+    summaryList.add(new SummaryData(3, "华南大区", 88.5));
+    
+    // ---------- 执行多Sheet填充 ----------
+    String templatePath = "doc/multi_sheet_template.xlsx";
+    String outputPath = "target/export_multi_sheet.xlsx";
+    
+    try (ExcelWriter writer = FesodSheet
+            .write(outputPath)
+            .withTemplate(ExcelUtil.toInputStreamFromClasspath(templatePath))
+            .build()
+    ) {
+        // 1. 填充第一个Sheet (使用默认的sheet索引0或名称"Sheet1")
+        WriteSheet writeSheet1 = FesodSheet.writerSheet().build(); // 默认指向第一个Sheet
+        writer.fill(sheet1Data, writeSheet1); // 填充普通变量
+        writer.fill(new FillWrapper("salesList", salesList), writeSheet1); // 填充列表
+        
+        // 2. 填充第二个Sheet (指定sheet名称或索引)
+        // 方式一：通过索引（从0开始）
+        // WriteSheet writeSheet2 = FesodSheet.writerSheet(1).build();
+        // 方式二：通过名称（推荐，更清晰）
+        WriteSheet writeSheet2 = FesodSheet.writerSheet("Summary").build();
+        
+        writer.fill(sheet2Data, writeSheet2); // 填充普通变量
+        writer.fill(new FillWrapper("summaryList", summaryList), writeSheet2); // 填充列表
+        
+    } // try-with-resources 自动关闭 writer
+}
 ```
+
+注意这里 Sheet 页顺序发生了变化 
+
+![image-20260127213628413](./assets/image-20260127213628413.png)
+
+![image-20260127213641362](./assets/image-20260127213641362.png)
 
 ### 横向遍历
 
@@ -2812,25 +3004,110 @@ src
  └─ main
     └─ resources
        └─ doc
-          └─ user_list_template.xlsx
+          └─ template_horizontal.xlsx
 ```
 
 **模版内容**
 
 ```
-用户信息    姓名： {name}
-    年龄： {age}
+数据	类型	{list.type}
+	数量	{list.count}
+		
+创建时间	{createTime}	
+作者	{author}	
+
 ```
 
-
+![image-20260127215108385](./assets/image-20260127215108385.png)
 
 **使用方法**
 
 ```java
+    @Test
+    void testTemplateHorizontalExport() {
+        // 准备数据
+        List<Map<String, Object>> list = new ArrayList<>();
+        list.add(new HashMap<String, Object>(){{
+            put("type", "类型1");
+            put("count", 10);
+        }});
+        list.add(new HashMap<String, Object>(){{
+            put("type", "类型2");
+            put("count", 20);
+        }});
+        HashMap<String, Object> data = new HashMap<>();
+        data.put("createTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        data.put("author", "Ateng");
+
+        // 填充导出
+        try (ExcelWriter writer = FesodSheet
+                .write("target/export_template_horizontal.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_horizontal.xlsx")).build()
+        ) {
+            WriteSheet writeSheet = FesodSheet.writerSheet().build();
+            // 使用 FillWrapper 进行多列表填充，配置为横向填充
+            FillConfig fillConfig = FillConfig.builder().direction(WriteDirectionEnum.HORIZONTAL).build();
+            writer.fill(new FillWrapper("list", list), fillConfig, writeSheet);
+            // 填充普通变量数据
+            writer.fill(data, writeSheet);
+        }
+    }
+```
+
+![image-20260127215233877](./assets/image-20260127215233877.png)
+
+### 模版中图片动态插入
+
+#### 单张图片插入
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ template_image.xlsx
+```
+
+**模版内容**
+
+```
+姓名    头像
+{{name}}    {{photo}}
 
 ```
 
-### 模版中图片动态插入
+![image-20260127215804334](./assets/image-20260127215804334.png)
+
+**使用方法**
+
+图片数据直接传二级制数组
+
+```java
+    @Test
+    void testTemplateImage() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+
+        byte[] imageBytes = HttpUtil.downloadBytes("https://placehold.co/100x100/png");
+        data.put("photo", imageBytes);
+
+        // 填充导出
+        try (ExcelWriter writer = FesodSheet
+                .write("target/export_template_image.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_image.xlsx")).build()
+        ) {
+            WriteSheet writeSheet = FesodSheet.writerSheet().build();
+            // 填充普通变量数据
+            writer.fill(data, writeSheet);
+        }
+    }
+```
+
+![image-20260127215744831](./assets/image-20260127215744831.png)
+
+#### 列表图片插入
 
 **创建模版**
 
