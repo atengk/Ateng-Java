@@ -330,7 +330,7 @@ public class InitData {
 
 
 
-## 创建工具类
+## 创建工具类xx
 
 
 
@@ -2647,6 +2647,220 @@ public class RowColumnDimensionHandler implements SheetWriteHandler {
 
 ![image-20260127160034936](./assets/image-20260127160034936.png)
 
+## 模板导出（Template Export）xx
+
+**模版语法**
+
+
+
+### 填充普通变量数据
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ template_user_simple.xlsx
+```
+
+**模版内容**
+
+```
+用户信息	姓名：	{name}
+	年龄：	{age}
+```
+
+![image-20260127172905958](./assets/image-20260127172905958.png)
+
+**使用方法**
+
+```java
+    @Test
+    void testTemplateExport() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "Ateng");
+        data.put("age", "25");
+
+        FesodSheet
+                .write("target/export_template_user_simple.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_user_simple.xlsx"))
+                .sheet()
+                .doFill(data);
+    }
+```
+
+![image-20260127173022903](./assets/image-20260127173022903.png)
+
+### 填充列表变量数据
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_template.xlsx
+```
+
+**模版内容**
+
+```
+用户信息	姓名：	{name}
+	年龄：	{age}
+```
+
+
+
+**使用方法**
+
+```java
+
+```
+
+
+
+### 填充普通和列表变量数据（混合）
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_template.xlsx
+```
+
+**模版内容**
+
+```
+用户信息    姓名： {name}
+    年龄： {age}
+```
+
+
+
+**使用方法**
+
+```java
+
+```
+
+### 填充多 Sheet
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_template.xlsx
+```
+
+**模版内容**
+
+```
+用户信息    姓名： {name}
+    年龄： {age}
+```
+
+
+
+**使用方法**
+
+```java
+
+```
+
+### 格式化
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_template.xlsx
+```
+
+**模版内容**
+
+```
+用户信息    姓名： {name}
+    年龄： {age}
+```
+
+
+
+**使用方法**
+
+```java
+
+```
+
+### 横向遍历
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_template.xlsx
+```
+
+**模版内容**
+
+```
+用户信息    姓名： {name}
+    年龄： {age}
+```
+
+
+
+**使用方法**
+
+```java
+
+```
+
+### 模版中图片动态插入
+
+**创建模版**
+
+```
+src
+ └─ main
+    └─ resources
+       └─ doc
+          └─ user_list_template.xlsx
+```
+
+**模版内容**
+
+```
+用户信息    姓名： {name}
+    年龄： {age}
+```
+
+
+
+**使用方法**
+
+```java
+
+```
+
+
+
+## 导入 Excel（Impot）xx
+
 
 
 ## SpringBoot 使用
@@ -2716,4 +2930,8 @@ public class RowColumnDimensionHandler implements SheetWriteHandler {
 ```
 
 ![image-20260127112241102](./assets/image-20260127112241102.png)
+
+### 模版导出xx
+
+### 导入数据xx
 

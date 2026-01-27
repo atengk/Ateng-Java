@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.*;
+import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -330,6 +331,159 @@ public class ExcelUtil {
         } catch (IOException e) {
             log.error("[toOutputStreamInMemory] 从 MultipartFile 创建内存输出流失败, name={}", multipartFile.getOriginalFilename(), e);
             throw new IllegalStateException("从 MultipartFile 创建内存输出流失败", e);
+        }
+    }
+
+    /*---------------------------------------------
+     * 输入流构建方法区域（导入 / 模板读取）
+     *---------------------------------------------*/
+
+    /**
+     * 根据文件路径创建 FileInputStream
+     *
+     * @param filePath 文件完整路径（不可为空）
+     * @return InputStream 输入流对象
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static InputStream toInputStream(String filePath) {
+        Objects.requireNonNull(filePath, "文件路径不能为空");
+        try {
+            File file = new File(filePath);
+            if (!file.exists()) {
+                log.error("[toInputStream(String)] 文件不存在，path={}", filePath);
+                throw new IllegalArgumentException("文件不存在: " + filePath);
+            }
+            return new FileInputStream(file);
+        } catch (Exception e) {
+            log.error("[toInputStream(String)] 创建文件输入流失败，path={}", filePath, e);
+            throw new IllegalStateException("创建文件输入流失败: " + filePath, e);
+        }
+    }
+
+    /**
+     * 根据 File 对象创建 FileInputStream
+     *
+     * @param file 文件对象（不可为空）
+     * @return InputStream 输入流对象
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static InputStream toInputStream(File file) {
+        Objects.requireNonNull(file, "文件对象不能为空");
+        try {
+            if (!file.exists()) {
+                log.error("[toInputStream(File)] 文件不存在，file={}", file.getAbsolutePath());
+                throw new IllegalArgumentException("文件不存在: " + file.getAbsolutePath());
+            }
+            return new FileInputStream(file);
+        } catch (Exception e) {
+            log.error("[toInputStream(File)] 创建文件输入流失败，file={}", file.getAbsolutePath(), e);
+            throw new IllegalStateException("创建文件输入流失败: " + file.getAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * 根据 Path 对象创建 FileInputStream
+     *
+     * @param path 文件路径（不可为空）
+     * @return InputStream 输入流对象
+     */
+    public static InputStream toInputStream(Path path) {
+        Objects.requireNonNull(path, "Path 不能为空");
+        return toInputStream(path.toFile());
+    }
+
+    /**
+     * 将 byte[] 转为内存输入流
+     *
+     * @param bytes 字节数组
+     * @return ByteArrayInputStream 输入流
+     */
+    public static InputStream toInputStream(byte[] bytes) {
+        if (bytes == null) {
+            throw new IllegalArgumentException("字节数组不能为空");
+        }
+        return new ByteArrayInputStream(bytes);
+    }
+
+    /**
+     * 从 MultipartFile 创建输入流（不落盘）
+     *
+     * @param multipartFile 上传文件
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStream(MultipartFile multipartFile) {
+        Objects.requireNonNull(multipartFile, "MultipartFile 不能为空");
+        try {
+            return multipartFile.getInputStream();
+        } catch (IOException e) {
+            log.error("[toInputStream(MultipartFile)] 创建输入流失败, name={}", multipartFile.getOriginalFilename(), e);
+            throw new IllegalStateException("从 MultipartFile 创建输入流失败", e);
+        }
+    }
+
+    /**
+     * 从 MultipartFile 创建临时文件并返回输入流
+     *
+     * <p>
+     * 适用于部分第三方 API 必须接收 FileInputStream 的场景
+     * </p>
+     *
+     * @param multipartFile 上传文件
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStreamByTempFile(MultipartFile multipartFile) {
+        Objects.requireNonNull(multipartFile, "MultipartFile 不能为空");
+        try {
+            File tempFile = File.createTempFile("upload-", multipartFile.getOriginalFilename());
+            multipartFile.transferTo(tempFile);
+            tempFile.deleteOnExit();
+            return new FileInputStream(tempFile);
+        } catch (IOException e) {
+            log.error("[toInputStreamByTempFile] 从 MultipartFile 创建临时文件输入流失败, name={}", multipartFile.getOriginalFilename(), e);
+            throw new IllegalStateException("从 MultipartFile 创建临时文件输入流失败", e);
+        }
+    }
+
+    /**
+     * 从 classpath 读取资源文件并创建输入流
+     *
+     * <p>
+     * 常用于模板导出，例如：
+     * resources/templates/user_template.xlsx
+     * </p>
+     *
+     * @param classpathLocation 资源路径，例如 "templates/user_template.xlsx"
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStreamFromClasspath(String classpathLocation) {
+        Objects.requireNonNull(classpathLocation, "classpath 资源路径不能为空");
+        InputStream in = Thread.currentThread()
+                .getContextClassLoader()
+                .getResourceAsStream(classpathLocation);
+        if (in == null) {
+            log.error("[toInputStreamFromClasspath] 未找到 classpath 资源: {}", classpathLocation);
+            throw new IllegalArgumentException("未找到 classpath 资源: " + classpathLocation);
+        }
+        return in;
+    }
+
+    /**
+     * 从 URL 资源创建输入流
+     *
+     * <p>
+     * 适用于读取远程模板文件
+     * </p>
+     *
+     * @param url 资源地址
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStream(URL url) {
+        Objects.requireNonNull(url, "URL 不能为空");
+        try {
+            return url.openStream();
+        } catch (IOException e) {
+            log.error("[toInputStream(URL)] 创建输入流失败, url={}", url, e);
+            throw new IllegalStateException("从 URL 创建输入流失败: " + url, e);
         }
     }
 
