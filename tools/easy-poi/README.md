@@ -7368,6 +7368,129 @@ EasyPoi 的 Key-Value 导入不是“Excel 表格导入”，
 
 
 
+## SpringBoot 使用
+
+### 导出数据
+
+**使用方法**
+
+```java
+    /**
+     * 导出Excel
+     */
+    @GetMapping("/entity")
+    public void exportEntity(HttpServletResponse response) {
+        List<MyUser> list = InitData.getDataList();
+        String fileName = "用户列表.xlsx";
+        ExcelUtil.exportExcel(
+                MyUser.class,
+                list,
+                fileName,
+                response,
+                params -> params.setSheetName("用户列表")
+        );
+    }
+```
+
+![image-20260127162154743](./assets/image-20260127162154743.png)
+
+### 导出动态数据
+
+**使用方法**
+
+```java
+    /**
+     * 动态导出 Excel
+     */
+    @GetMapping("/dynamic")
+    public void exportDynamic(HttpServletResponse response) {
+        List<MyUser> userList = InitData.getDataList();
+
+        // 转成 List<Map>
+        List<Map<String, Object>> dataList = new ArrayList<>();
+        for (MyUser user : userList) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", user.getId());
+            map.put("name", user.getName());
+            map.put("age", user.getAge());
+            map.put("city", user.getCity());
+            dataList.add(map);
+        }
+
+        // 定义表头（key 对应 map 的 key，name 是显示在 Excel 的标题）
+        List<ExcelExportEntity> entityList = new ArrayList<>();
+        ExcelExportEntity id = new ExcelExportEntity("ID", "id");
+        id.setWidth(20);
+        entityList.add(id);
+        ExcelExportEntity name = new ExcelExportEntity("姓名", "name");
+        name.setWidth(30);
+        entityList.add(name);
+        ExcelExportEntity age = new ExcelExportEntity("年龄", "age");
+        age.setWidth(20);
+        entityList.add(age);
+        ExcelExportEntity city = new ExcelExportEntity("城市", "city");
+        city.setWidth(40);
+        entityList.add(city);
+
+        ExportParams params = new ExportParams();
+        params.setSheetName("用户列表");
+
+        Workbook workbook = ExcelExportUtil.exportExcel(params, entityList, dataList);
+        String fileName = "用户列表.xlsx";
+        ExcelUtil.write(workbook,  fileName, response);
+    }
+```
+
+![image-20260127162335071](./assets/image-20260127162335071.png)
+
+### 模版导出
+
+**使用方法**
+
+```java
+    /**
+     * 模版导出Excel
+     */
+    @GetMapping("/simple")
+    public void simple(HttpServletResponse response) {
+        List<MyUser> dataList = InitData.getDataList(10);
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", dataList);
+        data.put("title", "EasyPoi 模版导出混合使用");
+        data.put("author", "Ateng");
+        data.put("time", DateUtil.now());
+        Workbook workbook = ExcelUtil.exportExcelByTemplate(
+                "doc/user_mix_template.xlsx",
+                data
+        );
+        String fileName = "用户列表.xlsx";
+        ExcelUtil.write(workbook, fileName, response);
+    }
+```
+
+![image-20260127163101896](./assets/image-20260127163101896.png)
+
+
+
+### 导入数据
+
+**使用方法**
+
+```java
+    /**
+     * 导入Excel
+     */
+    @PostMapping("/simple")
+    public List<MyUser> exportEntity(MultipartFile file) {
+        List<MyUser> list = ExcelUtil.importExcel(file, MyUser.class);
+        return list;
+    }
+```
+
+![image-20260127163730914](./assets/image-20260127163730914.png)
+
+
+
 ## Word 模版导出
 
 模版指令和 Excel 的一样的
@@ -7762,4 +7885,6 @@ public final class WordUtil {
 ```
 
 ![image-20260125185928963](./assets/image-20260125185928963.png)
+
+
 
