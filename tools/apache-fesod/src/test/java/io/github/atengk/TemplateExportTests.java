@@ -230,4 +230,29 @@ public class TemplateExportTests {
         }
     }
 
+    @Test
+    void testTemplateImageList() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "User-" + i);
+            byte[] imageBytes = HttpUtil.downloadBytes("https://placehold.co/100x100/png");
+            row.put("photo", imageBytes);
+            list.add(row);
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+
+        // 填充导出
+        try (ExcelWriter writer = FesodSheet
+                .write("target/export_template_image_list.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_image_list.xlsx")).build()
+        ) {
+            WriteSheet writeSheet = FesodSheet.writerSheet().build();
+            // 使用 FillWrapper 进行多列表填充
+            writer.fill(new FillWrapper("list", list), writeSheet);
+        }
+    }
+
 }

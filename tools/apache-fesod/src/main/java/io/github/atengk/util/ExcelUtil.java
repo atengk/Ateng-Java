@@ -6,6 +6,7 @@ import org.apache.fesod.sheet.write.builder.ExcelWriterBuilder;
 import org.apache.fesod.sheet.write.builder.ExcelWriterSheetBuilder;
 import org.apache.fesod.sheet.write.handler.WriteHandler;
 import org.apache.fesod.sheet.write.metadata.WriteSheet;
+import org.apache.fesod.sheet.write.metadata.fill.FillWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,6 +37,227 @@ public class ExcelUtil {
     private static final Logger log = LoggerFactory.getLogger(ExcelUtil.class);
 
     private ExcelUtil() {
+    }
+
+    /*---------------------------------------------
+     * 模板导出方法区域（Template Export）
+     *---------------------------------------------*/
+
+    /**
+     * 模板导出（单 Sheet，仅普通变量填充）
+     *
+     * <p>使用场景：
+     * - 模板中只包含普通占位符变量
+     * - 不包含任何列表循环填充
+     *
+     * @param out      输出流（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据 Map，例如 {name}、{createTime}
+     * @throws IllegalStateException 模板导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                      InputStream template,
+                                      Map<String, Object> data) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            WriteSheet sheet = FesodSheet.writerSheet().build();
+            writer.fill(data, sheet);
+            log.info("[exportTemplate] 模板普通变量导出成功");
+        } catch (Exception e) {
+            log.error("[exportTemplate] 模板普通变量导出失败", e);
+            throw new IllegalStateException("模板普通变量导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出（单 Sheet，单列表变量填充）
+     *
+     * <p>使用场景：
+     * - 模板中存在单个列表循环
+     * - 支持匿名列表 {.name} 或命名列表 {list.name}
+     *
+     * @param out      输出流（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param listName 列表名称，为空表示匿名列表
+     * @param dataList 列表数据（不可为空）
+     * @throws IllegalStateException 模板导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                          InputStream template,
+                                          String listName,
+                                          List<?> dataList) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        Objects.requireNonNull(dataList, "数据列表不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            WriteSheet sheet = FesodSheet.writerSheet().build();
+            if (listName == null || listName.trim().isEmpty()) {
+                writer.fill(dataList, sheet);
+            } else {
+                writer.fill(new FillWrapper(listName, dataList), sheet);
+            }
+            log.info("[exportTemplateList] 模板单列表导出成功，listName={}", listName);
+        } catch (Exception e) {
+            log.error("[exportTemplateList] 模板单列表导出失败，listName={}", listName, e);
+            throw new IllegalStateException("模板单列表导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出（单 Sheet，普通变量 + 多列表混合填充）
+     *
+     * <p>使用场景：
+     * - 模板中同时存在普通变量和多个列表变量
+     *
+     * @param out      输出流（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据 Map
+     * @param listMap  列表变量集合，key 为列表名称，value 为列表数据
+     * @throws IllegalStateException 模板导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                         InputStream template,
+                                         Map<String, Object> data,
+                                         Map<String, List<?>> listMap) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            WriteSheet sheet = FesodSheet.writerSheet().build();
+            if (listMap != null) {
+                for (Map.Entry<String, List<?>> entry : listMap.entrySet()) {
+                    writer.fill(new FillWrapper(entry.getKey(), entry.getValue()), sheet);
+                }
+            }
+            if (data != null && !data.isEmpty()) {
+                writer.fill(data, sheet);
+            }
+            log.info("[exportTemplateMix] 模板混合数据导出成功");
+        } catch (Exception e) {
+            log.error("[exportTemplateMix] 模板混合数据导出失败", e);
+            throw new IllegalStateException("模板混合数据导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出（多 Sheet 填充）
+     *
+     * <p>使用场景：
+     * - 一个模板文件包含多个 Sheet
+     * - 每个 Sheet 可有独立普通变量和多列表配置
+     *
+     * @param out           输出流（不可为空）
+     * @param template      模板输入流（不可为空）
+     * @param sheetDataList Sheet 数据集合（不可为空）
+     * @throws IllegalStateException 模板多 Sheet 导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                                InputStream template,
+                                                List<TemplateSheetData> sheetDataList) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        Objects.requireNonNull(sheetDataList, "Sheet 数据不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            for (TemplateSheetData sheetData : sheetDataList) {
+                WriteSheet sheet = sheetData.getSheetName() == null
+                        ? FesodSheet.writerSheet(sheetData.getSheetIndex()).build()
+                        : FesodSheet.writerSheet(sheetData.getSheetName()).build();
+                if (sheetData.getListMap() != null) {
+                    for (Map.Entry<String, List<?>> entry : sheetData.getListMap().entrySet()) {
+                        writer.fill(new FillWrapper(entry.getKey(), entry.getValue()), sheet);
+                    }
+                }
+                if (sheetData.getData() != null && !sheetData.getData().isEmpty()) {
+                    writer.fill(sheetData.getData(), sheet);
+                }
+            }
+            log.info("[exportTemplateMultiSheet] 模板多 Sheet 导出成功，sheetCount={}", sheetDataList.size());
+        } catch (Exception e) {
+            log.error("[exportTemplateMultiSheet] 模板多 Sheet 导出失败", e);
+            throw new IllegalStateException("模板多 Sheet 导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出到浏览器响应流（单 Sheet，仅普通变量）
+     *
+     * @param response HttpServletResponse 对象（不可为空）
+     * @param fileName 下载文件名（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportTemplateToResponse(HttpServletResponse response,
+                                                String fileName,
+                                                InputStream template,
+                                                Map<String, Object> data) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportTemplate(out, template, data);
+            out.flush();
+            log.info("[exportTemplateToResponse] 浏览器模板导出成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportTemplateToResponse] 模板导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("模板导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 模板导出到浏览器响应流（单 Sheet，普通变量 + 多列表混合）
+     *
+     * @param response HttpServletResponse 对象（不可为空）
+     * @param fileName 下载文件名（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据
+     * @param listMap  列表变量集合
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportTemplateToResponse(HttpServletResponse response,
+                                                   String fileName,
+                                                   InputStream template,
+                                                   Map<String, Object> data,
+                                                   Map<String, List<?>> listMap) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportTemplate(out, template, data, listMap);
+            out.flush();
+            log.info("[exportTemplateMixToResponse] 浏览器模板混合导出成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportTemplateMixToResponse] 模板混合导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("模板混合导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 模板导出到浏览器响应流（多 Sheet）
+     *
+     * @param response      HttpServletResponse 对象（不可为空）
+     * @param fileName      下载文件名（不可为空）
+     * @param template      模板输入流（不可为空）
+     * @param sheetDataList 多 Sheet 数据集合（不可为空）
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportTemplateToResponse(HttpServletResponse response,
+                                                          String fileName,
+                                                          InputStream template,
+                                                          List<TemplateSheetData> sheetDataList) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportTemplate(out, template, sheetDataList);
+            out.flush();
+            log.info("[exportTemplateMultiSheetToResponse] 浏览器模板多 Sheet 导出成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportTemplateMultiSheetToResponse] 模板多 Sheet 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("模板多 Sheet 导出到浏览器失败: " + fileName, e);
+        }
     }
 
     /*---------------------------------------------
@@ -1001,6 +1223,52 @@ public class ExcelUtil {
 
         public List<T> getDataList() {
             return dataList;
+        }
+    }
+
+    /**
+     * 模板 Sheet 数据模型
+     *
+     * <p>
+     * 用于描述单个 Sheet 的填充数据结构：
+     * <ul>
+     *     <li>普通变量数据</li>
+     *     <li>多列表变量数据</li>
+     *     <li>Sheet 索引或 Sheet 名称</li>
+     * </ul>
+     * </p>
+     */
+    public static class TemplateSheetData {
+
+        private final Integer sheetIndex;
+        private final String sheetName;
+        private final Map<String, Object> data;
+        private final Map<String, List<?>> listMap;
+
+        public TemplateSheetData(Integer sheetIndex,
+                                 String sheetName,
+                                 Map<String, Object> data,
+                                 Map<String, List<?>> listMap) {
+            this.sheetIndex = sheetIndex;
+            this.sheetName = sheetName;
+            this.data = data;
+            this.listMap = listMap;
+        }
+
+        public Integer getSheetIndex() {
+            return sheetIndex;
+        }
+
+        public String getSheetName() {
+            return sheetName;
+        }
+
+        public Map<String, Object> getData() {
+            return data;
+        }
+
+        public Map<String, List<?>> getListMap() {
+            return listMap;
         }
     }
 

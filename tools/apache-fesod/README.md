@@ -2647,11 +2647,19 @@ public class RowColumnDimensionHandler implements SheetWriteHandler {
 
 ![image-20260127160034936](./assets/image-20260127160034936.png)
 
-## 模板导出（Template Export）xx
+## 模板导出（Template Export）
 
 **模版语法**
 
-
+| 语法类型             | 模版占位符写法                  | 说明                                       | 示例数据结构                            | 使用场景                     |
+| -------------------- | ------------------------------- | ------------------------------------------ | --------------------------------------- | ---------------------------- |
+| 普通变量             | `{name}`                        | 填充一个普通对象或 Map 中的字段值          | `Map.put("name","Ateng")`               | 表头信息、作者、时间、标题等 |
+| 普通变量（嵌套对象） | `{user.name}`                   | 通过对象属性路径取值                       | `data.put("user", userObj)`             | 对象结构化数据填充           |
+| 匿名列表             | `{.name}`                       | 填充单一 List，当前行作为列表模板行        | `List<MyUser>`                          | 只有一个列表数据时最简写法   |
+| 指定列表             | `{userList.name}`               | 指定 List 名称，多列表同时存在时必须使用   | `new FillWrapper("userList", userList)` | 多集合并存填充               |
+| Map 列表             | `{list.key}`                    | List 中每个元素为 Map 时通过 key 取值      | `List<Map<String,Object>>`              | 动态字段结构数据             |
+| 普通 + 列表混合      | `{author}` + `{userList.name}`  | 普通变量与列表变量同时存在                 | Map + 多个 FillWrapper                  | 报表头 + 明细数据            |
+| 横向填充             | `{list.type}`                   | 配合 HORIZONTAL 实现按列扩展               | `FillConfig.direction(HORIZONTAL)`      | 指标横向展开                 |
 
 ### 填充普通变量数据
 
@@ -3074,7 +3082,7 @@ src
 
 ```
 姓名    头像
-{{name}}    {{photo}}
+{name}    {photo}
 
 ```
 
@@ -3116,23 +3124,49 @@ src
  └─ main
     └─ resources
        └─ doc
-          └─ user_list_template.xlsx
+          └─ template_image_list.xlsx
 ```
 
 **模版内容**
 
 ```
-用户信息    姓名： {name}
-    年龄： {age}
+名称	图片
+{list.name}	{list.photo}
+
 ```
 
-
+![image-20260128071320326](./assets/image-20260128071320326.png)
 
 **使用方法**
 
 ```java
+    @Test
+    void testTemplateImageList() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("name", "User-" + i);
+            byte[] imageBytes = HttpUtil.downloadBytes("https://placehold.co/100x100/png");
+            row.put("photo", imageBytes);
+            list.add(row);
+        }
 
+        Map<String, Object> data = new HashMap<>();
+        data.put("list", list);
+
+        // 填充导出
+        try (ExcelWriter writer = FesodSheet
+                .write("target/export_template_image_list.xlsx")
+                .withTemplate(ExcelUtil.toInputStreamFromClasspath("doc/template_image_list.xlsx")).build()
+        ) {
+            WriteSheet writeSheet = FesodSheet.writerSheet().build();
+            // 使用 FillWrapper 进行多列表填充
+            writer.fill(new FillWrapper("list", list), writeSheet);
+        }
+    }
 ```
+
+![image-20260128071439937](./assets/image-20260128071439937.png)
 
 
 
@@ -3208,7 +3242,50 @@ src
 
 ![image-20260127112241102](./assets/image-20260127112241102.png)
 
-### 模版导出xx
+### 模版导出
+
+**使用方法**
+
+```java
+    /**
+     * 模版导出Excel
+     */
+    @GetMapping("/simple")
+    public void simple(HttpServletResponse response) {
+        // 准备数据
+        // 列表变量
+        List<MyUser> userList = InitData.getDataList(2);
+        List<Map<String, Object>> otherList = new ArrayList<>();
+        otherList.add(new HashMap<String, Object>() {{
+            put("type", "类型1");
+            put("count", 10);
+        }});
+        otherList.add(new HashMap<String, Object>() {{
+            put("type", "类型2");
+            put("count", 20);
+        }});
+        Map<String, List<?>> listMap = new HashMap<>();
+        listMap.put("userList", userList);
+        listMap.put("otherList", otherList);
+        // 普通变量
+        HashMap<String, Object> data = new HashMap<>();
+        data.put("createTime", LocalDateTime.now());
+        data.put("createTimeStr", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        data.put("author", "Ateng");
+        data.put("authorZh", "阿腾");
+
+        // 导出多列
+        ExcelUtil.exportTemplateToResponse(
+                response,
+                "用户列表.xlsx",
+                ExcelUtil.toInputStreamFromClasspath("doc/template_user_mix.xlsx"),
+                data,
+                listMap
+                );
+    }
+```
+
+![image-20260128075131103](./assets/image-20260128075131103.png)
 
 ### 导入数据xx
 
