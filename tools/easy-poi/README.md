@@ -6429,7 +6429,7 @@ src
 
 
 
-## 导入 Excel（Impot）
+## 导入 Excel（Import）
 
 `ImportParams` 常用配置
 
