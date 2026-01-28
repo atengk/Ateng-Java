@@ -47,7 +47,7 @@ public class ExcelTemplateExportController {
         data.put("authorZh", "阿腾");
 
         // 导出多列
-        ExcelUtil.exportTemplateToResponse(
+        ExcelUtil.exportExcelTemplateToResponse(
                 response,
                 "用户列表.xlsx",
                 ExcelUtil.toInputStreamFromClasspath("doc/template_user_mix.xlsx"),

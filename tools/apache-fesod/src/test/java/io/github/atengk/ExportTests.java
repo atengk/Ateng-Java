@@ -293,7 +293,7 @@ public class ExportTests {
         System.out.println(dataList);
 
         // 导出
-        ExcelUtil.exportDynamicSimple(
+        ExcelUtil.exportExcelDynamicSimple(
                 ExcelUtil.toOutputStream("target/export_dynamic.xlsx"),
                 headers,
                 dataList,
@@ -325,7 +325,7 @@ public class ExportTests {
         //System.out.println(JSONUtil.toJsonStr(dataList));
 
         // 导出
-        ExcelUtil.exportDynamic(
+        ExcelUtil.exportExcelDynamic(
                 ExcelUtil.toOutputStream("target/export_dynamic_image.xlsx"),
                 headers,
                 dataList,
@@ -357,7 +357,7 @@ public class ExportTests {
         System.out.println(JSONUtil.toJsonStr(dataList));
 
         // 导出
-        ExcelUtil.exportDynamicComplex(
+        ExcelUtil.exportExcelDynamicComplex(
                 ExcelUtil.toOutputStream("target/export_dynamic_multi_head.xlsx"),
                 headers,
                 dataList,
@@ -389,7 +389,7 @@ public class ExportTests {
         }
         System.out.println(sheets);
         // 导出
-        ExcelUtil.exportDynamicMultiSheet(
+        ExcelUtil.exportExcelDynamicMultiSheet(
                 ExcelUtil.toOutputStream("target/export_dynamic_multi_sheet.xlsx"),
                 sheets
         );
@@ -430,7 +430,7 @@ public class ExportTests {
         );
 
         // 导出
-        ExcelUtil.exportDynamicSimple(
+        ExcelUtil.exportExcelDynamicSimple(
                 ExcelUtil.toOutputStream("target/export_dynamic_row_column.xlsx"),
                 headers,
                 dataList,

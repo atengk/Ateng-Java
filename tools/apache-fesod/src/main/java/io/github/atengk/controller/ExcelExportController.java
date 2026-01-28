@@ -21,7 +21,7 @@ public class ExcelExportController {
     public void exportEntity(HttpServletResponse response) {
         List<MyUser> list = InitData.getDataList();
         String fileName = "用户列表.xlsx";
-        ExcelUtil.exportToResponse(
+        ExcelUtil.exportExcelToResponse(
                 response,
                 fileName,
                 list,
@@ -55,7 +55,7 @@ public class ExcelExportController {
 
         // 导出文件
         String fileName = "动态导出.xlsx";
-        ExcelUtil.exportDynamicSimpleToResponse(
+        ExcelUtil.exportExcelDynamicSimpleToResponse(
                 response,
                 fileName,
                 headers,
