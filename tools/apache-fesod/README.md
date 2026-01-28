@@ -330,7 +330,1288 @@ public class InitData {
 
 
 
-## 创建工具类xx
+## 创建工具类
+
+ExcelUtil
+
+```java
+package io.github.atengk.util;
+
+import org.apache.fesod.sheet.ExcelWriter;
+import org.apache.fesod.sheet.FesodSheet;
+import org.apache.fesod.sheet.write.builder.ExcelWriterBuilder;
+import org.apache.fesod.sheet.write.builder.ExcelWriterSheetBuilder;
+import org.apache.fesod.sheet.write.handler.WriteHandler;
+import org.apache.fesod.sheet.write.metadata.WriteSheet;
+import org.apache.fesod.sheet.write.metadata.fill.FillWrapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.multipart.MultipartFile;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.*;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Excel 工具类
+ *
+ * <p>
+ * 提供与 Excel 读写相关的常用操作方法，可按需扩展。
+ * 支持基础导出、表头构建、多 Sheet 处理、输出流适配等能力。
+ * 适用于服务端常见 Excel 处理场景。
+ * </p>
+ *
+ * @author 孔余
+ * @since 2026-01-27
+ */
+public class ExcelUtil {
+
+    private static final Logger log = LoggerFactory.getLogger(ExcelUtil.class);
+
+    private ExcelUtil() {
+    }
+
+    /*---------------------------------------------
+     * 模板导出方法区域（Template Export）
+     *---------------------------------------------*/
+
+    /**
+     * 模板导出（单 Sheet，仅普通变量填充）
+     *
+     * <p>使用场景：
+     * - 模板中只包含普通占位符变量
+     * - 不包含任何列表循环填充
+     *
+     * @param out      输出流（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据 Map，例如 {name}、{createTime}
+     * @throws IllegalStateException 模板导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                      InputStream template,
+                                      Map<String, Object> data) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            WriteSheet sheet = FesodSheet.writerSheet().build();
+            writer.fill(data, sheet);
+            log.info("[exportTemplate] 模板普通变量导出成功");
+        } catch (Exception e) {
+            log.error("[exportTemplate] 模板普通变量导出失败", e);
+            throw new IllegalStateException("模板普通变量导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出（单 Sheet，单列表变量填充）
+     *
+     * <p>使用场景：
+     * - 模板中存在单个列表循环
+     * - 支持匿名列表 {.name} 或命名列表 {list.name}
+     *
+     * @param out      输出流（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param listName 列表名称，为空表示匿名列表
+     * @param dataList 列表数据（不可为空）
+     * @throws IllegalStateException 模板导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                          InputStream template,
+                                          String listName,
+                                          List<?> dataList) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        Objects.requireNonNull(dataList, "数据列表不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            WriteSheet sheet = FesodSheet.writerSheet().build();
+            if (listName == null || listName.trim().isEmpty()) {
+                writer.fill(dataList, sheet);
+            } else {
+                writer.fill(new FillWrapper(listName, dataList), sheet);
+            }
+            log.info("[exportTemplateList] 模板单列表导出成功，listName={}", listName);
+        } catch (Exception e) {
+            log.error("[exportTemplateList] 模板单列表导出失败，listName={}", listName, e);
+            throw new IllegalStateException("模板单列表导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出（单 Sheet，普通变量 + 多列表混合填充）
+     *
+     * <p>使用场景：
+     * - 模板中同时存在普通变量和多个列表变量
+     *
+     * @param out      输出流（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据 Map
+     * @param listMap  列表变量集合，key 为列表名称，value 为列表数据
+     * @throws IllegalStateException 模板导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                         InputStream template,
+                                         Map<String, Object> data,
+                                         Map<String, List<?>> listMap) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            WriteSheet sheet = FesodSheet.writerSheet().build();
+            if (listMap != null) {
+                for (Map.Entry<String, List<?>> entry : listMap.entrySet()) {
+                    writer.fill(new FillWrapper(entry.getKey(), entry.getValue()), sheet);
+                }
+            }
+            if (data != null && !data.isEmpty()) {
+                writer.fill(data, sheet);
+            }
+            log.info("[exportTemplateMix] 模板混合数据导出成功");
+        } catch (Exception e) {
+            log.error("[exportTemplateMix] 模板混合数据导出失败", e);
+            throw new IllegalStateException("模板混合数据导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出（多 Sheet 填充）
+     *
+     * <p>使用场景：
+     * - 一个模板文件包含多个 Sheet
+     * - 每个 Sheet 可有独立普通变量和多列表配置
+     *
+     * @param out           输出流（不可为空）
+     * @param template      模板输入流（不可为空）
+     * @param sheetDataList Sheet 数据集合（不可为空）
+     * @throws IllegalStateException 模板多 Sheet 导出失败时抛出
+     */
+    public static void exportTemplate(OutputStream out,
+                                                InputStream template,
+                                                List<TemplateSheetData> sheetDataList) {
+        Objects.requireNonNull(out, "输出流不能为空");
+        Objects.requireNonNull(template, "模板输入流不能为空");
+        Objects.requireNonNull(sheetDataList, "Sheet 数据不能为空");
+        try (ExcelWriter writer = FesodSheet.write(out)
+                .withTemplate(template)
+                .build()) {
+            for (TemplateSheetData sheetData : sheetDataList) {
+                WriteSheet sheet = sheetData.getSheetName() == null
+                        ? FesodSheet.writerSheet(sheetData.getSheetIndex()).build()
+                        : FesodSheet.writerSheet(sheetData.getSheetName()).build();
+                if (sheetData.getListMap() != null) {
+                    for (Map.Entry<String, List<?>> entry : sheetData.getListMap().entrySet()) {
+                        writer.fill(new FillWrapper(entry.getKey(), entry.getValue()), sheet);
+                    }
+                }
+                if (sheetData.getData() != null && !sheetData.getData().isEmpty()) {
+                    writer.fill(sheetData.getData(), sheet);
+                }
+            }
+            log.info("[exportTemplateMultiSheet] 模板多 Sheet 导出成功，sheetCount={}", sheetDataList.size());
+        } catch (Exception e) {
+            log.error("[exportTemplateMultiSheet] 模板多 Sheet 导出失败", e);
+            throw new IllegalStateException("模板多 Sheet 导出失败", e);
+        }
+    }
+
+    /**
+     * 模板导出到浏览器响应流（单 Sheet，仅普通变量）
+     *
+     * @param response HttpServletResponse 对象（不可为空）
+     * @param fileName 下载文件名（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportTemplateToResponse(HttpServletResponse response,
+                                                String fileName,
+                                                InputStream template,
+                                                Map<String, Object> data) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportTemplate(out, template, data);
+            out.flush();
+            log.info("[exportTemplateToResponse] 浏览器模板导出成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportTemplateToResponse] 模板导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("模板导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 模板导出到浏览器响应流（单 Sheet，普通变量 + 多列表混合）
+     *
+     * @param response HttpServletResponse 对象（不可为空）
+     * @param fileName 下载文件名（不可为空）
+     * @param template 模板输入流（不可为空）
+     * @param data     普通变量数据
+     * @param listMap  列表变量集合
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportTemplateToResponse(HttpServletResponse response,
+                                                   String fileName,
+                                                   InputStream template,
+                                                   Map<String, Object> data,
+                                                   Map<String, List<?>> listMap) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportTemplate(out, template, data, listMap);
+            out.flush();
+            log.info("[exportTemplateMixToResponse] 浏览器模板混合导出成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportTemplateMixToResponse] 模板混合导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("模板混合导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 模板导出到浏览器响应流（多 Sheet）
+     *
+     * @param response      HttpServletResponse 对象（不可为空）
+     * @param fileName      下载文件名（不可为空）
+     * @param template      模板输入流（不可为空）
+     * @param sheetDataList 多 Sheet 数据集合（不可为空）
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportTemplateToResponse(HttpServletResponse response,
+                                                          String fileName,
+                                                          InputStream template,
+                                                          List<TemplateSheetData> sheetDataList) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportTemplate(out, template, sheetDataList);
+            out.flush();
+            log.info("[exportTemplateMultiSheetToResponse] 浏览器模板多 Sheet 导出成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportTemplateMultiSheetToResponse] 模板多 Sheet 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("模板多 Sheet 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /*---------------------------------------------
+     * 实体导出方法区域
+     *---------------------------------------------*/
+
+    /**
+     * 实体导出（单 Sheet）
+     *
+     * <p>
+     * 使用 Fesod 注解驱动模式，将实体列表直接导出为 Excel。
+     * 表头、样式、格式全部由实体类上的注解控制。
+     * </p>
+     *
+     * @param out        输出流（不可为空）
+     * @param dataList   实体数据列表（可为空）
+     * @param clazz      实体类型（不可为空）
+     * @param sheetName  Sheet 名称（不可为空）
+     * @param handlers   可选 WriteHandler 扩展
+     * @param <T>        实体泛型类型
+     */
+    public static <T> void export(OutputStream out,
+                                  List<T> dataList,
+                                  Class<T> clazz,
+                                  String sheetName,
+                                  WriteHandler... handlers) {
+
+        if (out == null) {
+            log.error("[export] 输出流不能为空");
+            throw new IllegalArgumentException("输出流不能为空");
+        }
+        if (clazz == null) {
+            log.error("[export] 实体类型 clazz 不能为空");
+            throw new IllegalArgumentException("实体类型不能为空");
+        }
+
+        List<T> rows = dataList == null ? Collections.emptyList() : dataList;
+
+        log.info("[export] 开始实体单 Sheet 导出，entity={}，rows={}",
+                clazz.getSimpleName(), rows.size());
+
+        ExcelWriterSheetBuilder writer = FesodSheet.write(out, clazz)
+                .sheet(sheetName);
+
+        if (handlers != null && handlers.length > 0) {
+            for (WriteHandler handler : handlers) {
+                if (handler != null) {
+                    writer.registerWriteHandler(handler);
+                }
+            }
+        }
+
+        writer.doWrite(rows);
+        log.info("[export] 实体单 Sheet 导出完成");
+    }
+
+    /**
+     * 实体导出（多 Sheet）
+     *
+     * <p>
+     * 每个 Sheet 对应一个实体类型及其数据集合，
+     * 适用于一个 Excel 中包含多个不同结构实体的场景。
+     * </p>
+     *
+     * @param out           输出流（不可为空）
+     * @param sheetDataList 多 Sheet 数据集合（不可为空/空集合）
+     * @param handlers      可选全局 WriteHandler
+     */
+    public static void exportMultiSheet(OutputStream out,
+                                        List<EntitySheetData<?>> sheetDataList,
+                                        WriteHandler... handlers) {
+
+        if (out == null) {
+            log.error("[exportMultiSheet] 输出流不能为空");
+            throw new IllegalArgumentException("输出流不能为空");
+        }
+        if (sheetDataList == null || sheetDataList.isEmpty()) {
+            log.error("[exportMultiSheet] Sheet 数据不能为空");
+            throw new IllegalArgumentException("Sheet 数据不能为空");
+        }
+
+        log.info("[exportMultiSheet] 开始实体多 Sheet 导出，共 {} 个 Sheet", sheetDataList.size());
+
+        ExcelWriterBuilder builder = FesodSheet.write(out);
+
+        if (handlers != null && handlers.length > 0) {
+            for (WriteHandler handler : handlers) {
+                if (handler != null) {
+                    builder.registerWriteHandler(handler);
+                }
+            }
+        }
+
+        try (ExcelWriter excelWriter = builder.build()) {
+
+            for (int i = 0; i < sheetDataList.size(); i++) {
+                EntitySheetData<?> sd = sheetDataList.get(i);
+
+                if (sd == null) {
+                    log.warn("[exportMultiSheet] 第 {} 个 SheetData 为 null，已跳过", i);
+                    continue;
+                }
+                if (sd.getClazz() == null) {
+                    log.error("[exportMultiSheet] 第 {} 个 Sheet 的 clazz 为空", i);
+                    throw new IllegalArgumentException("Sheet 实体类型不能为空");
+                }
+
+                List<?> rows = sd.getDataList() == null
+                        ? Collections.emptyList()
+                        : sd.getDataList();
+
+                WriteSheet sheet = FesodSheet.writerSheet(i, sd.getSheetName())
+                        .head(sd.getClazz())
+                        .build();
+
+                excelWriter.write(rows, sheet);
+
+                log.info("[exportMultiSheet] Sheet[{}] 导出成功，名称='{}'，实体={}，行数={}",
+                        i, sd.getSheetName(),
+                        sd.getClazz().getSimpleName(),
+                        rows.size());
+            }
+        }
+
+        log.info("[exportMultiSheet] 实体多 Sheet 导出完成");
+    }
+
+    /**
+     * 实体导出到浏览器（单 Sheet）
+     *
+     * @param response  HttpServletResponse 对象（不可为空）
+     * @param fileName  下载文件名，例如 "用户列表.xlsx"（不可为空）
+     * @param dataList  实体数据列表（可为空）
+     * @param clazz     实体类型（不可为空）
+     * @param sheetName Sheet 名称（不可为空）
+     * @param handlers  可选 WriteHandler
+     * @param <T>       实体泛型类型
+     */
+    public static <T> void exportToResponse(HttpServletResponse response,
+                                            String fileName,
+                                            List<T> dataList,
+                                            Class<T> clazz,
+                                            String sheetName,
+                                            WriteHandler... handlers) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            export(out, dataList, clazz, sheetName, handlers);
+            out.flush();
+            log.info("[exportToResponse] 浏览器实体下载成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportToResponse] 实体 Excel 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("实体 Excel 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 实体多 Sheet 导出到浏览器
+     *
+     * <p>
+     * 使用场景：
+     * - 一个 Excel 文件中包含多个 Sheet
+     * - 每个 Sheet 可以是不同的实体类型
+     * - 每个实体通过 Fesod 注解自动解析表头和样式
+     * </p>
+     *
+     * @param response      HttpServletResponse 对象（不可为空）
+     * @param fileName      下载文件名，例如 "多实体导出.xlsx"（不可为空）
+     * @param sheetDataList 多 Sheet 实体数据集合（不可为空/空集合）
+     * @param handlers      可选全局 WriteHandler 扩展参数
+     */
+    public static void exportMultiSheetToResponse(HttpServletResponse response,
+                                                  String fileName,
+                                                  List<EntitySheetData<?>> sheetDataList,
+                                                  WriteHandler... handlers) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportMultiSheet(out, sheetDataList, handlers);
+            out.flush();
+            log.info("[exportMultiSheetToResponse] 浏览器实体多 Sheet 下载成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportMultiSheetToResponse] 实体多 Sheet Excel 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("实体多 Sheet Excel 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /*---------------------------------------------
+     * 转换输出流工具方法区域
+     *---------------------------------------------*/
+
+    /**
+     * 根据文件路径创建 FileOutputStream
+     *
+     * @param filePath 文件完整路径（不可为空）
+     * @return OutputStream 输出流对象
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static OutputStream toOutputStream(String filePath) {
+        Objects.requireNonNull(filePath, "文件路径不能为空");
+        try {
+            File file = new File(filePath);
+            ensureParentDirExists(file);
+            return new FileOutputStream(file);
+        } catch (IOException e) {
+            log.error("[toOutputStream(String)] 创建文件输出流失败，path={}", filePath, e);
+            throw new IllegalStateException("创建文件输出流失败，请检查路径是否合法: " + filePath, e);
+        }
+    }
+
+    /**
+     * 根据 File 对象创建 FileOutputStream
+     *
+     * @param file 文件对象（不可为空）
+     * @return OutputStream 输出流对象
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static OutputStream toOutputStream(File file) {
+        Objects.requireNonNull(file, "文件对象不能为空");
+        try {
+            ensureParentDirExists(file);
+            return new FileOutputStream(file);
+        } catch (IOException e) {
+            log.error("[toOutputStream(File)] 创建文件输出流失败，file={}", file.getAbsolutePath(), e);
+            throw new IllegalStateException("创建文件输出流失败，请检查文件是否可写: " + file.getAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * 根据 Path 对象创建 FileOutputStream
+     *
+     * @param path 文件路径（不可为空）
+     * @return OutputStream 输出流对象
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static OutputStream toOutputStream(Path path) {
+        Objects.requireNonNull(path, "Path 不能为空");
+        return toOutputStream(path.toFile());
+    }
+
+    /**
+     * 将 byte[] 写入内存输出流（ByteArrayOutputStream）
+     *
+     * @param bytes 字节数组
+     * @return ByteArrayOutputStream 内存输出流
+     * @throws IllegalStateException 写入失败时抛出
+     */
+    public static ByteArrayOutputStream toOutputStream(byte[] bytes) {
+        if (bytes == null) {
+            throw new IllegalArgumentException("字节数组不能为空");
+        }
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            out.write(bytes);
+            return out;
+        } catch (IOException e) {
+            log.error("[toOutputStream(byte[])] 写入内存输出流失败", e);
+            throw new IllegalStateException("写入内存输出流失败", e);
+        }
+    }
+
+    /**
+     * 将 MultipartFile 写入临时文件并返回输出流
+     *
+     * @param multipartFile 上传文件
+     * @return FileOutputStream 输出流
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static OutputStream toOutputStream(MultipartFile multipartFile) {
+        Objects.requireNonNull(multipartFile, "MultipartFile 不能为空");
+        try {
+            File tempFile = File.createTempFile("upload-", multipartFile.getOriginalFilename());
+            multipartFile.transferTo(tempFile);
+            tempFile.deleteOnExit();
+            return new FileOutputStream(tempFile);
+        } catch (IOException e) {
+            log.error("[toOutputStream(MultipartFile)] 从 MultipartFile 创建输出流失败, name={}", multipartFile.getOriginalFilename(), e);
+            throw new IllegalStateException("从 MultipartFile 创建输出流失败", e);
+        }
+    }
+
+    /**
+     * 将 MultipartFile 转为内存输出流（不会写入磁盘）
+     *
+     * @param multipartFile 上传文件
+     * @return ByteArrayOutputStream 输出流
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static OutputStream toOutputStreamInMemory(MultipartFile multipartFile) {
+        Objects.requireNonNull(multipartFile, "MultipartFile 不能为空");
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            out.write(multipartFile.getBytes());
+            return out;
+        } catch (IOException e) {
+            log.error("[toOutputStreamInMemory] 从 MultipartFile 创建内存输出流失败, name={}", multipartFile.getOriginalFilename(), e);
+            throw new IllegalStateException("从 MultipartFile 创建内存输出流失败", e);
+        }
+    }
+
+    /*---------------------------------------------
+     * 输入流构建方法区域（导入 / 模板读取）
+     *---------------------------------------------*/
+
+    /**
+     * 根据文件路径创建 FileInputStream
+     *
+     * @param filePath 文件完整路径（不可为空）
+     * @return InputStream 输入流对象
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static InputStream toInputStream(String filePath) {
+        Objects.requireNonNull(filePath, "文件路径不能为空");
+        try {
+            File file = new File(filePath);
+            if (!file.exists()) {
+                log.error("[toInputStream(String)] 文件不存在，path={}", filePath);
+                throw new IllegalArgumentException("文件不存在: " + filePath);
+            }
+            return new FileInputStream(file);
+        } catch (Exception e) {
+            log.error("[toInputStream(String)] 创建文件输入流失败，path={}", filePath, e);
+            throw new IllegalStateException("创建文件输入流失败: " + filePath, e);
+        }
+    }
+
+    /**
+     * 根据 File 对象创建 FileInputStream
+     *
+     * @param file 文件对象（不可为空）
+     * @return InputStream 输入流对象
+     * @throws IllegalStateException 创建失败时抛出
+     */
+    public static InputStream toInputStream(File file) {
+        Objects.requireNonNull(file, "文件对象不能为空");
+        try {
+            if (!file.exists()) {
+                log.error("[toInputStream(File)] 文件不存在，file={}", file.getAbsolutePath());
+                throw new IllegalArgumentException("文件不存在: " + file.getAbsolutePath());
+            }
+            return new FileInputStream(file);
+        } catch (Exception e) {
+            log.error("[toInputStream(File)] 创建文件输入流失败，file={}", file.getAbsolutePath(), e);
+            throw new IllegalStateException("创建文件输入流失败: " + file.getAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * 根据 Path 对象创建 FileInputStream
+     *
+     * @param path 文件路径（不可为空）
+     * @return InputStream 输入流对象
+     */
+    public static InputStream toInputStream(Path path) {
+        Objects.requireNonNull(path, "Path 不能为空");
+        return toInputStream(path.toFile());
+    }
+
+    /**
+     * 将 byte[] 转为内存输入流
+     *
+     * @param bytes 字节数组
+     * @return ByteArrayInputStream 输入流
+     */
+    public static InputStream toInputStream(byte[] bytes) {
+        if (bytes == null) {
+            throw new IllegalArgumentException("字节数组不能为空");
+        }
+        return new ByteArrayInputStream(bytes);
+    }
+
+    /**
+     * 从 MultipartFile 创建输入流（不落盘）
+     *
+     * @param multipartFile 上传文件
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStream(MultipartFile multipartFile) {
+        Objects.requireNonNull(multipartFile, "MultipartFile 不能为空");
+        try {
+            return multipartFile.getInputStream();
+        } catch (IOException e) {
+            log.error("[toInputStream(MultipartFile)] 创建输入流失败, name={}", multipartFile.getOriginalFilename(), e);
+            throw new IllegalStateException("从 MultipartFile 创建输入流失败", e);
+        }
+    }
+
+    /**
+     * 从 MultipartFile 创建临时文件并返回输入流
+     *
+     * <p>
+     * 适用于部分第三方 API 必须接收 FileInputStream 的场景
+     * </p>
+     *
+     * @param multipartFile 上传文件
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStreamByTempFile(MultipartFile multipartFile) {
+        Objects.requireNonNull(multipartFile, "MultipartFile 不能为空");
+        try {
+            File tempFile = File.createTempFile("upload-", multipartFile.getOriginalFilename());
+            multipartFile.transferTo(tempFile);
+            tempFile.deleteOnExit();
+            return new FileInputStream(tempFile);
+        } catch (IOException e) {
+            log.error("[toInputStreamByTempFile] 从 MultipartFile 创建临时文件输入流失败, name={}", multipartFile.getOriginalFilename(), e);
+            throw new IllegalStateException("从 MultipartFile 创建临时文件输入流失败", e);
+        }
+    }
+
+    /**
+     * 从 classpath 读取资源文件并创建输入流
+     *
+     * <p>
+     * 常用于模板导出，例如：
+     * resources/templates/user_template.xlsx
+     * </p>
+     *
+     * @param classpathLocation 资源路径，例如 "templates/user_template.xlsx"
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStreamFromClasspath(String classpathLocation) {
+        Objects.requireNonNull(classpathLocation, "classpath 资源路径不能为空");
+        InputStream in = Thread.currentThread()
+                .getContextClassLoader()
+                .getResourceAsStream(classpathLocation);
+        if (in == null) {
+            log.error("[toInputStreamFromClasspath] 未找到 classpath 资源: {}", classpathLocation);
+            throw new IllegalArgumentException("未找到 classpath 资源: " + classpathLocation);
+        }
+        return in;
+    }
+
+    /**
+     * 从 URL 资源创建输入流
+     *
+     * <p>
+     * 适用于读取远程模板文件
+     * </p>
+     *
+     * @param url 资源地址
+     * @return InputStream 输入流
+     */
+    public static InputStream toInputStream(URL url) {
+        Objects.requireNonNull(url, "URL 不能为空");
+        try {
+            return url.openStream();
+        } catch (IOException e) {
+            log.error("[toInputStream(URL)] 创建输入流失败, url={}", url, e);
+            throw new IllegalStateException("从 URL 创建输入流失败: " + url, e);
+        }
+    }
+
+    /*---------------------------------------------
+     * 内部辅助工具方法区域
+     *---------------------------------------------*/
+
+    /**
+     * 确保父级目录存在
+     */
+    private static void ensureParentDirExists(File file) {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            boolean created = parent.mkdirs();
+            if (!created) {
+                log.warn("[ensureParentDirExists] 父目录创建失败: {}", parent.getAbsolutePath());
+            }
+        }
+    }
+
+    /*---------------------------------------------
+     * 表头/数据构建区域
+     *---------------------------------------------*/
+
+    /**
+     * 构建 Fesod 所需的表头结构（多级表头）
+     *
+     * @param headers 表头描述集合（不可为空）
+     * @return 多层 List 结构的表头
+     * @throws IllegalArgumentException 当 headers 非法时抛出
+     */
+    public static List<List<String>> buildHead(List<HeaderItem> headers) {
+        if (headers == null || headers.isEmpty()) {
+            log.error("[buildHead] 表头为空，无法构建 Head");
+            throw new IllegalArgumentException("表头不能为空");
+        }
+
+        List<List<String>> result = new ArrayList<>(headers.size());
+
+        for (HeaderItem item : headers) {
+            if (item == null) {
+                log.error("[buildHead] HeaderItem 为空");
+                throw new IllegalArgumentException("表头项不能为空");
+            }
+            if (item.getPath() == null || item.getPath().isEmpty()) {
+                log.error("[buildHead] HeaderItem.path 非法，field={}", item.getField());
+                throw new IllegalArgumentException("表头路径不能为空，且必须至少包含一级名称");
+            }
+
+            // 深复制避免外部修改影响
+            result.add(new ArrayList<>(item.getPath()));
+        }
+
+        return result;
+    }
+
+    /**
+     * 根据表头字段映射构建数据行
+     *
+     * @param headers  表头描述集合（至少包含 field，不可为空）
+     * @param dataList 数据源列表（可为空）
+     * @return 按字段顺序生成的二维数据行
+     * @throws IllegalArgumentException 当 headers 非法时抛出
+     */
+    public static List<List<Object>> buildRows(List<HeaderItem> headers, List<Map<String, Object>> dataList) {
+        if (headers == null || headers.isEmpty()) {
+            log.error("[buildRows] 表头为空，无法构建数据行");
+            throw new IllegalArgumentException("表头不能为空，无法构建数据行");
+        }
+
+        // 提取字段列表（headers -> field）
+        List<String> fields = headers.stream()
+                .peek(h -> {
+                    if (h == null) {
+                        log.error("[buildRows] HeaderItem 为空");
+                        throw new IllegalArgumentException("表头项不能为空");
+                    }
+                    if (h.getField() == null) {
+                        log.error("[buildRows] HeaderItem.field 为空，path={}", h.getPath());
+                        throw new IllegalArgumentException("HeaderItem.field 不能为空");
+                    }
+                })
+                .map(HeaderItem::getField)
+                .collect(Collectors.toList());
+
+        // dataList 为空时直接返回空集合，不抛异常
+        if (dataList == null || dataList.isEmpty()) {
+            log.warn("[buildRows] 数据列表为空，返回空行集");
+            return Collections.emptyList();
+        }
+
+        List<List<Object>> rows = new ArrayList<>(dataList.size());
+
+        for (Map<String, Object> data : dataList) {
+            if (data == null) {
+                log.warn("[buildRows] 检测到空数据行，已跳过");
+                continue;
+            }
+
+            List<Object> row = new ArrayList<>(fields.size());
+            for (String field : fields) {
+                // 若 field 不存在，返回 null（Excel 可接受）
+                row.add(data.getOrDefault(field, null));
+            }
+            rows.add(row);
+        }
+
+        return rows;
+    }
+
+    /*---------------------------------------------
+     * 导出方法区域（支持单Sheet、多Sheet）
+     *---------------------------------------------*/
+
+    /**
+     * 简单导出（单 Sheet，无分组表头）
+     *
+     * @param out       输出流（不可为空）
+     * @param headers   表头字符串列表，每个字符串为一级表头
+     * @param dataList  数据列表，可为空
+     * @param sheetName Sheet 名称（不可为空）
+     * @param handlers  可选 WriteHandler
+     */
+    public static void exportDynamicSimple(OutputStream out,
+                                           List<String> headers,
+                                           List<Map<String, Object>> dataList,
+                                           String sheetName,
+                                           WriteHandler... handlers) {
+
+        if (headers == null || headers.isEmpty()) {
+            log.error("[exportDynamicSimple] 表头为空");
+            throw new IllegalArgumentException("表头不能为空");
+        }
+
+        List<HeaderItem> headerItems = headers.stream()
+                .peek(h -> {
+                    if (h == null || h.trim().isEmpty()) {
+                        log.error("[exportDynamicSimple] 检测到空表头项");
+                        throw new IllegalArgumentException("表头项不能为空");
+                    }
+                })
+                .map(h -> new HeaderItem(Collections.singletonList(h), h))
+                .collect(Collectors.toList());
+
+        exportDynamic(out, headerItems, dataList, sheetName, handlers);
+    }
+
+
+    /**
+     * 复杂导出（单 Sheet，支持多级表头）
+     *
+     * @param out       输出流（不可为空）
+     * @param headers   表头定义（不可为空）
+     * @param dataList  数据源，可为空
+     * @param sheetName Sheet 名称（不可为空）
+     * @param handlers  可选 WriteHandler
+     */
+    public static void exportDynamicComplex(OutputStream out,
+                                            List<HeaderItem> headers,
+                                            List<Map<String, Object>> dataList,
+                                            String sheetName,
+                                            WriteHandler... handlers) {
+        exportDynamic(out, headers, dataList, sheetName, handlers);
+    }
+
+
+    /**
+     * 核心单 Sheet 导出方法（带默认列宽策略）
+     *
+     * @param out       输出流（不可为空）
+     * @param headers   表头定义（不可为空）
+     * @param dataList  数据源，可为空
+     * @param sheetName Sheet 名称（不可为空）
+     * @param handlers  可选 WriteHandler
+     */
+    public static void exportDynamic(OutputStream out,
+                                     List<HeaderItem> headers,
+                                     List<Map<String, Object>> dataList,
+                                     String sheetName,
+                                     WriteHandler... handlers) {
+
+        if (out == null) {
+            log.error("[exportDynamic] 输出流不能为空");
+            throw new IllegalArgumentException("输出流不能为空");
+        }
+        if (headers == null || headers.isEmpty()) {
+            log.error("[exportDynamic] 表头为空，无法导出");
+            throw new IllegalArgumentException("表头不能为空");
+        }
+
+        log.info("[exportDynamic] 开始单 Sheet 导出，headers={}，rows={}",
+                headers.size(), dataList == null ? 0 : dataList.size());
+
+        ExcelWriterSheetBuilder writer = FesodSheet.write(out)
+                .head(buildHead(headers))
+                .sheet(sheetName);
+
+        // 注册用户扩展 handler
+        if (handlers != null && handlers.length > 0) {
+            for (WriteHandler handler : handlers) {
+                if (handler != null) {
+                    writer.registerWriteHandler(handler);
+                }
+            }
+        }
+
+        writer.doWrite(buildRows(headers, dataList));
+        log.info("[exportDynamic] 单 Sheet 导出完成");
+    }
+
+
+    /**
+     * 多 Sheet 导出
+     *
+     * @param out           输出流（不可为空）
+     * @param sheetDataList 多 Sheet 数据（不可为空/空列表）
+     * @param handlers      可选全局 handler
+     */
+    public static void exportDynamicMultiSheet(OutputStream out,
+                                               List<SheetData> sheetDataList,
+                                               WriteHandler... handlers) {
+
+        if (out == null) {
+            log.error("[exportDynamicMultiSheet] 输出流不能为空");
+            throw new IllegalArgumentException("输出流不能为空");
+        }
+        if (sheetDataList == null || sheetDataList.isEmpty()) {
+            log.error("[exportDynamicMultiSheet] 多 Sheet 数据不能为空");
+            throw new IllegalArgumentException("Sheet 数据不能为空");
+        }
+
+        log.info("[exportDynamicMultiSheet] 开始多 Sheet 导出，共 {} 个 Sheet", sheetDataList.size());
+
+        ExcelWriterBuilder builder = FesodSheet.write(out);
+
+        // 注册用户扩展 handler（全局）
+        if (handlers != null && handlers.length > 0) {
+            for (WriteHandler handler : handlers) {
+                if (handler != null) {
+                    builder.registerWriteHandler(handler);
+                }
+            }
+        }
+
+        try (ExcelWriter excelWriter = builder.build()) {
+
+            for (int i = 0; i < sheetDataList.size(); i++) {
+                SheetData sd = sheetDataList.get(i);
+
+                if (sd == null) {
+                    log.warn("[exportDynamicMultiSheet] 第 {} 个 SheetData 为 null，已跳过", i);
+                    continue;
+                }
+
+                if (sd.getHeaders() == null || sd.getHeaders().isEmpty()) {
+                    log.error("[exportDynamicMultiSheet] 第 {} 个 Sheet 表头为空", i);
+                    throw new IllegalArgumentException("多 Sheet 导出时，Sheet 表头不能为空");
+                }
+
+                List<Map<String, Object>> rows =
+                        sd.getDataList() == null ? Collections.emptyList() : sd.getDataList();
+
+                WriteSheet sheet = FesodSheet.writerSheet(i, sd.getSheetName())
+                        .head(buildHead(sd.getHeaders()))
+                        .build();
+
+                excelWriter.write(buildRows(sd.getHeaders(), rows), sheet);
+                log.info("[exportDynamicMultiSheet] Sheet[{}] 导出成功，名称='{}'，行数={}", i, sd.getSheetName(), rows.size());
+            }
+        }
+
+        log.info("[exportDynamicMultiSheet] 全部 Sheet 导出完成");
+    }
+
+    /*---------------------------------------------
+     * 浏览器下载方法（Spring Boot Response）区域
+     *---------------------------------------------*/
+
+    /**
+     * 获取浏览器输出流，并统一设置 ContentType、编码、文件名
+     *
+     * @param response HttpServletResponse 对象
+     * @param fileName 下载文件名
+     * @return 输出流
+     */
+    private static OutputStream prepareResponseOutputStream(HttpServletResponse response, String fileName) {
+        try {
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("UTF-8");
+            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.name());
+            response.setHeader("Content-Disposition", "attachment;filename=\"" + encodedFileName + "\"");
+            return response.getOutputStream();
+        } catch (Exception e) {
+            log.error("获取浏览器输出流失败，文件名：{}", fileName, e);
+            throw new IllegalStateException("获取浏览器输出流失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 将单 Sheet Excel 导出到浏览器（一级表头）
+     *
+     * <p>使用场景：
+     * - 前端点击下载按钮时，将 Excel 文件直接推送给浏览器
+     * - 表头为简单一级列表，每个 header 对应一列
+     *
+     * @param response  HttpServletResponse 对象（不可为空）
+     * @param fileName  下载文件名，例如 "用户列表.xlsx"（不可为空）
+     * @param headers   一级表头列表，每个字符串为一列名称（不可为空，且不可包含空字符串）
+     * @param dataList  数据列表，每个 Map 对应一行，可为空
+     * @param sheetName Sheet 名称（不可为空）
+     * @param handlers  可选的 WriteHandler 扩展参数，可为空
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportDynamicSimpleToResponse(HttpServletResponse response,
+                                                     String fileName,
+                                                     List<String> headers,
+                                                     List<Map<String, Object>> dataList,
+                                                     String sheetName,
+                                                     WriteHandler... handlers) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportDynamicSimple(out, headers, dataList, sheetName, handlers);
+            out.flush();
+            log.info("[exportDynamicSimpleToResponse] 浏览器下载成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportDynamicSimpleToResponse] Excel 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("Excel 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 将单 Sheet Excel 导出到浏览器（多级表头）
+     *
+     * <p>使用场景：
+     * - 表头为多级结构（支持分组表头）
+     * - 数据为 Map 列表，键对应 HeaderItem.field
+     *
+     * @param response  HttpServletResponse 对象（不可为空）
+     * @param fileName  下载文件名，例如 "用户数据.xlsx"（不可为空）
+     * @param headers   表头定义列表，每个 HeaderItem 可包含多级 path（不可为空，且 path 不为空）
+     * @param dataList  数据列表，每个 Map 对应一行，可为空
+     * @param sheetName Sheet 名称（不可为空）
+     * @param handlers  可选的 WriteHandler 扩展参数，可为空
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportDynamicToResponse(HttpServletResponse response,
+                                                      String fileName,
+                                                      List<HeaderItem> headers,
+                                                      List<Map<String, Object>> dataList,
+                                                      String sheetName,
+                                                      WriteHandler... handlers) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportDynamic(out, headers, dataList, sheetName, handlers);
+            out.flush();
+            log.info("[exportDynamicToResponse] 浏览器下载成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportDynamicToResponse] Excel 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("Excel 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /**
+     * 将多 Sheet Excel 导出到浏览器
+     *
+     * <p>使用场景：
+     * - 同一个 Excel 包含多个 Sheet，每个 Sheet 可有独立表头和数据
+     * - SheetData 列表不可为空，每个 SheetData 需有 sheetName 和 headers
+     *
+     * @param response      HttpServletResponse 对象（不可为空）
+     * @param fileName      下载文件名，例如 "多Sheet导出.xlsx"（不可为空）
+     * @param sheetDataList 多 Sheet 数据列表，每个 SheetData 包含 sheetName、headers、dataList（不可为空/空列表）
+     * @param handlers      可选的全局 WriteHandler 扩展参数，可为空
+     * @throws IllegalStateException 导出或流操作失败时抛出
+     */
+    public static void exportDynamicMultiSheetToResponse(HttpServletResponse response,
+                                                         String fileName,
+                                                         List<SheetData> sheetDataList,
+                                                         WriteHandler... handlers) {
+        Objects.requireNonNull(response, "HttpServletResponse 不能为空");
+        try (OutputStream out = prepareResponseOutputStream(response, fileName)) {
+            exportDynamicMultiSheet(out, sheetDataList, handlers);
+            out.flush();
+            log.info("[exportDynamicMultiSheetToResponse] 浏览器多 Sheet 下载成功，文件名={}", fileName);
+        } catch (Exception e) {
+            log.error("[exportDynamicMultiSheetToResponse] Excel 多 Sheet 导出到浏览器失败，文件名={}", fileName, e);
+            throw new IllegalStateException("Excel 多 Sheet 导出到浏览器失败: " + fileName, e);
+        }
+    }
+
+    /*---------------------------------------------
+     * 内部数据结构
+     *---------------------------------------------*/
+
+    /**
+     * 表头项，用于动态构建多级表头
+     *
+     * <p>
+     * 示例：
+     * path = ["用户信息","姓名"]
+     * field = "name"
+     * </p>
+     */
+    public static class HeaderItem {
+
+        /**
+         * 多级表头路径，例如：["一级","二级","三级"]
+         * 最后一级为实际列名
+         */
+        private final List<String> path;
+
+        /**
+         * 对应数据 Map 中的字段 key
+         */
+        private final String field;
+
+        public HeaderItem(List<String> path, String field) {
+            if (path == null || path.isEmpty()) {
+                throw new IllegalArgumentException("path 不能为空");
+            }
+            if (field == null || field.isEmpty()) {
+                throw new IllegalArgumentException("field 不能为空");
+            }
+            this.path = path;
+            this.field = field;
+        }
+
+        public List<String> getPath() {
+            return path;
+        }
+
+        public String getField() {
+            return field;
+        }
+    }
+
+    /**
+     * Sheet 数据载体，用于多 Sheet 导出场景
+     */
+    public static class SheetData {
+
+        /**
+         * Sheet 名称
+         */
+        private final String sheetName;
+
+        /**
+         * 表头定义列表
+         */
+        private final List<HeaderItem> headers;
+
+        /**
+         * 实际数据行列表，每行 Map 代表一个 Entity
+         */
+        private final List<Map<String, Object>> dataList;
+
+        public SheetData(String sheetName,
+                         List<HeaderItem> headers,
+                         List<Map<String, Object>> dataList) {
+            this.sheetName = sheetName;
+            this.headers = headers;
+            this.dataList = dataList;
+        }
+
+        public String getSheetName() {
+            return sheetName;
+        }
+
+        public List<HeaderItem> getHeaders() {
+            return headers;
+        }
+
+        public List<Map<String, Object>> getDataList() {
+            return dataList;
+        }
+    }
+
+    /**
+     * 实体 Sheet 数据载体，用于多 Sheet 实体导出场景
+     *
+     * @param <T> 实体类型
+     */
+    public static class EntitySheetData<T> {
+
+        /**
+         * Sheet 名称
+         */
+        private final String sheetName;
+
+        /**
+         * 实体类型
+         */
+        private final Class<T> clazz;
+
+        /**
+         * 实体数据列表
+         */
+        private final List<T> dataList;
+
+        public EntitySheetData(String sheetName,
+                               Class<T> clazz,
+                               List<T> dataList) {
+            this.sheetName = sheetName;
+            this.clazz = clazz;
+            this.dataList = dataList;
+        }
+
+        public String getSheetName() {
+            return sheetName;
+        }
+
+        public Class<T> getClazz() {
+            return clazz;
+        }
+
+        public List<T> getDataList() {
+            return dataList;
+        }
+    }
+
+    /**
+     * 模板 Sheet 数据模型
+     *
+     * <p>
+     * 用于描述单个 Sheet 的填充数据结构：
+     * <ul>
+     *     <li>普通变量数据</li>
+     *     <li>多列表变量数据</li>
+     *     <li>Sheet 索引或 Sheet 名称</li>
+     * </ul>
+     * </p>
+     */
+    public static class TemplateSheetData {
+
+        private final Integer sheetIndex;
+        private final String sheetName;
+        private final Map<String, Object> data;
+        private final Map<String, List<?>> listMap;
+
+        public TemplateSheetData(Integer sheetIndex,
+                                 String sheetName,
+                                 Map<String, Object> data,
+                                 Map<String, List<?>> listMap) {
+            this.sheetIndex = sheetIndex;
+            this.sheetName = sheetName;
+            this.data = data;
+            this.listMap = listMap;
+        }
+
+        public Integer getSheetIndex() {
+            return sheetIndex;
+        }
+
+        public String getSheetName() {
+            return sheetName;
+        }
+
+        public Map<String, Object> getData() {
+            return data;
+        }
+
+        public Map<String, List<?>> getListMap() {
+            return listMap;
+        }
+    }
+
+}
+
+```
 
 
 
@@ -3170,7 +4451,951 @@ src
 
 
 
-## 导入 Excel（Impot）xx
+## 导入 Excel（Import）
+
+
+
+### 读取为实体类
+
+**Excel 文件**
+
+![image-20260128095310072](./assets/image-20260128095310072.png)
+
+**实体类**
+
+```java
+package io.github.atengk.entity;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.apache.fesod.sheet.annotation.ExcelIgnore;
+import org.apache.fesod.sheet.annotation.ExcelProperty;
+import org.apache.fesod.sheet.annotation.format.DateTimeFormat;
+import org.apache.fesod.sheet.annotation.format.NumberFormat;
+import org.apache.fesod.sheet.annotation.write.style.*;
+import org.apache.fesod.sheet.enums.BooleanEnum;
+import org.apache.fesod.sheet.enums.poi.BorderStyleEnum;
+import org.apache.fesod.sheet.enums.poi.HorizontalAlignmentEnum;
+import org.apache.fesod.sheet.enums.poi.VerticalAlignmentEnum;
+
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@HeadFontStyle(fontName = "宋体", fontHeightInPoints = 11, bold = BooleanEnum.TRUE)
+@ContentFontStyle(fontName = "宋体", fontHeightInPoints = 11, bold = BooleanEnum.FALSE)
+@HeadStyle(wrapped = BooleanEnum.TRUE, horizontalAlignment = HorizontalAlignmentEnum.CENTER, verticalAlignment = VerticalAlignmentEnum.CENTER, fillBackgroundColor = 9, fillForegroundColor = 9, borderLeft = BorderStyleEnum.THIN, borderRight = BorderStyleEnum.THIN, borderTop = BorderStyleEnum.THIN, borderBottom = BorderStyleEnum.THIN)
+@ContentStyle(wrapped = BooleanEnum.TRUE, horizontalAlignment = HorizontalAlignmentEnum.CENTER, verticalAlignment = VerticalAlignmentEnum.CENTER, fillBackgroundColor = 9, fillForegroundColor = 9, borderLeft = BorderStyleEnum.THIN, borderRight = BorderStyleEnum.THIN, borderTop = BorderStyleEnum.THIN, borderBottom = BorderStyleEnum.THIN)
+@HeadRowHeight(25)  // 设置表头行高
+@ContentRowHeight(20)  // 设置数据内容行高
+@ColumnWidth(15)       // 设置列宽
+public class MyUser implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 主键id
+     */
+    @ExcelIgnore
+    private Long id;
+
+    /**
+     * 名称
+     */
+    @ExcelProperty(value = "名称", index = 0)
+    @ColumnWidth(20) // 单独设置列宽
+    private String name;
+
+    /**
+     * 年龄
+     */
+    @ExcelProperty(value = "年龄", index = 1)
+    private Integer age;
+
+    /**
+     * 手机号码
+     */
+    @ExcelProperty(value = "手机号码", index = 2)
+    @ColumnWidth(30) // 单独设置列宽
+    private String phoneNumber;
+
+    /**
+     * 邮箱
+     */
+    @ExcelProperty(value = "邮箱", index = 3)
+    @ColumnWidth(30) // 单独设置列宽
+    private String email;
+
+    /**
+     * 分数
+     */
+    @ExcelProperty(value = "分数", index = 4)
+    @NumberFormat(value = "#,##0.00", roundingMode = RoundingMode.HALF_UP)
+    private BigDecimal score;
+
+    /**
+     * 比例
+     */
+    @ExcelProperty(value = "比例", index = 5)
+    @NumberFormat(value = "0.00%", roundingMode = RoundingMode.HALF_UP)
+    private Double ratio;
+
+    /**
+     * 生日
+     */
+    @ExcelProperty(value = "生日", index = 6)
+    @DateTimeFormat("yyyy年MM月dd日")
+    private LocalDate birthday;
+
+    /**
+     * 所在省份
+     */
+    @ExcelProperty(value = "所在省份", index = 7)
+    private String province;
+
+    /**
+     * 所在城市
+     */
+    @ExcelProperty(value = "所在城市", index = 8)
+    private String city;
+
+    /**
+     * 创建时间
+     */
+    @ExcelProperty(value = "创建时间", index = 9)
+    @DateTimeFormat("yyyy-MM-dd HH:mm:ss")
+    @ColumnWidth(30) // 单独设置列宽
+    private LocalDateTime createTime;
+
+}
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportEntitySimple() {
+        List<MyUser> list = FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_simple_users.xlsx"))
+                .head(MyUser.class)
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+        System.out.println(list.get(0).getName());
+    }
+```
+
+> 输出：
+>
+> [MyUser(id=null, name=任昊焱, age=22, phoneNumber=15911890172, email=昊然.贾@yahoo.com, score=62753.25, ratio=0.93061, birthday=2026-01-28, province=湖南省, city=惠州, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=石嘉熙, age=72, phoneNumber=15539104243, email=思远.姜@hotmail.com, score=58840.94, ratio=0.56496, birthday=2026-01-28, province=广东省, city=章丘, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=严琪, age=62, phoneNumber=15778145233, email=晓啸.孔@hotmail.com, score=93748.53, ratio=0.61555, birthday=2026-01-28, province=四川省, city=西安, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=夏弘文, age=84, phoneNumber=15512542300, email=涛.薛@gmail.com, score=6989.5, ratio=0.41597, birthday=2026-01-28, province=山西省, city=遵义, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=王思远, age=73, phoneNumber=14595696437, email=越泽.阎@gmail.com, score=65829.7, ratio=0.77095, birthday=2026-01-28, province=澳门, city=衡水, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null)]
+> 任昊焱
+
+
+
+### 读取为Map
+
+**Excel 文件**
+
+![image-20260128095310072](./assets/image-20260128095310072.png)
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportMapSimple() {
+        // key 是列索引，value 是单元格内容
+        List<Map<Integer, String>> list = FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_simple_users.xlsx"))
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+    }
+```
+
+> 输出：
+>
+> [{0=任昊焱, 1=22, 2=15911890172, 3=昊然.贾@yahoo.com, 4=62,753.25, 5=93.06%, 6=2026年01月28日, 7=湖南省, 8=惠州, 9=2026-01-28 09:05:51}, {0=石嘉熙, 1=72, 2=15539104243, 3=思远.姜@hotmail.com, 4=58,840.94, 5=56.50%, 6=2026年01月28日, 7=广东省, 8=章丘, 9=2026-01-28 09:05:51}, {0=严琪, 1=62, 2=15778145233, 3=晓啸.孔@hotmail.com, 4=93,748.53, 5=61.56%, 6=2026年01月28日, 7=四川省, 8=西安, 9=2026-01-28 09:05:51}, {0=夏弘文, 1=84, 2=15512542300, 3=涛.薛@gmail.com, 4=6,989.50, 5=41.60%, 6=2026年01月28日, 7=山西省, 8=遵义, 9=2026-01-28 09:05:51}, {0=王思远, 1=73, 2=14595696437, 3=越泽.阎@gmail.com, 4=65,829.70, 5=77.10%, 6=2026年01月28日, 7=澳门, 8=衡水, 9=2026-01-28 09:05:51}]
+
+
+
+### 效验数据（直接抛出错误）
+
+**Excel 文件**
+
+![image-20260128103654122](./assets/image-20260128103654122.png)
+
+**创建监听器**
+
+```java
+package io.github.atengk.listener;
+
+import io.github.atengk.entity.MyUser;
+import org.apache.fesod.sheet.context.AnalysisContext;
+import org.apache.fesod.sheet.event.AnalysisEventListener;
+import org.springframework.util.ObjectUtils;
+
+public class ValidationUserListener extends AnalysisEventListener<MyUser> {
+    @Override
+    public void onException(Exception exception, AnalysisContext context) throws Exception {
+        super.onException(exception, context);
+    }
+
+    @Override
+    public void invoke(MyUser myUser, AnalysisContext context) {
+        Integer rowIndex = context.readRowHolder().getRowIndex();
+        validate(myUser, rowIndex);
+    }
+
+    /**
+     * 用户导入数据校验逻辑
+     *
+     * @param data     当前行解析后的数据对象
+     * @param rowIndex Excel 行号，从 0 开始
+     */
+    private void validate(MyUser data, Integer rowIndex) {
+
+        Integer excelRowNum = rowIndex + 1;
+
+        if (ObjectUtils.isEmpty(data.getName())) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：姓名不能为空");
+        }
+
+        if (data.getName().length() > 50) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：姓名长度不能超过 50");
+        }
+
+        if (data.getAge() == null) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：年龄不能为空");
+        }
+
+        if (data.getAge() < 0 || data.getAge() > 150) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：年龄必须在 0 到 150 之间");
+        }
+
+        if (ObjectUtils.isEmpty(data.getPhoneNumber())) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：手机号不能为空");
+        }
+
+    }
+
+    @Override
+    public void doAfterAllAnalysed(AnalysisContext analysisContext) {
+
+    }
+
+}
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportValidation() {
+        List<MyUser> list = FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_error_users.xlsx"), new ValidationUserListener())
+                .head(MyUser.class)
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+        System.out.println(list.get(0).getName());
+    }
+```
+
+![image-20260128102351612](./assets/image-20260128102351612.png)
+
+
+
+### 效验数据（收集所有错误）
+
+**Excel 文件**
+
+
+
+**创建监听器**
+
+```java
+package io.github.atengk.listener;
+
+import io.github.atengk.entity.MyUser;
+import org.apache.fesod.sheet.context.AnalysisContext;
+import org.apache.fesod.sheet.event.AnalysisEventListener;
+import org.springframework.util.ObjectUtils;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ValidationAllUserListener extends AnalysisEventListener<MyUser> {
+
+    /**
+     * 校验通过的数据
+     */
+    private final List<MyUser> successList = new ArrayList<>();
+
+    /**
+     * 校验失败的错误信息
+     */
+    private final List<String> errorList = new ArrayList<>();
+
+    @Override
+    public void onException(Exception exception, AnalysisContext context) {
+        Integer rowIndex = context.readRowHolder().getRowIndex();
+        Integer excelRowNum = rowIndex + 1;
+        errorList.add("第" + excelRowNum + "行数据解析失败：" + exception.getMessage());
+    }
+
+    @Override
+    public void invoke(MyUser myUser, AnalysisContext context) {
+        Integer rowIndex = context.readRowHolder().getRowIndex();
+        validate(myUser, rowIndex);
+        successList.add(myUser);
+    }
+
+    /**
+     * 用户导入数据校验逻辑
+     *
+     * @param data     当前行解析后的数据对象
+     * @param rowIndex Excel 行号，从 0 开始
+     */
+    private void validate(MyUser data, Integer rowIndex) {
+
+        Integer excelRowNum = rowIndex + 1;
+
+        if (ObjectUtils.isEmpty(data.getName())) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：姓名不能为空");
+        }
+
+        if (data.getName().length() > 50) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：姓名长度不能超过 50");
+        }
+
+        if (data.getAge() == null) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：年龄不能为空");
+        }
+
+        if (data.getAge() < 0 || data.getAge() > 150) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：年龄必须在 0 到 150 之间");
+        }
+
+        if (ObjectUtils.isEmpty(data.getPhoneNumber())) {
+            throw new IllegalArgumentException("第" + excelRowNum + "行：手机号不能为空");
+        }
+    }
+
+    @Override
+    public void doAfterAllAnalysed(AnalysisContext analysisContext) {
+    }
+
+    public List<MyUser> getSuccessList() {
+        return successList;
+    }
+
+    public List<String> getErrorList() {
+        return errorList;
+    }
+
+    public boolean hasError() {
+        return !errorList.isEmpty();
+    }
+
+}
+
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportValidationAll() {
+        ValidationAllUserListener listener = new ValidationAllUserListener();
+        FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_error_users.xlsx"), listener)
+                .head(MyUser.class)
+                .sheet()
+                .doRead();
+        // 获取效验数据
+        List<MyUser> successList = listener.getSuccessList();
+        List<String> errorList = listener.getErrorList();
+        boolean hasError = listener.hasError();
+        // 错误信息
+        if (hasError) {
+            System.out.println("错误信息：" + errorList);
+        }
+        // 正确数据
+        System.out.println("正确数据：" + successList);
+    }
+```
+
+> 输出：
+>
+> 错误信息：[第6行数据解析失败：第6行：年龄必须在 0 到 150 之间, 第7行数据解析失败：第7行：手机号不能为空]
+> 正确数据：[MyUser(id=null, name=任昊焱, age=22, phoneNumber=15911890172, email=昊然.贾@yahoo.com, score=62753.25, ratio=0.93061, birthday=2026-01-28, province=湖南省, city=惠州, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=石嘉熙, age=72, phoneNumber=15539104243, email=思远.姜@hotmail.com, score=58840.94, ratio=0.56496, birthday=2026-01-28, province=广东省, city=章丘, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=严琪, age=62, phoneNumber=15778145233, email=晓啸.孔@hotmail.com, score=93748.53, ratio=0.61555, birthday=2026-01-28, province=四川省, city=西安, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=夏弘文, age=84, phoneNumber=15512542300, email=涛.薛@gmail.com, score=6989.5, ratio=0.41597, birthday=2026-01-28, province=山西省, city=遵义, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null)]
+
+
+
+### 图片导入（框架不支持!!!）
+
+**Excel 文件**
+
+![image-20260128142147504](./assets/image-20260128142147504.png)
+
+**添加图片字段**
+
+```java
+    /**
+     * 图片
+     */
+    @ExcelProperty(value = "图片", converter = StringUrlImageConverter.class)
+    @ColumnWidth(20)
+    private String imageUrl;
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportImage() {
+        List<MyUser> list = FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_image_users.xlsx"))
+                .head(MyUser.class)
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+        System.out.println(list.get(0).getName());
+    }
+```
+
+> 输出：
+>
+> 
+
+
+
+### 图片导入（使用POI）
+
+**Excel 文件**
+
+![image-20260128142147504](./assets/image-20260128142147504.png)
+
+**添加图片字段**
+
+```java
+    /**
+     * 图片
+     */
+    @ExcelProperty(value = "图片", converter = StringUrlImageConverter.class)
+    @ColumnWidth(20)
+    private String imageUrl;
+```
+
+**创建POI获取图片的方法**
+
+```java
+    /**
+     * 读取 Excel 中的所有图片
+     *
+     * @param inputStream Excel 输入流
+     * @param columnIndex 图片所在列
+     * @return key = 行号(0-based)，value = 图片文件路径（或 URL）
+     */
+    public static Map<Integer, String> readImages(InputStream inputStream, int columnIndex) {
+        Map<Integer, String> imageMap = new HashMap<>();
+
+        try (Workbook workbook = WorkbookFactory.create(inputStream)) {
+            Sheet sheet = workbook.getSheetAt(0);
+
+            if (!(sheet instanceof XSSFSheet)) {
+                return imageMap;
+            }
+
+            XSSFSheet xssfSheet = (XSSFSheet) sheet;
+            XSSFDrawing drawing = xssfSheet.getDrawingPatriarch();
+            if (drawing == null) {
+                return imageMap;
+            }
+
+            for (XSSFShape shape : drawing.getShapes()) {
+                if (!(shape instanceof XSSFPicture)) {
+                    continue;
+                }
+
+                XSSFPicture picture = (XSSFPicture) shape;
+                XSSFClientAnchor anchor = picture.getPreferredSize();
+
+                int row = anchor.getRow1();
+                int col = anchor.getCol1();
+
+                // 只处理“图片列”的图片
+                if (col != columnIndex) {
+                    continue;
+                }
+
+                XSSFPictureData pictureData = picture.getPictureData();
+                byte[] bytes = pictureData.getData();
+                String ext = pictureData.suggestFileExtension();
+
+                String fileName = "img_" + row + "." + ext;
+                File file = new File("target/excel-images/" + fileName);
+                file.getParentFile().mkdirs();
+
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(bytes);
+                }
+
+                imageMap.put(row, file.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("读取 Excel 图片失败", e);
+        }
+
+        return imageMap;
+    }
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportImagePoi() {
+        // 1. 先用 Fesod 读取结构化数据
+        List<MyUser> list = FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_image_users.xlsx"))
+                .head(MyUser.class)
+                .sheet()
+                .doReadSync();
+
+        // 2. 再用 POI 读取图片
+        Map<Integer, String> imageMap = readImages(
+                ExcelUtil.toInputStreamFromClasspath("doc/import_image_users.xlsx"), 10);
+
+        // 3. 把图片 URL 填充回 MyUser
+        for (int i = 0; i < list.size(); i++) {
+            MyUser user = list.get(i);
+            String imagePath = imageMap.get(i + 1);
+            // 注意：通常 Excel 第一行是表头，所以图片行号要 +1
+            user.setImageUrl(imagePath);
+        }
+
+        // 4. 验证结果
+        System.out.println(list);
+        System.out.println(list.get(0).getName());
+        System.out.println(list.get(0).getImageUrl());
+    }
+```
+
+> 输出：
+>
+> [MyUser(id=null, name=方熠彤, age=10, phoneNumber=15237545759, email=文轩.孔@hotmail.com, score=52065.22, ratio=0.54658, birthday=2026-01-28, province=安徽省, city=金华, createTime=2026-01-28T14:13:15, imageUrl=D:\My\dev\Ateng-Java\tools\apache-fesod\target\excel-images\img_1.png, gender=null), MyUser(id=null, name=孙立辉, age=29, phoneNumber=17811999389, email=鸿涛.叶@gmail.com, score=20952.43, ratio=0.80635, birthday=2026-01-28, province=江西省, city=石家庄, createTime=2026-01-28T14:13:15, imageUrl=D:\My\dev\Ateng-Java\tools\apache-fesod\target\excel-images\img_2.png, gender=null), MyUser(id=null, name=黄晋鹏, age=4, phoneNumber=14792892027, email=文博.李@yahoo.com, score=22293.26, ratio=0.55105, birthday=2026-01-28, province=内蒙古, city=咸阳, createTime=2026-01-28T14:13:15, imageUrl=D:\My\dev\Ateng-Java\tools\apache-fesod\target\excel-images\img_3.png, gender=null), MyUser(id=null, name=贾修洁, age=25, phoneNumber=15004074446, email=思淼.杨@yahoo.com, score=9218.35, ratio=0.30789, birthday=2026-01-28, province=香港, city=泉州, createTime=2026-01-28T14:13:15, imageUrl=D:\My\dev\Ateng-Java\tools\apache-fesod\target\excel-images\img_4.png, gender=null), MyUser(id=null, name=田梓晨, age=62, phoneNumber=15111934778, email=烨霖.曹@hotmail.com, score=23338.83, ratio=0.08037, birthday=2026-01-28, province=黑龙江省, city=宿迁, createTime=2026-01-28T14:13:15, imageUrl=D:\My\dev\Ateng-Java\tools\apache-fesod\target\excel-images\img_5.png, gender=null)]
+> 方熠彤
+> D:\My\dev\Ateng-Java\tools\apache-fesod\target\excel-images\img_1.png
+
+
+
+### 数据映射（Converter 转换器）
+
+**Excel 文件**
+
+![image-20260128142703198](./assets/image-20260128142703198.png)
+
+**创建Converter** 
+
+```java
+package io.github.atengk.util;
+
+import org.apache.fesod.sheet.converters.Converter;
+import org.apache.fesod.sheet.enums.CellDataTypeEnum;
+import org.apache.fesod.sheet.metadata.GlobalConfiguration;
+import org.apache.fesod.sheet.metadata.data.ReadCellData;
+import org.apache.fesod.sheet.metadata.data.WriteCellData;
+import org.apache.fesod.sheet.metadata.property.ExcelContentProperty;
+
+/**
+ * 性别字段 Excel 映射转换器
+ * <p>
+ * 功能说明：
+ * 1. 导出时：将 Java 中的性别编码转换为 Excel 可读文本
+ * 2. 导入时：将 Excel 中的性别文本转换为 Java 性别编码
+ * <p>
+ * 映射规则：
+ * Java -> Excel
+ * 1  -> 男
+ * 2  -> 女
+ * 0  -> 未知
+ * <p>
+ * Excel -> Java
+ * 男   -> 1
+ * 女   -> 2
+ * 未知 -> 0
+ * <p>
+ * 使用方式：
+ * 在实体字段上配置：
+ *
+ * @author 孔余
+ * @ExcelProperty(value = "性别", converter = GenderConverter.class)
+ * <p>
+ * 适用场景：
+ * - 枚举字段导入导出
+ * - 字典字段导入导出
+ * - 固定映射规则字段
+ * @since 2026-01-26
+ */
+public class GenderConverter implements Converter<Integer> {
+
+    /**
+     * 返回当前转换器支持的 Java 类型
+     *
+     * @return Java 字段类型
+     */
+    @Override
+    public Class<?> supportJavaTypeKey() {
+        return Integer.class;
+    }
+
+    /**
+     * 返回当前转换器支持的 Excel 单元格类型
+     *
+     * @return Excel 单元格类型枚举
+     */
+    @Override
+    public CellDataTypeEnum supportExcelTypeKey() {
+        return CellDataTypeEnum.STRING;
+    }
+
+    /**
+     * Excel -> Java 数据转换
+     * <p>
+     * 在 Excel 导入时执行：
+     * 将单元格中的文本转换为 Java 字段值
+     *
+     * @param cellData            Excel 单元格数据
+     * @param contentProperty     字段内容属性
+     * @param globalConfiguration 全局配置
+     * @return Java 字段值
+     */
+    @Override
+    public Integer convertToJavaData(ReadCellData<?> cellData,
+                                     ExcelContentProperty contentProperty,
+                                     GlobalConfiguration globalConfiguration) {
+
+        String value = cellData.getStringValue();
+
+        if ("男".equals(value)) {
+            return 1;
+        }
+
+        if ("女".equals(value)) {
+            return 2;
+        }
+
+        if ("未知".equals(value)) {
+            return 0;
+        }
+
+        return null;
+    }
+
+    /**
+     * Java -> Excel 数据转换
+     * <p>
+     * 在 Excel 导出时执行：
+     * 将 Java 字段值转换为 Excel 单元格显示文本
+     *
+     * @param value               Java 字段值
+     * @param contentProperty     字段内容属性
+     * @param globalConfiguration 全局配置
+     * @return Excel 单元格数据对象
+     */
+    @Override
+    public WriteCellData<?> convertToExcelData(Integer value,
+                                               ExcelContentProperty contentProperty,
+                                               GlobalConfiguration globalConfiguration) {
+
+        String text;
+
+        if (value == null) {
+            text = "";
+        } else if (value == 1) {
+            text = "男";
+        } else if (value == 2) {
+            text = "女";
+        } else if (value == 0) {
+            text = "未知";
+        } else {
+            text = "未知";
+        }
+
+        return new WriteCellData<>(text);
+    }
+}
+```
+
+**添加字段**
+
+```java
+    /**
+     * 性别
+     */
+    @ExcelProperty(value = "性别", converter = GenderConverter.class)
+    private Integer gender;
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportConverter() {
+        List<MyUser> list = FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_converter_users.xlsx"))
+                .head(MyUser.class)
+                .sheet()
+                .doReadSync();
+        System.out.println(list);
+        System.out.println(list.get(0).getName());
+    }
+```
+
+> 输出：
+>
+> [MyUser(id=null, name=龚志泽, age=44, phoneNumber=17566644578, email=明辉.姚@yahoo.com, score=68196.67, ratio=0.32753, birthday=2026-01-28, province=广东省, city=青岛, createTime=2026-01-28T14:26:22, imageUrl=null, gender=0), MyUser(id=null, name=姚梓晨, age=6, phoneNumber=15251575227, email=志强.白@hotmail.com, score=13278.37, ratio=0.62875, birthday=2026-01-28, province=广东省, city=常熟, createTime=2026-01-28T14:26:22, imageUrl=null, gender=2), MyUser(id=null, name=郑靖琪, age=55, phoneNumber=15203600176, email=文轩.顾@hotmail.com, score=71270.01, ratio=0.80977, birthday=2026-01-28, province=云南省, city=唐山, createTime=2026-01-28T14:26:22, imageUrl=null, gender=0), MyUser(id=null, name=唐文昊, age=15, phoneNumber=15846002549, email=文.侯@gmail.com, score=19070.49, ratio=0.70297, birthday=2026-01-28, province=陕西省, city=淄博, createTime=2026-01-28T14:26:22, imageUrl=null, gender=1), MyUser(id=null, name=潘炎彬, age=20, phoneNumber=17560980773, email=哲瀚.龚@hotmail.com, score=56272.39, ratio=0.36022, birthday=2026-01-28, province=陕西省, city=临汾, createTime=2026-01-28T14:26:22, imageUrl=null, gender=0)]
+> 龚志泽
+
+
+
+### 流式回调读取（大量数据）
+
+使用 Listener 流式回调，适用于大文件、导入入库、带校验、分批处理
+
+**Excel 文件**
+
+![image-20260128162845413](./assets/image-20260128162845413.png)
+
+**创建 Listener**
+
+```java
+package io.github.atengk.listener;
+
+import io.github.atengk.entity.MyUser;
+import org.apache.fesod.sheet.context.AnalysisContext;
+import org.apache.fesod.sheet.read.listener.ReadListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MyUserBatchReadListener implements ReadListener<MyUser> {
+
+    private static final Logger log = LoggerFactory.getLogger(MyUserBatchReadListener.class);
+
+    /**
+     * 单批次最大数据量
+     */
+    private static final int BATCH_SIZE = 400;
+
+    /**
+     * 当前批次缓存数据
+     */
+    private final List<MyUser> batchList = new ArrayList<>(BATCH_SIZE);
+
+    /**
+     * 成功处理的数据总量，仅用于测试统计
+     */
+    private int totalCount = 0;
+
+    @Override
+    public void invoke(MyUser myUser, AnalysisContext analysisContext) {
+        batchList.add(myUser);
+
+        if (batchList.size() >= BATCH_SIZE) {
+            saveBatch();
+            batchList.clear();
+        }
+    }
+
+    @Override
+    public void doAfterAllAnalysed(AnalysisContext analysisContext) {
+        if (!batchList.isEmpty()) {
+            saveBatch();
+            batchList.clear();
+        }
+
+        log.info("Excel 导入完成，总处理数据量：{}", totalCount);
+    }
+
+    /**
+     * 模拟批量入库
+     */
+    private void saveBatch() {
+        int size = batchList.size();
+        totalCount += size;
+
+        log.info("模拟入库，当前批次大小：{}，累计处理：{}", size, totalCount);
+
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+}
+```
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportListener() {
+        FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_listener_users.xlsx"))
+                .head(MyUser.class)
+                .registerReadListener(new MyUserBatchReadListener())
+                .sheet()
+                .doRead();
+    }
+```
+
+> 输出：
+>
+> 16:34:43.878 [main] INFO io.github.atengk.listener.MyUserBatchReadListener - 模拟入库，当前批次大小：400，累计处理：400
+> 16:34:43.965 [main] INFO io.github.atengk.listener.MyUserBatchReadListener - 模拟入库，当前批次大小：400，累计处理：800
+> 16:34:44.051 [main] INFO io.github.atengk.listener.MyUserBatchReadListener - 模拟入库，当前批次大小：200，累计处理：1000
+> 16:34:44.110 [main] INFO io.github.atengk.listener.MyUserBatchReadListener - Excel 导入完成，总处理数据量：1000
+
+
+
+### 多 Sheet 导入
+
+使用多个 Listener 流式回调，从 Listener 获取到数据
+
+**Excel 文件**
+
+Sheet 1
+
+![image-20260128162044727](./assets/image-20260128162044727.png)
+
+Sheet 2
+
+![image-20260128162104264](./assets/image-20260128162104264.png)
+
+**创建 Listener** 
+
+MyUserReadListener
+
+```java
+package io.github.atengk.listener;
+
+import io.github.atengk.entity.MyUser;
+import org.apache.fesod.sheet.context.AnalysisContext;
+import org.apache.fesod.sheet.read.listener.ReadListener;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MyUserReadListener implements ReadListener<MyUser> {
+
+    private final List<MyUser> dataList = new ArrayList<>();
+
+    @Override
+    public void invoke(MyUser myUser, AnalysisContext analysisContext) {
+        dataList.add(myUser);
+    }
+
+    @Override
+    public void doAfterAllAnalysed(AnalysisContext analysisContext) {
+    }
+
+    public List<MyUser> getDataList() {
+        return dataList;
+    }
+
+}
+```
+
+OtherReadListener
+
+```java
+package io.github.atengk.listener;
+
+import io.github.atengk.entity.Other;
+import org.apache.fesod.sheet.context.AnalysisContext;
+import org.apache.fesod.sheet.read.listener.ReadListener;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class OtherReadListener implements ReadListener<Other> {
+
+    private final List<Other> dataList = new ArrayList<>();
+
+    @Override
+    public void invoke(Other other, AnalysisContext analysisContext) {
+        dataList.add(other);
+    }
+
+    @Override
+    public void doAfterAllAnalysed(AnalysisContext analysisContext) {
+    }
+
+    public List<Other> getDataList() {
+        return dataList;
+    }
+
+}
+```
+
+
+
+**使用方法**
+
+```java
+    @Test
+    public void testImportMultiSheet() {
+        MyUserReadListener userListener = new MyUserReadListener();
+        OtherReadListener otherListener = new OtherReadListener();
+
+        try (ExcelReader excelReader = FesodSheet
+                .read(ExcelUtil.toInputStreamFromClasspath("doc/import_multi_sheets.xlsx"))
+                .build()) {
+
+            ReadSheet readSheet1 = FesodSheet
+                    .readSheet(0)
+                    .head(MyUser.class)
+                    .registerReadListener(userListener)
+                    .build();
+
+            ReadSheet readSheet2 = FesodSheet
+                    .readSheet("其他数据")
+                    .head(Other.class)
+                    .registerReadListener(otherListener)
+                    .build();
+
+            excelReader.read(readSheet1, readSheet2);
+            excelReader.finish();
+        }
+
+        // 读取结果
+        System.out.println("Sheet0 用户数据：");
+        System.out.println(userListener.getDataList());
+
+        System.out.println("“其他数据” Sheet 数据：");
+        System.out.println(otherListener.getDataList());
+    }
+```
+
+> 输出：
+>
+> Sheet0 用户数据：
+> [MyUser(id=null, name=任昊焱, age=22, phoneNumber=15911890172, email=昊然.贾@yahoo.com, score=62753.25, ratio=0.93061, birthday=2026-01-28, province=湖南省, city=惠州, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=石嘉熙, age=72, phoneNumber=15539104243, email=思远.姜@hotmail.com, score=58840.94, ratio=0.56496, birthday=2026-01-28, province=广东省, city=章丘, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=严琪, age=62, phoneNumber=15778145233, email=晓啸.孔@hotmail.com, score=93748.53, ratio=0.61555, birthday=2026-01-28, province=四川省, city=西安, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=夏弘文, age=84, phoneNumber=15512542300, email=涛.薛@gmail.com, score=6989.5, ratio=0.41597, birthday=2026-01-28, province=山西省, city=遵义, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null), MyUser(id=null, name=王思远, age=73, phoneNumber=14595696437, email=越泽.阎@gmail.com, score=65829.7, ratio=0.77095, birthday=2026-01-28, province=澳门, city=衡水, createTime=2026-01-28T09:05:51, imageUrl=null, gender=null)]
+> “其他数据” Sheet 数据：
+> [Other(name=任昊焱, age=22), Other(name=石嘉熙, age=72), Other(name=严琪, age=62), Other(name=夏弘文, age=84), Other(name=王思远, age=73)]
 
 
 
@@ -3287,5 +5512,7 @@ src
 
 ![image-20260128075131103](./assets/image-20260128075131103.png)
 
-### 导入数据xx
+### 导入数据
+
+
 
