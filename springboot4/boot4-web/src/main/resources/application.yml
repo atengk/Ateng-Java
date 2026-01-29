@@ -1,0 +1,5 @@
+server:
+  port: 14000
+spring:
+  application:
+    name: ${project.artifactId}
