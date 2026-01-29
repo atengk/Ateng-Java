@@ -27,6 +27,43 @@ public final class AssertUtil {
         throw new UnsupportedOperationException("工具类不可实例化");
     }
 
+    /**
+     * 创建默认的断言异常（示例实现）
+     *
+     * <p>
+     * 当前使用 {@link IllegalArgumentException} 作为默认异常类型，
+     * 主要用于：
+     * <ul>
+     *     <li>参数校验失败</li>
+     *     <li>业务前置条件不满足</li>
+     *     <li>工具类的通用断言场景</li>
+     * </ul>
+     *
+     * <p>
+     * <strong>⚠ 实际项目中强烈建议替换为自定义业务异常</strong>，例如：
+     * <pre>
+     * {@code
+     * private static RuntimeException illegalArg(String message) {
+     *     return new BusinessException(ErrorCode.PARAM_INVALID, message);
+     * }
+     * }
+     * </pre>
+     *
+     * <p>
+     * 通过统一在此方法中构建异常，可以实现：
+     * <ul>
+     *     <li>断言工具类对业务异常类型“零侵入”</li>
+     *     <li>后续异常体系调整只需修改一处代码</li>
+     *     <li>保持 AssertUtil 各断言方法签名稳定</li>
+     * </ul>
+     *
+     * @param message 异常提示信息
+     * @return 运行时异常实例
+     */
+    private static RuntimeException illegalArg(String message) {
+        return new IllegalArgumentException(message);
+    }
+
     // ==================== 基础断言 ====================
 
     /**
@@ -42,6 +79,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void isTrue(boolean expression, String message) {
+        isTrue(expression, () -> illegalArg(message));
+    }
+
     /**
      * 断言表达式为 false，否则抛出调用方提供的异常
      *
@@ -53,6 +94,10 @@ public final class AssertUtil {
         if (expression) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void isFalse(boolean expression, String message) {
+        isFalse(expression, () -> illegalArg(message));
     }
 
     /**
@@ -71,6 +116,10 @@ public final class AssertUtil {
                 throw exceptionSupplier.get();
             }
         }
+    }
+
+    public static void allTrue(String message, boolean... expressions) {
+        allTrue(() -> illegalArg(message), expressions);
     }
 
     /**
@@ -92,6 +141,10 @@ public final class AssertUtil {
         throw exceptionSupplier.get();
     }
 
+    public static void anyTrue(String message, boolean... expressions) {
+        anyTrue(() -> illegalArg(message), expressions);
+    }
+
     /**
      * 断言对象不为 null，否则抛出调用方提供的异常
      *
@@ -103,6 +156,10 @@ public final class AssertUtil {
         if (object == null) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void notNull(Object object, String message) {
+        notNull(object, () -> illegalArg(message));
     }
 
     /**
@@ -118,6 +175,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void isNull(Object object, String message) {
+        isNull(object, () -> illegalArg(message));
+    }
+
     /**
      * 断言字符串不为 null 且不为空，否则抛出调用方提供的异常
      *
@@ -129,6 +190,10 @@ public final class AssertUtil {
         if (text == null || text.isEmpty()) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void notEmpty(String text, String message) {
+        notEmpty(text, () -> illegalArg(message));
     }
 
     /**
@@ -144,6 +209,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void notBlank(String text, String message) {
+        notBlank(text, () -> illegalArg(message));
+    }
+
     /**
      * 断言数组不为 null 且长度大于 0，否则抛出调用方提供的异常
      *
@@ -155,6 +224,10 @@ public final class AssertUtil {
         if (array == null || array.length == 0) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void notEmpty(Object[] array, String message) {
+        notEmpty(array, () -> illegalArg(message));
     }
 
     /**
@@ -170,6 +243,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void notEmpty(Collection<?> collection, String message) {
+        notEmpty(collection, () -> illegalArg(message));
+    }
+
     /**
      * 断言 Map 不为 null 且不为空，否则抛出调用方提供的异常
      *
@@ -181,6 +258,10 @@ public final class AssertUtil {
         if (map == null || map.isEmpty()) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void notEmpty(Map<?, ?> map, String message) {
+        notEmpty(map, () -> illegalArg(message));
     }
 
     /**
@@ -196,6 +277,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void isEmpty(Collection<?> collection, String message) {
+        isEmpty(collection, () -> illegalArg(message));
+    }
+
     /**
      * 断言 Map 为空（null 或无元素），否则抛出调用方提供的异常
      *
@@ -209,6 +294,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void isEmpty(Map<?, ?> map, String message) {
+        isEmpty(map, () -> illegalArg(message));
+    }
+
     /**
      * 断言数组为空（null 或长度为 0），否则抛出调用方提供的异常
      *
@@ -220,6 +309,10 @@ public final class AssertUtil {
         if (array != null && array.length > 0) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void isEmpty(Object[] array, String message) {
+        isEmpty(array, () -> illegalArg(message));
     }
 
     // ==================== 数值类断言 ====================
@@ -238,6 +331,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void greaterThan(Number value, Number target, String message) {
+        greaterThan(value, target, () -> illegalArg(message));
+    }
+
     /**
      * 断言 value >= target，否则抛出调用方提供的异常
      *
@@ -250,6 +347,10 @@ public final class AssertUtil {
         if (value == null || target == null || value.doubleValue() < target.doubleValue()) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void greaterOrEqual(Number value, Number target, String message) {
+        greaterOrEqual(value, target, () -> illegalArg(message));
     }
 
     /**
@@ -266,6 +367,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void lessThan(Number value, Number target, String message) {
+        lessThan(value, target, () -> illegalArg(message));
+    }
+
     /**
      * 断言 value <= target，否则抛出调用方提供的异常
      *
@@ -278,6 +383,10 @@ public final class AssertUtil {
         if (value == null || target == null || value.doubleValue() > target.doubleValue()) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void lessOrEqual(Number value, Number target, String message) {
+        lessOrEqual(value, target, () -> illegalArg(message));
     }
 
     /**
@@ -294,6 +403,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void equals(Number value, Number target, String message) {
+        equals(value, target, () -> illegalArg(message));
+    }
+
     /**
      * 断言 value != target，否则抛出调用方提供的异常
      *
@@ -306,6 +419,10 @@ public final class AssertUtil {
         if (value == null || target == null || Double.compare(value.doubleValue(), target.doubleValue()) == 0) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void notEquals(Number value, Number target, String message) {
+        notEquals(value, target, () -> illegalArg(message));
     }
 
     /**
@@ -327,6 +444,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void between(Number value, Number min, Number max, String message) {
+        between(value, min, max, () -> illegalArg(message));
+    }
+
     // ==================== 字符串格式类断言 ====================
 
     /**
@@ -343,6 +464,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void matches(String text, String regex, String message) {
+        matches(text, regex, () -> illegalArg(message));
+    }
+
     /**
      * 断言字符串为合法邮箱，否则抛出调用方提供的异常
      *
@@ -355,6 +480,10 @@ public final class AssertUtil {
         matches(text, emailRegex, exceptionSupplier);
     }
 
+    public static void isEmail(String text, String message) {
+        isEmail(text, () -> illegalArg(message));
+    }
+
     /**
      * 断言字符串为合法手机号（中国手机号），否则抛出调用方提供的异常
      *
@@ -365,6 +494,10 @@ public final class AssertUtil {
     public static void isMobile(String text, Supplier<? extends RuntimeException> exceptionSupplier) {
         String mobileRegex = "^1[3-9]\\d{9}$";
         matches(text, mobileRegex, exceptionSupplier);
+    }
+
+    public static void isMobile(String text, String message) {
+        isMobile(text, () -> illegalArg(message));
     }
 
     /**
@@ -382,6 +515,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void lengthBetween(String text, int min, int max, String message) {
+        lengthBetween(text, min, max, () -> illegalArg(message));
+    }
+
     /**
      * 断言字符串以指定前缀开头，否则抛出调用方提供的异常
      *
@@ -394,6 +531,10 @@ public final class AssertUtil {
         if (text == null || prefix == null || !text.startsWith(prefix)) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void startsWith(String text, String prefix, String message) {
+        startsWith(text, prefix, () -> illegalArg(message));
     }
 
     /**
@@ -410,6 +551,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void endsWith(String text, String suffix, String message) {
+        endsWith(text, suffix, () -> illegalArg(message));
+    }
+
     /**
      * 断言字符串包含指定子串，否则抛出调用方提供的异常
      *
@@ -422,6 +567,10 @@ public final class AssertUtil {
         if (text == null || substring == null || !text.contains(substring)) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void contains(String text, String substring, String message) {
+        contains(text, substring, () -> illegalArg(message));
     }
 
     // ==================== 集合 / 数组类断言 ====================
@@ -440,6 +589,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void contains(Collection<?> collection, Object element, String message) {
+        contains(collection, element, () -> illegalArg(message));
+    }
+
     /**
      * 断言集合不包含指定元素，否则抛出调用方提供的异常
      *
@@ -452,6 +605,10 @@ public final class AssertUtil {
         if (collection != null && collection.contains(element)) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void notContains(Collection<?> collection, Object element, String message) {
+        notContains(collection, element, () -> illegalArg(message));
     }
 
     /**
@@ -470,6 +627,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void sizeBetween(Collection<?> collection, int min, int max, String message) {
+        sizeBetween(collection, min, max, () -> illegalArg(message));
+    }
+
     /**
      * 断言集合大小等于指定值，否则抛出调用方提供的异常
      *
@@ -485,6 +646,9 @@ public final class AssertUtil {
         }
     }
 
+    public static void sizeEquals(Collection<?> collection, int size, String message) {
+        sizeEquals(collection, size, () -> illegalArg(message));
+    }
 
     // ==================== 对象比较断言 ====================
 
@@ -502,6 +666,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void equals(Object a, Object b, String message) {
+        equals(a, b, () -> illegalArg(message));
+    }
+
     /**
      * 断言两个对象值不相等，否则抛出调用方提供的异常
      *
@@ -514,6 +682,10 @@ public final class AssertUtil {
         if (Objects.equals(a, b)) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void notEquals(Object a, Object b, String message) {
+        notEquals(a, b, () -> illegalArg(message));
     }
 
     /**
@@ -530,6 +702,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void same(Object a, Object b, String message) {
+        same(a, b, () -> illegalArg(message));
+    }
+
     /**
      * 断言两个对象引用不同，否则抛出调用方提供的异常
      *
@@ -544,6 +720,10 @@ public final class AssertUtil {
         }
     }
 
+    public static void notSame(Object a, Object b, String message) {
+        notSame(a, b, () -> illegalArg(message));
+    }
+
     // ==================== 其他 ====================
 
     /**
@@ -554,6 +734,10 @@ public final class AssertUtil {
      */
     public static void fail(Supplier<? extends RuntimeException> exceptionSupplier) {
         throw exceptionSupplier.get();
+    }
+
+    public static void fail(String message) {
+        fail(() -> illegalArg(message));
     }
 
     /**
@@ -567,6 +751,10 @@ public final class AssertUtil {
         if (!expression) {
             throw exceptionSupplier.get();
         }
+    }
+
+    public static void state(boolean expression, String message) {
+        state(expression, () -> illegalArg(message));
     }
 
 }
