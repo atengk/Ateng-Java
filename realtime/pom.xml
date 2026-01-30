@@ -16,6 +16,7 @@
     <modules>
         <module>websocket</module>
         <module>stomp</module>
+        <module>stomp-cluster</module>
         <module>sse</module>
         <module>netty</module>
     </modules>

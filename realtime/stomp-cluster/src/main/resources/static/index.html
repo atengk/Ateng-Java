@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>STOMP WebSocket 调试台</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #fafafa;
+        }
+
+        h1 { margin-bottom: 10px; }
+
+        .status {
+            padding: 8px 12px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .connected { background: #e6fffa; color: #065f46; }
+        .disconnected { background: #fee2e2; color: #7f1d1d; }
+
+        .section {
+            margin-top: 15px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            background: #fff;
+        }
+
+        input, button {
+            padding: 6px;
+            margin: 4px 0;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .log {
+            font-size: 13px;
+            margin-top: 10px;
+            background: #111827;
+            color: #e5e7eb;
+            padding: 10px;
+            height: 280px;
+            overflow-y: auto;
+        }
+
+        .log div { margin-bottom: 4px; }
+        .log .sys { color: #93c5fd; }
+        .log .send { color: #facc15; }
+        .log .recv { color: #86efac; }
+        .log .warn { color: #fca5a5; }
+    </style>
+</head>
+<body>
+
+<h1>STOMP WebSocket 调试台</h1>
+
+<div id="status" class="status disconnected">🔴 未连接</div>
+
+<div class="section">
+    <h3>连接信息</h3>
+    <input id="userId" value="10001" placeholder="userId"/>
+    <input id="username" value="阿腾" placeholder="username"/>
+    <input id="token" value="Admin@123" placeholder="token"/>
+    <br/>
+    <button onclick="connect()">连接</button>
+    <button onclick="disconnect()">断开</button>
+</div>
+
+<div class="section">
+    <h3>广播消息</h3>
+    <input id="messageToAll" placeholder="发送给所有用户"/>
+    <button onclick="sendToAll()">发送</button>
+</div>
+
+<div class="section">
+    <h3>私聊</h3>
+    <input id="targetUserId" placeholder="目标用户ID"/>
+    <input id="messageToUser" placeholder="私聊内容"/>
+    <button onclick="sendToUser()">发送</button>
+</div>
+
+<div class="section">
+    <h3>群聊</h3>
+    <input id="groupId" placeholder="群ID"/>
+    <input id="messageToGroup" placeholder="群消息"/>
+    <br/>
+    <button onclick="sendToGroup()">发送</button>
+    <button onclick="subscribeGroupByInput()">订阅群</button>
+    <button onclick="unsubscribeGroupByInput()">退订群</button>
+</div>
+
+<div class="section">
+    <h3>日志</h3>
+    <div id="log" class="log"></div>
+</div>
+
+<script>
+    let socket;
+    let stompClient;
+    let heartbeatTimer;
+
+    const WS_URL = "http://localhost:18002/ws";
+    const HEARTBEAT_INTERVAL = 30_000;
+    const groupSubscriptions = new Map();
+
+    function setStatus(connected) {
+        const el = document.getElementById("status");
+        el.className = "status " + (connected ? "connected" : "disconnected");
+        el.textContent = connected ? "🟢 已连接" : "🔴 未连接";
+    }
+
+    function log(msg, type = "sys") {
+        const el = document.getElementById("log");
+        const div = document.createElement("div");
+        div.className = type;
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        el.appendChild(div);
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function connect() {
+        if (stompClient?.connected) {
+            log("已连接，无需重复连接", "warn");
+            return;
+        }
+
+        socket = new SockJS(WS_URL);
+        stompClient = Stomp.over(socket);
+        stompClient.debug = null;
+
+        stompClient.connect({
+            userId: userId.value,
+            username: username.value,
+            Authorization: "Bearer " + token.value
+        }, () => {
+            setStatus(true);
+            log("WebSocket 连接成功");
+            subscribeBase();
+            startHeartbeat();
+        }, err => {
+            log("连接失败：" + err, "warn");
+        });
+    }
+
+    function disconnect() {
+        stopHeartbeat();
+        groupSubscriptions.forEach(s => s.unsubscribe());
+        groupSubscriptions.clear();
+
+        stompClient?.disconnect(() => {
+            setStatus(false);
+            log("连接已断开");
+        });
+    }
+
+    function subscribeBase() {
+        stompClient.subscribe("/topic/public", msg => {
+            const d = JSON.parse(msg.body);
+            log(`📢 公共 ${d.fromUserId}：${d.content}`, "recv");
+        });
+
+        stompClient.subscribe("/user/queue/message", msg => {
+            const d = JSON.parse(msg.body);
+            log(`👤 私聊 ${d.fromUserId}：${d.content}`, "recv");
+        });
+
+        log("基础订阅完成");
+    }
+
+    function subscribeGroupByInput() {
+        const gid = groupId.value;
+        if (!gid || groupSubscriptions.has(gid)) return;
+
+        const sub = stompClient.subscribe(`/topic/group.${gid}`, msg => {
+            const d = JSON.parse(msg.body);
+            log(`👥 群[${gid}] ${d.fromUserId}：${d.content}`, "recv");
+        });
+
+        groupSubscriptions.set(gid, sub);
+        log(`订阅群 ${gid}`);
+    }
+
+    function unsubscribeGroupByInput() {
+        const gid = groupId.value;
+        const sub = groupSubscriptions.get(gid);
+        if (!sub) return;
+        sub.unsubscribe();
+        groupSubscriptions.delete(gid);
+        log(`退订群 ${gid}`);
+    }
+
+    function startHeartbeat() {
+        heartbeatTimer = setInterval(() => {
+            stompClient?.connected &&
+            stompClient.send("/app/heartbeat", {}, "");
+            log("心跳发送", "sys");
+        }, HEARTBEAT_INTERVAL);
+    }
+
+    function stopHeartbeat() {
+        clearInterval(heartbeatTimer);
+    }
+
+    function sendToAll() {
+        stompClient.send("/app/public.send", {}, messageToAll.value);
+        log("广播：" + messageToAll.value, "send");
+        messageToAll.value = "";
+    }
+
+    function sendToUser() {
+        stompClient.send("/app/private.send", {}, JSON.stringify({
+            toUserId: targetUserId.value,
+            content: messageToUser.value
+        }));
+        log("私聊 → " + targetUserId.value, "send");
+        messageToUser.value = "";
+    }
+
+    function sendToGroup() {
+        stompClient.send("/app/group.send", {}, JSON.stringify({
+            groupId: groupId.value,
+            content: messageToGroup.value
+        }));
+        log("群消息 → " + groupId.value, "send");
+        messageToGroup.value = "";
+    }
+
+    window.onbeforeunload = disconnect;
+</script>
+
+</body>
+</html>
