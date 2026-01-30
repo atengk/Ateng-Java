@@ -1,5 +1,10 @@
 # WebSocket STOMP
 
+- [RabbitMQ使用（开启 STOMP）](https://atengk.github.io/ops/#/work/docker/service/rabbitmq/)
+- [Vue3 使用 WebSocket STOMP 示例](https://atengk.github.io/Ateng-Vue/#/apps/stomp/)
+
+
+
 ## 概述（Overview）
 
 ### 整体架构说明
@@ -1699,8 +1704,6 @@ public class WebSocketSessionController {
 ## 前端页面
 
 编辑 ` resources\static\index.html` ，后续调试STOMP的一个页面
-
-> Vue3 使用 WebSocket STOMP 参考文档：[链接](https://atengk.github.io/Ateng-Vue/#/apps/stomp/)
 
 ```html
 <!DOCTYPE html>
