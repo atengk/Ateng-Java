@@ -1,0 +1,25 @@
+server:
+  port: 18001
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
+---
+# WebSocket 配置
+websocket:
+  # 连接地址
+  endpoint: /ws
+
+  # 允许跨域来源
+  allowed-origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173
+
+  # 心跳超时时间
+  heartbeat-timeout: 60s
+
+  # 心跳检测间隔（毫秒）
+  heartbeat-check-interval: 30000

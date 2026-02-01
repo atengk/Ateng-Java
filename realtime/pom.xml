@@ -15,6 +15,7 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>websocket</module>
+        <module>websocket-single</module>
         <module>stomp</module>
         <module>stomp-cluster</module>
         <module>sse</module>
