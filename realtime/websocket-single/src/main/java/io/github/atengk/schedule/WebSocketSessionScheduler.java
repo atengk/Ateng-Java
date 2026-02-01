@@ -4,6 +4,7 @@ import io.github.atengk.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 /**
  * WebSocket 会话定时任务
@@ -17,7 +18,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  * @since 2026-01-30
  */
 @Slf4j
-//@Component
+@Component
 @RequiredArgsConstructor
 public class WebSocketSessionScheduler {
 
