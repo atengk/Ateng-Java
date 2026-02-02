@@ -29,5 +29,6 @@
         <module>onlyoffice</module>
         <module>easy-poi</module>
         <module>apache-fesod</module>
+        <module>jackson3</module>
     </modules>
 </project>
