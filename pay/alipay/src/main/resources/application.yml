@@ -1,0 +1,22 @@
+server:
+  port: 16001
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
+---
+# 支付宝支付配置
+alipay:
+  app-id: 9021000xxxxxxxx
+  private-key: MIIExxxxxxxx
+  app-cert-path: alipay/cert/appPublicCert.crt
+  alipay-cert-path: alipay/cert/alipayPublicCert.crt
+  alipay-root-cert-path: alipay/cert/alipayRootCert.crt
+
+  gateway-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+  notify-url: http://你的域名/api/pay/alipay/notify
+  charset: utf-8
+  sign-type: RSA2
