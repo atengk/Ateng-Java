@@ -8,116 +8,92 @@ WebSocket 是一种**全双工**通信协议，它允许服务器和客户端之
 - **低延迟**：相比 HTTP 轮询，WebSocket 只在建立连接时使用 HTTP 进行握手，后续通信使用 TCP，减少了带宽和延迟。
 - **减少服务器压力**：减少了频繁的 HTTP 请求，适用于聊天室、实时股票推送、在线游戏等应用场景。
 
-
+------
 
 ## 概览
 
-本文档描述了一套基于 **Spring Boot + 原生 WebSocket（非 STOMP）+ 单机部署** 的 WebSocket 实现方案，适用于**中小规模实时通信场景**，如消息推送、通知下发、实时状态同步等。
+本方案基于 **Spring Boot + 原生 WebSocket** 构建，面向 **生产级集群部署场景**，在不引入 STOMP 的前提下，实现了 **跨节点消息广播、定向推送、在线状态统一管理** 等能力。
 
-该方案以**工程化、可维护、可扩展**为设计目标，围绕以下核心能力展开：
+整体设计遵循以下原则：
 
-### 🎯 核心目标
-
-- 建立 **稳定、可控** 的 WebSocket 长连接
-- 支持 **按 Session / 用户 / 多用户 / 全量广播** 推送消息
-- 支持 **多端登录**、**重复登录控制**、**主动踢人**
-- 提供 **业务消息分发机制**，避免 Handler 中堆业务逻辑
-- 实现 **心跳检测 + 超时清理**，防止僵尸连接
-- 提供 **HTTP 管理接口**，便于运维和后台系统调用
+- **单机能力优先**：在单机 WebSocket 实现稳定的前提下演进至集群
+- **职责分离**：WebSocket 只负责连接与推送，集群同步交由 Redis / MQ
+- **弱耦合扩展**：节点之间通过消息通信，不直接感知彼此存在
+- **工程可维护**：组件清晰、职责单一、便于排查与扩展
 
 ------
 
-### 🧱 整体架构说明
+### 架构组成
 
-整体采用 **分层解耦设计**，各层职责清晰：
+系统主要由以下几部分构成：
 
-```
-HTTP / Browser
-      │
-      ▼
-WebSocket 握手
-(AuthInterceptor)
-      │
-      ▼
-WebSocketHandler（协议层）
-      │
-      ▼
-WebSocketService（会话 / 心跳 / 推送 / 管理）
-      │
-      ▼
-WebSocketBizDispatcher
-      │
-      ▼
-WebSocketBizHandler（具体业务处理）
-```
-
-- **AuthInterceptor**
-  负责 WebSocket 握手阶段的鉴权（如 token 校验、用户识别）
-- **WebSocketHandler**
-  负责 WebSocket 协议层处理（连接、断开、消息接收、异常处理）
-- **WebSocketService**
-  WebSocket 核心服务，统一管理：
-  - Session 与用户映射
-  - 心跳与连接状态
-  - 消息推送（单播 / 多播 / 广播）
-  - 用户踢下线、重复登录控制
-- **BizDispatcher + BizHandler**
-  将业务消息从 WebSocket 协议中解耦出来，实现**可插拔的业务处理机制**
+- **WebSocket 服务层**
+  - 维护本节点的 WebSocket 会话
+  - 提供用户级、Session 级消息推送能力
+  - 支持心跳检测与连接清理
+- **Redis 在线状态中心**
+  - 维护全局在线用户集合
+  - 支持快速判断用户是否在线
+  - 为跨节点消息路由提供依据
+- **RabbitMQ 集群广播通道**
+  - 负责节点之间的消息投递
+  - 每个节点拥有独立消费队列
+  - 保证消息在集群内可靠分发
+- **HTTP 运维与管理接口**
+  - 查询在线用户 / 会话数量
+  - 主动推送消息
+  - 强制踢用户或 Session 下线
 
 ------
 
-### 🔗 连接模型说明
+### 集群通信模型
 
-系统内部维护三类核心映射关系：
+在集群模式下，WebSocket 消息的流转遵循以下流程：
 
-- **Session 维度**：
-  每个 WebSocket 连接对应一个唯一 `sessionId`
-- **用户维度**：
-  一个用户可同时拥有多个 Session（多端登录）
-- **连接信息维度**：
-  记录用户、Session、连接时间、心跳时间等运行时信息
+1. 当前节点接收到推送请求
+2. 若目标用户不在本节点：
+   - 构造集群广播消息
+   - 通过 MQ 投递给其他节点
+3. 各节点消费广播消息：
+   - 判断是否为自身发送的消息
+   - 根据目标用户决定是否转发
+4. 命中本地会话后完成 WebSocket 推送
 
-该模型支持以下能力：
-
-- 按 Session 精确推送
-- 按用户推送（多端同时接收）
-- 获取当前在线用户数
-- 查询所有在线连接详情
-- 灵活实现踢人、下线、重复登录控制
+该模型避免了节点间的直接调用，保证了良好的扩展性和容错能力。
 
 ------
 
-### 💓 心跳与连接管理策略
+### 消息类型支持
 
-采用 **应用层心跳机制**：
+当前方案支持以下几类 WebSocket 消息推送方式：
 
-- 客户端定时发送心跳消息
-- 服务端记录最后一次心跳时间
-- 定时任务扫描超时连接并主动关闭
+- **单用户推送**
+- **多用户定向推送**
+- **全局广播**
+- **指定 Session 推送**
 
-该方式相比依赖 TCP 层心跳，具备：
-
-- 更强的可控性
-- 更清晰的业务语义
-- 更方便的监控与扩展能力
+所有消息在集群层面统一封装为广播消息模型，在节点内部再进行精确分发。
 
 ------
 
-### 🚀 适用范围与限制说明
+### 适用场景
 
-**适用场景：**
+该方案适用于以下场景：
 
-- 单机或单实例部署
-- 中低并发 WebSocket 连接
-- 实时通知、聊天、进度推送等场景
+- 中小规模 WebSocket 集群
+- 对连接数和实时性有要求的系统
+- 不需要 STOMP / SockJS 协议支持
+- 需要精细控制 WebSocket 行为的业务系统
 
-**当前限制：**
+------
 
-- 不支持多实例 / 集群消息同步
-- 广播、踢人等操作仅作用于当前实例
-- 如需集群支持，需要引入 MQ / Redis 等中间件
+### 方案特点
 
-> 本方案在设计上已为后续**集群化、消息中间件接入**预留扩展空间。
+- 原生 WebSocket，协议轻量
+- 无 STOMP 依赖，减少中间抽象
+- MQ 解耦节点通信，集群扩展简单
+- 支持运维级 HTTP 管理接口
+- 具备生产环境落地经验
 
 ------
 
@@ -260,6 +236,92 @@ public class WebSocketProperties {
      */
     @NotNull
     private Long heartbeatCheckInterval;
+}
+
+```
+
+#### 广播消息类
+
+```java
+package io.github.atengk.entity;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+import java.util.Set;
+
+/**
+ * WebSocket 集群广播消息实体
+ *
+ * <p>
+ * 用于 WebSocket 集群节点之间通过 MQ 传递消息，
+ * 消息由发送节点投递，接收节点根据消息内容
+ * 决定是否向本地 WebSocket Session 转发。
+ * </p>
+ *
+ * <p>
+ * 典型使用场景：
+ * <ul>
+ *     <li>跨节点广播消息</li>
+ *     <li>跨节点定向推送给指定用户</li>
+ *     <li>集群内节点间消息同步</li>
+ * </ul>
+ * </p>
+ *
+ * <p>
+ * 注意：
+ * <ul>
+ *     <li>消息仅用于节点间通信，不直接暴露给前端</li>
+ *     <li>实际 WebSocket 发送内容由 payload 承载</li>
+ * </ul>
+ * </p>
+ *
+ * @author 孔余
+ * @since 2026-01-30
+ */
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class WebSocketBroadcastMessage implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 消息来源节点标识
+     *
+     * <p>
+     * 用于区分消息的发送节点，
+     * 接收节点可据此避免处理自身发送的消息。
+     * </p>
+     */
+    private String fromNode;
+
+    /**
+     * 实际 WebSocket 消息内容
+     *
+     * <p>
+     * 该字段为最终推送给 WebSocket 客户端的消息体，
+     * 通常为 JSON 字符串。
+     * </p>
+     */
+    private String payload;
+
+    /**
+     * 目标用户集合
+     *
+     * <p>
+     * 当集合为空或为 {@code null} 时，
+     * 表示广播给所有在线用户。
+     * </p>
+     *
+     * <p>
+     * 当集合不为空时，
+     * 仅向指定 userId 对应的 WebSocket Session 推送。
+     * </p>
+     */
+    private Set<String> targetUsers;
 }
 
 ```
@@ -498,6 +560,87 @@ public enum WebSocketBizCode {
 
 ```
 
+#### 消息队列常量类
+
+```java
+package io.github.atengk.constants;
+
+/**
+ * WebSocket MQ 相关常量定义
+ *
+ * <p>
+ * 统一管理 WebSocket 集群模式下使用的
+ * RabbitMQ 交换机、队列及路由键名称，
+ * 避免在代码中出现硬编码字符串。
+ * </p>
+ *
+ * <p>
+ * 使用约定：
+ * <ul>
+ *     <li>交换机固定为单一广播交换机</li>
+ *     <li>队列名称按节点维度动态拼接 nodeId</li>
+ *     <li>所有消息使用统一 routingKey</li>
+ * </ul>
+ * </p>
+ *
+ * <p>
+ * 示例：
+ * <pre>
+ * Exchange : ws.exchange
+ * Queue    : ws.queue.{nodeId}
+ * Routing  : ws.broadcast
+ * </pre>
+ * </p>
+ *
+ * @author 孔余
+ * @since 2026-01-30
+ */
+public final class WebSocketMqConstants {
+
+    /**
+     * WebSocket 广播交换机名称
+     *
+     * <p>
+     * 用于 WebSocket 集群间消息广播，
+     * 所有节点队列均绑定到该交换机。
+     * </p>
+     */
+    public static final String EXCHANGE_WS_BROADCAST = "ws.exchange";
+
+    /**
+     * WebSocket 广播队列名称前缀
+     *
+     * <p>
+     * 实际队列名称由该前缀与节点标识 nodeId 拼接而成，
+     * 每个节点拥有独立的消息队列。
+     * </p>
+     *
+     * <pre>
+     * ws.queue.node-1
+     * ws.queue.node-2
+     * </pre>
+     */
+    public static final String QUEUE_WS_BROADCAST = "ws.queue.";
+
+    /**
+     * WebSocket 广播路由键
+     *
+     * <p>
+     * 所有 WebSocket 广播消息均使用该 routingKey，
+     * 简化路由规则，避免复杂绑定。
+     * </p>
+     */
+    public static final String ROUTING_KEY = "ws.broadcast";
+
+    /**
+     * 私有构造方法，防止实例化
+     */
+    private WebSocketMqConstants() {
+    }
+}
+
+```
+
 ### 配置WebSocketService
 
 ```java
@@ -505,40 +648,44 @@ package io.github.atengk.service;
 
 import com.alibaba.fastjson2.JSONObject;
 import io.github.atengk.config.WebSocketProperties;
+import io.github.atengk.constants.WebSocketMqConstants;
+import io.github.atengk.entity.WebSocketBroadcastMessage;
 import io.github.atengk.entity.WebSocketMessage;
 import io.github.atengk.enums.WebSocketMessageType;
-import lombok.Getter;
+import io.github.atengk.util.NodeIdUtil;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
-import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * WebSocket 核心服务
+ * WebSocket 核心服务类（支持集群）
  *
  * <p>
- * 负责 WebSocket 会话的统一管理，包括：
+ * 负责 WebSocket Session 生命周期管理、心跳维护、
+ * 本地消息投递以及跨节点消息广播。
  * </p>
- * <ul>
- *     <li>Session 与用户关系维护</li>
- *     <li>心跳检测与连接清理</li>
- *     <li>消息推送（单播 / 多播 / 广播）</li>
- *     <li>用户踢下线与重复登录控制</li>
- *     <li>业务消息分发</li>
- * </ul>
  *
  * <p>
- * 该实现基于单机内存模型，适用于单实例部署场景
+ * 设计原则：
+ * <ul>
+ *     <li>Session 仅存在于本地内存，不跨节点共享</li>
+ *     <li>Redis 维护全局状态</li>
+ *     <li>MQ 仅用于跨节点消息投递</li>
+ * </ul>
  * </p>
  *
  * @author 孔余
@@ -550,203 +697,203 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WebSocketService {
 
     /**
-     * SessionId -> WebSocketSession 映射
-     *
-     * <p>
-     * 用于根据 SessionId 精确操作 WebSocket 连接
-     * </p>
+     * Redis Key：在线用户集合
+     */
+    private static final String KEY_USERS = "ws:online:users";
+
+    /**
+     * Redis Key：sessionId -> userId
+     */
+    private static final String KEY_SESSION_USER = "ws:session:user";
+
+    /**
+     * Redis Key：sessionId -> nodeId
+     */
+    private static final String KEY_SESSION_NODE = "ws:session:node";
+
+    /**
+     * Redis Key：nodeId -> sessions
+     */
+    private static final String KEY_NODE_SESSIONS = "ws:node:sessions:";
+
+    /**
+     * Redis Key：nodeId -> 心跳 ZSet
+     */
+    private static final String KEY_HEARTBEAT_ZSET = "ws:heartbeat:zset:";
+
+    /**
+     * 本地 Session 缓存（sessionId -> WebSocketSession）
      */
     private static final Map<String, WebSocketSession> SESSION_MAP = new ConcurrentHashMap<>();
 
     /**
-     * 用户ID -> SessionId 集合 映射
-     *
-     * <p>
-     * 支持同一用户多端同时在线
-     * </p>
+     * 本地用户 Session 映射（userId -> sessionId 集合）
      */
     private static final Map<String, Set<String>> USER_SESSION_MAP = new ConcurrentHashMap<>();
 
-    /**
-     * SessionId -> 连接信息 映射
-     *
-     * <p>
-     * 记录连接建立时间、最近心跳时间等运行时信息
-     * </p>
-     */
-    private static final Map<String, ConnectionInfo> CONNECTION_INFO_MAP = new ConcurrentHashMap<>();
-
-    /**
-     * WebSocket 配置属性
-     */
     private final WebSocketProperties webSocketProperties;
-
-    /**
-     * WebSocket 业务消息分发器
-     */
     private final WebSocketBizDispatcher bizDispatcher;
+    private final RabbitTemplate rabbitTemplate;
+    private final StringRedisTemplate redisTemplate;
 
     /**
-     * 注册新的 WebSocket 会话
+     * 当前节点标识
+     */
+    private final String nodeId = NodeIdUtil.getNodeId();
+
+    /**
+     * 应用是否正在关闭标识
+     */
+    private static final AtomicBoolean SHUTTING_DOWN = new AtomicBoolean(false);
+
+    /**
+     * 应用关闭前标记状态
+     */
+    @PreDestroy
+    public void onShutdown() {
+        SHUTTING_DOWN.set(true);
+        log.info("WebSocketService 正在关闭，nodeId={}", nodeId);
+    }
+
+    /**
+     * WebSocket 用户鉴权
+     *
+     * @param userId 用户ID
+     * @return 是否通过鉴权
+     */
+    public boolean authenticate(String userId) {
+        return userId != null && !userId.isBlank();
+    }
+
+    /**
+     * 注册 WebSocket Session
      *
      * @param userId  用户ID
-     * @param session WebSocket 会话
+     * @param session WebSocket Session
      */
     public void registerSession(String userId, WebSocketSession session) {
-        SESSION_MAP.put(session.getId(), session);
-
-        USER_SESSION_MAP
-                .computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet())
-                .add(session.getId());
-
-        ConnectionInfo info = new ConnectionInfo(
-                userId,
-                session.getId(),
-                session.getRemoteAddress() != null
-                        ? session.getRemoteAddress().toString()
-                        : "未知",
-                LocalDateTime.now(),
-                LocalDateTime.now()
-        );
-
-        CONNECTION_INFO_MAP.put(session.getId(), info);
+        String sessionId = session.getId();
 
         log.info(
-                "WebSocket 用户连接成功，用户ID：{}，SessionID：{}",
-                userId,
-                session.getId()
+                "注册 WebSocket Session，nodeId={}, userId={}, sessionId={}",
+                nodeId, userId, sessionId
+        );
+
+        SESSION_MAP.put(sessionId, session);
+        USER_SESSION_MAP
+                .computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet())
+                .add(sessionId);
+
+        redisTemplate.opsForSet().add(KEY_USERS, userId);
+        redisTemplate.opsForHash().put(KEY_SESSION_USER, sessionId, userId);
+        redisTemplate.opsForHash().put(KEY_SESSION_NODE, sessionId, nodeId);
+        redisTemplate.opsForSet().add(KEY_NODE_SESSIONS + nodeId, sessionId);
+        redisTemplate.opsForZSet().add(
+                KEY_HEARTBEAT_ZSET + nodeId,
+                sessionId,
+                System.currentTimeMillis()
         );
     }
 
     /**
-     * 移除 WebSocket 会话并清理相关映射关系
+     * 移除 WebSocket Session
      *
-     * @param session WebSocket 会话
+     * @param session WebSocket Session
      */
     public void removeSession(WebSocketSession session) {
         if (session == null) {
             return;
         }
 
-        ConnectionInfo info = CONNECTION_INFO_MAP.remove(session.getId());
-        SESSION_MAP.remove(session.getId());
+        String sessionId = session.getId();
+        SESSION_MAP.remove(sessionId);
 
-        if (info != null) {
-            String userId = info.getUserId();
-            Set<String> sessions = USER_SESSION_MAP.get(userId);
+        if (SHUTTING_DOWN.get()) {
+            USER_SESSION_MAP.values().forEach(set -> set.remove(sessionId));
+            return;
+        }
+
+        Object userId = redisTemplate.opsForHash().get(KEY_SESSION_USER, sessionId);
+
+        redisTemplate.opsForHash().delete(KEY_SESSION_USER, sessionId);
+        redisTemplate.opsForHash().delete(KEY_SESSION_NODE, sessionId);
+        redisTemplate.opsForSet().remove(KEY_NODE_SESSIONS + nodeId, sessionId);
+        redisTemplate.opsForZSet().remove(KEY_HEARTBEAT_ZSET + nodeId, sessionId);
+
+        if (userId != null) {
+            Set<String> sessions = USER_SESSION_MAP.get(userId.toString());
             if (sessions != null) {
-                sessions.remove(session.getId());
+                sessions.remove(sessionId);
                 if (sessions.isEmpty()) {
-                    USER_SESSION_MAP.remove(userId);
+                    USER_SESSION_MAP.remove(userId.toString());
+                    redisTemplate.opsForSet().remove(KEY_USERS, userId.toString());
                 }
             }
-
-            log.info(
-                    "WebSocket 用户断开连接，用户ID：{}，SessionID：{}",
-                    userId,
-                    session.getId()
-            );
-        } else {
-            log.info("WebSocket Session 断开连接，SessionID：{}", session.getId());
         }
-    }
 
-    /**
-     * WebSocket 鉴权校验
-     *
-     * @param userId 用户ID
-     * @return 是否鉴权通过
-     */
-    public boolean authenticate(String userId) {
-        if (userId == null || userId.isBlank()) {
-            log.warn("WebSocket 鉴权失败，用户ID为空");
-            return false;
-        }
-        log.info("WebSocket 鉴权通过，用户ID：{}", userId);
-        return true;
+        log.info(
+                "移除 WebSocket Session，nodeId={}, sessionId={}, userId={}",
+                nodeId, sessionId, userId
+        );
     }
 
     /**
      * 处理心跳消息
      *
-     * <p>
-     * 刷新当前 Session 的最近心跳时间
-     * </p>
-     *
-     * @param session WebSocket 会话
+     * @param session WebSocket Session
      */
     public void handleHeartbeat(WebSocketSession session) {
-        ConnectionInfo info = CONNECTION_INFO_MAP.get(session.getId());
-        if (info == null) {
-            log.debug(
-                    "收到心跳但未找到连接信息，SessionID：{}",
-                    session.getId()
-            );
-            return;
-        }
-
-        info.refreshHeartbeat();
-
-        log.debug(
-                "收到 WebSocket 心跳，SessionID：{}，更新时间：{}",
+        redisTemplate.opsForZSet().add(
+                KEY_HEARTBEAT_ZSET + nodeId,
                 session.getId(),
-                info.getLastHeartbeatTime()
+                System.currentTimeMillis()
         );
 
-        // 返回心跳响应
         try {
             if (session.isOpen()) {
-                WebSocketMessage webSocketMessage = new WebSocketMessage();
-                webSocketMessage.setType(WebSocketMessageType.HEARTBEAT_ACK.getCode());
-                String message = JSONObject.toJSONString(webSocketMessage);
-                session.sendMessage(new TextMessage(message));
+                WebSocketMessage msg = new WebSocketMessage();
+                msg.setType(WebSocketMessageType.HEARTBEAT_ACK.getCode());
+                session.sendMessage(
+                        new TextMessage(JSONObject.toJSONString(msg))
+                );
             }
         } catch (Exception e) {
             log.warn(
-                    "发送心跳响应失败，SessionID：{}",
+                    "心跳响应失败，准备关闭 Session，sessionId={}",
                     session.getId(),
                     e
             );
+            closeSession(session.getId(), CloseStatus.SERVER_ERROR);
         }
     }
 
     /**
-     * 检测心跳超时的连接并主动关闭
+     * 检测心跳超时 Session
      */
     public void checkHeartbeatTimeout() {
-        LocalDateTime now = LocalDateTime.now();
+        long now = System.currentTimeMillis();
+        long timeoutMillis = webSocketProperties.getHeartbeatTimeout().toMillis();
+        String heartbeatKey = KEY_HEARTBEAT_ZSET + nodeId;
 
-        CONNECTION_INFO_MAP.values().forEach(info -> {
-            if (Duration.between(info.getLastHeartbeatTime(), now)
-                    .compareTo(webSocketProperties.getHeartbeatTimeout()) > 0) {
-                closeSession(info.getSessionId(), CloseStatus.SESSION_NOT_RELIABLE);
-            }
-        });
-    }
+        Set<String> timeoutSessionIds = redisTemplate.opsForZSet()
+                .rangeByScore(heartbeatKey, 0, now - timeoutMillis);
 
-    /**
-     * 踢指定用户下线
-     *
-     * @param userId 用户ID
-     * @param reason 踢下线原因
-     */
-    public void kickUser(String userId, String reason) {
-        Set<String> sessionIds = USER_SESSION_MAP.get(userId);
-        if (sessionIds == null || sessionIds.isEmpty()) {
+        if (timeoutSessionIds == null || timeoutSessionIds.isEmpty()) {
             return;
         }
 
-        for (String sessionId : Set.copyOf(sessionIds)) {
-            sendToSession(sessionId, reason);
-            closeSession(sessionId, CloseStatus.NORMAL);
+        log.warn(
+                "检测到心跳超时 Session，nodeId={}, count={}",
+                nodeId, timeoutSessionIds.size()
+        );
+
+        for (String sessionId : timeoutSessionIds) {
+            closeSession(sessionId, CloseStatus.SESSION_NOT_RELIABLE);
         }
     }
 
     /**
      * 向指定 Session 发送消息
-     *
-     * @param sessionId SessionID
-     * @param message   消息内容
      */
     public void sendToSession(String sessionId, String message) {
         WebSocketSession session = SESSION_MAP.get(sessionId);
@@ -760,74 +907,98 @@ public class WebSocketService {
         try {
             session.sendMessage(new TextMessage(message));
         } catch (IOException e) {
-            log.error("WebSocket 消息发送异常，SessionID：{}", sessionId, e);
+            log.warn(
+                    "发送消息失败，sessionId={}",
+                    sessionId,
+                    e
+            );
             closeSession(sessionId, CloseStatus.SERVER_ERROR);
         }
     }
 
     /**
-     * 向指定用户发送消息（多端同时接收）
-     *
-     * @param userId  用户ID
-     * @param message 消息内容
+     * 向指定用户发送消息（本节点）
      */
     public void sendToUser(String userId, String message) {
-        Set<String> sessionIds = USER_SESSION_MAP.getOrDefault(userId, Collections.emptySet());
+        Set<String> sessionIds =
+                USER_SESSION_MAP.getOrDefault(userId, Collections.emptySet());
+
         for (String sessionId : Set.copyOf(sessionIds)) {
             sendToSession(sessionId, message);
         }
     }
 
     /**
-     * 向多个用户发送消息
-     *
-     * @param userIds 用户ID集合
-     * @param message 消息内容
+     * 本地向多个用户发送消息
+     */
+    private void sendToUsersLocal(Set<String> userIds, String message) {
+        for (String userId : userIds) {
+            Set<String> sessionIds = USER_SESSION_MAP.get(userId);
+            if (sessionIds == null || sessionIds.isEmpty()) {
+                continue;
+            }
+            for (String sessionId : Set.copyOf(sessionIds)) {
+                sendToSession(sessionId, message);
+            }
+        }
+    }
+
+    /**
+     * 向多个用户发送消息（集群）
      */
     public void sendToUsers(Set<String> userIds, String message) {
         if (userIds == null || userIds.isEmpty()) {
             return;
         }
 
-        for (String userId : Set.copyOf(userIds)) {
-            sendToUser(userId, message);
-        }
+        sendToUsersLocal(userIds, message);
+
+        rabbitTemplate.convertAndSend(
+                WebSocketMqConstants.EXCHANGE_WS_BROADCAST,
+                WebSocketMqConstants.ROUTING_KEY,
+                new WebSocketBroadcastMessage(nodeId, message, userIds)
+        );
     }
 
     /**
-     * 向多个用户发送消息（排除指定用户）
-     *
-     * @param userIds        目标用户集合
-     * @param excludeUserIds 排除的用户集合
-     * @param message        消息内容
+     * 广播消息（集群）
      */
-    public void sendToUsersExclude(Set<String> userIds,
-                                   Set<String> excludeUserIds,
-                                   String message) {
-        if (userIds == null || userIds.isEmpty()) {
+    public void broadcast(String message) {
+        broadcastLocal(message);
+
+        rabbitTemplate.convertAndSend(
+                WebSocketMqConstants.EXCHANGE_WS_BROADCAST,
+                WebSocketMqConstants.ROUTING_KEY,
+                new WebSocketBroadcastMessage(nodeId, message, null)
+        );
+    }
+
+    /**
+     * MQ 消息监听（跨节点广播）
+     */
+    @RabbitListener(queues = "#{wsBroadcastQueue.name}")
+    public void onBroadcast(WebSocketBroadcastMessage message) {
+        if (nodeId.equals(message.getFromNode())) {
             return;
         }
 
-        for (String userId : Set.copyOf(userIds)) {
-            if (excludeUserIds != null && excludeUserIds.contains(userId)) {
-                continue;
-            }
-            sendToUser(userId, message);
+        if (message.getTargetUsers() == null || message.getTargetUsers().isEmpty()) {
+            broadcastLocal(message.getPayload());
+            return;
         }
+
+        sendToUsersLocal(message.getTargetUsers(), message.getPayload());
     }
 
     /**
-     * 广播消息给所有在线 Session
-     *
-     * @param message 消息内容
+     * 本地广播消息
      */
-    public void broadcast(String message) {
+    private void broadcastLocal(String message) {
         SESSION_MAP.values().forEach(session -> {
             if (!session.isOpen()) {
                 removeSession(session);
                 return;
             }
-
             try {
                 session.sendMessage(new TextMessage(message));
             } catch (IOException e) {
@@ -837,10 +1008,26 @@ public class WebSocketService {
     }
 
     /**
-     * 关闭指定 Session
-     *
-     * @param sessionId SessionID
-     * @param status    关闭状态
+     * 踢用户下线
+     */
+    public void kickUser(String userId) {
+        Set<String> sessionIds =
+                USER_SESSION_MAP.getOrDefault(userId, Collections.emptySet());
+
+        for (String sessionId : Set.copyOf(sessionIds)) {
+            closeSession(sessionId);
+        }
+    }
+
+    /**
+     * 关闭 Session（默认状态）
+     */
+    public void closeSession(String sessionId) {
+        closeSession(sessionId, CloseStatus.NORMAL);
+    }
+
+    /**
+     * 关闭 Session
      */
     public void closeSession(String sessionId, CloseStatus status) {
         WebSocketSession session = SESSION_MAP.get(sessionId);
@@ -852,139 +1039,61 @@ public class WebSocketService {
             if (session.isOpen()) {
                 session.close(status);
             }
-        } catch (IOException e) {
-            log.error("关闭 WebSocket Session 异常，SessionID：{}", sessionId, e);
+        } catch (IOException ignored) {
         } finally {
             removeSession(session);
         }
     }
 
     /**
-     * 获取当前在线用户数量
-     *
-     * @return 在线用户数
-     */
-    public int getOnlineUserCount() {
-        return USER_SESSION_MAP.size();
-    }
-
-    /**
-     * 获取所有在线连接信息
-     *
-     * @return 连接信息映射
-     */
-    public Map<String, ConnectionInfo> getAllConnectionInfo() {
-        return Collections.unmodifiableMap(CONNECTION_INFO_MAP);
-    }
-
-    /**
-     * 处理业务消息
-     *
-     * @param session WebSocket 会话
-     * @param message 业务消息
+     * 分发业务消息
      */
     public void handleBizMessage(WebSocketSession session, WebSocketMessage message) {
-        boolean handled = bizDispatcher.dispatch(
-                session,
-                message.getCode(),
-                message
-        );
-
-        if (!handled) {
-            log.warn(
-                    "未找到对应的 BizHandler，sessionId：{}，code：{}",
-                    session.getId(),
-                    message.getCode()
-            );
-        }
+        bizDispatcher.dispatch(session, message.getCode(), message);
     }
 
     /**
-     * 踢除指定用户的所有连接
-     *
-     * @param userId 用户ID
+     * 获取在线用户列表
      */
-    public void kickIfDuplicateLogin(String userId) {
-        Set<String> sessionIds = USER_SESSION_MAP.get(userId);
-        if (sessionIds == null || sessionIds.size() <= 1) {
-            return;
-        }
-
-        for (String sessionId : Set.copyOf(sessionIds)) {
-            closeSession(sessionId, CloseStatus.NORMAL);
-        }
+    public Set<String> getOnlineUsers() {
+        Set<String> users = redisTemplate.opsForSet().members(KEY_USERS);
+        return users == null ? Collections.emptySet() : users;
     }
 
     /**
-     * 踢除指定用户除当前 Session 外的其他连接
-     *
-     * @param userId           用户ID
-     * @param currentSessionId 当前 SessionID
+     * 获取在线用户数量
      */
-    public void kickIfDuplicateLogin(String userId, String currentSessionId) {
-        Set<String> sessionIds = USER_SESSION_MAP.get(userId);
-        if (sessionIds == null || sessionIds.size() <= 1) {
-            return;
-        }
-
-        for (String sessionId : Set.copyOf(sessionIds)) {
-            if (!sessionId.equals(currentSessionId)) {
-                closeSession(sessionId, CloseStatus.NORMAL);
-            }
-        }
+    public int getOnlineUserCount() {
+        Long size = redisTemplate.opsForSet().size(KEY_USERS);
+        return size == null ? 0 : size.intValue();
     }
 
     /**
-     * WebSocket 连接信息
+     * 获取当前节点 Session 数量
      */
-    @Getter
-    public static class ConnectionInfo {
-
-        /**
-         * 用户ID
-         */
-        private final String userId;
-
-        /**
-         * SessionID
-         */
-        private final String sessionId;
-
-        /**
-         * 客户端地址
-         */
-        private final String clientAddress;
-
-        /**
-         * 连接建立时间
-         */
-        private final LocalDateTime connectTime;
-
-        /**
-         * 最近一次心跳时间
-         */
-        private volatile LocalDateTime lastHeartbeatTime;
-
-        public ConnectionInfo(String userId,
-                              String sessionId,
-                              String clientAddress,
-                              LocalDateTime connectTime,
-                              LocalDateTime lastHeartbeatTime) {
-            this.userId = userId;
-            this.sessionId = sessionId;
-            this.clientAddress = clientAddress;
-            this.connectTime = connectTime;
-            this.lastHeartbeatTime = lastHeartbeatTime;
-        }
-
-        /**
-         * 刷新心跳时间
-         */
-        public void refreshHeartbeat() {
-            this.lastHeartbeatTime = LocalDateTime.now();
-        }
+    public int getOnlineSessionCount() {
+        return SESSION_MAP.size();
     }
+
+    /**
+     * 获取用户 Session 数量
+     */
+    public int getUserSessionCount(String userId) {
+        Set<String> sessions = USER_SESSION_MAP.get(userId);
+        return sessions == null ? 0 : sessions.size();
+    }
+
+    /**
+     * 获取指定节点的 Session 列表
+     */
+    public Set<String> getNodeSessions(String nodeId) {
+        Set<String> sessions =
+                redisTemplate.opsForSet().members(KEY_NODE_SESSIONS + nodeId);
+        return sessions == null ? Collections.emptySet() : sessions;
+    }
+
 }
+
 ```
 
 ### 配置WebSocketAuthInterceptor
@@ -1639,6 +1748,161 @@ public class WebSocketSessionScheduler {
 
 ```
 
+### 配置WebSocketRabbitConfig
+
+```java
+package io.github.atengk.config;
+
+import io.github.atengk.constants.WebSocketMqConstants;
+import io.github.atengk.util.NodeIdUtil;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * WebSocket RabbitMQ 配置类
+ *
+ * <p>
+ * 负责 WebSocket 集群场景下的 MQ 基础设施配置，
+ * 用于实现跨节点 WebSocket 消息广播与定向投递。
+ * </p>
+ *
+ * <p>
+ * 设计说明：
+ * <ul>
+ *     <li>使用 DirectExchange + RoutingKey 进行广播</li>
+ *     <li>每个节点拥有独立 Queue（通过 nodeId 区分）</li>
+ *     <li>消息体统一使用 JSON 序列化</li>
+ * </ul>
+ * </p>
+ *
+ * <p>
+ * 消息流向示意：
+ * <pre>
+ * WebSocketService
+ *        ↓
+ *   ws.exchange
+ *        ↓
+ *  ws.queue.{nodeId}
+ *        ↓
+ * 当前节点 WebSocketService 消费
+ * </pre>
+ * </p>
+ *
+ * @author 孔余
+ * @since 2026-01-30
+ */
+@Configuration
+public class WebSocketRabbitConfig {
+
+    /**
+     * WebSocket 广播交换机
+     *
+     * <p>
+     * 使用 DirectExchange，通过固定 routingKey
+     * 将消息投递到所有绑定的节点队列。
+     * </p>
+     *
+     * @return DirectExchange
+     */
+    @Bean
+    public DirectExchange wsExchange() {
+        return new DirectExchange(
+                WebSocketMqConstants.EXCHANGE_WS_BROADCAST,
+                true,
+                false
+        );
+    }
+
+    /**
+     * WebSocket 广播队列（节点级）
+     *
+     * <p>
+     * 每个 WebSocket 节点创建一个独立队列，
+     * 队列名称中包含 nodeId，用于区分不同节点。
+     * </p>
+     *
+     * <p>
+     * 示例：
+     * <pre>
+     * ws.queue.node-1
+     * ws.queue.node-2
+     * </pre>
+     * </p>
+     *
+     * @return Queue
+     */
+    @Bean
+    public Queue wsBroadcastQueue() {
+        return new Queue(
+                WebSocketMqConstants.QUEUE_WS_BROADCAST + NodeIdUtil.getNodeId(),
+                true
+        );
+    }
+
+    /**
+     * WebSocket 广播队列绑定关系
+     *
+     * <p>
+     * 将当前节点的广播队列绑定到 WebSocket 广播交换机，
+     * 使用统一的 routingKey 接收所有广播消息。
+     * </p>
+     *
+     * @param wsBroadcastQueue 当前节点广播队列
+     * @param wsExchange       WebSocket 广播交换机
+     * @return Binding
+     */
+    @Bean
+    public Binding wsBroadcastBinding(
+            Queue wsBroadcastQueue,
+            DirectExchange wsExchange
+    ) {
+        return BindingBuilder
+                .bind(wsBroadcastQueue)
+                .to(wsExchange)
+                .with(WebSocketMqConstants.ROUTING_KEY);
+    }
+
+    /**
+     * WebSocket MQ 消息 JSON 转换器
+     *
+     * <p>
+     * 用于将 MQ 消息与 Java 对象之间进行 JSON 序列化 / 反序列化，
+     * 并限制反序列化时允许的 Java 包路径，防止反序列化安全问题。
+     * </p>
+     *
+     * <p>
+     * 仅信任 {@code io.github.atengk.entity} 包下的消息实体，
+     * 适用于 WebSocketBroadcastMessage 等内部消息模型。
+     * </p>
+     *
+     * @return Jackson2JsonMessageConverter
+     */
+    @Bean
+    public Jackson2JsonMessageConverter jackson2JsonMessageConverter() {
+        Jackson2JsonMessageConverter converter =
+                new Jackson2JsonMessageConverter();
+
+        DefaultJackson2JavaTypeMapper typeMapper =
+                new DefaultJackson2JavaTypeMapper();
+
+        typeMapper.setTrustedPackages(
+                "io.github.atengk.entity"
+        );
+
+        converter.setJavaTypeMapper(typeMapper);
+        return converter;
+    }
+
+}
+
+```
+
 
 
 ### 配置WebSocketConfig
@@ -1720,20 +1984,31 @@ public class WebSocketConfig implements WebSocketConfigurer {
 ```java
 package io.github.atengk.controller;
 
+import com.alibaba.fastjson2.JSONObject;
 import io.github.atengk.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
  * WebSocket 管理控制器
  *
  * <p>
- * 提供基于 HTTP 的 WebSocket 管理与运维接口，
- * 用于查询连接状态、主动推送消息、踢用户下线等操作。
+ * 提供基于 HTTP 的 WebSocket 运维与管理接口，
+ * 用于查询在线状态、主动推送消息、广播消息、
+ * 以及强制断开用户或 Session 连接。
+ * </p>
+ *
+ * <p>
+ * 说明：
+ * <ul>
+ *     <li>仅用于服务端运维 / 管理场景</li>
+ *     <li>不参与 WebSocket 实时通信流程</li>
+ *     <li>所有操作最终委托给 {@link WebSocketService}</li>
+ * </ul>
  * </p>
  *
  * @author 孔余
@@ -1746,132 +2021,169 @@ import java.util.Set;
 public class WebSocketController {
 
     /**
-     * WebSocket 服务
+     * WebSocket 核心服务
      */
     private final WebSocketService webSocketService;
 
     /**
-     * 获取当前在线用户数
+     * 获取在线用户数量
      *
-     * @return 在线用户数量
+     * @return 在线用户数
      */
     @GetMapping("/online/count")
-    public int getOnlineCount() {
-        return webSocketService.getOnlineUserCount();
+    public long getOnlineUserCount() {
+        long count = webSocketService.getOnlineUserCount();
+        log.debug("查询在线用户数量，count={}", count);
+        return count;
     }
 
     /**
-     * 获取当前所有在线连接信息
+     * 获取当前节点在线 Session 数量
      *
-     * @return SessionID 与连接信息的映射关系
+     * @return Session 数量
      */
-    @GetMapping("/connections")
-    public Map<String, WebSocketService.ConnectionInfo> getConnections() {
-        return webSocketService.getAllConnectionInfo();
+    @GetMapping("/online/session/count")
+    public int getOnlineSessionCount() {
+        int count = webSocketService.getOnlineSessionCount();
+        log.debug("查询在线 Session 数量，count={}", count);
+        return count;
     }
 
     /**
-     * 向指定用户发送 WebSocket 消息
+     * 获取在线用户列表
      *
-     * <p>
-     * 如果用户存在多个连接，将向该用户的所有 Session 推送消息。
-     * </p>
+     * @return 用户ID集合
+     */
+    @GetMapping("/online/users")
+    public Set<String> getOnlineUsers() {
+        Set<String> users = webSocketService.getOnlineUsers();
+        log.debug("查询在线用户列表，size={}", users.size());
+        return users;
+    }
+
+    /**
+     * 向指定用户推送 WebSocket 消息
      *
-     * @param userId  用户ID
-     * @param message 消息内容
+     * @param userId 用户ID
+     * @param body   请求体（message 字段）
      */
     @PostMapping("/send/user/{userId}")
     public void sendToUser(
             @PathVariable String userId,
-            @RequestBody String message
+            @RequestBody JSONObject body
     ) {
-        log.info("HTTP 推送 WebSocket 消息给用户，userId：{}，message：{}", userId, message);
+        String message = body.getString("message");
+
+        log.info(
+                "HTTP 推送 WebSocket 消息给用户，userId={}, message={}",
+                userId,
+                message
+        );
+
         webSocketService.sendToUser(userId, message);
     }
 
     /**
-     * 向指定用户集合群发 WebSocket 消息
+     * 向多个用户群发 WebSocket 消息
      *
-     * <p>
-     * 根据用户ID集合进行群发，
-     * 每个用户的所有在线 Session 都会收到消息。
-     * </p>
-     *
-     * @param userIds 用户ID集合
-     * @param message 消息内容
+     * @param body 请求体（userIds + message）
      */
     @PostMapping("/send/users")
-    public void sendToUsers(
-            @RequestParam Set<String> userIds,
-            @RequestBody String message
-    ) {
+    public void sendToUsers(@RequestBody JSONObject body) {
+        Set<String> userIds = new HashSet<>(
+                body.getJSONArray("userIds").toJavaList(String.class)
+        );
+        String message = body.getString("message");
+
         log.info(
-                "HTTP 群发 WebSocket 消息，userIds：{}，message：{}",
+                "HTTP 群发 WebSocket 消息，userIds={}, message={}",
                 userIds,
                 message
         );
+
         webSocketService.sendToUsers(userIds, message);
     }
 
     /**
-     * 向指定 Session 发送 WebSocket 消息
+     * 向指定 Session 推送 WebSocket 消息
      *
-     * @param sessionId WebSocket SessionID
-     * @param message   消息内容
+     * @param sessionId Session ID
+     * @param body      请求体（message 字段）
      */
     @PostMapping("/send/session/{sessionId}")
     public void sendToSession(
             @PathVariable String sessionId,
-            @RequestBody String message
+            @RequestBody JSONObject body
     ) {
-        log.info("HTTP 推送 WebSocket 消息给 Session，sessionId：{}，message：{}", sessionId, message);
+        String message = body.getString("message");
+
+        log.info(
+                "HTTP 推送 WebSocket 消息给 Session，sessionId={}, message={}",
+                sessionId,
+                message
+        );
+
         webSocketService.sendToSession(sessionId, message);
     }
 
     /**
-     * 广播 WebSocket 消息
+     * 广播 WebSocket 消息（所有在线用户）
      *
-     * <p>
-     * 向当前所有在线 Session 推送消息。
-     * </p>
-     *
-     * @param message 消息内容
+     * @param body 请求体（message 字段）
      */
     @PostMapping("/broadcast")
-    public void broadcast(@RequestBody String message) {
-        log.info("HTTP 广播 WebSocket 消息，message：{}", message);
+    public void broadcast(@RequestBody JSONObject body) {
+        String message = body.getString("message");
+
+        log.info(
+                "HTTP 广播 WebSocket 消息，message={}",
+                message
+        );
+
         webSocketService.broadcast(message);
     }
 
     /**
-     * 踢指定用户下线
-     *
-     * <p>
-     * 将关闭该用户的所有 WebSocket 连接，并向其发送下线原因。
-     * </p>
+     * 强制踢指定用户下线（关闭其所有 Session）
      *
      * @param userId 用户ID
-     * @param reason 下线原因
      */
-    @PostMapping("/kick/{userId}")
-    public void kickUser(
-            @PathVariable String userId,
-            @RequestParam(required = false, defaultValue = "管理员强制下线") String reason
-    ) {
-        log.warn("HTTP 请求踢用户下线，userId：{}，reason：{}", userId, reason);
-        webSocketService.kickUser(userId, reason);
+    @PostMapping("/kick/user/{userId}")
+    public void kickUser(@PathVariable String userId) {
+        log.warn(
+                "HTTP 踢用户下线，userId={}",
+                userId
+        );
+
+        webSocketService.kickUser(userId);
     }
 
     /**
-     * 手动触发一次 WebSocket 心跳超时检测
+     * 强制踢指定 Session 下线
+     *
+     * @param sessionId Session ID
+     */
+    @PostMapping("/kick/session/{sessionId}")
+    public void kickSession(@PathVariable String sessionId) {
+        log.warn(
+                "HTTP 踢 Session 下线，sessionId={}",
+                sessionId
+        );
+
+        webSocketService.closeSession(sessionId);
+    }
+
+    /**
+     * 手动触发 WebSocket 心跳超时检测
      *
      * <p>
-     * 主要用于运维或调试场景。
+     * 一般用于运维排查或调试场景，
+     * 正常情况下由定时任务自动触发。
      * </p>
      */
     @PostMapping("/heartbeat/check")
     public void checkHeartbeat() {
-        log.info("HTTP 触发 WebSocket 心跳超时检测");
+        log.info("HTTP 手动触发 WebSocket 心跳超时检测");
         webSocketService.checkHeartbeatTimeout();
     }
 }
