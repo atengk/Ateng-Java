@@ -168,6 +168,72 @@ public class MyConfig {
 
 
 
+## InitializingBean / DisposableBean
+
+```java
+package local.ateng.java.netty.netty;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.stereotype.Component;
+
+@Component
+@RequiredArgsConstructor
+public class NettyServerStarter implements InitializingBean, DisposableBean {
+
+    private final NettyServer nettyServer;
+
+    @Override
+    public void afterPropertiesSet() {
+        nettyServer.start();
+    }
+
+    @Override
+    public void destroy() {
+        nettyServer.stop();
+    }
+}
+```
+
+**Spring 容器启动时（Bean 初始化阶段）**
+
+**完整顺序大致是：**
+
+1. 实例化 `NettyServerStarter`
+2. 构造函数注入 `NettyServer`
+3. 属性注入完成
+4. 👉 **调用 `afterPropertiesSet()`**
+5. Bean 就绪
+
+所以：
+
+> **Netty Server 会在 Spring 容器“完全准备好 Bean 之后”启动**
+
+这是非常关键的一点。
+
+------
+
+**Spring 容器关闭时（优雅停机阶段）**
+
+当发生下面任意情况：
+
+- 应用正常退出
+- Spring Boot 收到 `SIGTERM`（docker / k8s / kill）
+- `ApplicationContext.close()`
+
+Spring 会：
+
+1. 触发 `ContextClosedEvent`
+2. 👉 **调用 `DisposableBean.destroy()`**
+3. 销毁 Bean
+
+于是：
+
+> **Netty Server 会在 Spring 关闭时被主动 stop**
+
+
+
 ## SmartLifecycle
 
 `SmartLifecycle` 是 Spring 提供的 **高级生命周期管理接口**，适用于需要在 **Spring 容器启动和停止时执行特定逻辑** 的场景。
