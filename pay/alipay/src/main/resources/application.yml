@@ -18,5 +18,6 @@ alipay:
 
   gateway-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
   notify-url: http://你的域名/api/pay/alipay/notify
+  return-url: http://你的域名/index.html
   charset: utf-8
   sign-type: RSA2

@@ -2,22 +2,15 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>支付宝沙箱支付测试</title>
+    <title>支付宝页面支付测试</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- 二维码生成库 -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs2@0.0.2/qrcode.min.js"></script>
 
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
             background: #f5f7fa;
             padding: 40px;
             text-align: center;
-        }
-
-        h1 {
-            margin-bottom: 10px;
         }
 
         .container {
@@ -31,7 +24,7 @@
 
         button {
             width: 100%;
-            padding: 12px 0;
+            padding: 14px 0;
             font-size: 16px;
             border: none;
             border-radius: 6px;
@@ -39,114 +32,19 @@
             color: #fff;
             cursor: pointer;
         }
-
-        button:disabled {
-            background: #a0c2ff;
-            cursor: not-allowed;
-        }
-
-        .status {
-            margin-top: 16px;
-            font-size: 14px;
-            color: #555;
-            min-height: 20px;
-        }
-
-        .order {
-            margin-top: 10px;
-            font-size: 13px;
-            color: #888;
-        }
-
-        #qrcode {
-            margin-top: 20px;
-            padding: 20px;
-            background: #fafafa;
-            border-radius: 8px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 260px;
-            border: 1px dashed #ddd;
-        }
-
-        .tip {
-            margin-top: 16px;
-            color: #666;
-            font-size: 13px;
-        }
     </style>
 </head>
 <body>
 
-<h1>支付宝沙箱支付测试</h1>
+<h1>支付宝页面支付测试</h1>
 
 <div class="container">
-
-    <button id="payBtn" onclick="createPay()">创建支付订单</button>
-
-    <div class="status" id="statusText"></div>
-    <div class="order" id="orderText"></div>
-
-    <div id="qrcode">
-        <span style="color:#999;font-size:14px;">二维码将在此显示</span>
-    </div>
-
-    <div class="tip">
-        请使用 <strong>支付宝沙箱 App</strong> 扫码支付
-    </div>
-
+    <button onclick="pay()">立即支付</button>
 </div>
 
 <script>
-    const payBtn = document.getElementById("payBtn");
-    const statusText = document.getElementById("statusText");
-    const orderText = document.getElementById("orderText");
-    const qrContainer = document.getElementById("qrcode");
-
-    function createPay() {
-
-        // UI 初始化
-        payBtn.disabled = true;
-        statusText.textContent = "正在创建支付订单...";
-        orderText.textContent = "";
-        qrContainer.innerHTML = "";
-
-        fetch("/api/pay/alipay/create", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            }
-        })
-        .then(resp => {
-            if (!resp.ok) {
-                throw new Error("HTTP " + resp.status);
-            }
-            return resp.text();
-        })
-        .then(qrCodeText => {
-
-            statusText.textContent = "订单创建成功，请扫码支付";
-
-            new QRCode(qrContainer, {
-                text: qrCodeText,
-                width: 220,
-                height: 220
-            });
-
-            // 从二维码内容里简单截取订单号（仅用于演示）
-            const match = qrCodeText.match(/out_trade_no=([^&]+)/);
-            if (match) {
-                orderText.textContent = "订单号：" + decodeURIComponent(match[1]);
-            }
-        })
-        .catch(err => {
-            statusText.textContent = "创建支付失败，请重试";
-            console.error(err);
-        })
-        .finally(() => {
-            payBtn.disabled = false;
-        });
+    function pay() {
+        window.location.href = "/api/pay/alipay/create";
     }
 </script>
 

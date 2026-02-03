@@ -425,6 +425,8 @@ public class AlipayController {
 
 ### 前端页面（展示支付二维码）
 
+Vue3 可以参考使用 VueUse 的 useQRCode 生成二维码图片，链接：[二维码生成：useQuCode](https://atengk.github.io/Ateng-Vue/#/apps/vueuse-integrations/?id=%e4%ba%8c%e7%bb%b4%e7%a0%81%e7%94%9f%e6%88%90%ef%bc%9auseqrcode)
+
 ```html
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -1000,7 +1002,7 @@ public class AlipayController {
     private final AlipayClient alipayClient;
     private final AlipayConfig alipayConfig;
 
-    /** 1️⃣ 创建支付（扫码） */
+    /** 创建支付（扫码） */
     @PostMapping("/create")
     public String create() throws Exception {
 
@@ -1027,7 +1029,7 @@ public class AlipayController {
         throw new RuntimeException(response.getSubMsg());
     }
 
-    /** 2️⃣ 支付宝异步通知 */
+    /** 支付宝异步通知 */
     @PostMapping("/notify")
     public String notify(HttpServletRequest request) throws Exception {
 
@@ -1054,7 +1056,7 @@ public class AlipayController {
         return "success";
     }
 
-    /** 3️⃣ 查询订单状态 */
+    /** 查询订单状态 */
     @GetMapping("/query")
     public String query(@RequestParam String outTradeNo) throws Exception {
 
@@ -1070,7 +1072,7 @@ public class AlipayController {
         return JSON.toJSONString(response);
     }
 
-    /** 4️⃣ 关闭订单 */
+    /** 关闭订单 */
     @PostMapping("/close")
     public String close(@RequestParam String outTradeNo) throws Exception {
 
@@ -1086,7 +1088,7 @@ public class AlipayController {
         return JSON.toJSONString(response);
     }
 
-    /** 5️⃣ 退款 */
+    /** 退款 */
     @PostMapping("/refund")
     public String refund(
             @RequestParam String outTradeNo,
@@ -1106,7 +1108,7 @@ public class AlipayController {
         return JSON.toJSONString(response);
     }
 
-    /** 6️⃣ 查询退款 */
+    /** 查询退款 */
     @GetMapping("/refund/query")
     public String refundQuery(
             @RequestParam String outTradeNo,
@@ -1127,7 +1129,7 @@ public class AlipayController {
         return JSON.toJSONString(response);
     }
 
-    /** 7️⃣ 对账 / 补偿（主动同步） */
+    /** 对账 / 补偿（主动同步） */
     @PostMapping("/sync")
     public String sync(@RequestParam String outTradeNo) throws Exception {
 
@@ -1150,3 +1152,241 @@ public class AlipayController {
 }
 ```
 
+
+
+## 跳转支付宝支付
+
+### 配置
+
+只需要添加一个 `return-url` 参数
+
+**application.yml 配置**
+
+```yaml
+alipay:
+  return-url: http://你的域名/index.html
+```
+
+**AlipayClient 配置 Bean**
+
+```java
+public class AlipayConfig {
+
+    /**
+     * 支付宝支付成功跳转页面地址
+     */
+    private String returnUrl;
+}
+```
+
+### 接口
+
+```java
+package io.github.atengk.alipay.controller;
+
+import cn.hutool.core.util.IdUtil;
+import com.alibaba.fastjson2.JSON;
+import com.alipay.api.AlipayClient;
+import com.alipay.api.domain.AlipayTradePagePayModel;
+import com.alipay.api.internal.util.AlipaySignature;
+import com.alipay.api.request.AlipayTradePagePayRequest;
+import io.github.atengk.alipay.config.AlipayConfig;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * 支付宝页面支付控制器
+ *
+ * <p>
+ * 负责：
+ * <ul>
+ *   <li>创建支付宝页面支付订单（跳转至支付宝收银台）</li>
+ *   <li>接收并处理支付宝异步通知回调</li>
+ * </ul>
+ * </p>
+ *
+ * <p>
+ * 说明：
+ * <ul>
+ *   <li>支付结果以 {@code notify} 异步通知为准</li>
+ *   <li>同步 {@code return_url} 仅用于页面跳转展示</li>
+ *   <li>异步通知处理必须保证业务幂等</li>
+ * </ul>
+ * </p>
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/pay/alipay")
+@RequiredArgsConstructor
+public class AlipayController {
+
+    /**
+     * 支付宝 SDK 客户端
+     * <p>
+     * 由配置类统一初始化（证书模式 / 密钥模式）
+     * </p>
+     */
+    private final AlipayClient alipayClient;
+
+    /**
+     * 支付宝配置（appId、回调地址、证书路径等）
+     */
+    private final AlipayConfig alipayConfig;
+
+    /**
+     * 创建页面支付订单（跳转到支付宝收银台）
+     *
+     * <p>
+     * 该接口会返回一段 HTML form，
+     * 浏览器渲染后会自动提交到支付宝网关。
+     * </p>
+     */
+    @GetMapping("/create")
+    public void create(HttpServletResponse response) throws Exception {
+
+        // 商户订单号（必须全局唯一）
+        String outTradeNo = "ORDER_" + IdUtil.getSnowflakeNextIdStr();
+
+        // 页面支付请求对象
+        AlipayTradePagePayRequest request = new AlipayTradePagePayRequest();
+
+        // 异步通知地址（以此为准处理业务结果）
+        request.setNotifyUrl(alipayConfig.getNotifyUrl());
+
+        // 同步跳转地址（仅用于页面跳转展示）
+        request.setReturnUrl(alipayConfig.getReturnUrl());
+
+        // 页面支付业务参数（推荐使用 Model，避免签名问题）
+        AlipayTradePagePayModel model = new AlipayTradePagePayModel();
+        model.setOutTradeNo(outTradeNo);
+        model.setProductCode("FAST_INSTANT_TRADE_PAY");
+        model.setTotalAmount("0.01");
+        model.setSubject("测试订单");
+
+        request.setBizModel(model);
+
+        log.info("[ALIPAY-CREATE] outTradeNo={}", outTradeNo);
+
+        // 调用 SDK 生成自动提交的 HTML 表单
+        String form = alipayClient.pageExecute(request).getBody();
+
+        // 直接将表单写回浏览器
+        response.setContentType("text/html;charset=UTF-8");
+        response.getWriter().write(form);
+        response.getWriter().flush();
+    }
+
+    /**
+     * 支付宝异步通知回调
+     *
+     * <p>
+     * 注意：
+     * 1. 必须进行验签
+     * 2. 必须保证业务处理幂等
+     * 3. 处理成功后返回 "success"
+     * </p>
+     */
+    @PostMapping("/notify")
+    public String notify(HttpServletRequest request) throws Exception {
+
+        // 将支付宝回调参数转换为 Map
+        Map<String, String> params = new HashMap<>();
+        request.getParameterMap()
+                .forEach((k, v) -> params.put(k, v[0]));
+
+        log.info("[ALIPAY-NOTIFY] params={}", JSON.toJSONString(params));
+
+        // 证书模式验签
+        boolean signVerified = AlipaySignature.rsaCertCheckV1(
+                params,
+                alipayConfig.getRealAlipayCertPath(),
+                alipayConfig.getCharset(),
+                alipayConfig.getSignType()
+        );
+
+        if (!signVerified) {
+            log.warn("[ALIPAY-NOTIFY] sign verify fail");
+            return "failure";
+        }
+
+        // 仅处理支付成功状态
+        if ("TRADE_SUCCESS".equals(params.get("trade_status"))) {
+            log.info("[ALIPAY-BIZ] pay success outTradeNo={}",
+                    params.get("out_trade_no"));
+
+            // TODO 更新订单状态（必须做幂等控制）
+        }
+
+        // 返回 success 告知支付宝已正确处理
+        return "success";
+    }
+}
+```
+
+### 前端页面
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>支付宝页面支付测试</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+            background: #f5f7fa;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 420px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 32px;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px 0;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            background: #1677ff;
+            color: #fff;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<h1>支付宝页面支付测试</h1>
+
+<div class="container">
+    <button onclick="pay()">立即支付</button>
+</div>
+
+<script>
+    function pay() {
+        window.location.href = "/api/pay/alipay/create";
+    }
+</script>
+
+</body>
+</html>
+```
+
+![image-20260203092841102](./assets/image-20260203092841102.png)

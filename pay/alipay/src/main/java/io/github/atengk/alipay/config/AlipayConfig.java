@@ -82,6 +82,11 @@ public class AlipayConfig {
     private String notifyUrl;
 
     /**
+     * 支付宝支付成功跳转页面地址
+     */
+    private String returnUrl;
+
+    /**
      * 请求与响应字符集
      */
     private String charset;
