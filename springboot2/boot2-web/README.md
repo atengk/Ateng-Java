@@ -1,12 +1,12 @@
-# SpringBoot 4
+# SpringBoot 2
 
 ## 版本信息
 
 | 组件       | 版本   |
 | ---------- | ------ |
-| JDK        | 25     |
+| JDK        | 8      |
 | Maven      | 3.9.12 |
-| SpringBoot | 4.0.2  |
+| SpringBoot | 2.7.18 |
 
 
 
@@ -23,18 +23,18 @@
 
     <!-- 项目坐标 -->
     <groupId>io.github.atengk</groupId>
-    <artifactId>boot4-web</artifactId>
+    <artifactId>boot2-web</artifactId>
     <version>1.0.0</version>
-    <name>boot4-web</name>
-    <description>SpringBoot4 演示模块</description>
+    <name>boot2-web</name>
+    <description>SpringBoot2 演示模块</description>
     <url>https://atengk.github.io/dev</url>
 
     <!-- 项目属性 -->
     <properties>
-        <java.version>25</java.version>
+        <java.version>8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-boot.version>4.0.2</spring-boot.version>
+        <spring-boot.version>2.7.18</spring-boot.version>
         <maven-compiler.version>3.14.1</maven-compiler.version>
         <lombok.version>1.18.42</lombok.version>
         <hutool.version>5.8.43</hutool.version>
@@ -173,10 +173,11 @@
 
 ```yaml
 server:
-  port: 14000
+  port: 12000
 spring:
   application:
     name: ${project.artifactId}
+
 ```
 
 ### 配置 SpringBootApplication
@@ -188,10 +189,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class SpringBoot4WebApplication {
+public class SpringBoot2WebApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SpringBoot4WebApplication.class, args);
+        SpringApplication.run(SpringBoot2WebApplication.class, args);
     }
 
 }
@@ -199,7 +200,7 @@ public class SpringBoot4WebApplication {
 
 
 
-## 使用 Springboot 4
+## 使用 Springboot 2
 
 ### 创建 Controller
 
@@ -213,11 +214,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Spring Boot 4 Web 演示 Controller
+ * Spring Boot 2 Web 演示 Controller
  *
  * <p>主要用于验证：
  * <ul>
- *     <li>Spring Boot 4 是否能正常启动</li>
+ *     <li>Spring Boot 2 是否能正常启动</li>
  *     <li>Web 模块是否可用</li>
  *     <li>JSON 返回是否正常</li>
  *     <li>参数绑定、路径变量、请求体解析是否正常</li>
@@ -234,7 +235,7 @@ public class DemoController {
      * 基础连通性测试接口
      *
      * <p>访问：
-     * http://localhost:14000/api/demo/hello
+     * http://localhost:12000/api/demo/hello
      */
     @GetMapping("/hello")
     public String hello() {
@@ -245,7 +246,7 @@ public class DemoController {
      * 返回 JSON 对象示例
      *
      * <p>访问：
-     * http://localhost:14000/api/demo/info
+     * http://localhost:12000/api/demo/info
      */
     @GetMapping("/info")
     public Map<String, Object> info() {
@@ -261,7 +262,7 @@ public class DemoController {
      * 路径变量演示
      *
      * <p>访问：
-     * http://localhost:14000/api/demo/user/1001
+     * http://localhost:12000/api/demo/user/1001
      */
     @GetMapping("/user/{id}")
     public Map<String, Object> getUser(@PathVariable("id") Long id) {
@@ -276,7 +277,7 @@ public class DemoController {
      * 请求参数演示
      *
      * <p>访问：
-     * http://localhost:14000/api/demo/param?name=atengk&age=18
+     * http://localhost:12000/api/demo/param?name=atengk&age=18
      */
     @GetMapping("/param")
     public Map<String, Object> param(
@@ -302,7 +303,7 @@ public class DemoController {
      * </pre>
      *
      * <p>POST：
-     * http://localhost:14000/api/demo/login
+     * http://localhost:12000/api/demo/login
      */
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody Map<String, Object> body) {
@@ -317,7 +318,7 @@ public class DemoController {
      * 异常测试接口
      *
      * <p>访问：
-     * http://localhost:14000/api/demo/error
+     * http://localhost:12000/api/demo/error
      */
     @GetMapping("/error")
     public String error() {

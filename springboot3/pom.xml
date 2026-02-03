@@ -33,5 +33,6 @@
         <module>email</module>
         <module>jasypt</module>
         <module>boot3-deploy</module>
+        <module>boot3-web</module>
     </modules>
 </project>

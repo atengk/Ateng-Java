@@ -1,4 +1,4 @@
-package io.github.atengk.controller;
+package io.github.atengk.web.controller;
 
 import org.springframework.web.bind.annotation.*;
 

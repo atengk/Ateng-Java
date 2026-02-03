@@ -1,9 +1,9 @@
-package io.github.atengk;
+package io.github.atengk.web;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-    @SpringBootApplication
+@SpringBootApplication
 public class SpringBoot4WebApplication {
 
     public static void main(String[] args) {

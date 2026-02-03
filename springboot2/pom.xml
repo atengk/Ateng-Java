@@ -21,5 +21,6 @@
         <module>boot2-jasypt</module>
         <module>boot2-deploy</module>
         <module>boot2-deploy-example</module>
+        <module>boot2-web</module>
     </modules>
 </project>
