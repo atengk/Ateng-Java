@@ -16,5 +16,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>alipay</module>
+        <module>IJPay</module>
     </modules>
 </project>

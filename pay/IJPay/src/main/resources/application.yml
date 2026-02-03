@@ -1,0 +1,23 @@
+server:
+  port: 16001
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
+---
+# 支付宝支付配置
+alipay:
+  app-id: 9021000159665623
+  private-key: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCdhLnkHOciKtoCJZ//F1awevioPX/2etsEDYB5+DL84Voe7NluqSYK8KTtmoHDvGYJH9fApoepPzx472Z/FLYjKOV+H3Zksf8VsH08uvVaOr92gzFXoVgGsuZEmTmouj5M9EUHBqydHrZI6HR/9X1qYMHuK6l+SqlgtvZpzw+Zt4QNhgnsf6luBYmSjjzycHxBYceSnxVU3F3YqvlXx/hBEYA3uH/WBbbK6Gfd9e9mEY5YDKHt8fn8iaYBKkOs3Qk3GL0AKlXXTyy473ENDgj4DPKURABUiMDnFvGCzA2ZqIceUGK9c5FxGx632mLDh34vcTLk7vFtjl6kMXiIBSKhAgMBAAECggEAFbBw6DgSm2HLIwCLR1SvWx2Tn5bYR9gi0CwLxL+oRanB/wAd8F7aHieEjjL4KzuF0TvROXW0uFk8umo8csMnUTAQaY1rf/ICbbofhH05y3LLakYmRSqyNDnt+wQeLF14tp/r4UvJ+NiBwQhBAl2LJ1qrWWAptnoRWH/Y7jjUrRWgTzMTA1VF2VuCrAvScjXkFJSCyJHgjQyfcIdJLEQoNBMi4xfs+LKirhgwPLrg1U+dG7OgC5G722V+5Yr32zYsXP4A+o5aC/RJwMxw+fen/n/+L7P+ttG+xioGufblJLAc1IbtY52cI3zqMnRDzIZH00o2lKz8Z3GBWLdZKybcAQKBgQDcUsW+0Yzdsuk40WcehM4aM0iFj7YvUb6UWp5QbSy4vY6D3giTtqC2c2XDa1umWZYmvKenH1UyWZtdA9c1azl67FOeytcLcMstKcnOXvqOk/IzQKRx58hpFU7CglsEX3zKQMRp3igSAN7Ge73WWt3rF56xUFJPF+Go2mIXl0N5nQKBgQC3BnTiEosLxQ7PoeBaZiKokQhBL7a17dz6mC9VwHgrwzCh2O0ydaWWG72yYQoDmLmFPlLxwH20MzucMbJy2Nf+UNSbsirDTLDFxPxHt9EnJw4h1OxPes8pwEi5yDmveu321UUb+jeIfDv02TRthW0VF0+AtEihwU71C2EG/0fP1QKBgQDHZWHxwFRskG7iLSHWTPr6W09XESkgyipguWJuB2BiEavZTCkXBkGM3gNLSO45LvrlM/fHGGRSnSYumDs87T2oMhm7rHfSstIunZM2Yl8AioS4PdiV/d8yu0X8Y11cJ88YfGVGKvi40nDL0VGNnc8Z5NaKQtc7HbHszzfXgd5fQQKBgAXTWMkRWgen4A7P0jpOYfAHncGlaSVlStFXIrqSA8Ew101vgC1I/VpHy8Pvvsfahp0tHKrBO78OmmkgU9O//zADFqFWDHJm8IF7AaSuvyOF5LdC9bqZ6BomGqp/Kwbg3M4sf6SiVD4t5iKm/zo1MwGm2kr4cg9j/cVi9VWprnl5AoGAVLOwhoAaXe1NWcTJUuyq6zrzwlAuJOOP01tJ9LeyxQPCQhF46woOrclRDKhhRcrdMEp8dBC58QtLA9yF2bVKZaZBqAsjASub7dwGMmj/4L0wIUiAHcki/96g+jNiY8NzN25/SeRhnPpKtDZNO6R+MExht53LWDY3OxAMtToo1f4=
+  app-cert-path: alipay/cert/appPublicCert.crt
+  alipay-cert-path: alipay/cert/alipayPublicCert.crt
+  alipay-root-cert-path: alipay/cert/alipayRootCert.crt
+
+  server-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+  notify-url: http://175.178.193.128:20049/api/pay/alipay/notify
+  return-url: http://175.178.193.128:20049/tradePage.html
+  charset: UTF-8
+  sign-type: RSA2

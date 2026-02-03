@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>支付宝页面支付测试</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+            background: #f5f7fa;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 420px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 32px;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px 0;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            background: #1677ff;
+            color: #fff;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<h1>支付宝页面支付测试</h1>
+
+<div class="container">
+    <button onclick="pay()">立即支付</button>
+</div>
+
+<script>
+    function pay() {
+        window.location.href = "/api/pay/alipay/wap";
+    }
+</script>
+
+</body>
+</html>
