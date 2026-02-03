@@ -1197,3 +1197,248 @@ AlipaySDK.defaultService().payOrder(orderString, fromScheme: "yourAppScheme") { 
 
 
 
+## 全资金能力
+
+### 单笔转账到账户接口
+
+```java
+    /**
+     * 单笔转账到账户接口
+     */
+    @PostMapping("/fund/transfer")
+    public String fundTransfer() {
+        try {
+            AlipayFundTransToaccountTransferModel model = new AlipayFundTransToaccountTransferModel();
+            model.setOutBizNo("FUND_TRANSFER_" + IdUtil.getSnowflakeNextIdStr());
+            model.setPayeeType("ALIPAY_LOGONID");
+            model.setPayeeAccount("nvpwqr6580@sandbox.com");
+            model.setAmount("10.00");
+            model.setRemark("IJPay 转账测试");
+
+            AlipayFundTransToaccountTransferResponse response =
+                    AliPayApi.transferToResponse(model);
+
+            return response.getBody();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+```
+
+响应：
+
+```json
+{
+	"alipay_fund_trans_toaccount_transfer_response": {
+		"code": "10000",
+		"msg": "Success",
+		"order_id": "20260203110070001502360003802737",
+		"out_biz_no": "FUND_TRANSFER_2018602082733182976",
+		"pay_date": "2026-02-03 16:26:56"
+	},
+	"alipay_cert_sn": "260ccbb11e34bc7981552fc8a782a9aa",
+	"sign": "aC8NC4LzT28FEbIYRgl4PgDb6Smiwgs0J5P03bPQuQJN3XOki1/gn/WFKbVhFwB3NdYIV8sTEQioOochKEfs3hGd47UWYvgRqGLUK9oDAuXwBklGlDtHOEQnM4OV/tGnQdgo7A61pUuSEIqTpcEDnVvw1oYgF9NfLu8z3sC+L+zdfLf5+//x4O27y1+oHaMWpkcx4ZtwNAyIbVXqRIyxmRz9v0OHCzZcVnsWIyvcVu+ZCGtIJUwpxxbkZGAKpGZNz0SV+ESVBN96OjGFfdLKyZM6Pf2cnvax89vVInftmRO1JQvN5JdzeCXkS8cZYbZOKZzqB5j6I/nq4WJs4g98fw=="
+}
+```
+
+### 单笔转账到账户查询接口
+
+```java
+    /**
+     * 单笔转账到账户查询接口
+     */
+    @PostMapping("/fund/transfer/query")
+    public String fundTransferQuery(@RequestParam(required = false, name = "outBizNo") String outBizNo,
+                                    @RequestParam(required = false, name = "orderId") String orderId) {
+        try {
+            AlipayFundTransOrderQueryModel model = new AlipayFundTransOrderQueryModel();
+
+            if (StrUtil.isBlank(outBizNo) && StrUtil.isBlank(orderId)) {
+                throw new RuntimeException("参数有误。参数out_biz_no与order_id不能同时为空");
+            }
+
+            if (StrUtil.isNotBlank(outBizNo)) {
+                model.setOutBizNo(outBizNo);
+            }
+            if (StrUtil.isNotBlank(orderId)) {
+                model.setOrderId(orderId);
+            }
+
+            AlipayFundTransOrderQueryResponse response =
+                    AliPayApi.transferQueryToResponse(model);
+
+            return response.getBody();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+```
+
+响应：
+
+```
+POST: http://localhost:16001/api/pay/alipay/fund/transfer/query?orderId=20260203110070001502360003802737
+响应:
+{
+	"alipay_fund_trans_order_query_response": {
+		"code": "10000",
+		"msg": "Success",
+		"order_fee": "0.00",
+		"order_id": "20260203110070001502360003802737",
+		"out_biz_no": "FUND_TRANSFER_2018602082733182976",
+		"pay_date": "2026-02-03 16:26:56",
+		"status": "SUCCESS"
+	},
+	"alipay_cert_sn": "260ccbb11e34bc7981552fc8a782a9aa",
+	"sign": "EnDRrwhb/BUE41uW+YYEJCVrmuq6BrecLfUmuFbiPUVNxKl5pDuzuWHWJcflB822CAuRf6fa45yzEJE2LTjjjlo8Rl16jDL1qta5JuSmtERdAyawkcsrz5yWb6hJFFYD0f3VJ++heL8ej4CvJsT/XvUlfzOVaHo1XxBpigJw+r6qQC2WGNzjY2y/gu3Czh5weSKVRZGQac1yA+E15DplxjZff7YzbKNUFQTWrpaLuecWpY2DPhrd6/dVFacLQjNx/ncAM45cwxvYkls4WxykwlG8IG0mO54NRtRXKWEW4XYgOcrQg1oXtMESUBucQOg+KVCVcPJ52PEqrBm/fh4KFg=="
+}
+```
+
+
+
+### 转账支付接口
+
+```java
+    /**
+     * 转账支付接口
+     */
+    @PostMapping(value = "/fund/uni/transfer")
+    public String fundUniTransfer() {
+        String totalAmount = "1";
+        AlipayFundTransUniTransferModel model = new AlipayFundTransUniTransferModel();
+        model.setOutBizNo("ATENG" + IdUtil.getSnowflakeNextIdStr());
+        model.setTransAmount(totalAmount);
+        model.setProductCode("TRANS_ACCOUNT_NO_PWD");
+        model.setBizScene("DIRECT_TRANSFER");
+        model.setOrderTitle("统一转账-转账至支付宝账户");
+        model.setRemark("IJPay 测试统一转账");
+
+        Participant payeeInfo = new Participant();
+        payeeInfo.setIdentity("nvpwqr6580@sandbox.com");
+        payeeInfo.setIdentityType("ALIPAY_LOGON_ID");
+        payeeInfo.setName("nvpwqr6580");
+        model.setPayeeInfo(payeeInfo);
+
+        try {
+            return AliPayApi.uniTransferToResponse(model, null).getBody();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+```
+
+响应：
+
+```json
+{
+	"alipay_fund_trans_uni_transfer_response": {
+		"code": "10000",
+		"msg": "Success",
+		"order_id": "20260203110070000002360003799974",
+		"out_biz_no": "ATENG2018606220661563392",
+		"pay_fund_order_id": "20260203110070001502360003802738",
+		"status": "SUCCESS",
+		"trans_date": "2026-02-03 16:43:22"
+	},
+	"alipay_cert_sn": "260ccbb11e34bc7981552fc8a782a9aa",
+	"sign": "VWvg7uRLcxyC2HKKsM2vUEIZJjuXuCi6vtb6TX30OfMt2iaUZqgZrIE6DP3ufk5ze4iL5Z7tD6ED2x3O8um1sORqnd/txe6bkWte2I6HUMYDNa8irEkjRVto9wCrCJstF9uaEcab5ePSH7GgDfkQhBaqTnYLGD+aCTJQIHHVNl3b6kHMyB4xLqGC/uPZ8KLpZuREt4k/ahPdKVz0/vSFwPITfRyoOwuShvG4EhZejipP7hiq0UjEQB0fsORm1zRcSsYopmu1Sr4YePJSEt1m/e8Kg1l6yZfETaqM24NuqxzY0Xt4woG0jct8M/P5s1NcjkbY/DtrmxzTf9pn6JK6XQ=="
+}
+```
+
+### 转账支付查询接口
+
+```java
+    /**
+     * 转账支付接口
+     */
+    @PostMapping(value = "/fund/uni/transfer/query")
+    public String fundUniTransferQuery(@RequestParam(required = false, name = "outBizNo") String outBizNo,
+                                   @RequestParam(required = false, name = "orderId") String orderId) {
+        AlipayFundTransCommonQueryModel model = new AlipayFundTransCommonQueryModel();
+
+        if (StrUtil.isBlank(outBizNo) && StrUtil.isBlank(orderId)) {
+            throw new RuntimeException("参数有误。参数out_biz_no与order_id不能同时为空");
+        }
+
+        if (StringUtils.isNotEmpty(outBizNo)) {
+            model.setOutBizNo(outBizNo);
+        }
+        if (StringUtils.isNotEmpty(orderId)) {
+            model.setOrderId(orderId);
+        }
+
+        try {
+            return AliPayApi.transCommonQueryToResponse(model, null).getBody();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+```
+
+响应：
+
+```
+POST: http://localhost:16001/api/pay/alipay/fund/uni/transfer/query?orderId=20260203110070000002360003799974
+
+响应:
+{
+	"alipay_fund_trans_common_query_response": {
+		"code": "10000",
+		"msg": "Success",
+		"order_id": "20260203110070000002360003799974",
+		"out_biz_no": "ATENG2018606220661563392",
+		"pay_date": "2026-02-03 16:43:22",
+		"pay_fund_order_id": "20260203110070001502360003802738",
+		"status": "SUCCESS",
+		"trans_amount": "1.00"
+	},
+	"alipay_cert_sn": "260ccbb11e34bc7981552fc8a782a9aa",
+	"sign": "Dj4ui08SMoog27FLvmRWu5iChlSBBwRiFSq4lllECmoJoxpH63vbSoY13hGS6lHmJekLVoDaRriRp082EXvO3H9ninxTGTY2pt/3gRDQ+6mqtHeY+Jt8WOmCsHSlPDmqIkFMKg/PhtT8wC5dbil7YYj0euEZvJz1TLOLgY48krl0FXQfctcSrYFLYURGf/K2WiluOeuYNTDCaN2UYgHkX77nm8L7m2ZmxLqVg2L9SU0fKNzGEITh0VpmfXZOsvugDWVEcZk0E1k+QyjIjIsS2bMyVmzM5jIinwIt6yNWaopxU8Q57xUULlTeeRt5gP/bykfD4tIzzZlP/2J/UqdrMw=="
+}
+```
+
+
+
+
+
+
+
+### 查询账户余额
+
+```java
+    /**
+     * 查询支付宝账户余额
+     */
+    @PostMapping("/fund/account")
+    public String fundAccountQuery() {
+        try {
+            AlipayFundAccountQueryModel model = new AlipayFundAccountQueryModel();
+            model.setAccountType("ACCTRANS_ACCOUNT"); // 资金账户
+
+            AlipayFundAccountQueryResponse response =
+                    AliPayApi.accountQueryToResponse(model, null);
+
+            return response.getBody();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+```
+
+响应：
+
+```json
+{
+	"alipay_fund_account_query_response": {
+		"code": "10000",
+		"msg": "Success",
+		"available_amount": "1000782.15",
+		"freeze_amount": "0.00"
+	},
+	"alipay_cert_sn": "260ccbb11e34bc7981552fc8a782a9aa",
+	"sign": "jJpp2A9csVP5h0di4X36FlIxW2LhJ0juwKol6yl4ztZxkrTfS1EjDYyQ0tzCW/9hx1Uha7h1GILbgWkMW9TWW8DWWQBFWt9u0gwnAf46aDYxl8sywXsR4hv28slP1H+hpv64AWhZRbSorQLdxcJ2Gn46dhVKwBO5/l95PTq/J6olBHwsiIejP737t/cCxG5HBx+EM9b6462kDmDIOzXwwHQQ01jY6WwynI30BGQOfuX+Hoh2VTvd+1jRr2CEF/ZW1AFJ+68Z20g1i+XMDGmaXg47sokpWV+AHkrNgGM+Y6xS6WmfyIocbS8CAeZLmeAjRnqJbNd8ZK2owQa8tmYDAw=="
+}
+```
+

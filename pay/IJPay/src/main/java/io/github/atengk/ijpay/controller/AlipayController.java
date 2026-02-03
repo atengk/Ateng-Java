@@ -1,12 +1,14 @@
 package io.github.atengk.ijpay.controller;
 
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alipay.api.domain.*;
 import com.alipay.api.internal.util.AlipaySignature;
-import com.alipay.api.response.AlipayTradePrecreateResponse;
+import com.alipay.api.response.*;
 import com.ijpay.alipay.AliPayApi;
 import io.github.atengk.ijpay.config.AlipayConfig;
+import io.micrometer.common.util.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -344,4 +346,129 @@ public class AlipayController {
         log.info("[ALIPAY-NOTIFY] return success");
         return "success";
     }
+
+    /**
+     * 单笔转账到账户接口
+     */
+    @PostMapping("/fund/transfer")
+    public String fundTransfer() {
+        try {
+            AlipayFundTransToaccountTransferModel model = new AlipayFundTransToaccountTransferModel();
+            model.setOutBizNo("FUND_TRANSFER_" + IdUtil.getSnowflakeNextIdStr());
+            model.setPayeeType("ALIPAY_LOGONID");
+            model.setPayeeAccount("nvpwqr6580@sandbox.com");
+            model.setAmount("10.00");
+            model.setRemark("IJPay 转账测试");
+
+            AlipayFundTransToaccountTransferResponse response =
+                    AliPayApi.transferToResponse(model);
+
+            return response.getBody();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 单笔转账到账户查询接口
+     */
+    @PostMapping("/fund/transfer/query")
+    public String fundTransferQuery(@RequestParam(required = false, name = "outBizNo") String outBizNo,
+                                    @RequestParam(required = false, name = "orderId") String orderId) {
+        try {
+            AlipayFundTransOrderQueryModel model = new AlipayFundTransOrderQueryModel();
+
+            if (StrUtil.isBlank(outBizNo) && StrUtil.isBlank(orderId)) {
+                throw new RuntimeException("参数有误。参数out_biz_no与order_id不能同时为空");
+            }
+
+            if (StrUtil.isNotBlank(outBizNo)) {
+                model.setOutBizNo(outBizNo);
+            }
+            if (StrUtil.isNotBlank(orderId)) {
+                model.setOrderId(orderId);
+            }
+
+            AlipayFundTransOrderQueryResponse response =
+                    AliPayApi.transferQueryToResponse(model);
+
+            return response.getBody();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 转账支付接口
+     */
+    @PostMapping(value = "/fund/uni/transfer")
+    public String fundUniTransfer() {
+        String totalAmount = "1";
+        AlipayFundTransUniTransferModel model = new AlipayFundTransUniTransferModel();
+        model.setOutBizNo("ATENG" + IdUtil.getSnowflakeNextIdStr());
+        model.setTransAmount(totalAmount);
+        model.setProductCode("TRANS_ACCOUNT_NO_PWD");
+        model.setBizScene("DIRECT_TRANSFER");
+        model.setOrderTitle("统一转账-转账至支付宝账户");
+        model.setRemark("IJPay 测试统一转账");
+
+        Participant payeeInfo = new Participant();
+        payeeInfo.setIdentity("nvpwqr6580@sandbox.com");
+        payeeInfo.setIdentityType("ALIPAY_LOGON_ID");
+        payeeInfo.setName("nvpwqr6580");
+        model.setPayeeInfo(payeeInfo);
+
+        try {
+            return AliPayApi.uniTransferToResponse(model, null).getBody();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * 转账支付接口
+     */
+    @PostMapping(value = "/fund/uni/transfer/query")
+    public String fundUniTransferQuery(@RequestParam(required = false, name = "outBizNo") String outBizNo,
+                                   @RequestParam(required = false, name = "orderId") String orderId) {
+        AlipayFundTransCommonQueryModel model = new AlipayFundTransCommonQueryModel();
+
+        if (StrUtil.isBlank(outBizNo) && StrUtil.isBlank(orderId)) {
+            throw new RuntimeException("参数有误。参数out_biz_no与order_id不能同时为空");
+        }
+
+        if (StringUtils.isNotEmpty(outBizNo)) {
+            model.setOutBizNo(outBizNo);
+        }
+        if (StringUtils.isNotEmpty(orderId)) {
+            model.setOrderId(orderId);
+        }
+
+        try {
+            return AliPayApi.transCommonQueryToResponse(model, null).getBody();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * 查询支付宝账户余额
+     */
+    @PostMapping("/fund/account")
+    public String fundAccountQuery() {
+        try {
+            AlipayFundAccountQueryModel model = new AlipayFundAccountQueryModel();
+            model.setAccountType("ACCTRANS_ACCOUNT"); // 资金账户
+
+            AlipayFundAccountQueryResponse response =
+                    AliPayApi.accountQueryToResponse(model, null);
+
+            return response.getBody();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
 }
