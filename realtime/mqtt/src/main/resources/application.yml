@@ -1,0 +1,16 @@
+server:
+  port: 18009
+spring:
+  application:
+    name: ${project.artifactId}
+---
+# MQTT 配置
+mqtt:
+  broker: tcp://192.168.1.12:1883
+  client-id: springboot3-mqtt-client
+  username: admin
+  password: public
+  timeout: 10
+  keep-alive: 20
+  default-topic: test/topic
+
