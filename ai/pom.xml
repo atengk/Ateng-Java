@@ -16,5 +16,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>spring-ai-alibaba</module>
+        <module>spring-ai</module>
     </modules>
 </project>
