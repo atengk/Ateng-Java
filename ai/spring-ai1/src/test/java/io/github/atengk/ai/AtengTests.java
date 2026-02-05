@@ -1,4 +1,4 @@
-package io.github.atengk.web;
+package io.github.atengk.ai;
 
 import org.springframework.boot.test.context.SpringBootTest;
 

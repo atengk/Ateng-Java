@@ -14,15 +14,15 @@
 
     <!-- 项目属性 -->
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-boot.version>3.5.7</spring-boot.version>
-        <spring-ai.version>3.5.7</spring-ai.version>
-        <spring-ai-alibaba.version>1.0.0.2</spring-ai-alibaba.version>
-        <maven-compiler.version>3.12.1</maven-compiler.version>
-        <lombok.version>1.18.36</lombok.version>
-        <hutool.version>5.8.41</hutool.version>
+        <spring-boot.version>4.0.2</spring-boot.version>
+        <spring-ai-alibaba.version>1.1.2.1</spring-ai-alibaba.version>
+        <maven-compiler.version>3.14.1</maven-compiler.version>
+        <lombok.version>1.18.42</lombok.version>
+        <hutool.version>5.8.43</hutool.version>
+        <fastjson2.version>2.0.53</fastjson2.version>
     </properties>
 
     <!-- 项目依赖 -->

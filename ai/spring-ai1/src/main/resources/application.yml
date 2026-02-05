@@ -1,5 +1,15 @@
 server:
-  port: 12000
+  port: 19001
 spring:
   application:
     name: ${project.artifactId}
+---
+# Spring AI 配置
+spring:
+  ai:
+    deepseek:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${DEEPSEEK_API_KEY}
+      chat:
+        options:
+          model: deepseek-v3.2
