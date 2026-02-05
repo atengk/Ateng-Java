@@ -8,14 +8,16 @@
     <groupId>io.github.atengk</groupId>
     <artifactId>ai</artifactId>
     <version>1.0.0</version>
-    <description>AI 应用开发相关</description>
-    <url>https://atengk.github.io/dev</url>
+    <description>Spring AI 1.0 模块</description>
+    <url>https://docs.spring.io/spring-ai/reference/1.0/index.html</url>
 
     <!-- 打包方式为 POM，表示该项目为聚合项目 -->
     <packaging>pom</packaging>
     <!-- 项目包含的子模块 -->
     <modules>
-        <module>spring-ai-alibaba</module>
-        <module>spring-ai</module>
+        <module>spring-ai1</module>
+        <module>spring-ai2</module>
+        <module>spring-ai-alibaba1</module>
+        <module>spring-ai-alibaba2</module>
     </modules>
 </project>

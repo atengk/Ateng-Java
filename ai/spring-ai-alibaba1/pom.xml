@@ -6,12 +6,12 @@
 
     <!-- 项目坐标 -->
     <groupId>io.github.atengk</groupId>
-    <artifactId>spring-ai-alibaba</artifactId>
+    <artifactId>spring-ai-alibaba1</artifactId>
     <version>1.0.0</version>
-    <name>spring-ai-alibaba</name>
-    <description>spring-ai-alibaba</description>
-    <url>https://atengk.github.io/dev</url>
-    
+    <name>spring-ai-alibaba1</name>
+    <description>Spring AI Alibaba 1.0 模块</description>
+    <url>https://java2ai.com/docs/overview/</url>
+
     <!-- 项目属性 -->
     <properties>
         <java.version>21</java.version>
