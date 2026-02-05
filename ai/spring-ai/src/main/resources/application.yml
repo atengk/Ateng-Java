@@ -7,6 +7,17 @@ spring:
 # Spring AI 配置
 spring:
   ai:
+    chat:
+      memory:
+        redis:
+          host: 175.178.193.128
+          port: 20003
+          index-name: chat-memory-idx
+          key-prefix: "chat-memory:"
+          time-to-live: 24h
+          initialize-schema: true
+          max-conversation-ids: 1000
+          max-messages-per-conversation: 1000
     deepseek:
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       api-key: ${DEEPSEEK_API_KEY}
@@ -14,3 +25,22 @@ spring:
         options:
           model: deepseek-v3.2
           temperature: 0.7
+---
+# Redis的相关配置
+spring:
+  data:
+    redis:
+      host: 175.178.193.128     # Redis服务器地址
+      port: 20003               # Redis端口
+      database: 0               # Redis数据库索引
+      password: Admin@123       # Redis密码
+      timeout: 5000ms           # 连接超时时间
+      client-type: jedis        # 使用 Jedis
+
+      jedis:
+        pool:
+          max-active: 100       # 最大连接数
+          max-idle: 100         # 最大空闲连接
+          min-idle: 0           # 最小空闲连接
+          max-wait: -1ms        # 获取连接最大等待时间（-1 表示无限）
+

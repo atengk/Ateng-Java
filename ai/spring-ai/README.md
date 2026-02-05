@@ -201,7 +201,7 @@ Spring AI 2.0 不是一个 Prompt 工具库，而是：
 
 ------
 
-## 基础使用
+## 基础配置
 
 **添加依赖**
 
@@ -245,30 +245,278 @@ spring:
           temperature: 0.7
 ```
 
-**使用接口**
+## 基础使用
+
+**controller创建**
+
+```java
+package io.github.atengk.ai.controller;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+
+@RestController
+@RequestMapping("/api/ai")
+public class BaseChatController {
+
+    private final ChatClient chatClient;
+
+    public BaseChatController(ChatClient.Builder chatClientBuilder) {
+        this.chatClient = chatClientBuilder.build();
+    }
+
+}
+```
+
+### 最基础的同步对话
+
+```java
+/**
+ * 最基础的同步对话
+ */
+@GetMapping("/chat")
+public String chat(@RequestParam String message) {
+    return chatClient
+            .prompt()
+            .user(message)
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat?message=SpringAI是什么？
+
+![image-20260205100433151](./assets/image-20260205100433151.png)
+
+### 流式对话（SSE / WebFlux 场景）
+
+```java
+/**
+ * 流式对话（SSE / WebFlux 场景）
+ */
+@GetMapping("/chat/stream")
+public Flux<String> stream(@RequestParam String message) {
+    return chatClient
+            .prompt()
+            .user(message)
+            .stream()
+            .content();
+}
+```
+
+GET /api/ai/chat/stream?message=SpringAI是什么？
+
+![image-20260205100607964](./assets/image-20260205100607964.png)
+
+### 带 System Prompt 的基础用法
+
+```java
+/**
+ * 带 System Prompt 的基础用法
+ */
+@GetMapping("/chat/system")
+public String chatWithSystem(
+        @RequestParam String system,
+        @RequestParam String message) {
+
+    return chatClient
+            .prompt()
+            .system(system)
+            .user(message)
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat/system?system=你是一个Java专家&message=什么是SpringAI
+
+![image-20260205100749241](./assets/image-20260205100749241.png)
+
+### 使用 Prompt Template 的基础示例
+
+```java
+/**
+ * 使用 Prompt Template 的基础示例
+ */
+@GetMapping("/chat/template")
+public String chatWithTemplate(
+        @RequestParam String topic,
+        @RequestParam(defaultValue = "Java") String language) {
+
+    return chatClient
+            .prompt()
+            .user(u -> u.text("""
+                    请用 {language} 的视角，
+                    解释一下 {topic}，
+                    并给出一个简单示例
+                    """)
+                    .param("topic", topic)
+                    .param("language", language)
+            )
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat/template?topic=SpringAI是什么？
+
+![image-20260205100840340](./assets/image-20260205100840340.png)
+
+
+
+## Prompt 与模型参数管理
+
+## 多轮对话与上下文管理
+
+**添加依赖**
+
+```xml
+<!-- Spring AI Redis Chat Memory -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-chat-memory-repository-redis</artifactId>
+</dependency>
+
+<!-- Spring Boot Redis 数据库集成 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+
+<!-- Jedis 客户端 -->
+<dependency>
+    <groupId>redis.clients</groupId>
+    <artifactId>jedis</artifactId>
+</dependency>
+```
+
+**配置 ChatMemoryConfig**
+
+```java
+package io.github.atengk.ai.config;
+
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.memory.repository.redis.RedisChatMemoryRepository;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import redis.clients.jedis.JedisPooled;
+
+import java.time.Duration;
+
+@Configuration
+public class ChatMemoryConfig {
+
+    @Bean
+    public JedisPooled jedisPooled() {
+        return new JedisPooled("175.178.193.128", 20003, null, "Admin@123");
+    }
+
+    @Bean
+    public ChatMemory chatMemory(JedisPooled jedisPooled) {
+        ChatMemoryRepository chatMemoryRepository = RedisChatMemoryRepository.builder()
+                .jedisClient(jedisPooled)
+                .indexName("my-chat-index")
+                .keyPrefix("my-chat:")
+                .timeToLive(Duration.ofHours(24))
+                .build();
+
+        ChatMemory chatMemory = MessageWindowChatMemory.builder()
+                .chatMemoryRepository(chatMemoryRepository)
+                .maxMessages(10)
+                .build();
+
+        return chatMemory;
+    }
+
+}
+```
+
+也可以直接在配置文件配置，但现在这个版本还不支持
+
+```java
+spring:
+  ai:
+    chat:
+      memory:
+        redis:
+          host: 175.178.193.128
+          port: 20003
+          index-name: chat-memory-idx
+          key-prefix: "chat-memory:"
+          time-to-live: 24h
+          initialize-schema: true
+          max-conversation-ids: 1000
+          max-messages-per-conversation: 1000
+```
+
+**配置 ChatClientConfig**
+
+```java
+package io.github.atengk.ai.config;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class ChatClientConfig {
+
+    @Bean
+    public ChatClient chatClient(
+            ChatClient.Builder builder,
+            ChatMemory chatMemory) {
+
+        return builder
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor
+                                .builder(chatMemory)
+                                .build()
+                )
+                .build();
+    }
+
+}
+```
+
+**创建接口**
 
 ```java
 package io.github.atengk.ai.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/api/ai/memory")
 @RequiredArgsConstructor
-public class ChatController {
+public class MemoryChatController {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient chatClient;
 
     @GetMapping("/chat")
-    public String chat(@RequestParam String message) {
-        ChatClient chatClient = chatClientBuilder.build();
+    public String chat(
+            @RequestParam String conversationId,
+            @RequestParam String message) {
 
         return chatClient
                 .prompt()
                 .user(message)
+                .advisors(a ->
+                        a.param(ChatMemory.CONVERSATION_ID, conversationId)
+                )
                 .call()
                 .content();
     }
@@ -276,7 +524,33 @@ public class ChatController {
 }
 ```
 
+**使用接口**
 
+```
+GET /api/ai/memory/chat?conversationId=001&message=我叫阿腾
+```
+
+![image-20260205113742176](./assets/image-20260205113742176.png)
+
+```
+GET /api/ai/memory/chat?conversationId=001&message=我叫什么？
+```
+
+![image-20260205113806322](./assets/image-20260205113806322.png)
+
+查看Redis数据
+
+![image-20260205113855495](./assets/image-20260205113855495.png)
+
+
+
+## Tool Calling：让 AI 调用代码
+
+## RAG：接入企业知识库
+
+## 结构化输出与业务集成
+
+## 架构建议与 Controller 分层
 
 ### 1️⃣ Spring AI 核心概念
 
