@@ -1042,7 +1042,9 @@ POST /api/ai/rag/chat?question=Spring AI 支持哪些核心能力？
 
 
 
-## MCP Client
+## 接入 MCP Server
+
+MCP Server 开发参考：[链接](/work/Ateng-Java/ai/spring-ai1-mcp-server/)
 
 ### 基础配置
 
@@ -1068,7 +1070,79 @@ spring:
             local-mcp:
               url: http://localhost:19002
               sse-endpoint: /sse
+        name: ateng-mcp-client
+        version: 1.0.0
 ```
+
+**注册 ToolCallbackProvider**
+
+让 Client 能发现 MCP Server + 拿到 Tool 元数据
+
+```java
+@Configuration
+@RequiredArgsConstructor
+public class ChatClientConfig {
+
+    @Bean
+    public ChatClient mcpServerChatClient(
+            ChatClient.Builder builder,
+            ToolCallbackProvider mcpToolCallbackProvider) {
+
+        return builder
+                .defaultToolCallbacks(mcpToolCallbackProvider)
+                .build();
+    }
+
+}
+```
+
+### 创建接口
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.tool.CommonTools;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/mcp-server")
+public class McpServerChatController {
+
+    private final ChatClient mcpServerChatClient;
+
+    /**
+     * 最基础的同步对话
+     */
+    @GetMapping("/chat")
+    public String chat(@RequestParam String message) {
+        return mcpServerChatClient
+                .prompt()
+                .system("""
+                        你可以在必要时调用系统提供的工具，
+                        工具的返回结果是可信的，
+                        不要自行编造结果。
+                        """)
+                .user(message)
+                .call()
+                .content();
+    }
+
+}
+```
+
+![image-20260206205417322](./assets/image-20260206205417322.png)
+
+MCP Server 被调用 Tool 的日志
+
+![image-20260206205343992](./assets/image-20260206205343992.png)
+
+
 
 
 

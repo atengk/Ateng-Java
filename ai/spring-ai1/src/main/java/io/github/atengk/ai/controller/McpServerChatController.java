@@ -10,20 +10,18 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/ai/tool")
-public class ToolChatController {
+@RequestMapping("/api/ai/mcp-server")
+public class McpServerChatController {
 
-    private final ChatClient chatClient;
-    private final CommonTools commonTools;
+    private final ChatClient mcpServerChatClient;
 
     /**
      * 最基础的同步对话
      */
     @GetMapping("/chat")
     public String chat(@RequestParam String message) {
-        return chatClient
+        return mcpServerChatClient
                 .prompt()
-                .tools(commonTools)
                 .system("""
                         你可以在必要时调用系统提供的工具，
                         工具的返回结果是可信的，

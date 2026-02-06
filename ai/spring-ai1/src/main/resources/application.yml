@@ -3,6 +3,10 @@ server:
 spring:
   application:
     name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
 ---
 # Spring AI 配置
 spring:

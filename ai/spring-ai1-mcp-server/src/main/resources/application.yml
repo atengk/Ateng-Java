@@ -6,7 +6,6 @@ spring:
 logging:
   level:
     root: info
-    org.springframework.ai.mcp: debug
     io.github.atengk: debug
 ---
 # MCP Server 配置

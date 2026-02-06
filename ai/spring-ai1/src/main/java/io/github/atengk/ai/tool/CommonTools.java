@@ -2,13 +2,14 @@ package io.github.atengk.ai.tool;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
 /**
  * 通用工具
  */
-//@Component
+@Component
 @Slf4j
 public class CommonTools {
 
