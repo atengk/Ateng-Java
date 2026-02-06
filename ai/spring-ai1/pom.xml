@@ -87,6 +87,12 @@
             <artifactId>mysql-connector-j</artifactId>
         </dependency>
 
+        <!-- Spring AI Milvus Vector Store -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
+        </dependency>
+
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->

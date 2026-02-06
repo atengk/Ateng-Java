@@ -525,6 +525,23 @@ GET /api/ai/memory/chat?conversationId=001&message=我叫什么？
 
 ## Tool Calling：让 AI 调用代码
 
+Tool Calling（工具调用）允许 AI 在对话过程中，根据上下文**主动调用后端方法**，从而将自然语言请求转化为真实的业务操作。这一机制非常适合用于查询、计算、规则判断等场景。
+
+------
+
+**为什么需要 Tool Calling**
+
+在没有 Tool Calling 的情况下，AI 只能“回答问题”，却无法参与真实业务流程，例如：
+
+- 查询数据库中的用户信息
+- 计算订单金额
+- 获取当前时间或系统状态
+- 执行业务规则校验
+
+Tool Calling 的目标是：
+
+> **让 AI 决定“要不要调用代码”，而不是“直接生成结果”。**
+
 ### 创建 Tools 
 
 ```java
@@ -570,7 +587,46 @@ public class CommonTools {
 }
 ```
 
-### 创建接口
+### 注册 Tools
+
+#### 全局注册
+
+```java
+package io.github.atengk.ai.config;
+
+import io.github.atengk.ai.tool.CommonTools;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@RequiredArgsConstructor
+public class ChatClientConfig {
+
+    private final CommonTools commonTools;
+
+    @Bean
+    public ChatClient chatClient(
+            ChatClient.Builder builder,
+            ChatMemory chatMemory) {
+
+        return builder
+                .defaultTools(commonTools)
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor
+                                .builder(chatMemory)
+                                .build()
+                )
+                .build();
+    }
+
+}
+```
+
+#### 局部注册
 
 ```java
 package io.github.atengk.ai.controller;
@@ -614,13 +670,381 @@ public class ToolChatController {
 
 ### 使用 Tool
 
+```
+GET /api/ai/tool/chat?message=现在的时间是？
+```
 
+![image-20260206085826334](./assets/image-20260206085826334.png)
+
+![image-20260206085751739](./assets/image-20260206085751739.png)
+
+```
+GET /api/ai/tool/chat?message=1加1等于几？
+```
+
+![image-20260206085934161](./assets/image-20260206085934161.png)
+
+![image-20260206085920849](./assets/image-20260206085920849.png)
+
+```
+GET /api/ai/tool/chat?message=我的ID是10010，我的用户名称是什么？
+```
+
+![image-20260206090042832](./assets/image-20260206090042832.png)
+
+![image-20260206090032459](./assets/image-20260206090032459.png)
+
+```
+GET /api/ai/tool/chat?message=我的年龄是25岁，请问是是否成年了？
+```
+
+![image-20260206090151079](./assets/image-20260206090151079.png)
+
+![image-20260206090140489](./assets/image-20260206090140489.png)
 
 ---
 
 
 
-## RAG
+## RAG：接入企业知识库
+
+RAG（Retrieval-Augmented Generation，检索增强生成）用于在模型回答问题前，引入**外部知识内容**，从而避免模型“凭空回答”或依赖过期知识。
+
+在 Spring AI 中，RAG 的核心思想是：
+
+> **先检索，再生成，而不是直接让模型回答。**
+
+------
+
+**RAG 的基本组成**
+
+一个最小可用的 RAG 流程包含三个部分：
+
+- **文档（Document）**：知识的基本载体
+- **向量存储（VectorStore）**：用于相似度检索
+- **检索增强 Advisor**：将检索结果注入 Prompt
+
+### 基础配置
+
+**添加依赖**
+
+```xml
+<!-- Spring AI Milvus Vector Store -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
+</dependency>
+```
+
+**编辑配置**
+
+```yaml
+spring:
+  ai:
+    vectorstore:
+      milvus:
+        initialize-schema: true
+        database-name: default
+        collection-name: spring_ai_knowledge_ateng
+        embedding-dimension: 1536
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+
+        id-field-name: id
+        content-field-name: content
+        metadata-field-name: metadata
+        embedding-field-name: embedding
+
+        auto-id: false
+
+        client:
+          host: 175.178.193.128
+          port: 20016
+          username: root
+          password: Milvus
+          secure: false
+
+```
+
+### 知识库初始化
+
+知识库初始化、手工知识录入
+
+#### 创建实体类
+
+```java
+package io.github.atengk.ai.entity;
+
+import lombok.Data;
+
+import java.util.List;
+import java.util.Map;
+
+@Data
+public class RagIngestRequest {
+
+    private List<String> texts;
+
+    private Map<String, Object> metadata;
+
+}
+```
+
+#### 创建Service
+
+```java
+package io.github.atengk.ai.service;
+
+import io.github.atengk.ai.entity.RagIngestRequest;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class RagIngestService {
+
+    private final VectorStore vectorStore;
+
+    /**
+     * 批量写入知识
+     */
+    public int ingest(RagIngestRequest request) {
+        List<Document> documents = request.getTexts()
+                .stream()
+                .map(text -> new Document(text, buildMetadata(request.getMetadata())))
+                .collect(Collectors.toList());
+
+        vectorStore.add(documents);
+        return documents.size();
+    }
+
+    /**
+     * 单条写入，方便测试
+     */
+    public void ingestSingle(String text, Map<String, Object> metadata) {
+        vectorStore.add(List.of(new Document(text, buildMetadata(metadata))));
+    }
+
+    /**
+     * 简单相似度查询，用于验证 RAG 是否生效
+     */
+    public List<Document> search(String query, int topK) {
+        SearchRequest request = SearchRequest.builder()
+                .query(query)
+                .topK(topK)
+                .build();
+
+        return vectorStore.similaritySearch(request);
+    }
+
+    /**
+     * 清空知识库（危险操作，慎用）
+     */
+    public void clearAll() {
+        Filter.Expression expression =
+                new Filter.Expression(
+                        Filter.ExpressionType.EQ,
+                        new Filter.Key("category"),
+                        new Filter.Value("spring-ai")
+                );
+
+        vectorStore.delete(expression);
+    }
+
+    private Map<String, Object> buildMetadata(Map<String, Object> metadata) {
+        return metadata == null ? Map.of() : metadata;
+    }
+}
+```
+
+#### 创建Controller
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.entity.RagIngestRequest;
+import io.github.atengk.ai.service.RagIngestService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.document.Document;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/rag")
+@RequiredArgsConstructor
+public class RagIngestController {
+
+    private final RagIngestService ragIngestService;
+
+    /**
+     * 批量写入
+     */
+    @PostMapping("/ingest")
+    public Map<String, Object> ingest(@RequestBody RagIngestRequest request) {
+        int count = ragIngestService.ingest(request);
+        return Map.of(
+                "status", "OK",
+                "count", count
+        );
+    }
+
+    /**
+     * 单条写入
+     */
+    @PostMapping("/ingest/single")
+    public String ingestSingle(@RequestParam String text) {
+        ragIngestService.ingestSingle(text, null);
+        return "OK";
+    }
+
+    /**
+     * 简单查询，验证 RAG
+     */
+    @GetMapping("/search")
+    public List<Document> search(
+            @RequestParam String query,
+            @RequestParam(defaultValue = "3") int topK
+    ) {
+        return ragIngestService.search(query, topK);
+    }
+
+    /**
+     * 清空知识库
+     */
+    @DeleteMapping("/clear")
+    public String clear() {
+        ragIngestService.clearAll();
+        return "CLEARED";
+    }
+}
+```
+
+#### 录入知识
+
+```
+POST /rag/ingest
+Content-Type: application/json
+
+{
+  "texts": [
+    "Spring AI 是 Spring 官方推出的 AI 应用开发框架",
+    "Spring AI 支持 RAG、Tool Calling、Chat Memory"
+  ],
+  "metadata": {
+    "source": "manual",
+    "category": "spring-ai"
+  }
+}
+```
+
+#### 查询验证
+
+```
+GET /rag/search?query=Spring AI 支持什么能力
+```
+
+#### 清空数据
+
+```
+DELETE /rag/clear
+```
+
+
+
+### RAG 对话接口
+
+**创建接口**
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.service.RagIngestService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.document.Document;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * RAG 对话接口
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/rag")
+@Slf4j
+public class RagChatController {
+
+    private final ChatClient chatClient;
+    private final RagIngestService ragIngestService;
+
+    @GetMapping("/chat")
+    public String chat(@RequestParam String question) {
+
+        // 从 Milvus 检索
+        List<Document> documents = ragIngestService.search(question, 5);
+
+        // 拼上下文
+        String context = buildContext(documents);
+
+
+        // 构建 Prompt
+        String prompt = """
+                你是一个专业助手，请基于以下已知内容回答问题。
+                如果无法从内容中得到答案，请明确说明不知道。
+
+                【已知内容】
+                %s
+
+                【用户问题】
+                %s
+                """.formatted(context, question);
+
+        // 调用模型
+        log.info(prompt);
+        return chatClient.prompt(prompt).call().content();
+    }
+
+    private String buildContext(List<Document> documents) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < documents.size(); i++) {
+            builder.append("[").append(i + 1).append("] ")
+                    .append(documents.get(i).getText())
+                    .append("\n");
+        }
+        return builder.toString();
+    }
+
+}
+```
+
+**调用接口**
+
+```
+POST /api/ai/rag/chat?question=Spring AI 支持哪些核心能力？
+```
+
+![image-20260206143734376](./assets/image-20260206143734376.png)
+
+![image-20260206143749451](./assets/image-20260206143749451.png)
+
+
+
+## MCP
+
+
 
 ## 结构化输出
 

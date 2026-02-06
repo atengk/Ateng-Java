@@ -12,6 +12,30 @@ spring:
         repository:
           jdbc:
             initialize-schema: always
+    vectorstore:
+      milvus:
+        initialize-schema: true
+        database-name: default
+        collection-name: spring_ai_knowledge_ateng
+        embedding-dimension: 1536
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+
+        id-field-name: id
+        content-field-name: content
+        metadata-field-name: metadata
+        embedding-field-name: embedding
+
+        auto-id: false
+
+        client:
+          host: 175.178.193.128
+          port: 20016
+          username: root
+          password: Milvus
+          secure: false
+
     openai:
       base-url: https://api.chatanywhere.tech
       api-key: ${OPENAI_API_KEY}
