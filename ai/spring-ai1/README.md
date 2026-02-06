@@ -1136,6 +1136,10 @@ public class McpServerChatController {
 }
 ```
 
+```
+GET /api/ai/mcp-server/chat?message=计算1 和 99 的和是多少？ 
+```
+
 ![image-20260206205417322](./assets/image-20260206205417322.png)
 
 MCP Server 被调用 Tool 的日志
@@ -1143,6 +1147,12 @@ MCP Server 被调用 Tool 的日志
 ![image-20260206205343992](./assets/image-20260206205343992.png)
 
 
+
+```
+GET /api/ai/mcp-server/chat?message=请告诉我重庆的气温
+```
+
+![image-20260206211650987](./assets/image-20260206211650987.png)
 
 
 

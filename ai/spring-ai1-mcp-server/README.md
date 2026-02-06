@@ -61,7 +61,7 @@ spring:
 
 MCP Tool 用于向模型暴露 **可调用的方法能力**。
 
-**示例：定义一个 Tool**
+**数学计算**
 
 ```java
 package io.github.atengk.mcp.tool;
@@ -115,6 +115,35 @@ public class MathTool {
   - `description`：模型理解工具用途的重要信息
 - 方法参数会自动转换为 MCP Tool 的参数 schema
 - 返回值会自动序列化为 MCP 响应
+
+**获取天气**
+
+```java
+package io.github.atengk.mcp.tool;
+
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springaicommunity.mcp.annotation.McpToolParam;
+import org.springframework.stereotype.Component;
+
+@Component
+public class WeatherTool {
+
+    @McpTool(
+            name = "getTemperature",
+            title = "Get Current Temperature",
+            description = "获取指定城市的当前气温"
+    )
+    public String getTemperature(
+            @McpToolParam(
+                    description = "城市名称",
+                    required = true
+            ) String city) {
+
+        // 这里一般是真实的业务逻辑 / RPC / HTTP
+        return String.format("当前 %s 的气温是 22°C", city);
+    }
+}
+```
 
 ------
 
