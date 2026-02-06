@@ -19,27 +19,27 @@
 **添加依赖**
 
 ```xml
-    <properties>
-        <spring-ai.version>1.1.2</spring-ai.version>
-    </properties>
+<properties>
+    <spring-ai.version>1.1.2</spring-ai.version>
+</properties>
+<dependencies>
+    <!-- Spring AI - OpenAI 依赖 -->
+    <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-starter-model-openai</artifactId>
+    </dependency>
+</dependencies>
+<dependencyManagement>
     <dependencies>
-        <!-- Spring AI - OpenAI 依赖 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <artifactId>spring-ai-bom</artifactId>
+            <version>${spring-ai.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
         </dependency>
     </dependencies>
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-bom</artifactId>
-                <version>${spring-ai.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+</dependencyManagement>
 ```
 
 **编辑配置**
@@ -184,7 +184,224 @@ GET /api/ai/chat/template?topic=SpringAI是什么？
 
 ## Prompt 与模型参数管理
 
-## 多轮对话与上下文管理
+在实际项目中，Prompt 和模型参数如果缺乏统一管理，往往会出现**难以维护、行为不可控、无法复用**等问题。本章节从工程实践角度，介绍如何对 Prompt 与模型参数进行系统化管理。
+
+---
+
+### 为什么需要 Prompt 管理
+
+在简单示例中，将 Prompt 直接写在 Controller 或 Service 中是可以接受的，但在真实项目中会逐渐暴露问题：
+
+* Prompt 分散在各个类中，难以统一修改
+* 相同的 System Prompt 被多次复制
+* Prompt 的职责与业务逻辑耦合，降低可读性
+* Prompt 无法版本化，模型行为不可追溯
+
+因此，在工程实践中应当将 Prompt 视为**一种配置资源**，而不是普通字符串。
+
+**核心目标：**
+
+* Prompt 可集中定义
+* Prompt 可复用、可演进
+* Prompt 与业务逻辑解耦
+
+---
+
+### System Prompt 的集中定义
+
+System Prompt 用于定义模型的角色、边界和回答风格，通常在多个接口或业务场景中复用。
+
+推荐将 System Prompt 统一集中管理，例如：
+
+```java
+package io.github.atengk.ai.prompt;
+
+/**
+ * 系统级 Prompt 定义
+ */
+public final class SystemPrompts {
+
+    private SystemPrompts() {
+    }
+
+    /**
+     * Java 专家角色
+     */
+    public static final String JAVA_EXPERT = """
+            你是一名资深 Java 架构师，
+            回答应遵循最佳实践，
+            代码示例需清晰、简洁、易于理解。
+            """;
+
+    /**
+     * 技术文档编写专家
+     */
+    public static final String TECH_WRITER = """
+            你是一名技术文档专家，
+            请用清晰、严谨且通俗的语言解释概念，
+            避免不必要的营销化表达。
+            """;
+}
+```
+
+在使用时，仅引用对应的 Prompt，而不是直接编写字符串：
+
+```java
+chatClient
+        .prompt()
+        .system(SystemPrompts.JAVA_EXPERT)
+        .user(message)
+        .call()
+        .content();
+```
+
+这样可以保证 System Prompt 的**一致性和可维护性**。
+
+---
+
+### Prompt Template 的工程化使用
+
+当 Prompt 中包含动态变量时，推荐使用 Prompt Template，并将其进行统一管理。
+
+示例：定义 Prompt 模板枚举
+
+```java
+package io.github.atengk.ai.prompt;
+
+/**
+ * Prompt 模板定义
+ */
+public enum PromptTemplates {
+
+    EXPLAIN_TOPIC("""
+            请用 {language} 的视角，
+            解释 {topic}，
+            并给出一个简单示例。
+            """),
+
+    CODE_REVIEW("""
+            请对以下代码进行审查，
+            指出潜在问题并给出改进建议：
+            {code}
+            """);
+
+    private final String template;
+
+    PromptTemplates(String template) {
+        this.template = template;
+    }
+
+    public String template() {
+        return template;
+    }
+}
+```
+
+使用时只需关注参数填充，而无需关心 Prompt 的具体内容：
+
+```java
+chatClient
+        .prompt()
+        .user(u -> u.text(PromptTemplates.EXPLAIN_TOPIC.template())
+                .param("topic", topic)
+                .param("language", language)
+        )
+        .call()
+        .content();
+```
+
+这种方式可以显著提升 Prompt 的**复用性和可读性**。
+
+---
+
+### 模型参数（temperature / top_p）的场景化配置
+
+模型参数直接影响 AI 的回答风格，例如：
+
+* `temperature`：控制随机性
+* `top_p`：控制输出多样性
+* `max_tokens`：限制响应长度
+
+不建议在代码中随意硬编码这些参数，而应根据**业务场景**进行抽象。
+
+示例：定义模型参数配置
+
+```java
+package io.github.atengk.ai.model;
+
+import org.springframework.ai.chat.ChatOptions;
+import org.springframework.ai.openai.OpenAiChatOptions;
+
+/**
+ * 模型参数配置
+ */
+public enum ModelProfiles {
+
+    DEFAULT(OpenAiChatOptions.builder().build()),
+
+    PRECISE(OpenAiChatOptions.builder()
+            .temperature(0.1)
+            .build()),
+
+    CREATIVE(OpenAiChatOptions.builder()
+            .temperature(0.9)
+            .topP(0.95)
+            .build());
+
+    private final ChatOptions options;
+
+    ModelProfiles(ChatOptions options) {
+        this.options = options;
+    }
+
+    public ChatOptions options() {
+        return options;
+    }
+}
+```
+
+在调用时根据业务需求选择合适的参数配置：
+
+```java
+chatClient
+        .prompt()
+        .options(ModelProfiles.PRECISE.options())
+        .user(message)
+        .call()
+        .content();
+```
+
+这样可以避免“凭感觉调参数”的问题，使模型行为更加稳定可控。
+
+---
+
+### Prompt、模型参数与对话记忆的关系
+
+在 Spring AI 中，这三者的职责应当明确区分：
+
+* **System Prompt**：定义模型角色和行为边界
+* **Prompt Template**：定义一次请求的输入结构
+* **模型参数**：控制模型输出风格与稳定性
+* **对话记忆（Chat Memory）**：维持上下文连续性
+
+需要注意的是：
+
+> **对话记忆不应承担规则或角色定义，规则应由 System Prompt 负责。**
+
+一个推荐的组合方式是：
+
+* System Prompt：固定角色
+* Prompt Template：当前问题结构
+* Model Profile：场景化参数
+* Chat Memory：上下文连续对话
+
+这一设计为下一章节的**对话记忆机制**提供了清晰的职责边界。
+
+---
+
+
+
+## 对话记忆
 
 **添加依赖**
 
@@ -308,11 +525,106 @@ GET /api/ai/memory/chat?conversationId=001&message=我叫什么？
 
 ## Tool Calling：让 AI 调用代码
 
-## RAG：接入企业知识库
+### 创建 Tools 
 
-## 结构化输出与业务集成
+```java
+package io.github.atengk.ai.tool;
 
-## 架构建议与 Controller 分层
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+
+/**
+ * 通用工具
+ */
+@Component
+@Slf4j
+public class CommonTools {
+
+    @Tool(description = "获取当前系统时间")
+    public String currentTime() {
+        log.info("调用了 [{}] 的方法", "获取当前系统时间");
+        return LocalDateTime.now().toString();
+    }
+
+    @Tool(description = "计算两个整数的和")
+    public int sum(int a, int b) {
+        log.info("调用了 [{}] 的方法", "计算两个整数的和");
+        return a + b;
+    }
+
+    @Tool(description = "根据用户ID查询用户名称")
+    public String findUserName(Long userId) {
+        log.info("调用了 [{}] 的方法", "根据用户ID查询用户名称");
+        return "ateng";
+    }
+
+    @Tool(description = "判断用户是否成年")
+    public boolean isAdult(int age) {
+        log.info("调用了 [{}] 的方法", "判断用户是否成年");
+        return age >= 18;
+    }
+
+}
+```
+
+### 创建接口
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.tool.CommonTools;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/tool")
+public class ToolChatController {
+
+    private final ChatClient chatClient;
+    private final CommonTools commonTools;
+
+    /**
+     * 最基础的同步对话
+     */
+    @GetMapping("/chat")
+    public String chat(@RequestParam String message) {
+        return chatClient
+                .prompt()
+                .tools(commonTools)
+                .system("""
+                        你可以在必要时调用系统提供的工具，
+                        工具的返回结果是可信的，
+                        不要自行编造结果。
+                        """)
+                .user(message)
+                .call()
+                .content();
+    }
+
+}
+```
+
+### 使用 Tool
+
+
+
+---
+
+
+
+## RAG
+
+## 结构化输出
+
+
 
 ### 1️⃣ Spring AI 核心概念
 
