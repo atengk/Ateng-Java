@@ -42,6 +42,15 @@ spring:
       chat:
         options:
           model: gpt-4o-mini
+    mcp:
+      client:
+        sse:
+          connections:
+            local-mcp:
+              url: http://localhost:19002
+              sse-endpoint: /sse
+        name: ateng-mcp-client
+        version: 1.0.0
 ---
 spring:
   datasource:

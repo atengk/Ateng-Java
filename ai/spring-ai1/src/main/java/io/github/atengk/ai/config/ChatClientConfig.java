@@ -1,6 +1,5 @@
 package io.github.atengk.ai.config;
 
-import io.github.atengk.ai.tool.CommonTools;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -12,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 @RequiredArgsConstructor
 public class ChatClientConfig {
 
-    private final CommonTools commonTools;
+    //private final CommonTools commonTools;
 
     @Bean
     public ChatClient chatClient(
@@ -20,7 +19,7 @@ public class ChatClientConfig {
             ChatMemory chatMemory) {
 
         return builder
-                .defaultTools(commonTools)
+                //.defaultTools(commonTools)
                 .defaultAdvisors(
                         MessageChatMemoryAdvisor
                                 .builder(chatMemory)

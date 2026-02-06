@@ -1,0 +1,20 @@
+server:
+  port: 19002
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    org.springframework.ai.mcp: debug
+    io.github.atengk: debug
+---
+# MCP Server 配置
+spring:
+  ai:
+    mcp:
+      server:
+        enabled: true
+        protocol: sse
+        name: ateng-mcp-server
+        version: 1.0.0

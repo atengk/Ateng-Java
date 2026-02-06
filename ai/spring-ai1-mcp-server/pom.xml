@@ -6,10 +6,10 @@
 
     <!-- 项目坐标 -->
     <groupId>io.github.atengk</groupId>
-    <artifactId>spring-ai1</artifactId>
+    <artifactId>spring-ai1-mcp-server</artifactId>
     <version>1.0.0</version>
-    <name>spring-ai1</name>
-    <description>Spring AI 1.0 模块</description>
+    <name>spring-ai1-mcp-server</name>
+    <description>Spring AI 1.0 MCP Server 模块</description>
     <url>https://docs.spring.io/spring-ai/reference/1.0/index.html</url>
 
     <!-- 项目属性 -->
@@ -63,40 +63,10 @@
             <version>${fastjson2.version}</version>
         </dependency>
 
-        <!-- Spring AI - OpenAI 依赖 -->
+        <!-- Spring AI MCP Server 依赖 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
-        </dependency>
-
-        <!-- Spring AI JDBC Chat Memory -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-chat-memory-repository-jdbc</artifactId>
-        </dependency>
-
-        <!-- HikariCP 数据源 依赖 -->
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-        </dependency>
-
-        <!-- MySQL数据库驱动 -->
-        <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-        </dependency>
-
-        <!-- Spring AI Milvus Vector Store -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
-        </dependency>
-
-        <!-- Spring AI MCP Client 依赖 -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-mcp-client</artifactId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
         </dependency>
 
     </dependencies>

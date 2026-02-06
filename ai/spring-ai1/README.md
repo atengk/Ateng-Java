@@ -1042,7 +1042,33 @@ POST /api/ai/rag/chat?question=Spring AI 支持哪些核心能力？
 
 
 
-## MCP
+## MCP Client
+
+### 基础配置
+
+**添加依赖**
+
+```xml
+<!-- Spring AI MCP Client 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-mcp-client</artifactId>
+</dependency>
+```
+
+**添加配置**
+
+```yaml
+spring:
+  ai:
+    mcp:
+      client:
+        sse:
+          connections:
+            local-mcp:
+              url: http://localhost:19002
+              sse-endpoint: /sse
+```
 
 
 

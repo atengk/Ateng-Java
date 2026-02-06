@@ -16,6 +16,7 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>spring-ai1</module>
+        <module>spring-ai1-mcp-server</module>
         <module>spring-ai2</module>
         <module>spring-ai-alibaba1</module>
         <module>spring-ai-alibaba2</module>
