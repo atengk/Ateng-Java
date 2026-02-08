@@ -93,6 +93,12 @@
             <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
         </dependency>
 
+        <!-- Spring AI RAG Advisor -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-rag</artifactId>
+        </dependency>
+
         <!-- Spring AI MCP Client 依赖 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>

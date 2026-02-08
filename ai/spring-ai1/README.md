@@ -734,6 +734,12 @@ RAG（Retrieval-Augmented Generation，检索增强生成）用于在模型回�
     <groupId>org.springframework.ai</groupId>
     <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
 </dependency>
+
+<!-- Spring AI RAG Advisor -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-rag</artifactId>
+</dependency>
 ```
 
 **编辑配置**
@@ -964,6 +970,8 @@ DELETE /rag/clear
 
 ### RAG 对话接口
 
+#### 手写方案
+
 **创建接口**
 
 ```java
@@ -1039,6 +1047,72 @@ POST /api/ai/rag/chat?question=Spring AI 支持哪些核心能力？
 ![image-20260206143734376](./assets/image-20260206143734376.png)
 
 ![image-20260206143749451](./assets/image-20260206143749451.png)
+
+#### Advisor 方案
+
+**创建接口**
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.service.RagIngestService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
+import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * RAG 对话接口
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/rag")
+@Slf4j
+public class RagChatController {
+
+    private final ChatClient chatClient;
+    private final VectorStore vectorStore;
+
+    @GetMapping("/chat")
+    public String chat(@RequestParam String message) {
+
+        // 构建 RAG 增强器：在模型回答前，先根据用户问题去向量库检索相关文档
+        RetrievalAugmentationAdvisor advisor = RetrievalAugmentationAdvisor
+                .builder()
+                // 使用向量检索器，从 VectorStore（如 Milvus）中查找相似文档
+                .documentRetriever(
+                        VectorStoreDocumentRetriever
+                                .builder()
+                                // 指定实际使用的向量存储实现
+                                .vectorStore(vectorStore)
+                                .build()
+                )
+                .build();
+
+        // 发送用户问题，并在推理前自动注入检索到的文档上下文
+        return chatClient
+                .prompt()
+                .user(message)
+                .advisors(advisor)
+                .call()
+                .content();
+    }
+
+}
+```
+
+**调用接口**
+
+```
+POST /api/ai/rag/chat?message=Spring AI 支持哪些核心能力？
+返回：Spring AI 支持 RAG、Tool Calling 和 Chat Memory。
+```
 
 
 
@@ -1153,96 +1227,3 @@ GET /api/ai/mcp-server/chat?message=请告诉我重庆的气温
 ```
 
 ![image-20260206211650987](./assets/image-20260206211650987.png)
-
-
-
-## 结构化输出
-
-
-
-### 1️⃣ Spring AI 核心概念
-
-- 模型抽象（Chat / Embedding / Image / Audio）
-- Prompt 与 Message 体系
-- Token 与上下文窗口
-- 结构化输出的意义
-
-------
-
-### 2️⃣ ChatClient 深入使用
-
-- System / User / Assistant Message
-- Prompt Template
-- 多轮对话
-- 上下文管理与 Memory
-
-------
-
-### 3️⃣ 结构化输出
-
-- JSON 输出约束
-- 映射为 Java DTO
-- 错误处理与校验策略
-
-------
-
-### 4️⃣ Embedding 与向量化
-
-- 什么是 Embedding
-- 向量相似度搜索
-- 向量数据库选型
-
-------
-
-### 5️⃣ RAG（检索增强生成）
-
-- RAG 架构原理
-- 文档切分与索引
-- 检索策略
-- Prompt 组合方式
-
-------
-
-### 6️⃣ Tool Calling（工具调用）
-
-- 工具定义
-- 参数 Schema
-- 模型调用流程
-- 与业务系统集成模式
-
-------
-
-### 7️⃣ AI 评估与调优
-
-- Evaluator 使用
-- 相关性评估
-- Prompt 与 RAG 优化思路
-
-------
-
-### 8️⃣ Spring AI 与 Spring 生态集成
-
-- Spring Boot 自动配置
-- 配置管理与多环境
-- 测试策略
-- 可观测性（日志 / 指标）
-
-------
-
-### 9️⃣ 典型应用场景
-
-- 企业知识库
-- 智能客服
-- AI Copilot
-- AI + 微服务架构
-
-------
-
-### 🔟 升级与演进
-
-- 1.x → 2.0 迁移要点
-- 模型切换策略
-- 架构演进建议
-
-------
-
