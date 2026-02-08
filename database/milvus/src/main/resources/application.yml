@@ -1,0 +1,13 @@
+server:
+  port: 15014
+spring:
+  application:
+    name: ${project.artifactId}
+---
+# Milvus 配置
+milvus:
+  host: 175.178.193.128
+  port: 20016
+  database: default
+  username: root
+  password: Milvus

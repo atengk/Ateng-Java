@@ -25,5 +25,6 @@
         <module>mybatis-flex-postgis</module>
         <module>mybatis-plus-jdk8</module>
         <module>beetl</module>
+        <module>milvus</module>
     </modules>
 </project>
