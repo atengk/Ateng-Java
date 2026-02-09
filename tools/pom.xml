@@ -30,5 +30,6 @@
         <module>easy-poi</module>
         <module>apache-fesod</module>
         <module>jackson3</module>
+        <module>apache-tika</module>
     </modules>
 </project>
