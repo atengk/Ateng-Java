@@ -724,6 +724,14 @@ RAG（Retrieval-Augmented Generation，检索增强生成）用于在模型回�
 - **向量存储（VectorStore）**：用于相似度检索
 - **检索增强 Advisor**：将检索结果注入 Prompt
 
+**相关链接**
+
+- 官网：[https://milvus.io](https://milvus.io)
+
+- Milvus服务安装文档：[链接](https://atengk.github.io/ops/#/work/docker/service/milvus/)
+
+
+
 ### 基础配置
 
 **添加依赖**
