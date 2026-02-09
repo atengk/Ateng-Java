@@ -1,15 +1,20 @@
 package io.github.atengk.milvus;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import io.github.atengk.milvus.entity.*;
+import io.github.atengk.milvus.entity.CollectionSpec;
+import io.github.atengk.milvus.entity.SimilaritySearchRequest;
+import io.github.atengk.milvus.entity.SimilaritySearchResult;
+import io.github.atengk.milvus.entity.VectorDocument;
 import io.github.atengk.milvus.service.EmbeddingService;
 import io.github.atengk.milvus.service.MilvusService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 
 @SpringBootTest
 public class MilvusServiceTest {
@@ -123,6 +128,57 @@ public class MilvusServiceTest {
                 milvusService.similaritySearch(request);
 
         results.forEach(System.out::println);
+    }
+
+    @Test
+    void testSimilaritySearchAll() {
+
+        List<Float> queryEmbedding =
+                embeddingService.embed("这份文档主要讲了什么？");
+
+        SimilaritySearchRequest request = new SimilaritySearchRequest();
+        request.setCollectionName(COLLECTION);
+        request.setEmbedding(queryEmbedding);
+        request.setTopK(5);
+        // 设置 expr = "" 查全部
+        request.setExpr("");
+
+        List<SimilaritySearchResult> results =
+                milvusService.similaritySearch(request);
+
+        results.forEach(System.out::println);
+    }
+
+    @Test
+    void testSimilaritySearchByAuthor() {
+
+        // 查询文本 → embedding
+        List<Float> queryEmbedding =
+                embeddingService.embed("阿腾在文档中写了什么？");
+
+        // 构造搜索请求
+        SimilaritySearchRequest request = new SimilaritySearchRequest();
+        request.setCollectionName(COLLECTION);
+        request.setEmbedding(queryEmbedding);
+        request.setTopK(5);
+        request.setExpr("metadata[\"author\"] == \"阿腾\"");
+        request.setIncludeEmbedding(false);
+
+        // 搜索
+        List<SimilaritySearchResult> results =
+                milvusService.similaritySearch(request);
+
+        // 使用结果
+        for (SimilaritySearchResult r : results) {
+            VectorDocument doc = r.getDocument();
+            JsonObject meta = doc.getMetadata();
+
+            System.out.println("score = " + r.getScore());
+            System.out.println("file = " + meta.get("fileName").getAsString());
+            System.out.println("chunkIndex = " + meta.get("chunkIndex").getAsInt());
+            System.out.println("content = " + doc.getContent());
+            System.out.println("--------------");
+        }
     }
 
     /* ========================= maintenance ========================= */

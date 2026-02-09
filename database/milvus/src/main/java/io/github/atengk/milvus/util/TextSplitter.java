@@ -13,17 +13,31 @@ public class TextSplitter {
             int chunkSize,
             int overlap
     ) {
+        if (chunkSize <= 0) {
+            throw new IllegalArgumentException("chunkSize must be > 0");
+        }
+        if (overlap < 0) {
+            throw new IllegalArgumentException("overlap must be >= 0");
+        }
+        if (overlap >= chunkSize) {
+            throw new IllegalArgumentException(
+                    "overlap must be smaller than chunkSize"
+            );
+        }
+
         List<String> chunks = new ArrayList<>();
 
         int start = 0;
-        while (start < text.length()) {
-            int end = Math.min(start + chunkSize, text.length());
+        int textLength = text.length();
+
+        while (start < textLength) {
+            int end = Math.min(start + chunkSize, textLength);
             chunks.add(text.substring(start, end));
-            start = end - overlap;
-            if (start < 0) {
-                start = 0;
-            }
+
+            start += (chunkSize - overlap);
         }
+
         return chunks;
     }
+
 }

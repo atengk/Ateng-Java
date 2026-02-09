@@ -889,16 +889,21 @@ public class MilvusServiceImpl implements MilvusService {
 ```java
 package io.github.atengk.milvus;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import io.github.atengk.milvus.entity.*;
+import io.github.atengk.milvus.entity.CollectionSpec;
+import io.github.atengk.milvus.entity.SimilaritySearchRequest;
+import io.github.atengk.milvus.entity.SimilaritySearchResult;
+import io.github.atengk.milvus.entity.VectorDocument;
 import io.github.atengk.milvus.service.EmbeddingService;
 import io.github.atengk.milvus.service.MilvusService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 
 @SpringBootTest
 public class MilvusServiceTest {
@@ -1012,6 +1017,57 @@ public class MilvusServiceTest {
                 milvusService.similaritySearch(request);
 
         results.forEach(System.out::println);
+    }
+
+    @Test
+    void testSimilaritySearchAll() {
+
+        List<Float> queryEmbedding =
+                embeddingService.embed("这份文档主要讲了什么？");
+
+        SimilaritySearchRequest request = new SimilaritySearchRequest();
+        request.setCollectionName(COLLECTION);
+        request.setEmbedding(queryEmbedding);
+        request.setTopK(5);
+        // 设置 expr = "" 查全部
+        request.setExpr("");
+
+        List<SimilaritySearchResult> results =
+                milvusService.similaritySearch(request);
+
+        results.forEach(System.out::println);
+    }
+
+    @Test
+    void testSimilaritySearchByAuthor() {
+
+        // 查询文本 → embedding
+        List<Float> queryEmbedding =
+                embeddingService.embed("阿腾在文档中写了什么？");
+
+        // 构造搜索请求
+        SimilaritySearchRequest request = new SimilaritySearchRequest();
+        request.setCollectionName(COLLECTION);
+        request.setEmbedding(queryEmbedding);
+        request.setTopK(5);
+        request.setExpr("metadata[\"author\"] == \"阿腾\"");
+        request.setIncludeEmbedding(false);
+
+        // 搜索
+        List<SimilaritySearchResult> results =
+                milvusService.similaritySearch(request);
+
+        // 使用结果
+        for (SimilaritySearchResult r : results) {
+            VectorDocument doc = r.getDocument();
+            JsonObject meta = doc.getMetadata();
+
+            System.out.println("score = " + r.getScore());
+            System.out.println("file = " + meta.get("fileName").getAsString());
+            System.out.println("chunkIndex = " + meta.get("chunkIndex").getAsInt());
+            System.out.println("content = " + doc.getContent());
+            System.out.println("--------------");
+        }
     }
 
     /* ========================= maintenance ========================= */
@@ -1204,19 +1260,33 @@ public class TextSplitter {
             int chunkSize,
             int overlap
     ) {
+        if (chunkSize <= 0) {
+            throw new IllegalArgumentException("chunkSize must be > 0");
+        }
+        if (overlap < 0) {
+            throw new IllegalArgumentException("overlap must be >= 0");
+        }
+        if (overlap >= chunkSize) {
+            throw new IllegalArgumentException(
+                    "overlap must be smaller than chunkSize"
+            );
+        }
+
         List<String> chunks = new ArrayList<>();
 
         int start = 0;
-        while (start < text.length()) {
-            int end = Math.min(start + chunkSize, text.length());
+        int textLength = text.length();
+
+        while (start < textLength) {
+            int end = Math.min(start + chunkSize, textLength);
             chunks.add(text.substring(start, end));
-            start = end - overlap;
-            if (start < 0) {
-                start = 0;
-            }
+
+            start += (chunkSize - overlap);
         }
+
         return chunks;
     }
+
 }
 
 ```
@@ -1226,13 +1296,12 @@ public class TextSplitter {
 ```java
 package io.github.atengk.milvus;
 
+import cn.hutool.core.io.file.PathUtil;
 import io.github.atengk.milvus.service.FileVectorService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -1246,8 +1315,8 @@ public class FileVectorTests {
     private static final String COLLECTION = "test_collection";
 
     @Test
-    void test1() throws FileNotFoundException {
-        Path filepath = Paths.get("d:/temp", "demo.pdf");
+    void test1() {
+        Path filepath = Paths.get("d:/Temp/pdf", "demo_more.pdf");
 
         HashMap<String, Object> metadata = new HashMap<>();
         metadata.put("author", "阿腾");
@@ -1255,7 +1324,7 @@ public class FileVectorTests {
         fileVectorService.ingest(
                 COLLECTION,
                 filepath.getFileName().toString(),
-                new FileInputStream(filepath.toFile()),
+                PathUtil.getInputStream(filepath),
                 metadata
         );
     }
