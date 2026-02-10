@@ -25,7 +25,7 @@
     <spring-ai-alibaba.version>1.1.2.1</spring-ai-alibaba.version>
 </properties>
 <dependencies>
-    <!-- Spring AI Alibaba starter -->
+    <!-- Spring AI Alibaba 依赖 -->
     <dependency>
         <groupId>com.alibaba.cloud.ai</groupId>
         <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
@@ -68,12 +68,37 @@
 spring:
   ai:
     dashscope:
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: "sk-41006e3b95f74d2985247ede3325ad44"
+      base-url: https://dashscope.aliyuncs.com
+      api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
           model: deepseek-v3.2
 ```
+
+**创建配置类**
+
+```java
+package io.github.atengk.ai.config;
+
+import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
+@Configuration
+public class ChatClientConfig {
+
+    @Bean("dashScopeChatClient")
+    @Primary
+    public ChatClient dashScopeChatClient(DashScopeChatModel dashScopeChatModel) {
+        return ChatClient.create(dashScopeChatModel);
+    }
+
+}
+```
+
+
 
 ## 基础使用
 
@@ -84,27 +109,119 @@ package io.github.atengk.ai.controller;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 
 @RestController
-class MyController {
+@RequestMapping("/api/ai")
+public class BaseChatController {
 
     private final ChatClient chatClient;
 
-    public MyController(ChatClient.Builder chatClientBuilder) {
+    public BaseChatController(ChatClient.Builder chatClientBuilder) {
         this.chatClient = chatClientBuilder.build();
     }
 
-    @GetMapping("/ai")
-    String generation(String userInput) {
-        return this.chatClient.prompt()
-                .user(userInput)
-                .call()
-                .content();
-    }
 }
-
 ```
+
+### 最基础的同步对话
+
+```java
+/**
+ * 最基础的同步对话
+ */
+@GetMapping("/chat")
+public String chat(@RequestParam String message) {
+    return chatClient
+            .prompt()
+            .user(message)
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat?message=SpringAI是什么？
+
+![image-20260205100433151](./assets/image-20260205100433151.png)
+
+### 流式对话（SSE / WebFlux 场景）
+
+```java
+/**
+ * 流式对话（SSE / WebFlux 场景）
+ */
+@GetMapping("/chat/stream")
+public Flux<String> stream(@RequestParam String message) {
+    return chatClient
+            .prompt()
+            .user(message)
+            .stream()
+            .content();
+}
+```
+
+GET /api/ai/chat/stream?message=SpringAI是什么？
+
+![image-20260205100607964](./assets/image-20260205100607964.png)
+
+### 带 System Prompt 的基础用法
+
+```java
+/**
+ * 带 System Prompt 的基础用法
+ */
+@GetMapping("/chat/system")
+public String chatWithSystem(
+        @RequestParam String system,
+        @RequestParam String message) {
+
+    return chatClient
+            .prompt()
+            .system(system)
+            .user(message)
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat/system?system=你是一个Java专家&message=什么是SpringAI
+
+![image-20260205100749241](./assets/image-20260205100749241.png)
+
+### 使用 Prompt Template 的基础示例
+
+```java
+/**
+ * 使用 Prompt Template 的基础示例
+ */
+@GetMapping("/chat/template")
+public String chatWithTemplate(
+        @RequestParam String topic,
+        @RequestParam(defaultValue = "Java") String language) {
+
+    return chatClient
+            .prompt()
+            .user(u -> u.text("""
+                    请用 {language} 的视角，
+                    解释一下 {topic}，
+                    并给出一个简单示例
+                    """)
+                    .param("topic", topic)
+                    .param("language", language)
+            )
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat/template?topic=SpringAI是什么？
+
+![image-20260205100840340](./assets/image-20260205100840340.png)
+
+
 
 
 

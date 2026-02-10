@@ -63,12 +63,6 @@
             <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
         </dependency>
 
-        <!-- Spring AI - OpenAI 依赖 -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
-        </dependency>
-
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->

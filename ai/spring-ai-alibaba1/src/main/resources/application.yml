@@ -13,9 +13,3 @@ spring:
       chat:
         options:
           model: deepseek-v3.2
-    openai:
-      base-url: https://api.chatanywhere.tech
-      api-key: ${OPENAI_API_KEY}
-      chat:
-        options:
-          model: gpt-4o-mini
