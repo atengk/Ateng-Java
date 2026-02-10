@@ -114,6 +114,19 @@ public final class TikaUtil {
     }
 
     /**
+     * 是否需要 OCR 处理
+     *
+     * @param mimeType MIME 类型
+     * @return 是否需要 OCR
+     */
+    public static boolean needOcr(String mimeType) {
+        if (mimeType == null) {
+            return false;
+        }
+        return isImage(mimeType);
+    }
+
+    /**
      * 是否为音频类型
      *
      * @param mimeType MIME 类型
@@ -212,6 +225,23 @@ public final class TikaUtil {
         return true;
     }
 
+    /**
+     * 是否为可安全解析文件
+     *
+     * @param file        文件
+     * @param allowedMime 允许的 MIME 类型
+     * @param maxBytes    最大文件大小
+     * @return 是否可解析
+     */
+    public static boolean canParse(File file, Set<String> allowedMime, long maxBytes) {
+        if (isEmpty(file) || isTooLarge(file, maxBytes)) {
+            return false;
+        }
+        String mimeType = detect(file);
+        return isAllowed(mimeType, allowedMime) && isExtensionMatch(file, mimeType);
+    }
+
+
     /* ========================= text ========================= */
 
     /**
@@ -258,11 +288,13 @@ public final class TikaUtil {
      * @return 文本内容，失败返回空字符串
      */
     public static String parseText(InputStream inputStream, int maxContentLength) {
-        if (inputStream == null || maxContentLength <= 0) {
+        if (inputStream == null) {
             return "";
         }
+
         try {
-            BodyContentHandler handler = new BodyContentHandler(maxContentLength);
+            int limit = maxContentLength < 0 ? -1 : maxContentLength;
+            BodyContentHandler handler = new BodyContentHandler(limit);
             Metadata metadata = new Metadata();
             ParseContext context = new ParseContext();
 
@@ -293,6 +325,21 @@ public final class TikaUtil {
             log.warn("Parse metadata from file failed: {}", file.getAbsolutePath(), e);
             return Collections.emptyMap();
         }
+    }
+
+    /**
+     * 获取指定元数据值
+     *
+     * @param file 文件
+     * @param key  元数据 key
+     * @return 元数据值，不存在返回 null
+     */
+    public static String getMetadata(File file, String key) {
+        if (file == null || key == null) {
+            return null;
+        }
+        Map<String, String> metadata = parseMetadata(file);
+        return metadata.get(key);
     }
 
     /**
@@ -365,11 +412,13 @@ public final class TikaUtil {
      * @return 解析结果，失败返回 null
      */
     public static TikaResult parseAll(InputStream inputStream, int maxContentLength) {
-        if (inputStream == null || maxContentLength <= 0) {
+        if (inputStream == null) {
             return null;
         }
+
         try {
-            BodyContentHandler handler = new BodyContentHandler(maxContentLength);
+            int limit = maxContentLength < 0 ? -1 : maxContentLength;
+            BodyContentHandler handler = new BodyContentHandler(limit);
             Metadata metadata = new Metadata();
             ParseContext context = new ParseContext();
 
@@ -418,4 +467,31 @@ public final class TikaUtil {
             return metadata;
         }
     }
+
+    /* ========================= size ========================= */
+
+    /**
+     * 是否为空文件
+     *
+     * @param file 文件
+     * @return 是否为空
+     */
+    public static boolean isEmpty(File file) {
+        return file == null || !file.exists() || file.length() == 0;
+    }
+
+    /**
+     * 是否超过最大文件大小
+     *
+     * @param file     文件
+     * @param maxBytes 最大字节数
+     * @return 是否超限
+     */
+    public static boolean isTooLarge(File file, long maxBytes) {
+        if (file == null || maxBytes <= 0) {
+            return false;
+        }
+        return file.length() > maxBytes;
+    }
+
 }

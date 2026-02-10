@@ -25,6 +25,19 @@ public class TikaTests {
     }
 
     /**
+     * 测试文件是否为图片类型
+     */
+    @Test
+    void testisImage() {
+        File file = new File("D:\\temp\\demo.pdf");
+
+        String mimeType = TikaUtil.detect(file);
+        boolean isImage = TikaUtil.isImage(mimeType);
+
+        System.out.println("MIME Type isImage: " + isImage);
+    }
+
+    /**
      * 测试文件类型检测（byte[]）
      */
     @Test
