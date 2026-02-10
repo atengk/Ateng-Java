@@ -1,24 +1,24 @@
 package io.github.atengk.ai.config;
 
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
-import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 @Configuration
-@RequiredArgsConstructor
 public class ChatClientConfig {
 
-    @Bean("dashScopeClient")
-    public ChatClient dashScopeClient(DashScopeChatModel dashScopeChatModel) {
-        return ChatClient.builder(dashScopeChatModel).build();
+    @Bean("dashScopeChatClient")
+    @Primary
+    public ChatClient dashScopeChatClient(DashScopeChatModel dashScopeChatModel) {
+        return ChatClient.create(dashScopeChatModel);
     }
 
     @Bean("openAiChatClient")
     public ChatClient openAiChatClient(OpenAiChatModel openAiChatModel) {
-        return ChatClient.builder(openAiChatModel).build();
+        return ChatClient.create(openAiChatModel);
     }
 
 }

@@ -57,7 +57,7 @@
             <version>${hutool.version}</version>
         </dependency>
 
-        <!-- Spring AI Alibaba starter -->
+        <!-- Spring AI Alibaba 依赖 -->
         <dependency>
             <groupId>com.alibaba.cloud.ai</groupId>
             <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>

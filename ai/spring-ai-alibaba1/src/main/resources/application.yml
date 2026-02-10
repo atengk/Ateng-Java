@@ -8,8 +8,8 @@ spring:
 spring:
   ai:
     dashscope:
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: ${DEEPSEEK_API_KEY}
+      base-url: https://dashscope.aliyuncs.com
+      api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
           model: deepseek-v3.2
