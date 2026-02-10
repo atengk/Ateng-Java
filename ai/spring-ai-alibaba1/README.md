@@ -22,7 +22,7 @@
 ```xml
 <properties>
     <spring-ai.version>1.1.2</spring-ai.version>
-    <spring-ai-alibaba.version>1.1.2.1</spring-ai-alibaba.version>
+    <spring-ai-alibaba.version>1.1.2.0</spring-ai-alibaba.version>
 </properties>
 <dependencies>
     <!-- Spring AI Alibaba 依赖 -->
@@ -43,9 +43,7 @@
         <dependency>
             <groupId>com.alibaba.cloud.ai</groupId>
             <artifactId>spring-ai-alibaba-bom</artifactId>
-            <!-- 等spring-ai-alibaba-bom的1.1.2.1版本发布 -->
-            <!--<version>${spring-ai-alibaba.version}</version>-->
-            <version>1.1.2.0</version>
+            <version>${spring-ai-alibaba.version}</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -61,6 +59,8 @@
 ```
 
 **编辑配置**
+
+如果需要使用 OpenAI 的 API 来调用 DashScope，base-url 修改为：https://dashscope.aliyuncs.com/compatible-mode/v1
 
 ```yaml
 ---
@@ -107,6 +107,7 @@ public class ChatClientConfig {
 ```java
 package io.github.atengk.ai.controller;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -116,13 +117,10 @@ import reactor.core.publisher.Flux;
 
 @RestController
 @RequestMapping("/api/ai")
+@RequiredArgsConstructor
 public class BaseChatController {
 
     private final ChatClient chatClient;
-
-    public BaseChatController(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
-    }
 
 }
 ```
@@ -305,7 +303,7 @@ package io.github.atengk.ai.enums;
 public enum AiModelType {
 
     OPENAI("openAiChatClient"),
-    DASH_SCOPE("dashScopeChatClient");
+    DASHSCOPE("dashScopeChatClient");
 
     private final String chatClientBeanName;
 
@@ -370,7 +368,7 @@ public class DashScopeChatClientStrategy implements ChatClientStrategy {
 
     @Override
     public AiModelType getModelType() {
-        return AiModelType.DASH_SCOPE;
+        return AiModelType.DASHSCOPE;
     }
 
     @Override
@@ -503,7 +501,7 @@ public class ChatClientController {
 
     @GetMapping("/chat")
     public String chat(
-            @RequestParam(defaultValue = "DASH_SCOPE") AiModelType model,
+            @RequestParam(defaultValue = "DASHSCOPE") AiModelType model,
             @RequestParam String prompt) {
 
         return chatClientService.chat(model, prompt);
@@ -515,7 +513,7 @@ public class ChatClientController {
 #### 使用接口
 
 ```java
-GET /api/ai/chat?model=DASH_SCOPE&prompt=SpringAI是什么？
+GET /api/ai/chat?model=DASHSCOPE&prompt=SpringAI是什么？
 GET /api/ai/chat?model=OPENAI&prompt=SpringAI是什么？
 ```
 

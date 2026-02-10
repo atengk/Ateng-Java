@@ -19,7 +19,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <spring-boot.version>3.5.10</spring-boot.version>
         <spring-ai.version>1.1.2</spring-ai.version>
-        <spring-ai-alibaba.version>1.1.2.1</spring-ai-alibaba.version>
+        <spring-ai-alibaba.version>1.1.2.0</spring-ai-alibaba.version>
         <maven-compiler.version>3.14.1</maven-compiler.version>
         <lombok.version>1.18.42</lombok.version>
         <hutool.version>5.8.43</hutool.version>
@@ -85,9 +85,7 @@
             <dependency>
                 <groupId>com.alibaba.cloud.ai</groupId>
                 <artifactId>spring-ai-alibaba-bom</artifactId>
-                <!-- 等spring-ai-alibaba-bom的1.1.2.1版本发布 -->
-                <!--<version>${spring-ai-alibaba.version}</version>-->
-                <version>1.1.2.0</version>
+                <version>${spring-ai-alibaba.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

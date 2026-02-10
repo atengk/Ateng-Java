@@ -1,5 +1,6 @@
 package io.github.atengk.ai.controller;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,13 +10,10 @@ import reactor.core.publisher.Flux;
 
 @RestController
 @RequestMapping("/api/ai")
+@RequiredArgsConstructor
 public class BaseChatController {
 
     private final ChatClient chatClient;
-
-    public BaseChatController(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
-    }
 
     /**
      * 最基础的同步对话
