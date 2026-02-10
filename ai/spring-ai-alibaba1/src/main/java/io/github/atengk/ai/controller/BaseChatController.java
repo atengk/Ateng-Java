@@ -1,6 +1,7 @@
 package io.github.atengk.ai.controller;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -11,10 +12,15 @@ import reactor.core.publisher.Flux;
 @RequestMapping("/api/ai")
 public class BaseChatController {
 
-    private final ChatClient chatClient;
+    private final ChatClient dashScopeClient;
+    private final ChatClient openAiChatClient;
 
-    public BaseChatController(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
+    public BaseChatController(
+            @Qualifier("dashScopeClient") ChatClient dashScopeClient,
+            @Qualifier("openAiChatClient") ChatClient openAiChatClient
+    ) {
+        this.dashScopeClient = dashScopeClient;
+        this.openAiChatClient = openAiChatClient;
     }
 
     /**
@@ -22,7 +28,7 @@ public class BaseChatController {
      */
     @GetMapping("/chat")
     public String chat(@RequestParam String message) {
-        return chatClient
+        return openAiChatClient
                 .prompt()
                 .user(message)
                 .call()
@@ -34,7 +40,7 @@ public class BaseChatController {
      */
     @GetMapping("/chat/stream")
     public Flux<String> stream(@RequestParam String message) {
-        return chatClient
+        return dashScopeClient
                 .prompt()
                 .user(message)
                 .stream()
@@ -49,7 +55,7 @@ public class BaseChatController {
             @RequestParam String system,
             @RequestParam String message) {
 
-        return chatClient
+        return dashScopeClient
                 .prompt()
                 .system(system)
                 .user(message)
@@ -65,7 +71,7 @@ public class BaseChatController {
             @RequestParam String topic,
             @RequestParam(defaultValue = "Java") String language) {
 
-        return chatClient
+        return dashScopeClient
                 .prompt()
                 .user(u -> u.text("""
                         请用 {language} 的视角，

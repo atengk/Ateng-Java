@@ -1,1336 +1,1238 @@
-# 发布到 Maven 仓库
+# Spring AI
 
-**开发一个可复用的 Spring Boot Starter 插件**，然后 **发布到 Maven 仓库**（私服或中央仓库），最后 **在其他 Spring Boot 项目中引入使用**。
+## 版本信息
+
+| 组件               | 版本                                  |
+|------------------|-------------------------------------|
+| JDK              | 21                                  |
+| Maven            | 3.9.12                              |
+| SpringBoot       | 3.5.10                              |
+| SpringAI         | 1.1.2                               |
+| SpringAI Alibaba | 1.1.2.1                             |
+| Model            | OpenAI（DeepSeek、Qwen 兼容 OpenAI API） |
 
 
 
-## Maven配置
+------
+
+## 基础配置
+
+**添加依赖**
 
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <!-- 项目模型版本 -->
-    <modelVersion>4.0.0</modelVersion>
-
-    <!-- 项目坐标 -->
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.0</version>
-    <name>boot3-deploy</name>
-    <description>SpringBoot3 发布到仓库 模块</description>
-
-    <!-- 项目属性 -->
-    <properties>
-        <java.version>21</java.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-boot.version>3.5.7</spring-boot.version>
-        <lombok.version>1.18.42</lombok.version>
-    </properties>
-
-    <!-- 项目依赖 -->
+<properties>
+    <spring-ai.version>1.1.2</spring-ai.version>
+</properties>
+<dependencies>
+    <!-- Spring AI - OpenAI 依赖 -->
+    <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-starter-model-openai</artifactId>
+    </dependency>
+</dependencies>
+<dependencyManagement>
     <dependencies>
-        <!-- Spring Boot Auto Configuration -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-            <version>${spring-boot.version}</version>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-bom</artifactId>
+            <version>${spring-ai.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
         </dependency>
-
-        <!-- Optional: 如果需要用到 Spring Boot 核心功能 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot</artifactId>
-            <version>${spring-boot.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- Lombok: 简化Java代码编写的依赖项 -->
-        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- 你的业务依赖 -->
-        <!-- ... -->
     </dependencies>
-
-    <!-- Spring Boot 依赖管理 -->
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
-    <!-- 普通仓库配置 -->
-    <repositories>
-        <!-- 阿里云中央仓库 -->
-        <repository>
-            <id>aliyun-central</id>
-            <name>阿里云中央仓库</name>
-            <url>https://maven.aliyun.com/repository/central</url>
-        </repository>
-
-        <!-- 官方中央仓库 -->
-        <repository>
-            <id>central</id>
-            <name>Maven Central</name>
-            <url>https://repo.maven.apache.org/maven2/</url>
-        </repository>
-    </repositories>
-
-    <!-- 构建配置 -->
-    <build>
-        <plugins>
-            <!-- 编译 JAR -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-
-            <!-- 打包源码 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- javadoc插件 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.12.0</version>
-                <executions>
-                    <execution>
-                        <id>attach-javadocs</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <source>${java.version}</source>
-                    <encoding>${project.build.sourceEncoding}</encoding>
-                    <failOnError>false</failOnError>
-                </configuration>
-            </plugin>
-
-            <!-- JAR 签名、发布 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>3.1.4</version>
-            </plugin>
-        </plugins>
-    </build>
-</project>
+</dependencyManagement>
 ```
 
-## 编写自动配置类
+**编辑配置**
 
-### 业务配置类
+免费使用 API Key：[GPT_API_free](https://github.com/chatanywhere/GPT_API_free)
 
-接口服务
+```yaml
+---
+# Spring AI 配置
+spring:
+  ai:
+    openai:
+      base-url: https://api.chatanywhere.tech
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: gpt-4o-mini
+```
+
+## 基础使用
+
+**controller创建**
 
 ```java
-package io.github.atengk.service;
+package io.github.atengk.ai.controller;
 
-import java.util.Map;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+
+@RestController
+@RequestMapping("/api/ai")
+public class BaseChatController {
+
+    private final ChatClient chatClient;
+
+    public BaseChatController(ChatClient.Builder chatClientBuilder) {
+        this.chatClient = chatClientBuilder.build();
+    }
+
+}
+```
+
+### 最基础的同步对话
+
+```java
+/**
+ * 最基础的同步对话
+ */
+@GetMapping("/chat")
+public String chat(@RequestParam String message) {
+    return chatClient
+            .prompt()
+            .user(message)
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat?message=SpringAI是什么？
+
+![image-20260205100433151](./assets/image-20260205100433151.png)
+
+### 流式对话（SSE / WebFlux 场景）
+
+```java
+/**
+ * 流式对话（SSE / WebFlux 场景）
+ */
+@GetMapping("/chat/stream")
+public Flux<String> stream(@RequestParam String message) {
+    return chatClient
+            .prompt()
+            .user(message)
+            .stream()
+            .content();
+}
+```
+
+GET /api/ai/chat/stream?message=SpringAI是什么？
+
+![image-20260205100607964](./assets/image-20260205100607964.png)
+
+### 带 System Prompt 的基础用法
+
+```java
+/**
+ * 带 System Prompt 的基础用法
+ */
+@GetMapping("/chat/system")
+public String chatWithSystem(
+        @RequestParam String system,
+        @RequestParam String message) {
+
+    return chatClient
+            .prompt()
+            .system(system)
+            .user(message)
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat/system?system=你是一个Java专家&message=什么是SpringAI
+
+![image-20260205100749241](./assets/image-20260205100749241.png)
+
+### 使用 Prompt Template 的基础示例
+
+```java
+/**
+ * 使用 Prompt Template 的基础示例
+ */
+@GetMapping("/chat/template")
+public String chatWithTemplate(
+        @RequestParam String topic,
+        @RequestParam(defaultValue = "Java") String language) {
+
+    return chatClient
+            .prompt()
+            .user(u -> u.text("""
+                    请用 {language} 的视角，
+                    解释一下 {topic}，
+                    并给出一个简单示例
+                    """)
+                    .param("topic", topic)
+                    .param("language", language)
+            )
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat/template?topic=SpringAI是什么？
+
+![image-20260205100840340](./assets/image-20260205100840340.png)
+
+
+
+## Prompt 与模型参数管理
+
+在实际项目中，Prompt 和模型参数如果缺乏统一管理，往往会出现**难以维护、行为不可控、无法复用**等问题。本章节从工程实践角度，介绍如何对 Prompt 与模型参数进行系统化管理。
+
+---
+
+### 为什么需要 Prompt 管理
+
+在简单示例中，将 Prompt 直接写在 Controller 或 Service 中是可以接受的，但在真实项目中会逐渐暴露问题：
+
+* Prompt 分散在各个类中，难以统一修改
+* 相同的 System Prompt 被多次复制
+* Prompt 的职责与业务逻辑耦合，降低可读性
+* Prompt 无法版本化，模型行为不可追溯
+
+因此，在工程实践中应当将 Prompt 视为**一种配置资源**，而不是普通字符串。
+
+**核心目标：**
+
+* Prompt 可集中定义
+* Prompt 可复用、可演进
+* Prompt 与业务逻辑解耦
+
+---
+
+### System Prompt 的集中定义
+
+System Prompt 用于定义模型的角色、边界和回答风格，通常在多个接口或业务场景中复用。
+
+推荐将 System Prompt 统一集中管理，例如：
+
+```java
+package io.github.atengk.ai.prompt;
 
 /**
- * 阿腾服务接口类
- *
- * @author 孔余
- * @since 2025-10-28
+ * 系统级 Prompt 定义
  */
-public interface AtengService {
+public final class SystemPrompts {
 
-    /**
-     * Hello
-     * @return 欢迎语
-     */
-    String hello();
-
-    /**
-     * 获取系统环境变量
-     *
-     * @return 以Map返回所有环境变量
-     */
-    Map<String, String> getEnv();
-
-}
-
-```
-
-服务实现
-
-```java
-package io.github.atengk.service.impl;
-
-import io.github.atengk.service.AtengService;
-
-import java.util.Map;
-
-public class AtengServiceImpl implements AtengService {
-    @Override
-    public String hello() {
-        return "Hello from Ateng！";
+    private SystemPrompts() {
     }
 
-    @Override
-    public Map<String, String> getEnv() {
-        return System.getenv();
-    }
-}
+    /**
+     * Java 专家角色
+     */
+    public static final String JAVA_EXPERT = """
+            你是一名资深 Java 架构师，
+            回答应遵循最佳实践，
+            代码示例需清晰、简洁、易于理解。
+            """;
 
+    /**
+     * 技术文档编写专家
+     */
+    public static final String TECH_WRITER = """
+            你是一名技术文档专家，
+            请用清晰、严谨且通俗的语言解释概念，
+            避免不必要的营销化表达。
+            """;
+}
 ```
 
-
-
-### 自动配置类
+在使用时，仅引用对应的 Prompt，而不是直接编写字符串：
 
 ```java
-package io.github.atengk.config;
+chatClient
+        .prompt()
+        .system(SystemPrompts.JAVA_EXPERT)
+        .user(message)
+        .call()
+        .content();
+```
 
-import io.github.atengk.service.AtengService;
-import io.github.atengk.service.impl.AtengServiceImpl;
-import org.springframework.boot.autoconfigure.AutoConfiguration;
+这样可以保证 System Prompt 的**一致性和可维护性**。
+
+---
+
+### Prompt Template 的工程化使用
+
+当 Prompt 中包含动态变量时，推荐使用 Prompt Template，并将其进行统一管理。
+
+示例：定义 Prompt 模板枚举
+
+```java
+package io.github.atengk.ai.prompt;
+
+/**
+ * Prompt 模板定义
+ */
+public enum PromptTemplates {
+
+    EXPLAIN_TOPIC("""
+            请用 {language} 的视角，
+            解释 {topic}，
+            并给出一个简单示例。
+            """),
+
+    CODE_REVIEW("""
+            请对以下代码进行审查，
+            指出潜在问题并给出改进建议：
+            {code}
+            """);
+
+    private final String template;
+
+    PromptTemplates(String template) {
+        this.template = template;
+    }
+
+    public String template() {
+        return template;
+    }
+}
+```
+
+使用时只需关注参数填充，而无需关心 Prompt 的具体内容：
+
+```java
+chatClient
+        .prompt()
+        .user(u -> u.text(PromptTemplates.EXPLAIN_TOPIC.template())
+                .param("topic", topic)
+                .param("language", language)
+        )
+        .call()
+        .content();
+```
+
+这种方式可以显著提升 Prompt 的**复用性和可读性**。
+
+---
+
+### 模型参数（temperature / top_p）的场景化配置
+
+模型参数直接影响 AI 的回答风格，例如：
+
+* `temperature`：控制随机性
+* `top_p`：控制输出多样性
+* `max_tokens`：限制响应长度
+
+不建议在代码中随意硬编码这些参数，而应根据**业务场景**进行抽象。
+
+示例：定义模型参数配置
+
+```java
+package io.github.atengk.ai.model;
+
+import org.springframework.ai.chat.ChatOptions;
+import org.springframework.ai.openai.OpenAiChatOptions;
+
+/**
+ * 模型参数配置
+ */
+public enum ModelProfiles {
+
+    DEFAULT(OpenAiChatOptions.builder().build()),
+
+    PRECISE(OpenAiChatOptions.builder()
+            .temperature(0.1)
+            .build()),
+
+    CREATIVE(OpenAiChatOptions.builder()
+            .temperature(0.9)
+            .topP(0.95)
+            .build());
+
+    private final ChatOptions options;
+
+    ModelProfiles(ChatOptions options) {
+        this.options = options;
+    }
+
+    public ChatOptions options() {
+        return options;
+    }
+}
+```
+
+在调用时根据业务需求选择合适的参数配置：
+
+```java
+chatClient
+        .prompt()
+        .options(ModelProfiles.PRECISE.options())
+        .user(message)
+        .call()
+        .content();
+```
+
+这样可以避免“凭感觉调参数”的问题，使模型行为更加稳定可控。
+
+---
+
+### Prompt、模型参数与对话记忆的关系
+
+在 Spring AI 中，这三者的职责应当明确区分：
+
+* **System Prompt**：定义模型角色和行为边界
+* **Prompt Template**：定义一次请求的输入结构
+* **模型参数**：控制模型输出风格与稳定性
+* **对话记忆（Chat Memory）**：维持上下文连续性
+
+需要注意的是：
+
+> **对话记忆不应承担规则或角色定义，规则应由 System Prompt 负责。**
+
+一个推荐的组合方式是：
+
+* System Prompt：固定角色
+* Prompt Template：当前问题结构
+* Model Profile：场景化参数
+* Chat Memory：上下文连续对话
+
+这一设计为下一章节的**对话记忆机制**提供了清晰的职责边界。
+
+---
+
+
+
+## 对话记忆
+
+**添加依赖**
+
+```xml
+<!-- Spring AI JDBC Chat Memory -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-chat-memory-repository-jdbc</artifactId>
+</dependency>
+
+<!-- HikariCP 数据源 依赖 -->
+<dependency>
+    <groupId>com.zaxxer</groupId>
+    <artifactId>HikariCP</artifactId>
+</dependency>
+
+<!-- MySQL数据库驱动 -->
+<dependency>
+    <groupId>com.mysql</groupId>
+    <artifactId>mysql-connector-j</artifactId>
+</dependency>
+```
+
+**编辑配置**
+
+初始化表结构
+
+```java
+spring:
+  ai:
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+```
+
+**配置 ChatClientConfig**
+
+```java
+package io.github.atengk.ai.config;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
-@AutoConfiguration
-public class AtengAutoConfiguration {
+@Configuration
+public class ChatClientConfig {
 
     @Bean
-    public AtengService atengService() {
-        return new AtengServiceImpl();
+    public ChatClient chatClient(
+            ChatClient.Builder builder,
+            ChatMemory chatMemory) {
+
+        return builder
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor
+                                .builder(chatMemory)
+                                .build()
+                )
+                .build();
     }
 
 }
-
 ```
 
+**创建接口**
 
+```java
+package io.github.atengk.ai.controller;
 
-## 注册自动配置
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-添加文件
+@RestController
+@RequestMapping("/api/ai/memory")
+@RequiredArgsConstructor
+public class MemoryChatController {
+
+    private final ChatClient chatClient;
+
+    @GetMapping("/chat")
+    public String chat(
+            @RequestParam String conversationId,
+            @RequestParam String message) {
+
+        return chatClient
+                .prompt()
+                .user(message)
+                .advisors(a ->
+                        a.param(ChatMemory.CONVERSATION_ID, conversationId)
+                )
+                .call()
+                .content();
+    }
+
+}
+```
+
+**使用接口**
 
 ```
-src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+GET /api/ai/memory/chat?conversationId=001&message=我叫阿腾
+GET /api/ai/memory/chat?conversationId=001&message=我叫什么？
 ```
 
-内容
+![image-20260205173520062](./assets/image-20260205173520062.png)
+
+查看MySQL数据
+
+![image-20260205173602743](./assets/image-20260205173602743.png)
+
+
+
+## Tool Calling：让 AI 调用代码
+
+Tool Calling（工具调用）允许 AI 在对话过程中，根据上下文**主动调用后端方法**，从而将自然语言请求转化为真实的业务操作。这一机制非常适合用于查询、计算、规则判断等场景。
+
+------
+
+**为什么需要 Tool Calling**
+
+在没有 Tool Calling 的情况下，AI 只能“回答问题”，却无法参与真实业务流程，例如：
+
+- 查询数据库中的用户信息
+- 计算订单金额
+- 获取当前时间或系统状态
+- 执行业务规则校验
+
+Tool Calling 的目标是：
+
+> **让 AI 决定“要不要调用代码”，而不是“直接生成结果”。**
+
+### 创建 Tools
+
+```java
+package io.github.atengk.ai.tool;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+
+/**
+ * 通用工具
+ */
+@Component
+@Slf4j
+public class CommonTools {
+
+    @Tool(description = "获取当前系统时间")
+    public String currentTime() {
+        log.info("调用了 [{}] 的方法", "获取当前系统时间");
+        return LocalDateTime.now().toString();
+    }
+
+    @Tool(description = "计算两个整数的和")
+    public int sum(int a, int b) {
+        log.info("调用了 [{}] 的方法", "计算两个整数的和");
+        return a + b;
+    }
+
+    @Tool(description = "根据用户ID查询用户名称")
+    public String findUserName(Long userId) {
+        log.info("调用了 [{}] 的方法", "根据用户ID查询用户名称");
+        return "ateng";
+    }
+
+    @Tool(description = "判断用户是否成年")
+    public boolean isAdult(int age) {
+        log.info("调用了 [{}] 的方法", "判断用户是否成年");
+        return age >= 18;
+    }
+
+}
+```
+
+### 注册 Tools
+
+#### 全局注册
+
+```java
+package io.github.atengk.ai.config;
+
+import io.github.atengk.ai.tool.CommonTools;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@RequiredArgsConstructor
+public class ChatClientConfig {
+
+    private final CommonTools commonTools;
+
+    @Bean
+    public ChatClient chatClient(
+            ChatClient.Builder builder,
+            ChatMemory chatMemory) {
+
+        return builder
+                .defaultTools(commonTools)
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor
+                                .builder(chatMemory)
+                                .build()
+                )
+                .build();
+    }
+
+}
+```
+
+#### 局部注册
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.tool.CommonTools;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/tool")
+public class ToolChatController {
+
+    private final ChatClient chatClient;
+    private final CommonTools commonTools;
+
+    /**
+     * 最基础的同步对话
+     */
+    @GetMapping("/chat")
+    public String chat(@RequestParam String message) {
+        return chatClient
+                .prompt()
+                .tools(commonTools)
+                .system("""
+                        你可以在必要时调用系统提供的工具，
+                        工具的返回结果是可信的，
+                        不要自行编造结果。
+                        """)
+                .user(message)
+                .call()
+                .content();
+    }
+
+}
+```
+
+### 使用 Tool
 
 ```
-io.github.atengk.config.AtengAutoConfiguration
+GET /api/ai/tool/chat?message=现在的时间是？
 ```
 
-多个配置示例
+![image-20260206085826334](./assets/image-20260206085826334.png)
+
+![image-20260206085751739](./assets/image-20260206085751739.png)
 
 ```
-io.github.atengk.config.AtengAutoConfiguration
-io.github.atengk.config.RedisAutoConfiguration
-io.github.atengk.config.WebMvcAutoConfiguration
+GET /api/ai/tool/chat?message=1加1等于几？
 ```
 
-## 本地发布（Install）
+![image-20260206085934161](./assets/image-20260206085934161.png)
 
-Maven 提供了 `install` 命令，把包发布到 **本地仓库**（默认路径 `~/.m2/repository`）：
-
-```
-mvn clean install
-```
-
-在其他项目需要依赖你刚刚 install 的模块：
+![image-20260206085920849](./assets/image-20260206085920849.png)
 
 ```
+GET /api/ai/tool/chat?message=我的ID是10010，我的用户名称是什么？
+```
+
+![image-20260206090042832](./assets/image-20260206090042832.png)
+
+![image-20260206090032459](./assets/image-20260206090032459.png)
+
+```
+GET /api/ai/tool/chat?message=我的年龄是25岁，请问是是否成年了？
+```
+
+![image-20260206090151079](./assets/image-20260206090151079.png)
+
+![image-20260206090140489](./assets/image-20260206090140489.png)
+
+---
+
+
+
+## RAG：接入企业知识库
+
+RAG（Retrieval-Augmented Generation，检索增强生成）用于在模型回答问题前，引入**外部知识内容**，从而避免模型“凭空回答”或依赖过期知识。
+
+在 Spring AI 中，RAG 的核心思想是：
+
+> **先检索，再生成，而不是直接让模型回答。**
+
+------
+
+**RAG 的基本组成**
+
+一个最小可用的 RAG 流程包含三个部分：
+
+- **文档（Document）**：知识的基本载体
+- **向量存储（VectorStore）**：用于相似度检索
+- **检索增强 Advisor**：将检索结果注入 Prompt
+
+**相关链接**
+
+- 官网：[https://milvus.io](https://milvus.io)
+
+- Milvus服务安装文档：[链接](https://atengk.github.io/ops/#/work/docker/service/milvus/)
+
+
+
+### 基础配置
+
+**添加依赖**
+
+```xml
+<!-- Spring AI Milvus Vector Store -->
 <dependency>
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.0</version>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
+</dependency>
+
+<!-- Spring AI RAG Advisor -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-rag</artifactId>
 </dependency>
 ```
 
-然后在项目中执行：
+**编辑配置**
+
+```yaml
+spring:
+  ai:
+    vectorstore:
+      milvus:
+        initialize-schema: true
+        database-name: default
+        collection-name: spring_ai_knowledge_ateng
+        embedding-dimension: 1536
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+
+        id-field-name: id
+        content-field-name: content
+        metadata-field-name: metadata
+        embedding-field-name: embedding
+
+        auto-id: false
+
+        client:
+          host: 175.178.193.128
+          port: 20016
+          username: root
+          password: Milvus
+          secure: false
 
 ```
-mvn clean compile
+
+### 知识库初始化
+
+知识库初始化、手工知识录入
+
+#### 创建实体类
+
+```java
+package io.github.atengk.ai.entity;
+
+import lombok.Data;
+
+import java.util.List;
+import java.util.Map;
+
+@Data
+public class RagIngestRequest {
+
+    private List<String> texts;
+
+    private Map<String, Object> metadata;
+
+}
 ```
 
-Maven 会从 **本地仓库**（`~/.m2/repository`）找到 SNAPSHOT 或 Release 包。
+#### 创建Service
+
+```java
+package io.github.atengk.ai.service;
+
+import io.github.atengk.ai.entity.RagIngestRequest;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class RagIngestService {
+
+    private final VectorStore vectorStore;
+
+    /**
+     * 批量写入知识
+     */
+    public int ingest(RagIngestRequest request) {
+        List<Document> documents = request.getTexts()
+                .stream()
+                .map(text -> new Document(text, buildMetadata(request.getMetadata())))
+                .collect(Collectors.toList());
+
+        vectorStore.add(documents);
+        return documents.size();
+    }
+
+    /**
+     * 单条写入，方便测试
+     */
+    public void ingestSingle(String text, Map<String, Object> metadata) {
+        vectorStore.add(List.of(new Document(text, buildMetadata(metadata))));
+    }
+
+    /**
+     * 简单相似度查询，用于验证 RAG 是否生效
+     */
+    public List<Document> search(String query, int topK) {
+        SearchRequest request = SearchRequest.builder()
+                .query(query)
+                .topK(topK)
+                .build();
+
+        return vectorStore.similaritySearch(request);
+    }
+
+    /**
+     * 清空知识库（危险操作，慎用）
+     */
+    public void clearAll() {
+        Filter.Expression expression =
+                new Filter.Expression(
+                        Filter.ExpressionType.EQ,
+                        new Filter.Key("category"),
+                        new Filter.Value("spring-ai")
+                );
+
+        vectorStore.delete(expression);
+    }
+
+    private Map<String, Object> buildMetadata(Map<String, Object> metadata) {
+        return metadata == null ? Map.of() : metadata;
+    }
+}
+```
+
+#### 创建Controller
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.entity.RagIngestRequest;
+import io.github.atengk.ai.service.RagIngestService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.document.Document;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/rag")
+@RequiredArgsConstructor
+public class RagIngestController {
+
+    private final RagIngestService ragIngestService;
+
+    /**
+     * 批量写入
+     */
+    @PostMapping("/ingest")
+    public Map<String, Object> ingest(@RequestBody RagIngestRequest request) {
+        int count = ragIngestService.ingest(request);
+        return Map.of(
+                "status", "OK",
+                "count", count
+        );
+    }
+
+    /**
+     * 单条写入
+     */
+    @PostMapping("/ingest/single")
+    public String ingestSingle(@RequestParam String text) {
+        ragIngestService.ingestSingle(text, null);
+        return "OK";
+    }
+
+    /**
+     * 简单查询，验证 RAG
+     */
+    @GetMapping("/search")
+    public List<Document> search(
+            @RequestParam String query,
+            @RequestParam(defaultValue = "3") int topK
+    ) {
+        return ragIngestService.search(query, topK);
+    }
+
+    /**
+     * 清空知识库
+     */
+    @DeleteMapping("/clear")
+    public String clear() {
+        ragIngestService.clearAll();
+        return "CLEARED";
+    }
+}
+```
+
+#### 录入知识
+
+```
+POST /rag/ingest
+Content-Type: application/json
+
+{
+  "texts": [
+    "Spring AI 是 Spring 官方推出的 AI 应用开发框架",
+    "Spring AI 支持 RAG、Tool Calling、Chat Memory"
+  ],
+  "metadata": {
+    "source": "manual",
+    "category": "spring-ai"
+  }
+}
+```
+
+#### 查询验证
+
+```
+GET /rag/search?query=Spring AI 支持什么能力
+```
+
+#### 清空数据
+
+```
+DELETE /rag/clear
+```
 
 
 
-## 发布到 Nexus3 / 私服
+### RAG 对话接口
 
-Nexus3 安装参考文档：[链接](https://atengk.github.io/ops/#/work/docker/service/nexus/)
+#### 手写方案
 
-### 上传
+**创建接口**
 
-#### 仓库配置
+```java
+package io.github.atengk.ai.controller;
 
-在 Maven 的`settings.xml` 中配置私服账号：
+import io.github.atengk.ai.service.RagIngestService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.document.Document;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * RAG 对话接口
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/rag")
+@Slf4j
+public class RagChatController {
+
+    private final ChatClient chatClient;
+    private final RagIngestService ragIngestService;
+
+    @GetMapping("/chat")
+    public String chat(@RequestParam String question) {
+
+        // 从 Milvus 检索
+        List<Document> documents = ragIngestService.search(question, 5);
+
+        // 拼上下文
+        String context = buildContext(documents);
+
+
+        // 构建 Prompt
+        String prompt = """
+                你是一个专业助手，请基于以下已知内容回答问题。
+                如果无法从内容中得到答案，请明确说明不知道。
+
+                【已知内容】
+                %s
+
+                【用户问题】
+                %s
+                """.formatted(context, question);
+
+        // 调用模型
+        log.info(prompt);
+        return chatClient.prompt(prompt).call().content();
+    }
+
+    private String buildContext(List<Document> documents) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < documents.size(); i++) {
+            builder.append("[").append(i + 1).append("] ")
+                    .append(documents.get(i).getText())
+                    .append("\n");
+        }
+        return builder.toString();
+    }
+
+}
+```
+
+**调用接口**
+
+```
+POST /api/ai/rag/chat?question=Spring AI 支持哪些核心能力？
+```
+
+![image-20260206143734376](./assets/image-20260206143734376.png)
+
+![image-20260206143749451](./assets/image-20260206143749451.png)
+
+#### Advisor 方案
+
+**创建接口**
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.service.RagIngestService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
+import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * RAG 对话接口
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/rag")
+@Slf4j
+public class RagChatController {
+
+    private final ChatClient chatClient;
+    private final VectorStore vectorStore;
+
+    @GetMapping("/chat")
+    public String chat(@RequestParam String message) {
+
+        // 构建 RAG 增强器：在模型回答前，先根据用户问题去向量库检索相关文档
+        RetrievalAugmentationAdvisor advisor = RetrievalAugmentationAdvisor
+                .builder()
+                // 使用向量检索器，从 VectorStore（如 Milvus）中查找相似文档
+                .documentRetriever(
+                        VectorStoreDocumentRetriever
+                                .builder()
+                                // 指定实际使用的向量存储实现
+                                .vectorStore(vectorStore)
+                                .build()
+                )
+                .build();
+
+        // 发送用户问题，并在推理前自动注入检索到的文档上下文
+        return chatClient
+                .prompt()
+                .user(message)
+                .advisors(advisor)
+                .call()
+                .content();
+    }
+
+}
+```
+
+**调用接口**
+
+```
+POST /api/ai/rag/chat?message=Spring AI 支持哪些核心能力？
+返回：Spring AI 支持 RAG、Tool Calling 和 Chat Memory。
+```
+
+
+
+## 接入 MCP Server
+
+MCP Server 开发参考：[链接](/work/Ateng-Java/ai/spring-ai1-mcp-server/)
+
+### 基础配置
+
+**添加依赖**
 
 ```xml
-  <servers>
-    <!-- nexus3 本地私有正式版发布仓库  -->
-    <server>
-        <id>nexus-local-release</id>
-        <username>admin</username>
-        <password>Admin@123</password>
-    </server>
-
-    <!-- nexus3 本地私有快照版发布仓库  -->
-    <server>
-        <id>nexus-local-snapshot</id>
-        <username>admin</username>
-        <password>Admin@123</password>
-    </server>
-  </servers>
-```
-
-然后在 `pom.xml` 添加，注意仓库的id要和上面servers.server配置的id一致
-
-```xml
-    <!--
-    发布到 Maven 仓库（如 Nexus）的配置：
-    用于区分发布版（release）和快照版（snapshot）上传地址
-    -->
-    <distributionManagement>
-
-        <!-- Nexus3 本地发布版仓库（稳定版本，版本号不带 -SNAPSHOT） -->
-        <repository>
-            <id>nexus-local-release</id> <!-- 与 settings.xml 中的 server id 对应 -->
-            <url>http://47.108.39.131:20033/repository/maven-releases/</url>
-        </repository>
-
-        <!-- Nexus3 本地快照版仓库（开发中版本，版本号带 -SNAPSHOT） -->
-        <snapshotRepository>
-            <id>nexus-local-snapshot</id> <!-- 与 settings.xml 中的 server id 对应 -->
-            <url>http://47.108.39.131:20033/repository/maven-snapshots/</url>
-        </snapshotRepository>
-
-    </distributionManagement>
-```
-
-#### 插件配置
-
-```xml
-            <!-- 编译 JAR -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-
-            <!-- 打包源码 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- javadoc插件 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.12.0</version>
-                <executions>
-                    <execution>
-                        <id>attach-javadocs</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <source>${java.version}</source>
-                    <encoding>${project.build.sourceEncoding}</encoding>
-                    <failOnError>false</failOnError>
-                </configuration>
-            </plugin>
-
-            <!-- JAR 签名、发布 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>3.1.4</version>
-            </plugin>
-```
-
-
-
-#### 完整 pom.xml
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <!-- 项目模型版本 -->
-    <modelVersion>4.0.0</modelVersion>
-
-    <!-- 项目坐标 -->
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.0</version>
-    <name>boot3-deploy</name>
-    <description>SpringBoot3 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
-
-    <!-- 项目属性 -->
-    <properties>
-        <java.version>21</java.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-boot.version>3.5.7</spring-boot.version>
-        <lombok.version>1.18.42</lombok.version>
-    </properties>
-
-    <!-- 项目依赖 -->
-    <dependencies>
-        <!-- Spring Boot Auto Configuration -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-            <version>${spring-boot.version}</version>
-        </dependency>
-
-        <!-- Optional: 如果需要用到 Spring Boot 核心功能 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot</artifactId>
-            <version>${spring-boot.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- Lombok: 简化Java代码编写的依赖项 -->
-        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- 你的业务依赖 -->
-        <!-- ... -->
-
-    </dependencies>
-
-    <!-- Spring Boot 依赖管理 -->
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
-    <!-- 普通仓库配置 -->
-    <repositories>
-        <!-- 阿里云中央仓库 -->
-        <repository>
-            <id>aliyun-central</id>
-            <name>阿里云中央仓库</name>
-            <url>https://maven.aliyun.com/repository/central</url>
-        </repository>
-
-        <!-- 官方中央仓库 -->
-        <repository>
-            <id>central</id>
-            <name>Maven Central</name>
-            <url>https://repo.maven.apache.org/maven2/</url>
-        </repository>
-    </repositories>
-
-    <!--
-    发布到 Maven 仓库（如 Nexus）的配置：
-    用于区分发布版（release）和快照版（snapshot）上传地址
-    -->
-    <distributionManagement>
-
-        <!-- Nexus3 本地发布版仓库（稳定版本，版本号不带 -SNAPSHOT） -->
-        <repository>
-            <id>nexus-local-release</id> <!-- 与 settings.xml 中的 server id 对应 -->
-            <url>http://47.108.39.131:20033/repository/maven-releases/</url>
-        </repository>
-
-        <!-- Nexus3 本地快照版仓库（开发中版本，版本号带 -SNAPSHOT） -->
-        <snapshotRepository>
-            <id>nexus-local-snapshot</id> <!-- 与 settings.xml 中的 server id 对应 -->
-            <url>http://47.108.39.131:20033/repository/maven-snapshots/</url>
-        </snapshotRepository>
-
-    </distributionManagement>
-
-    <!-- 构建配置 -->
-    <build>
-        <plugins>
-            <!-- 编译 JAR -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-
-            <!-- 打包源码 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- javadoc插件 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.12.0</version>
-                <executions>
-                    <execution>
-                        <id>attach-javadocs</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <source>${java.version}</source>
-                    <encoding>${project.build.sourceEncoding}</encoding>
-                    <failOnError>false</failOnError>
-                </configuration>
-            </plugin>
-
-            <!-- JAR 签名、发布 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>3.1.4</version>
-            </plugin>
-        </plugins>
-    </build>
-
-</project>
-
-```
-
-#### 上传到仓库
-
-上传命令：
-
-```bash
-mvn clean deploy
-```
-
-或者使用 IDEA 的 Maven 插件：clean + deploy
-
-![image-20251029094701691](./assets/image-20251029094701691.png)
-
-上传后在 Nexus3 查看依赖
-
-![image-20251029094635621](./assets/image-20251029094635621.png)
-
-#### 后续发布
-
-**正式版本发布**
-
-后续再次发布需要修改版本号version，如果版本号已存在会发布失败。
-
-```xml
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.2</version>
-```
-
-**快照版本发布**
-
-快照版本发布版本号version必须要加上 `-SNAPSHOT` 后缀
-
-```xml
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
-```
-
-
-
-### 使用
-
-使用端从 Nexus 拉取依赖
-
-#### 仓库配置
-
-在 Maven 的`settings.xml` 中配置私服账号：
-
-```xml
-  <servers>
-    <!-- nexus3 本地私有正式版发布仓库  -->
-    <server>
-        <id>nexus-local-release</id>
-        <username>admin</username>
-        <password>Admin@123</password>
-    </server>
-
-    <!-- nexus3 本地私有快照版发布仓库  -->
-    <server>
-        <id>nexus-local-snapshot</id>
-        <username>admin</username>
-        <password>Admin@123</password>
-    </server>
-  </servers>
-```
-
-在项目的 `pom.xml`，注意仓库的id要和上面servers.server配置的id一致
-
-```xml
-    <!-- 普通仓库配置 -->
-    <repositories>
-        <!-- Nexus3 本地发布版仓库 -->
-        <repository>
-            <id>nexus-local-release</id>
-            <url>http://47.108.39.131:20033/repository/maven-releases/</url>
-        </repository>
-
-        <!-- Nexus3 本地快照版仓库 -->
-        <repository>
-            <id>nexus-local-snapshot</id>
-            <url>http://47.108.39.131:20033/repository/maven-snapshots/</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-        </repository>
-
-        <!-- 阿里云中央仓库 -->
-        <repository>
-            <id>aliyun-central</id>
-            <name>阿里云中央仓库</name>
-            <url>https://maven.aliyun.com/repository/central</url>
-        </repository>
-
-        <!-- 官方中央仓库 -->
-        <repository>
-            <id>central</id>
-            <name>Maven Central</name>
-            <url>https://repo.maven.apache.org/maven2/</url>
-        </repository>
-    </repositories>
-
-```
-
-💡 Maven 会按顺序依次尝试下载依赖。
- 如果 Nexus 仓库中没有，就会自动去阿里云仓库拉取。
-
-#### 使用
-
-添加依赖
-
-```xml
+<!-- Spring AI MCP Client 依赖 -->
 <dependency>
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.2</version>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-mcp-client</artifactId>
 </dependency>
 ```
 
+**添加配置**
 
-
-## 发布到 Maven Central
-
-### 生成Token
-
-**登录账号**
-
-https://central.sonatype.com/
-
-**注册Namespace**
-
-https://central.sonatype.com/publishing/namespaces
-
-创建Namespace
-
-![image-20251028164731027](./assets/image-20251028164731027.png)
-
-验证Namespace，在Github上创建指定的仓库，然后`Confirm` 确认
-
-![image-20251028164837986](./assets/image-20251028164837986.png)
-
-开启 `SNAPSHOTs`，最终如下图所示
-
-![image-20251028165705485](./assets/image-20251028165705485.png)
-
-
-
-**生成Token**
-
-https://central.sonatype.com/usertoken
-
-![image-20251028165849797](./assets/image-20251028165849797.png)
-
-将生成的Token配置在Maven settings.xml的servers中
-
-```xml
-  <servers>
-
-    <!-- Maven Central 仓库 -->
-    <server>
-        <id>maven-central</id>
-        <username>bLapxx</username>
-        <password>xRovbvyzl2WDD1upt3qaMS3OF0FDExxxx</password>
-    </server>
-
-  </servers>
+```yaml
+spring:
+  ai:
+    mcp:
+      client:
+        sse:
+          connections:
+            local-mcp:
+              url: http://localhost:19002
+              sse-endpoint: /sse
+        name: ateng-mcp-client
+        version: 1.0.0
 ```
 
+**注册 ToolCallbackProvider**
 
+让 Client 能发现 MCP Server + 拿到 Tool 元数据
 
-### 安装 GPG 并配置
+```java
+@Configuration
+@RequiredArgsConstructor
+public class ChatClientConfig {
 
-下载软件并安装
+    @Bean
+    public ChatClient mcpServerChatClient(
+            ChatClient.Builder builder,
+            ToolCallbackProvider mcpToolCallbackProvider) {
 
-https://www.gpg4win.org/
+        return builder
+                .defaultToolCallbacks(mcpToolCallbackProvider)
+                .build();
+    }
 
-如果是新安装的，记得重新IDEA加载环境变量
-
-```
-C:\Users\admin>gpg --version
-gpg (GnuPG) 2.4.8
-libgcrypt 1.11.1
-Copyright (C) 2025 g10 Code GmbH
-License GNU GPL-3.0-or-later <https://gnu.org/licenses/gpl.html>
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
-
-Home: C:\Users\admin\AppData\Roaming\gnupg
-Supported algorithms:
-Pubkey: RSA, ELG, DSA, ECDH, ECDSA, EDDSA
-Cipher: IDEA, 3DES, CAST5, BLOWFISH, AES, AES192, AES256, TWOFISH,
-        CAMELLIA128, CAMELLIA192, CAMELLIA256
-Hash: SHA1, RIPEMD160, SHA256, SHA384, SHA512, SHA224
-Compression: Uncompressed, ZIP, ZLIB, BZIP2
+}
 ```
 
-生成密钥，注意会提示输入口令，设置你的口令后续需要使用
+### 创建接口
 
-```
-C:\Users\admin>gpg --gen-key
-gpg (GnuPG) 2.4.8; Copyright (C) 2025 g10 Code GmbH
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
+```java
+package io.github.atengk.ai.controller;
 
-Note: Use "gpg --full-generate-key" for a full featured key generation dialog.
+import io.github.atengk.ai.tool.CommonTools;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-GnuPG needs to construct a user ID to identify your key.
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/mcp-server")
+public class McpServerChatController {
 
-Real name: ateng
-Email address: 2385569970@qq.com
-You selected this USER-ID:
-    "ateng <2385569970@qq.com>"
+    private final ChatClient mcpServerChatClient;
 
-Change (N)ame, (E)mail, or (O)kay/(Q)uit? o
-We need to generate a lot of random bytes. It is a good idea to perform
-some other action (type on the keyboard, move the mouse, utilize the
-disks) during the prime generation; this gives the random number
-generator a better chance to gain enough entropy.
-We need to generate a lot of random bytes. It is a good idea to perform
-some other action (type on the keyboard, move the mouse, utilize the
-disks) during the prime generation; this gives the random number
-generator a better chance to gain enough entropy.
-gpg: C:\\Users\\admin\\AppData\\Roaming\\gnupg\\trustdb.gpg: trustdb created
-gpg: directory 'C:\\Users\\admin\\AppData\\Roaming\\gnupg\\openpgp-revocs.d' created
-gpg: revocation certificate stored as 'C:\\Users\\admin\\AppData\\Roaming\\gnupg\\openpgp-revocs.d\\EB0C72C000ACD52F1ED9CDB070C5945074947FDB.rev'
-public and secret key created and signed.
+    /**
+     * 最基础的同步对话
+     */
+    @GetMapping("/chat")
+    public String chat(@RequestParam String message) {
+        return mcpServerChatClient
+                .prompt()
+                .system("""
+                        你可以在必要时调用系统提供的工具，
+                        工具的返回结果是可信的，
+                        不要自行编造结果。
+                        """)
+                .user(message)
+                .call()
+                .content();
+    }
 
-pub   ed25519 2025-10-28 [SC] [expires: 2028-10-27]
-      EB0C72C000ACD52F1ED9CDB070C5945074947FDB
-uid                      ateng <2385569970@qq.com>
-sub   cv25519 2025-10-28 [E] [expires: 2028-10-27]
-```
-
-并在 Maven settings.xml 中配置，如果 GPG 的口令不想配置在文件中，可以使用 `MAVEN_GPG_PASSPHRASE` 环境变量
-
-```xml
-  <servers>
-    <!--  GPG 口令 -->
-    <server>
-        <id>gpg.passphrase</id>
-        <passphrase>Admin@123</passphrase>
-    </server>
-	
-  </servers>
-
-    <profiles>
-        <profile>
-            <!-- Profile 名称（可在命令行用 -P release 指定） -->
-            <id>release</id>
-
-            <properties>
-                <!-- GPG 可执行文件（一般保持默认） -->
-                <gpg.executable>gpg</gpg.executable>
-
-                <!-- GPG 密钥名（对应你的 key ID） -->
-                <gpg.keyname>EB0C72C000ACD52F1ED9CDB070C5945074947FDB</gpg.keyname>
-            </properties>
-        </profile>
-    </profiles>
-
-    <activeProfiles>
-        <!-- 默认激活 release profile，无需手动加 -P -->
-        <activeProfile>release</activeProfile>
-    </activeProfiles>
-
+}
 ```
 
-查看秘钥
-
 ```
-gpg --list-keys        # 查看公钥
-gpg --list-secret-keys # 查看私钥
+GET /api/ai/mcp-server/chat?message=计算1 和 99 的和是多少？ 
 ```
 
-![image-20251028171144150](./assets/image-20251028171144150.png)
+![image-20260206205417322](./assets/image-20260206205417322.png)
 
-查看你的 GPG key
+MCP Server 被调用 Tool 的日志
+
+![image-20260206205343992](./assets/image-20260206205343992.png)
+
+
 
 ```
-gpg --list-keys
+GET /api/ai/mcp-server/chat?message=请告诉我重庆的气温
 ```
 
-输出类似：
-
-```
-pub   rsa4096 2023-07-16 [SC]
-      1234ABCD5678EF90123456789ABCDEF012345678
-uid           [ultimate] atengk <your_email@example.com>
-sub   rsa4096 2023-07-16 [E]
-```
-
-- 其中那串长长的 **`1234ABCD5678...`** 就是你的 key fingerprint（指纹）。
-- 确认这就是你在打包签名时用的那把 key。
-
-上传公钥到公共 PGP 服务器
-
-```
-# 推荐上传到 Ubuntu keyserver
-gpg --keyserver keyserver.ubuntu.com --send-keys 1234ABCD5678EF90123456789ABCDEF012345678
-
-# 或上传到 keys.openpgp.org
-gpg --keyserver hkps://keys.openpgp.org --send-keys 1234ABCD5678EF90123456789ABCDEF012345678
-```
-
-> ⚠️ 注意：
->
-> - `1234ABCD5678...` 请替换成你自己的 key 指纹。
-> - 如果你用 `keys.openpgp.org`，第一次可能需要到邮箱确认（因为它要求验证邮件地址）。
-
-验证公钥是否已成功上传
-
-```
-gpg --keyserver keyserver.ubuntu.com --recv-keys 1234ABCD5678EF90123456789ABCDEF012345678
-```
-
-如果能成功拉取，说明上传生效。
- 过几分钟后 Maven Central 那边就能识别到了。
-
-### 配置项目 pom.xml
-
-#### 基本信息配置
-
-```xml
-    <!-- 项目模型版本 -->
-    <modelVersion>4.0.0</modelVersion>
-
-    <!-- 项目坐标 -->
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.2</version>
-    <name>boot3-deploy</name>
-    <description>SpringBoot3 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
-
-    <!-- 许可证信息 -->
-    <licenses>
-        <license>
-            <name>The Apache License, Version 2.0</name>
-            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
-        </license>
-    </licenses>
-
-    <!-- 开发者信息 -->
-    <developers>
-        <developer>
-            <id>ateng</id>
-            <name>阿腾</name>
-            <email>2385569970@qq.com</email>
-        </developer>
-    </developers>
-
-    <!-- 版本控制信息 -->
-    <scm>
-        <url>https://github.com/atengk/Ateng-Java</url>
-        <connection>scm:git:git://github.com/atengk/Ateng-Java.git</connection>
-        <developerConnection>scm:git:ssh://github.com/atengk/Ateng-Java.git</developerConnection>
-    </scm>
-```
-
-
-
-#### 插件配置
-
-##### 编译插件
-
-```xml
-            <!-- 编译 JAR -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-```
-
-##### 打包插件
-
-```xml
-            <!-- 打包源码 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-```
-
-##### javadoc插件
-
-```xml
-            <!-- javadoc插件 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.12.0</version>
-                <executions>
-                    <execution>
-                        <id>attach-javadocs</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <source>${java.version}</source>
-                    <encoding>${project.build.sourceEncoding}</encoding>
-                    <failOnError>false</failOnError>
-                </configuration>
-            </plugin>
-```
-
-##### 签名、发布插件
-
-```xml
-            <!-- JAR 签名、发布 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>3.1.4</version>
-            </plugin>
-```
-
-##### GPG 签名插件
-
-```xml
-            <!-- GPG 签名插件 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>3.2.8</version>
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <!-- 用 loopback 模式 -->
-                    <gpgArguments>
-                        <arg>--pinentry-mode</arg>
-                        <arg>loopback</arg>
-                    </gpgArguments>
-
-                    <!-- 从 settings.xml 中取 passphrase -->
-                    <passphraseServerId>gpg.passphrase</passphraseServerId>
-                </configuration>
-            </plugin>
-```
-
-##### 部署到 Sonatype 的插件
-
-```xml
-            <!-- 部署到 Sonatype 的插件 -->
-            <plugin>
-                <groupId>org.sonatype.central</groupId>
-                <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.9.0</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <!-- 对应 settings.xml 中 servers.server 的 id -->
-                    <publishingServerId>maven-central</publishingServerId>
-                    <!-- 自动发布，否则需要手动去 [sonatype](https://central.sonatype.com/publishing/deployments) 发布 --> 
-                    <autoPublish>true</autoPublish>
-                </configuration>
-            </plugin>
-```
-
-#### 完整 pom.xml 
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <!-- 项目模型版本 -->
-    <modelVersion>4.0.0</modelVersion>
-
-    <!-- 项目坐标 -->
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.2</version>
-    <name>boot3-deploy</name>
-    <description>SpringBoot2 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
-
-    <!-- 许可证信息 -->
-    <licenses>
-        <license>
-            <name>The Apache License, Version 2.0</name>
-            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
-        </license>
-    </licenses>
-
-    <!-- 开发者信息 -->
-    <developers>
-        <developer>
-            <id>ateng</id>
-            <name>阿腾</name>
-            <email>2385569970@qq.com</email>
-        </developer>
-    </developers>
-
-    <!-- 版本控制信息 -->
-    <scm>
-        <url>https://github.com/atengk/Ateng-Java</url>
-        <connection>scm:git:git://github.com/atengk/Ateng-Java.git</connection>
-        <developerConnection>scm:git:ssh://github.com/atengk/Ateng-Java.git</developerConnection>
-    </scm>
-
-    <!-- 项目属性 -->
-    <properties>
-        <java.version>21</java.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-boot.version>3.5.7</spring-boot.version>
-        <lombok.version>1.18.42</lombok.version>
-    </properties>
-
-    <!-- 项目依赖 -->
-    <dependencies>
-        <!-- Spring Boot Auto Configuration -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-            <version>${spring-boot.version}</version>
-        </dependency>
-
-        <!-- Optional: 如果需要用到 Spring Boot 核心功能 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot</artifactId>
-            <version>${spring-boot.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- Lombok: 简化Java代码编写的依赖项 -->
-        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- 你的业务依赖 -->
-        <!-- ... -->
-    </dependencies>
-
-    <!-- Spring Boot 依赖管理 -->
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
-    <!-- 普通仓库配置 -->
-    <repositories>
-        <!-- 阿里云中央仓库 -->
-        <repository>
-            <id>aliyun-central</id>
-            <name>阿里云中央仓库</name>
-            <url>https://maven.aliyun.com/repository/central</url>
-        </repository>
-
-        <!-- 官方中央仓库 -->
-        <repository>
-            <id>central</id>
-            <name>Maven Central</name>
-            <url>https://repo.maven.apache.org/maven2/</url>
-        </repository>
-    </repositories>
-
-    <!-- 构建配置 -->
-    <build>
-        <plugins>
-            <!-- 编译 JAR -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
-                <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
-                </configuration>
-            </plugin>
-
-            <!-- 打包源码 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
-                <executions>
-                    <execution>
-                        <id>attach-sources</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- javadoc插件 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.12.0</version>
-                <executions>
-                    <execution>
-                        <id>attach-javadocs</id>
-                        <goals>
-                            <goal>jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <source>${java.version}</source>
-                    <encoding>${project.build.sourceEncoding}</encoding>
-                    <failOnError>false</failOnError>
-                </configuration>
-            </plugin>
-
-            <!-- JAR 签名、发布 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>3.1.4</version>
-            </plugin>
-
-            <!-- GPG 签名插件 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>3.2.8</version>
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <!-- 用 loopback 模式 -->
-                    <gpgArguments>
-                        <arg>--pinentry-mode</arg>
-                        <arg>loopback</arg>
-                    </gpgArguments>
-
-                    <!-- 从 settings.xml 中取 passphrase -->
-                    <passphraseServerId>gpg.passphrase</passphraseServerId>
-                </configuration>
-            </plugin>
-
-            <!-- 部署到 Sonatype 的插件 -->
-            <plugin>
-                <groupId>org.sonatype.central</groupId>
-                <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.9.0</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <!-- 对应 settings.xml 中 servers.server 的 id -->
-                    <publishingServerId>maven-central</publishingServerId>
-                    <!-- 自动发布，否则需要手动去 [sonatype](https://central.sonatype.com/publishing/deployments) 发布 -->
-                    <autoPublish>true</autoPublish>
-                </configuration>
-            </plugin>
-
-        </plugins>
-    </build>
-
-</project>
-
-```
-
-
-
-### 发布到Maven仓库
-
-使用命令
-
-```
-mvn clean deploy
-```
-
-指定profile
-
-```
-mvn clean deploy -P release
-mvn clean deploy -P dev,release
-```
-
-或者使用 IDEA 的 Maven 插件：clean + deploy
-
-![image-20251029091852841](./assets/image-20251029091852841.png)
-
-### 查看Maven仓库
-
-发布后需要等待一会（目前状态是PUBLISHING），同步到中央仓库后就是PUBLISHED
-
-![image-20251029092021003](./assets/image-20251029092021003.png)
-
-### 后续发布
-
-**正式版本发布**
-
-后续再次发布需要修改版本号version，如果版本号已存在会发布失败。
-
-```xml
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.2</version>
-```
-
-**快照版本发布**
-
-快照版本发布版本号version必须要加上 `-SNAPSHOT` 后缀
-
-```xml
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
-```
-
-从 **2025年6月起**，Sonatype 官方彻底迁移到新的 **Central Portal（central.sonatype.com）** 平台。
- 此平台只支持 **Release（正式版）** 构件发布，不再接收 `-SNAPSHOT` 快照版本。
-
-> 📢 官方说明：
->
-> > *Snapshots are no longer supported on Central Portal. For snapshot deployments, you need to host your own repository (e.g., Nexus, JitPack, GitHub Packages, etc.).*
-
-也就是说：
-
-- ✅ 正式版（如 `1.0.0`）可以上传并在 Maven Central 生效。
-- ❌ 快照版（如 `1.0.0-SNAPSHOT`）不会被 Central Portal 接受，也不会出现在中央仓库。
-
-
-
-### 使用依赖
-
-在其他项目中添加以下依赖就可以使用了
-
-```xml
-<dependency>
-    <groupId>io.github.atengk</groupId>
-    <artifactId>boot3-deploy</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
+![image-20260206211650987](./assets/image-20260206211650987.png)
