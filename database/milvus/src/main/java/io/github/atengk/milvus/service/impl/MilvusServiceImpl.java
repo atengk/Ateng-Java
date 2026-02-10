@@ -317,6 +317,32 @@ public class MilvusServiceImpl implements MilvusService {
         );
     }
 
+    @Override
+    public List<VectorDocument> listByExpr(String collectionName, String expr, long limit) {
+
+        if (limit <= 0) {
+            return List.of();
+        }
+
+        QueryResults results = milvusClient.query(
+                QueryParam.newBuilder()
+                        .withCollectionName(collectionName)
+                        .withExpr(expr)
+                        .withOutFields(Arrays.asList(
+                                ID_FIELD, CONTENT_FIELD, METADATA_FIELD
+                        ))
+                        .withLimit(limit)
+                        .build()
+        ).getData();
+
+        return mapQueryResults(results);
+    }
+
+    @Override
+    public boolean existsByExpr(String collectionName, String expr) {
+        return !listByExpr(collectionName, expr, 1).isEmpty();
+    }
+
     /* ========================= vector search ========================= */
 
     @Override

@@ -394,6 +394,34 @@ public interface MilvusService {
      */
     void deleteByExpr(String collectionName, String expr);
 
+    /* ========================= query by expr ========================= */
+
+    /**
+     * 根据条件表达式查询文档列表
+     *
+     * @param collectionName collection 名称
+     * @param expr Milvus 表达式，例如：metadata.documentId == "xxx"
+     * @param limit 最大返回数量
+     * @return 文档列表
+     */
+    List<VectorDocument> listByExpr(
+            String collectionName,
+            String expr,
+            long limit
+    );
+
+    /**
+     * 根据条件表达式判断是否存在数据
+     *
+     * @param collectionName collection 名称
+     * @param expr Milvus 表达式
+     * @return 是否存在
+     */
+    boolean existsByExpr(
+            String collectionName,
+            String expr
+    );
+
     /* ========================= vector search ========================= */
 
     /**
@@ -732,6 +760,32 @@ public class MilvusServiceImpl implements MilvusService {
                         .withExpr(expr)
                         .build()
         );
+    }
+
+    @Override
+    public List<VectorDocument> listByExpr(String collectionName, String expr, long limit) {
+
+        if (limit <= 0) {
+            return List.of();
+        }
+
+        QueryResults results = milvusClient.query(
+                QueryParam.newBuilder()
+                        .withCollectionName(collectionName)
+                        .withExpr(expr)
+                        .withOutFields(Arrays.asList(
+                                ID_FIELD, CONTENT_FIELD, METADATA_FIELD
+                        ))
+                        .withLimit(limit)
+                        .build()
+        ).getData();
+
+        return mapQueryResults(results);
+    }
+
+    @Override
+    public boolean existsByExpr(String collectionName, String expr) {
+        return !listByExpr(collectionName, expr, 1).isEmpty();
     }
 
     /* ========================= vector search ========================= */
@@ -1088,6 +1142,534 @@ public class MilvusServiceTest {
 
 ## 构建知识库
 
+### 配置 Apache Tika
+
+#### 添加依赖
+
+```xml
+<properties>
+    <tika.version>3.2.3</tika.version>
+</properties>
+<dependencies>
+    <!-- Apache Tika 检测库 -->
+    <dependency>
+        <groupId>org.apache.tika</groupId>
+        <artifactId>tika-core</artifactId>
+        <version>${tika.version}</version>
+    </dependency>
+    <!-- Apache Tika 解析内容库 -->
+    <dependency>
+        <groupId>org.apache.tika</groupId>
+        <artifactId>tika-parsers-standard-package</artifactId>
+        <version>${tika.version}</version>
+    </dependency>
+</dependencies>
+```
+
+#### 创建 TikaUtil
+
+```java
+package io.github.atengk.milvus.util;
+
+import org.apache.tika.Tika;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.parser.AutoDetectParser;
+import org.apache.tika.parser.ParseContext;
+import org.apache.tika.sax.BodyContentHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Apache Tika 工具类
+ * <p>
+ * 提供文件类型检测、文本内容提取、元数据解析等能力
+ *
+ * @author Ateng
+ * @since 2026-02-09
+ */
+public final class TikaUtil {
+
+    private static final Logger log = LoggerFactory.getLogger(TikaUtil.class);
+
+    /**
+     * 默认最大文本提取长度
+     */
+    private static final int DEFAULT_MAX_CONTENT_LENGTH = 100_000;
+
+    /**
+     * 线程安全的 Tika 实例
+     */
+    private static final Tika TIKA = new Tika();
+
+    /**
+     * 自动检测解析器
+     */
+    private static final AutoDetectParser PARSER = new AutoDetectParser();
+
+    private TikaUtil() {
+    }
+
+    /* ========================= type ========================= */
+
+    /**
+     * 检测文件 MIME 类型
+     *
+     * @param file 文件对象
+     * @return MIME 类型，失败返回 null
+     */
+    public static String detect(File file) {
+        if (file == null) {
+            return null;
+        }
+        try {
+            return TIKA.detect(file);
+        } catch (Exception e) {
+            log.warn("Detect file type failed: {}", file.getAbsolutePath(), e);
+            return null;
+        }
+    }
+
+    /**
+     * 检测字节数据 MIME 类型
+     *
+     * @param data 文件字节数据
+     * @return MIME 类型，失败返回 null
+     */
+    public static String detect(byte[] data) {
+        if (data == null || data.length == 0) {
+            return null;
+        }
+        try {
+            return TIKA.detect(data);
+        } catch (Exception e) {
+            log.warn("Detect byte[] type failed", e);
+            return null;
+        }
+    }
+
+    /**
+     * 检测输入流 MIME 类型
+     *
+     * @param inputStream 输入流
+     * @return MIME 类型，失败返回 null
+     */
+    public static String detect(InputStream inputStream) {
+        if (inputStream == null) {
+            return null;
+        }
+        try {
+            return TIKA.detect(inputStream);
+        } catch (Exception e) {
+            log.warn("Detect InputStream type failed", e);
+            return null;
+        }
+    }
+
+    /**
+     * 是否为图片类型
+     *
+     * @param mimeType MIME 类型
+     * @return 是否为图片
+     */
+    public static boolean isImage(String mimeType) {
+        return mimeType != null && mimeType.startsWith("image/");
+    }
+
+    /**
+     * 是否需要 OCR 处理
+     *
+     * @param mimeType MIME 类型
+     * @return 是否需要 OCR
+     */
+    public static boolean needOcr(String mimeType) {
+        if (mimeType == null) {
+            return false;
+        }
+        return isImage(mimeType);
+    }
+
+    /**
+     * 是否为音频类型
+     *
+     * @param mimeType MIME 类型
+     * @return 是否为音频
+     */
+    public static boolean isAudio(String mimeType) {
+        return mimeType != null && mimeType.startsWith("audio/");
+    }
+
+    /**
+     * 是否为视频类型
+     *
+     * @param mimeType MIME 类型
+     * @return 是否为视频
+     */
+    public static boolean isVideo(String mimeType) {
+        return mimeType != null && mimeType.startsWith("video/");
+    }
+
+    /**
+     * 是否为 PDF
+     *
+     * @param mimeType MIME 类型
+     * @return 是否为 PDF
+     */
+    public static boolean isPdf(String mimeType) {
+        return "application/pdf".equals(mimeType);
+    }
+
+    /**
+     * 是否为 Office 文档
+     *
+     * @param mimeType MIME 类型
+     * @return 是否为 Office 文档
+     */
+    public static boolean isOffice(String mimeType) {
+        if (mimeType == null) {
+            return false;
+        }
+        return mimeType.startsWith("application/msword")
+                || mimeType.startsWith("application/vnd.ms-")
+                || mimeType.startsWith("application/vnd.openxmlformats-officedocument");
+    }
+
+    /**
+     * 是否为可解析文本类型
+     *
+     * @param mimeType MIME 类型
+     * @return 是否可能包含正文文本
+     */
+    public static boolean isTextual(String mimeType) {
+        if (mimeType == null) {
+            return false;
+        }
+        return mimeType.startsWith("text/")
+                || isPdf(mimeType)
+                || isOffice(mimeType);
+    }
+
+    /**
+     * 校验 MIME 类型是否在白名单中
+     *
+     * @param mimeType MIME 类型
+     * @param allowed  允许的 MIME 类型集合
+     * @return 是否允许
+     */
+    public static boolean isAllowed(String mimeType, Set<String> allowed) {
+        if (mimeType == null || allowed == null || allowed.isEmpty()) {
+            return false;
+        }
+        return allowed.contains(mimeType);
+    }
+
+    /**
+     * 校验文件扩展名与 MIME 是否匹配
+     *
+     * @param file     文件
+     * @param mimeType MIME 类型
+     * @return 是否匹配
+     */
+    public static boolean isExtensionMatch(File file, String mimeType) {
+        if (file == null || mimeType == null) {
+            return false;
+        }
+        String name = file.getName().toLowerCase();
+
+        if (name.endsWith(".pdf")) {
+            return isPdf(mimeType);
+        }
+        if (name.endsWith(".docx") || name.endsWith(".doc")) {
+            return isOffice(mimeType);
+        }
+        if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")) {
+            return isImage(mimeType);
+        }
+        return true;
+    }
+
+    /**
+     * 是否为可安全解析文件
+     *
+     * @param file        文件
+     * @param allowedMime 允许的 MIME 类型
+     * @param maxBytes    最大文件大小
+     * @return 是否可解析
+     */
+    public static boolean canParse(File file, Set<String> allowedMime, long maxBytes) {
+        if (isEmpty(file) || isTooLarge(file, maxBytes)) {
+            return false;
+        }
+        String mimeType = detect(file);
+        return isAllowed(mimeType, allowedMime) && isExtensionMatch(file, mimeType);
+    }
+
+
+    /* ========================= text ========================= */
+
+    /**
+     * 提取文件文本内容
+     *
+     * @param file 文件对象
+     * @return 文本内容，失败返回空字符串
+     */
+    public static String parseText(File file) {
+        if (file == null) {
+            return "";
+        }
+        try (InputStream inputStream = new FileInputStream(file)) {
+            return parseText(inputStream, DEFAULT_MAX_CONTENT_LENGTH);
+        } catch (Exception e) {
+            log.warn("Parse text from file failed: {}", file.getAbsolutePath(), e);
+            return "";
+        }
+    }
+
+    /**
+     * 提取字节数据文本内容
+     *
+     * @param data 文件字节数据
+     * @return 文本内容，失败返回空字符串
+     */
+    public static String parseText(byte[] data) {
+        if (data == null || data.length == 0) {
+            return "";
+        }
+        try (InputStream inputStream = new ByteArrayInputStream(data)) {
+            return parseText(inputStream, DEFAULT_MAX_CONTENT_LENGTH);
+        } catch (Exception e) {
+            log.warn("Parse text from byte[] failed", e);
+            return "";
+        }
+    }
+
+    /**
+     * 提取输入流文本内容
+     *
+     * @param inputStream      输入流
+     * @param maxContentLength 最大提取字符数，< 0 表示不限制
+     * @return 文本内容，失败返回空字符串
+     */
+    public static String parseText(InputStream inputStream, int maxContentLength) {
+        if (inputStream == null) {
+            return "";
+        }
+
+        try {
+            int limit = maxContentLength < 0 ? -1 : maxContentLength;
+            BodyContentHandler handler = new BodyContentHandler(limit);
+            Metadata metadata = new Metadata();
+            ParseContext context = new ParseContext();
+
+            PARSER.parse(inputStream, handler, metadata, context);
+
+            return handler.toString();
+        } catch (Exception e) {
+            log.warn("Parse text from InputStream failed", e);
+            return "";
+        }
+    }
+
+    /* ========================= metadata ========================= */
+
+    /**
+     * 解析文件元数据
+     *
+     * @param file 文件对象
+     * @return 元数据 Map，失败返回空 Map
+     */
+    public static Map<String, String> parseMetadata(File file) {
+        if (file == null) {
+            return Collections.emptyMap();
+        }
+        try (InputStream inputStream = new FileInputStream(file)) {
+            return parseMetadata(inputStream);
+        } catch (Exception e) {
+            log.warn("Parse metadata from file failed: {}", file.getAbsolutePath(), e);
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
+     * 获取指定元数据值
+     *
+     * @param file 文件
+     * @param key  元数据 key
+     * @return 元数据值，不存在返回 null
+     */
+    public static String getMetadata(File file, String key) {
+        if (file == null || key == null) {
+            return null;
+        }
+        Map<String, String> metadata = parseMetadata(file);
+        return metadata.get(key);
+    }
+
+    /**
+     * 解析字节数据元数据
+     *
+     * @param data 文件字节数据
+     * @return 元数据 Map，失败返回空 Map
+     */
+    public static Map<String, String> parseMetadata(byte[] data) {
+        if (data == null || data.length == 0) {
+            return Collections.emptyMap();
+        }
+        try (InputStream inputStream = new ByteArrayInputStream(data)) {
+            return parseMetadata(inputStream);
+        } catch (Exception e) {
+            log.warn("Parse metadata from byte[] failed", e);
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
+     * 解析输入流元数据
+     *
+     * @param inputStream 输入流
+     * @return 元数据 Map，失败返回空 Map
+     */
+    public static Map<String, String> parseMetadata(InputStream inputStream) {
+        if (inputStream == null) {
+            return Collections.emptyMap();
+        }
+        try {
+            BodyContentHandler handler = new BodyContentHandler(-1);
+            Metadata metadata = new Metadata();
+            ParseContext context = new ParseContext();
+
+            PARSER.parse(inputStream, handler, metadata, context);
+
+            return toMap(metadata);
+        } catch (Exception e) {
+            log.warn("Parse metadata from InputStream failed", e);
+            return Collections.emptyMap();
+        }
+    }
+
+    /* ========================= full ========================= */
+
+    /**
+     * 同时解析文本内容和元数据
+     *
+     * @param file 文件对象
+     * @return 解析结果，失败返回 null
+     */
+    public static TikaResult parseAll(File file) {
+        if (file == null) {
+            return null;
+        }
+        try (InputStream inputStream = new FileInputStream(file)) {
+            return parseAll(inputStream, DEFAULT_MAX_CONTENT_LENGTH);
+        } catch (Exception e) {
+            log.warn("Parse all from file failed: {}", file.getAbsolutePath(), e);
+            return null;
+        }
+    }
+
+    /**
+     * 同时解析文本内容和元数据
+     *
+     * @param inputStream      输入流
+     * @param maxContentLength 最大提取字符数
+     * @return 解析结果，失败返回 null
+     */
+    public static TikaResult parseAll(InputStream inputStream, int maxContentLength) {
+        if (inputStream == null) {
+            return null;
+        }
+
+        try {
+            int limit = maxContentLength < 0 ? -1 : maxContentLength;
+            BodyContentHandler handler = new BodyContentHandler(limit);
+            Metadata metadata = new Metadata();
+            ParseContext context = new ParseContext();
+
+            PARSER.parse(inputStream, handler, metadata, context);
+
+            return new TikaResult(handler.toString(), toMap(metadata));
+        } catch (Exception e) {
+            log.warn("Parse all from InputStream failed", e);
+            return null;
+        }
+    }
+
+    /* ========================= helper ========================= */
+
+    private static Map<String, String> toMap(Metadata metadata) {
+        if (metadata == null || metadata.size() == 0) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> map = new HashMap<>(metadata.size());
+        for (String name : metadata.names()) {
+            map.put(name, metadata.get(name));
+        }
+        return map;
+    }
+
+    /* ========================= result ========================= */
+
+    /**
+     * Tika 解析结果封装
+     */
+    public static final class TikaResult {
+
+        private final String content;
+        private final Map<String, String> metadata;
+
+        public TikaResult(String content, Map<String, String> metadata) {
+            this.content = content;
+            this.metadata = metadata;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public Map<String, String> getMetadata() {
+            return metadata;
+        }
+    }
+
+    /* ========================= size ========================= */
+
+    /**
+     * 是否为空文件
+     *
+     * @param file 文件
+     * @return 是否为空
+     */
+    public static boolean isEmpty(File file) {
+        return file == null || !file.exists() || file.length() == 0;
+    }
+
+    /**
+     * 是否超过最大文件大小
+     *
+     * @param file     文件
+     * @param maxBytes 最大字节数
+     * @return 是否超限
+     */
+    public static boolean isTooLarge(File file, long maxBytes) {
+        if (file == null || maxBytes <= 0) {
+            return false;
+        }
+        return file.length() > maxBytes;
+    }
+
+}
+```
+
+
+
 ### 创建FileVectorService接口
 
 ```java
@@ -1116,30 +1698,33 @@ public interface FileVectorService {
 
 ```
 
-### 接口实现PdfFileVectorService
-
-读取文本推荐使用 Apache Tika：[参考文档链接](/work/Ateng-Java/tools/apache-tika/)
+### FileVectorService接口实现
 
 ```java
 package io.github.atengk.milvus.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.crypto.digest.DigestUtil;
+import com.google.gson.JsonObject;
 import io.github.atengk.milvus.entity.VectorDocument;
 import io.github.atengk.milvus.service.EmbeddingService;
 import io.github.atengk.milvus.service.FileVectorService;
 import io.github.atengk.milvus.service.MilvusService;
 import io.github.atengk.milvus.util.TextSplitter;
+import io.github.atengk.milvus.util.TikaUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Service
-public class PdfFileVectorService implements FileVectorService {
+public class FileVectorServiceImpl implements FileVectorService {
 
     private static final int CHUNK_SIZE = 800;
     private static final int CHUNK_OVERLAP = 150;
@@ -1147,7 +1732,7 @@ public class PdfFileVectorService implements FileVectorService {
     private final MilvusService milvusService;
     private final EmbeddingService embeddingService;
 
-    public PdfFileVectorService(
+    public FileVectorServiceImpl(
             MilvusService milvusService,
             EmbeddingService embeddingService
     ) {
@@ -1160,86 +1745,117 @@ public class PdfFileVectorService implements FileVectorService {
             String collectionName,
             String fileName,
             InputStream inputStream,
-            Map<String, Object> metadata
+            Map<String, Object> externalMetadata
     ) {
-        try (PDDocument document = PDDocument.load(inputStream)) {
+        try {
+            // 读取文件字节 + 计算内容指纹
+            byte[] fileBytes = inputStream.readAllBytes();
+            String documentId = DigestUtil.sha256Hex(fileBytes);
 
-            PDFTextStripper stripper = new PDFTextStripper();
-            String fullText = stripper.getText(document);
+            // 文件防重复
+            String expr = String.format(
+                    "metadata[\"documentId\"] == \"%s\"",
+                    documentId
+            );
 
-            if (fullText == null || fullText.isBlank()) {
-                log.warn("PDF 内容为空: {}", fileName);
+            if (milvusService.existsByExpr(collectionName, expr)) {
+                log.warn("文件重复，跳过写入: fileName={}, SHA-256={}", fileName, documentId);
+                return;
+            }
+
+            // Tika 解析文本
+            InputStream tikaInputStream = new ByteArrayInputStream(fileBytes);
+            TikaUtil.TikaResult tikaResult = TikaUtil.parseAll(tikaInputStream, -1);
+
+            String content = tikaResult.getContent();
+            if (StrUtil.isBlank(content)) {
+                log.warn("文件内容为空，跳过写入: fileName={}", fileName);
                 return;
             }
 
             // 文本切割
             List<String> chunks = TextSplitter.split(
-                    fullText,
+                    content,
                     CHUNK_SIZE,
                     CHUNK_OVERLAP
             );
 
-            List<VectorDocument> docs = new ArrayList<>();
+            if (chunks.isEmpty()) {
+                log.warn("文本切割结果为空，跳过写入: fileName={}", fileName);
+                return;
+            }
 
-            // 文档级唯一 ID
-            String docId = UUID.randomUUID().toString();
-            int totalChunks = chunks.size();
+            int chunkTotal = chunks.size();
+            List<VectorDocument> documents = new ArrayList<>(chunkTotal);
 
-            // 用于计算 offset
-            int cursor = 0;
+            int offsetCursor = 0;
 
-            for (int i = 0; i < chunks.size(); i++) {
+            // 构建向量文档
+            for (int i = 0; i < chunkTotal; i++) {
 
                 String chunk = chunks.get(i);
                 if (StrUtil.isBlank(chunk)) {
                     continue;
                 }
 
-                int startOffset = cursor;
-                int endOffset = cursor + chunk.length();
-                cursor = endOffset - CHUNK_OVERLAP;
+                String chunkId = UUID.randomUUID().toString();
 
-                VectorDocument doc = new VectorDocument();
-                doc.setId(UUID.randomUUID().toString());
-                doc.setContent(chunk);
-                doc.setEmbedding(embeddingService.embed(chunk));
+                int startOffset = offsetCursor;
+                int endOffset = startOffset + chunk.length();
+                offsetCursor = Math.max(endOffset - CHUNK_OVERLAP, startOffset);
 
-                // metadata
-                com.google.gson.JsonObject meta = new com.google.gson.JsonObject();
+                VectorDocument document = new VectorDocument();
+                document.setId(chunkId);
+                document.setContent(chunk);
+                document.setEmbedding(embeddingService.embed(chunk));
 
-                meta.addProperty("fileName", fileName);
-                meta.addProperty("chunkIndex", i);
+                JsonObject metadata = new JsonObject();
 
-                meta.addProperty("docId", docId);
-                meta.addProperty("chunkTotal", totalChunks);
-                meta.addProperty("fileType", "pdf");
-                meta.addProperty("startOffset", startOffset);
-                meta.addProperty("endOffset", endOffset);
-                meta.addProperty("chunkSize", CHUNK_SIZE);
-                meta.addProperty("chunkOverlap", CHUNK_OVERLAP);
+                // 文档级
+                metadata.addProperty("documentId", documentId);
+                metadata.addProperty("fileHash", documentId);
+                metadata.addProperty("fileName", fileName);
 
-                // 外部 metadata 透传
-                if (metadata != null) {
-                    metadata.forEach((k, v) ->
-                            meta.addProperty(k, String.valueOf(v))
+                // chunk 级
+                metadata.addProperty("chunkId", chunkId);
+                metadata.addProperty("chunkIndex", i);
+                metadata.addProperty("chunkTotal", chunkTotal);
+                metadata.addProperty("startOffset", startOffset);
+                metadata.addProperty("endOffset", endOffset);
+                metadata.addProperty("chunkSize", CHUNK_SIZE);
+                metadata.addProperty("chunkOverlap", CHUNK_OVERLAP);
+
+                // Tika 元数据
+                if (tikaResult.getMetadata() != null) {
+                    tikaResult.getMetadata().forEach(metadata::addProperty);
+                }
+
+                // 外部透传 metadata
+                if (externalMetadata != null) {
+                    externalMetadata.forEach(
+                            (k, v) -> metadata.addProperty(k, String.valueOf(v))
                     );
                 }
 
-                doc.setMetadata(meta);
-                docs.add(doc);
+                document.setMetadata(metadata);
+                documents.add(document);
             }
 
-            milvusService.add(collectionName, docs);
+            // 写入 Milvus
+            if (!documents.isEmpty()) {
+                milvusService.add(collectionName, documents);
+            }
 
             log.info(
-                    "PDF 写入完成: file={}, docId={}, chunks={}",
+                    "文件写入 Milvus 完成: fileName={}, documentId={}, chunks={}",
                     fileName,
-                    docId,
-                    docs.size()
+                    documentId,
+                    documents.size()
             );
 
         } catch (Exception e) {
-            throw new RuntimeException("PDF 写入 Milvus 失败", e);
+            log.error("写入 Milvus 失败: fileName={}", fileName, e);
+            throw new RuntimeException("写入 Milvus 失败", e);
         }
     }
 

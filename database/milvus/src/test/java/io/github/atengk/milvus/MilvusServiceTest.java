@@ -113,6 +113,25 @@ public class MilvusServiceTest {
     }
 
     @Test
+    void testListByExpr() {
+        List<VectorDocument> documentList = milvusService.listByExpr(
+                COLLECTION,
+                "metadata[\"source\"] == \"test\"",
+                10
+        );
+        System.out.println(documentList);
+    }
+
+    @Test
+    void testExistsByExpr() {
+        boolean exists = milvusService.existsByExpr(
+                COLLECTION,
+                "metadata[\"source\"] == \"test\""
+        );
+        System.out.println(exists);
+    }
+
+    @Test
     void testSimilaritySearch() {
         String queryText = "Hello Milvus";
         List<Float> queryEmbedding = embeddingService.embed(queryText);

@@ -87,6 +87,34 @@ public interface MilvusService {
      */
     void deleteByExpr(String collectionName, String expr);
 
+    /* ========================= query by expr ========================= */
+
+    /**
+     * 根据条件表达式查询文档列表
+     *
+     * @param collectionName collection 名称
+     * @param expr Milvus 表达式，例如：metadata.documentId == "xxx"
+     * @param limit 最大返回数量
+     * @return 文档列表
+     */
+    List<VectorDocument> listByExpr(
+            String collectionName,
+            String expr,
+            long limit
+    );
+
+    /**
+     * 根据条件表达式判断是否存在数据
+     *
+     * @param collectionName collection 名称
+     * @param expr Milvus 表达式
+     * @return 是否存在
+     */
+    boolean existsByExpr(
+            String collectionName,
+            String expr
+    );
+
     /* ========================= vector search ========================= */
 
     /**
