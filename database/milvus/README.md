@@ -1118,6 +1118,8 @@ public interface FileVectorService {
 
 ### 接口实现PdfFileVectorService
 
+读取文本推荐使用 Apache Tika：[参考文档链接](/work/Ateng-Java/tools/apache-tika/)
+
 ```java
 package io.github.atengk.milvus.service.impl;
 
