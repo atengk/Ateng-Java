@@ -1235,3 +1235,298 @@ GET /api/ai/mcp-server/chat?message=请告诉我重庆的气温
 ```
 
 ![image-20260206211650987](./assets/image-20260206211650987.png)
+
+
+
+## 多模型使用
+
+### 基础配置
+
+**添加依赖**
+
+```xml
+<!-- Spring AI - OpenAI 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-openai</artifactId>
+</dependency>
+
+<!-- Spring AI - DeepSeek 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-deepseek</artifactId>
+</dependency>
+```
+
+**编辑配置**
+
+```yaml
+---
+# Spring AI 配置
+spring:
+  ai:
+    openai:
+      base-url: https://api.chatanywhere.tech
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: gpt-4o-mini
+    deepseek:
+      base-url: https://api.chatanywhere.tech
+      api-key: ${DEEPSEEK_API_KEY}
+      chat:
+        options:
+          model: deepseek-v3.2
+```
+
+**创建配置类**
+
+```java
+package io.github.atengk.ai.config;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.deepseek.DeepSeekChatModel;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@RequiredArgsConstructor
+public class ChatClientConfig {
+
+    @Bean("openAiChatClient")
+    public ChatClient openAiChatClient(OpenAiChatModel model) {
+        return ChatClient.builder(model).build();
+    }
+
+    @Bean("deepSeekChatClient")
+    public ChatClient deepSeekChatClient(DeepSeekChatModel model) {
+        return ChatClient.builder(model).build();
+    }
+
+}
+```
+
+### 创建策略和工厂
+
+#### 创建枚举
+
+```java
+package io.github.atengk.ai.enums;
+
+public enum AiModelType {
+
+    OPENAI("openAiChatClient"),
+    DEEPSEEK("deepSeekChatClient");
+
+    private final String chatClientBeanName;
+
+    AiModelType(String chatClientBeanName) {
+        this.chatClientBeanName = chatClientBeanName;
+    }
+
+    public String getBeanName() {
+        return chatClientBeanName;
+    }
+}
+```
+
+#### 创建策略
+
+```java
+package io.github.atengk.ai.service;
+
+import io.github.atengk.ai.enums.AiModelType;
+import org.springframework.ai.chat.client.ChatClient;
+
+public interface ChatClientStrategy {
+
+    /**
+     * 当前策略支持的模型类型
+     *
+     * @return AiModelType
+     */
+    AiModelType getModelType();
+
+    /**
+     * 返回对应的 ChatClient
+     *
+     * @return ChatClient
+     */
+    ChatClient getChatClient();
+}
+
+```
+
+#### 策略实现 OpenAi
+
+```java
+package io.github.atengk.ai.service.strategy;
+
+import io.github.atengk.ai.enums.AiModelType;
+import io.github.atengk.ai.service.ChatClientStrategy;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
+
+@Component
+public class OpenAiChatClientStrategy implements ChatClientStrategy {
+
+    private final ChatClient chatClient;
+
+    public OpenAiChatClientStrategy(
+            @Qualifier("openAiChatClient") ChatClient chatClient) {
+        this.chatClient = chatClient;
+    }
+
+    @Override
+    public AiModelType getModelType() {
+        return AiModelType.OPENAI;
+    }
+
+    @Override
+    public ChatClient getChatClient() {
+        return chatClient;
+    }
+}
+
+
+```
+
+#### 策略实现 DeepSeek
+
+```java
+package io.github.atengk.ai.service.strategy;
+
+import io.github.atengk.ai.enums.AiModelType;
+import io.github.atengk.ai.service.ChatClientStrategy;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
+
+@Component
+public class DeepSeekChatClientStrategy implements ChatClientStrategy {
+
+    private final ChatClient chatClient;
+
+    public DeepSeekChatClientStrategy(
+            @Qualifier("deepSeekChatClient") ChatClient chatClient) {
+        this.chatClient = chatClient;
+    }
+
+    @Override
+    public AiModelType getModelType() {
+        return AiModelType.DEEPSEEK;
+    }
+
+    @Override
+    public ChatClient getChatClient() {
+        return chatClient;
+    }
+}
+
+
+```
+
+#### 创建工厂
+
+```java
+package io.github.atengk.ai.service;
+
+import io.github.atengk.ai.enums.AiModelType;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+
+@Component
+public class ChatClientFactory {
+
+    private final Map<String, ChatClient> chatClientMap;
+
+    public ChatClientFactory(Map<String, ChatClient> chatClientMap) {
+        this.chatClientMap = chatClientMap;
+    }
+
+    public ChatClient getClient(AiModelType modelType) {
+        ChatClient client = chatClientMap.get(modelType.getBeanName());
+        if (client == null) {
+            throw new IllegalArgumentException(
+                    "No ChatClient bean named: " + modelType.getBeanName());
+        }
+        return client;
+    }
+
+}
+
+```
+
+### 使用多模型
+
+#### 创建服务
+
+```java
+package io.github.atengk.ai.service;
+
+import io.github.atengk.ai.enums.AiModelType;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ChatClientService {
+
+    private final ChatClientFactory factory;
+
+    public ChatClientService(ChatClientFactory factory) {
+        this.factory = factory;
+    }
+
+    public String chat(AiModelType modelType, String prompt) {
+        return factory.getClient(modelType)
+                .prompt(prompt)
+                .call()
+                .content();
+    }
+}
+```
+
+#### 创建接口
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.enums.AiModelType;
+import io.github.atengk.ai.service.ChatClientService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/ai")
+public class ChatClientController {
+
+    private final ChatClientService chatClientService;
+
+    public ChatClientController(ChatClientService chatClientService) {
+        this.chatClientService = chatClientService;
+    }
+
+    @GetMapping("/chat")
+    public String chat(
+            @RequestParam(defaultValue = "OPENAI") AiModelType model,
+            @RequestParam String prompt) {
+
+        return chatClientService.chat(model, prompt);
+    }
+}
+
+```
+
+#### 使用接口
+
+```java
+GET /api/ai/chat?model=DEEPSEEK&prompt=SpringAI是什么？
+GET /api/ai/chat?model=OPENAI&prompt=SpringAI是什么？
+```
+
