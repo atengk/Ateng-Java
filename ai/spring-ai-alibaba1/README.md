@@ -221,6 +221,318 @@ GET /api/ai/chat/template?topic=SpringAI是什么？
 
 
 
+## Agent 使用
+
+使用 Agent Framework 内置的 `ReactAgent` 抽象快速构建 Agent 应用。
+
+### 基础配置
+
+**添加依赖**
+
+```xml
+<!-- Spring AI Alibaba 依赖 -->
+<dependency>
+    <groupId>com.alibaba.cloud.ai</groupId>
+    <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
+</dependency>
+
+<!-- Spring AI Alibaba Agent Framework -->
+<dependency>
+    <groupId>com.alibaba.cloud.ai</groupId>
+    <artifactId>spring-ai-alibaba-agent-framework</artifactId>
+</dependency>
+```
+
+### 基础使用
+
+#### 创建 ReactAgent 配置类
+
+**基础 ReactAgent**
+
+```java
+package io.github.atengk.ai.config;
+
+import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class ReactAgentConfig {
+
+    @Bean
+    public ReactAgent reactAgent(DashScopeChatModel dashScopeChatModel) {
+        return ReactAgent.builder()
+                .name("default_agent")
+                .model(dashScopeChatModel)
+                .saver(new MemorySaver())
+                .build();
+    }
+
+}
+
+```
+
+#### 使用 ReactAgent
+
+**基础使用**
+
+```java
+package io.github.atengk.ai.controller;
+
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/agent")
+@RequiredArgsConstructor
+public class ReactAgentController {
+
+    private final ReactAgent reactAgent;
+
+    @GetMapping("/simple")
+    public String simple(String message) throws GraphRunnerException {
+        AssistantMessage call = reactAgent.call(message);
+        return call.getText();
+    }
+
+}
+
+```
+
+调用接口
+
+```
+GET /api/agent/simple?message=SpringAIAlibaba是什么？
+```
+
+### 使用 Tool
+
+#### 创建 Tool 类
+
+**天气查询工具**
+
+```java
+package io.github.atengk.ai.tool;
+
+import com.fasterxml.jackson.annotation.JsonClassDescription;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+
+import java.util.function.Function;
+
+/**
+ * 根据城市名称获取天气信息工具
+ *
+ * @author 孔余
+ * @since 2026-02-11
+ */
+public class WeatherTool
+        implements Function<WeatherTool.Request, WeatherTool.Response> {
+
+    @Override
+    public WeatherTool.Response apply(WeatherTool.Request request) {
+
+        String city = request.city;
+
+        // 这里是模拟天气数据，实际项目可以改成调用第三方天气 API
+        String weather = "晴";
+        String temperature = "25°";
+
+        return new Response(
+                String.format("%s的天气是%s，温度%s",
+                        city,
+                        weather,
+                        temperature));
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonClassDescription("根据城市名称获取天气信息")
+    public record Request(
+            @JsonProperty(required = true, value = "city")
+            @JsonPropertyDescription("城市名称，例如 重庆、北京")
+            String city) {
+    }
+
+    @JsonClassDescription("天气查询结果")
+    public record Response(String description) {
+    }
+
+}
+
+```
+
+**时区查询工具**
+
+```java
+package io.github.atengk.ai.tool;
+
+import com.fasterxml.jackson.annotation.JsonClassDescription;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.function.Function;
+
+/**
+ * 根据时区获取当前时间工具
+ *
+ * @author 孔余
+ * @since 2026-02-11
+ */
+public class TimeByZoneIdTool
+        implements Function<TimeByZoneIdTool.Request, TimeByZoneIdTool.Response> {
+
+    @Override
+    public TimeByZoneIdTool.Response apply(TimeByZoneIdTool.Request request) {
+        String timeZoneId = request.timeZoneId;
+        ZonedDateTime zonedDateTime = ZonedDateTime.now(ZoneId.of(timeZoneId));
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String currentTime = zonedDateTime.format(formatter);
+        return new Response(String.format("当前时区为 %s，当前时间为 %s",
+                timeZoneId,
+                currentTime));
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonClassDescription("根据时区ID获取当前时间")
+    public record Request(
+            @JsonProperty(required = true, value = "timeZoneId")
+            @JsonPropertyDescription("时区ID，例如 Asia/Shanghai")
+            String timeZoneId) {
+    }
+
+    @JsonClassDescription("根据时区ID获取时间的响应结果")
+    public record Response(String description) {
+    }
+
+}
+
+
+```
+
+
+
+#### 创建 ToolConfig 配置类
+
+**创建 ToolCallback**
+
+```java
+package io.github.atengk.ai.config;
+
+import io.github.atengk.ai.tool.TimeByZoneIdTool;
+import io.github.atengk.ai.tool.WeatherTool;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class ToolConfig {
+
+    @Bean
+    public ToolCallback weatherTool() {
+        return FunctionToolCallback.builder("getWeather", new WeatherTool())
+                .description("根据城市名称获取天气信息工具")
+                .inputType(WeatherTool.Request.class)
+                .build();
+    }
+
+    @Bean
+    public ToolCallback timeByZoneIdTool() {
+        return FunctionToolCallback.builder("getTimeByZoneId", new TimeByZoneIdTool())
+                .description("根据时区获取当前时间工具")
+                .inputType(TimeByZoneIdTool.Request.class)
+                .build();
+    }
+
+}
+
+```
+
+#### 创建 ReactAgent 配置类
+
+**带有 Tool 的 ReactAgent**
+
+```java
+package io.github.atengk.ai.config;
+
+import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
+
+@Configuration
+public class ReactAgentConfig {
+
+    @Bean
+    public ReactAgent toolReactAgent(
+            DashScopeChatModel dashScopeChatModel,
+            List<ToolCallback> toolCallbacks
+    ) {
+        return ReactAgent.builder()
+                .name("tool_agent")
+                .tools(toolCallbacks)
+                .model(dashScopeChatModel)
+                .saver(new MemorySaver())
+                .build();
+    }
+
+}
+
+```
+
+#### 使用 ReactAgent
+
+```java
+package io.github.atengk.ai.controller;
+
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/agent")
+@RequiredArgsConstructor
+public class ReactAgentController {
+
+    private final ReactAgent toolReactAgent;
+
+    @GetMapping("/tool")
+    public String tool(String message) throws GraphRunnerException {
+        AssistantMessage call = toolReactAgent.call(message);
+        return call.getText();
+    }
+
+}
+
+```
+
+调用接口
+
+```
+GET /api/agent/tool?message=重庆的天气怎么样？
+GET /api/agent/tool?message=中国的时间是多少？
+```
+
 
 
 ## 多模型使用
