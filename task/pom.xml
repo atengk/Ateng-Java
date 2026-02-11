@@ -17,5 +17,6 @@
          <module>scheduled</module>
          <module>snail-job</module>
          <module>power-job</module>
+         <module>database-job</module>
     </modules>
 </project>

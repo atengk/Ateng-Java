@@ -1,0 +1,24 @@
+server:
+  port: 19004
+spring:
+  application:
+    name: ${project.artifactId}
+---
+# 数据库的相关配置
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      maximum-pool-size: 1000
+      minimum-idle: 10
+      idle-timeout: 30000
+      connection-timeout: 30000
+# Mybatis Plus的配置 https://baomidou.com/reference
+mybatis-plus:
+  global-config:
+    banner: false
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
