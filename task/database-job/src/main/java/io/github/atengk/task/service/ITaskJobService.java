@@ -13,9 +13,4 @@ import io.github.atengk.task.entity.TaskJob;
  */
 public interface ITaskJobService extends IService<TaskJob> {
 
-    /**
-     * 根据 jobCode 执行任务
-     */
-    void execute(TaskJob job);
-
 }

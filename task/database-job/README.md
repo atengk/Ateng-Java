@@ -1,6 +1,6 @@
 # 数据库驱动的任务执行模型
 
-本模型基于数据库存储任务定义，通过反射方式动态执行指定 Bean 方法，支持任意参数类型（含复杂对象），内置重试机制与乐观锁并发控制。
+本模型使用SpringBoot3基于数据库存储任务定义，通过反射方式动态执行指定 Bean 方法，支持任意参数类型（含复杂对象），内置重试机制与乐观锁并发控制。
  任务执行成功后自动删除，失败则保留并记录日志，可人工干预后重新执行。
  适用于一次性任务、异步补偿任务及轻量级后台任务执行场景。
 
@@ -278,6 +278,41 @@ public class TaskJob implements Serializable {
 
 ```
 
+### 创建配置类
+
+```java
+package io.github.atengk.task.config;
+
+import com.baomidou.mybatisplus.annotation.DbType;
+import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@MapperScan("io.github.atengk.**.mapper")
+public class MyBatisPlusConfiguration {
+
+    /**
+     * 拦截器配置
+     */
+    @Bean
+    public MybatisPlusInterceptor mybatisPlusInterceptor() {
+        MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+        // 分页插件
+        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
+        // 乐观锁插件
+        interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
+
+        return interceptor;
+    }
+
+}
+
+```
+
 
 
 ## 创建 execute
@@ -370,32 +405,30 @@ public class ReflectInvokeUtil {
 
 ```
 
-### 创建执行服务
+### 创建执行器
 
 ```java
-package io.github.atengk.task.service.impl;
+package io.github.atengk.task.executor;
 
 import cn.hutool.core.exceptions.ExceptionUtil;
 import cn.hutool.core.thread.ThreadUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import io.github.atengk.task.entity.TaskJob;
 import io.github.atengk.task.entity.TaskJobLog;
-import io.github.atengk.task.mapper.TaskJobMapper;
 import io.github.atengk.task.service.ITaskJobLogService;
 import io.github.atengk.task.service.ITaskJobService;
 import io.github.atengk.task.util.ReflectInvokeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 数据库驱动任务执行服务（生产级实现）
+ * 数据库驱动任务执行服务
  *
  * 特性：
  * 1. 乐观锁抢占
@@ -407,19 +440,17 @@ import java.util.concurrent.TimeUnit;
  * @author Ateng
  * @since 2026-02-11
  */
-@Slf4j
-@Service
+@Component
 @RequiredArgsConstructor
-public class TaskJobServiceImpl
-        extends ServiceImpl<TaskJobMapper, TaskJob>
-        implements ITaskJobService {
+@Slf4j
+public class TaskExecutor {
 
     private final ITaskJobLogService taskJobLogService;
+    private final ITaskJobService taskJobService;
 
     /**
      * 执行任务（供调度框架调用）
      */
-    @Override
     public void execute(TaskJob job) {
 
         if (job == null) {
@@ -442,7 +473,7 @@ public class TaskJobServiceImpl
 
         job.setExecuteStatus(1);
 
-        return updateById(job);
+        return taskJobService.updateById(job);
     }
 
 
@@ -533,7 +564,7 @@ public class TaskJobServiceImpl
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteSuccessJob(Long jobId) {
-        removeById(jobId);
+        taskJobService.removeById(jobId);
     }
 
     /**
@@ -545,7 +576,7 @@ public class TaskJobServiceImpl
                          String errorMsg,
                          int retryInterval) {
 
-        lambdaUpdate()
+        taskJobService.lambdaUpdate()
                 .eq(TaskJob::getId, jobId)
                 .set(TaskJob::getExecuteStatus, 2)
                 .set(TaskJob::getFailReason,
@@ -625,6 +656,7 @@ public class OrderTaskService {
 package io.github.atengk.task.controller;
 
 import io.github.atengk.task.entity.TaskJob;
+import io.github.atengk.task.executor.TaskExecutor;
 import io.github.atengk.task.service.ITaskJobService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -637,6 +669,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class TaskTestController {
 
+    private final TaskExecutor taskExecutor;
     private final ITaskJobService taskJobService;
 
     @GetMapping("/execute")
@@ -645,7 +678,7 @@ public class TaskTestController {
                 .lambdaQuery()
                 .eq(TaskJob::getJobCode, code)
                 .one();
-        taskJobService.execute(taskJob);
+        taskExecutor.execute(taskJob);
         return "执行完成";
     }
 
