@@ -1,6 +1,7 @@
 package io.github.atengk.milvus.service.impl;
 
 import io.github.atengk.milvus.service.EmbeddingService;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Random;
 
 @Service
+@Primary
 public class MockEmbeddingServiceImpl implements EmbeddingService {
 
     private static final int DIMENSION = 1536;

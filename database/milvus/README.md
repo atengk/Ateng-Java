@@ -1869,47 +1869,87 @@ public class FileVectorServiceImpl implements FileVectorService {
 package io.github.atengk.milvus.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
+/**
+ * 文本切割工具类
+ *
+ * <p>
+ * 用于将长文本按指定最大长度切割为多个 chunk，
+ * 并在相邻 chunk 之间保留一定的字符重叠，
+ * 以减少语义在切割边界处的丢失。
+ * </p>
+ *
+ * <p>
+ * 常用于：
+ * <ul>
+ *     <li>RAG 文档切块</li>
+ *     <li>Embedding 前文本预处理</li>
+ * </ul>
+ * </p>
+ */
 public class TextSplitter {
 
+    private TextSplitter() {
+    }
+
     /**
-     * 按最大字符数切割，带重叠
+     * 按最大字符数切割文本（支持重叠）
+     *
+     * @param text 原始文本
+     * @param chunkSize 每个 chunk 的最大字符数，必须 &gt; 0
+     * @param overlap 相邻 chunk 之间的重叠字符数，必须 &gt;= 0 且 &lt; chunkSize
+     * @return 切割后的文本块列表，按原文顺序排列
      */
     public static List<String> split(
             String text,
             int chunkSize,
             int overlap
     ) {
+        /* ---------- 基础校验 ---------- */
+
+        if (text == null || text.isBlank()) {
+            return Collections.emptyList();
+        }
+
         if (chunkSize <= 0) {
-            throw new IllegalArgumentException("chunkSize must be > 0");
+            throw new IllegalArgumentException("chunkSize must be greater than 0");
         }
+
         if (overlap < 0) {
-            throw new IllegalArgumentException("overlap must be >= 0");
+            throw new IllegalArgumentException("overlap must be greater than or equal to 0");
         }
+
         if (overlap >= chunkSize) {
             throw new IllegalArgumentException(
                     "overlap must be smaller than chunkSize"
             );
         }
 
+        /* ---------- 切割逻辑 ---------- */
+
         List<String> chunks = new ArrayList<>();
 
-        int start = 0;
         int textLength = text.length();
+        int start = 0;
+
+        int step = chunkSize - overlap;
+        if (step <= 0) {
+            throw new IllegalStateException(
+                    "Invalid step size, possible infinite loop: step=" + step
+            );
+        }
 
         while (start < textLength) {
             int end = Math.min(start + chunkSize, textLength);
             chunks.add(text.substring(start, end));
-
-            start += (chunkSize - overlap);
+            start += step;
         }
 
         return chunks;
     }
-
 }
-
 ```
 
 ### 使用方法
@@ -1952,5 +1992,416 @@ public class FileVectorTests {
 
 }
 
+```
+
+
+
+## 使用 OpenAI 的 EmbeddingModel
+
+### 基础配置
+
+**添加依赖**
+
+```xml
+        <!-- Spring AI - OpenAI 依赖 -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <version>1.1.2</version>
+        </dependency>
+```
+
+**创建配置**
+
+```yaml
+---
+# Spring AI 配置
+spring:
+  ai:
+    openai:
+      base-url: https://api.chatanywhere.tech
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: gpt-4o-mini
+```
+
+
+
+### FileVectorService接口实现
+
+FileVectorService接口实现OpenAiEmbeddingService
+
+```java
+package io.github.atengk.milvus.service.impl;
+
+import io.github.atengk.milvus.service.EmbeddingService;
+import org.springframework.ai.embedding.Embedding;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingRequest;
+import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.stereotype.Service;
+import org.springframework.util.ObjectUtils;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+/**
+ * 基于 OpenAI 的 Embedding 服务实现
+ *
+ * <p>
+ * 说明：
+ * <ul>
+ *     <li>内部通过 Spring AI 的 EmbeddingModel 调用 OpenAI Embeddings API</li>
+ *     <li>embed(text) 会自动委托到批量接口</li>
+ *     <li>dimension 在首次调用后缓存</li>
+ * </ul>
+ */
+@Service
+public class OpenAiEmbeddingService implements EmbeddingService {
+
+    /**
+     * Spring AI 抽象的 EmbeddingModel
+     */
+    private final EmbeddingModel embeddingModel;
+
+    /**
+     * embedding 维度缓存
+     */
+    private volatile Integer dimensionCache;
+
+    public OpenAiEmbeddingService(EmbeddingModel embeddingModel) {
+        this.embeddingModel = embeddingModel;
+    }
+
+    /**
+     * 单条文本 embedding
+     */
+    @Override
+    public List<Float> embed(String text) {
+        if (ObjectUtils.isEmpty(text)) {
+            return Collections.emptyList();
+        }
+
+        List<List<Float>> result = embedBatch(Collections.singletonList(text));
+        return result.isEmpty() ? Collections.emptyList() : result.get(0);
+    }
+
+    /**
+     * 批量文本 embedding
+     */
+    @Override
+    public List<List<Float>> embedBatch(List<String> texts) {
+        if (ObjectUtils.isEmpty(texts)) {
+            return Collections.emptyList();
+        }
+
+        EmbeddingRequest request = new EmbeddingRequest(texts, null);
+
+        EmbeddingResponse response = embeddingModel.call(request);
+
+        List<Embedding> embeddings = response.getResults();
+        if (ObjectUtils.isEmpty(embeddings)) {
+            return Collections.emptyList();
+        }
+
+        List<List<Float>> vectors = embeddings.stream()
+                .map(Embedding::getOutput)
+                .filter(Objects::nonNull)
+                .map(this::toFloatList)
+                .collect(Collectors.toList());
+
+        cacheDimensionIfNecessary(vectors);
+
+        return vectors;
+    }
+
+    /**
+     * 将 float[] 转换为 List<Float>
+     */
+    private List<Float> toFloatList(float[] vector) {
+        List<Float> result = new ArrayList<>(vector.length);
+        for (float v : vector) {
+            result.add(v);
+        }
+        return result;
+    }
+
+    /**
+     * 返回 embedding 向量维度
+     */
+    @Override
+    public int dimension() {
+        if (dimensionCache != null) {
+            return dimensionCache;
+        }
+
+        List<Float> vector = embed("dimension_probe");
+        if (ObjectUtils.isEmpty(vector)) {
+            throw new IllegalStateException("Failed to determine embedding dimension");
+        }
+
+        dimensionCache = vector.size();
+        return dimensionCache;
+    }
+
+    /**
+     * 缓存 embedding 维度
+     */
+    private void cacheDimensionIfNecessary(List<List<Float>> vectors) {
+        if (dimensionCache != null) {
+            return;
+        }
+
+        if (ObjectUtils.isEmpty(vectors)) {
+            return;
+        }
+
+        List<Float> first = vectors.get(0);
+        if (!ObjectUtils.isEmpty(first)) {
+            dimensionCache = first.size();
+        }
+    }
+}
+
+```
+
+### 修改 FileVectorServiceImpl
+
+主要是修改了批量获取embedding，节省调用AI模型的token
+
+```java
+package io.github.atengk.milvus.service.impl;
+
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.crypto.digest.DigestUtil;
+import com.google.gson.JsonObject;
+import io.github.atengk.milvus.entity.VectorDocument;
+import io.github.atengk.milvus.service.EmbeddingService;
+import io.github.atengk.milvus.service.FileVectorService;
+import io.github.atengk.milvus.service.MilvusService;
+import io.github.atengk.milvus.util.TextSplitter;
+import io.github.atengk.milvus.util.TikaUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@Slf4j
+@Service
+public class FileVectorServiceImpl implements FileVectorService {
+
+    private static final int CHUNK_SIZE = 800;
+    private static final int CHUNK_OVERLAP = 150;
+
+    private final MilvusService milvusService;
+    private final EmbeddingService embeddingService;
+
+    public FileVectorServiceImpl(
+            MilvusService milvusService,
+            @Qualifier("openAiEmbeddingService") EmbeddingService embeddingService
+    ) {
+        this.milvusService = milvusService;
+        this.embeddingService = embeddingService;
+    }
+
+    @Override
+    public void ingest(
+            String collectionName,
+            String fileName,
+            InputStream inputStream,
+            Map<String, Object> externalMetadata
+    ) {
+        try {
+            /* ========================= file fingerprint ========================= */
+
+            byte[] fileBytes = inputStream.readAllBytes();
+            String documentId = DigestUtil.sha256Hex(fileBytes);
+
+            String expr = String.format(
+                    "metadata[\"documentId\"] == \"%s\"",
+                    documentId
+            );
+
+            if (milvusService.existsByExpr(collectionName, expr)) {
+                log.warn(
+                        "文件重复，跳过写入: fileName={}, documentId={}",
+                        fileName,
+                        documentId
+                );
+                return;
+            }
+
+            /* ========================= tika parse ========================= */
+
+            InputStream tikaInputStream = new ByteArrayInputStream(fileBytes);
+            TikaUtil.TikaResult tikaResult = TikaUtil.parseAll(tikaInputStream, -1);
+
+            String content = tikaResult.getContent();
+            if (StrUtil.isBlank(content)) {
+                log.warn("文件内容为空，跳过写入: fileName={}", fileName);
+                return;
+            }
+
+            /* ========================= text split ========================= */
+
+            List<String> chunks = TextSplitter.split(
+                    content,
+                    CHUNK_SIZE,
+                    CHUNK_OVERLAP
+            );
+
+            if (chunks.isEmpty()) {
+                log.warn("文本切割结果为空，跳过写入: fileName={}", fileName);
+                return;
+            }
+
+            /* ========================= batch embedding ========================= */
+
+            List<String> chunkTexts = new ArrayList<>(chunks.size());
+            for (String chunk : chunks) {
+                if (StrUtil.isNotBlank(chunk)) {
+                    chunkTexts.add(chunk);
+                }
+            }
+
+            List<List<Float>> embeddings =
+                    embeddingService.embedBatch(chunkTexts);
+
+            if (embeddings.size() != chunkTexts.size()) {
+                throw new IllegalStateException(
+                        "Embedding 结果数量不匹配: texts="
+                                + chunkTexts.size()
+                                + ", embeddings="
+                                + embeddings.size()
+                );
+            }
+
+            /* ========================= build vector documents ========================= */
+
+            int chunkTotal = chunkTexts.size();
+            List<VectorDocument> documents = new ArrayList<>(chunkTotal);
+
+            int offsetCursor = 0;
+
+            for (int i = 0; i < chunkTotal; i++) {
+
+                String chunk = chunkTexts.get(i);
+                List<Float> vector = embeddings.get(i);
+
+                String chunkId = UUID.randomUUID().toString();
+
+                int startOffset = offsetCursor;
+                int endOffset = startOffset + chunk.length();
+                offsetCursor = Math.max(endOffset - CHUNK_OVERLAP, startOffset);
+
+                VectorDocument document = new VectorDocument();
+                document.setId(chunkId);
+                document.setContent(chunk);
+                document.setEmbedding(vector);
+
+                JsonObject metadata = new JsonObject();
+
+                /* ---------- document level ---------- */
+                metadata.addProperty("documentId", documentId);
+                metadata.addProperty("fileHash", documentId);
+                metadata.addProperty("fileName", fileName);
+
+                /* ---------- chunk level ---------- */
+                metadata.addProperty("chunkId", chunkId);
+                metadata.addProperty("chunkIndex", i);
+                metadata.addProperty("chunkTotal", chunkTotal);
+                metadata.addProperty("startOffset", startOffset);
+                metadata.addProperty("endOffset", endOffset);
+                metadata.addProperty("chunkSize", CHUNK_SIZE);
+                metadata.addProperty("chunkOverlap", CHUNK_OVERLAP);
+
+                /* ---------- tika metadata ---------- */
+                if (tikaResult.getMetadata() != null) {
+                    tikaResult.getMetadata().forEach(metadata::addProperty);
+                }
+
+                /* ---------- external metadata ---------- */
+                if (externalMetadata != null) {
+                    externalMetadata.forEach(
+                            (k, v) -> metadata.addProperty(k, String.valueOf(v))
+                    );
+                }
+
+                document.setMetadata(metadata);
+                documents.add(document);
+            }
+
+            /* ========================= write to milvus ========================= */
+
+            if (!documents.isEmpty()) {
+                milvusService.add(collectionName, documents);
+            }
+
+            log.info(
+                    "文件写入 Milvus 完成: fileName={}, documentId={}, chunks={}",
+                    fileName,
+                    documentId,
+                    documents.size()
+            );
+
+        } catch (Exception e) {
+            log.error("写入 Milvus 失败: fileName={}", fileName, e);
+            throw new RuntimeException("写入 Milvus 失败", e);
+        }
+    }
+}
+```
+
+### 写入数据到 Milvus
+
+基于 OpenAI EmbeddingModel（1536）写入数据到 Milvus
+
+```java
+package io.github.atengk.milvus;
+
+import cn.hutool.core.io.file.PathUtil;
+import io.github.atengk.milvus.service.FileVectorService;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.HashMap;
+
+@SpringBootTest
+public class FileVectorTests {
+
+    @Autowired
+    private FileVectorService fileVectorService;
+
+    private static final String COLLECTION = "test_collection";
+
+    @Test
+    void test1() {
+        Path filepath = Paths.get("D:\\temp", "demo.docx");
+
+        HashMap<String, Object> metadata = new HashMap<>();
+        metadata.put("author", "阿腾");
+        metadata.put("date", "20260208");
+        fileVectorService.ingest(
+                COLLECTION,
+                filepath.getFileName().toString(),
+                PathUtil.getInputStream(filepath),
+                metadata
+        );
+    }
+
+}
 ```
 

@@ -10,6 +10,7 @@ import io.github.atengk.milvus.service.MilvusService;
 import io.github.atengk.milvus.util.TextSplitter;
 import io.github.atengk.milvus.util.TikaUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
@@ -31,7 +32,7 @@ public class FileVectorServiceImpl implements FileVectorService {
 
     public FileVectorServiceImpl(
             MilvusService milvusService,
-            EmbeddingService embeddingService
+            @Qualifier("openAiEmbeddingService") EmbeddingService embeddingService
     ) {
         this.milvusService = milvusService;
         this.embeddingService = embeddingService;
@@ -45,22 +46,27 @@ public class FileVectorServiceImpl implements FileVectorService {
             Map<String, Object> externalMetadata
     ) {
         try {
-            // 读取文件字节 + 计算内容指纹
+            /* ========================= file fingerprint ========================= */
+
             byte[] fileBytes = inputStream.readAllBytes();
             String documentId = DigestUtil.sha256Hex(fileBytes);
 
-            // 文件防重复
             String expr = String.format(
                     "metadata[\"documentId\"] == \"%s\"",
                     documentId
             );
 
             if (milvusService.existsByExpr(collectionName, expr)) {
-                log.warn("文件重复，跳过写入: fileName={}, SHA-256={}", fileName, documentId);
+                log.warn(
+                        "文件重复，跳过写入: fileName={}, documentId={}",
+                        fileName,
+                        documentId
+                );
                 return;
             }
 
-            // Tika 解析文本
+            /* ========================= tika parse ========================= */
+
             InputStream tikaInputStream = new ByteArrayInputStream(fileBytes);
             TikaUtil.TikaResult tikaResult = TikaUtil.parseAll(tikaInputStream, -1);
 
@@ -70,7 +76,8 @@ public class FileVectorServiceImpl implements FileVectorService {
                 return;
             }
 
-            // 文本切割
+            /* ========================= text split ========================= */
+
             List<String> chunks = TextSplitter.split(
                     content,
                     CHUNK_SIZE,
@@ -82,18 +89,38 @@ public class FileVectorServiceImpl implements FileVectorService {
                 return;
             }
 
-            int chunkTotal = chunks.size();
+            /* ========================= batch embedding ========================= */
+
+            List<String> chunkTexts = new ArrayList<>(chunks.size());
+            for (String chunk : chunks) {
+                if (StrUtil.isNotBlank(chunk)) {
+                    chunkTexts.add(chunk);
+                }
+            }
+
+            List<List<Float>> embeddings =
+                    embeddingService.embedBatch(chunkTexts);
+
+            if (embeddings.size() != chunkTexts.size()) {
+                throw new IllegalStateException(
+                        "Embedding 结果数量不匹配: texts="
+                                + chunkTexts.size()
+                                + ", embeddings="
+                                + embeddings.size()
+                );
+            }
+
+            /* ========================= build vector documents ========================= */
+
+            int chunkTotal = chunkTexts.size();
             List<VectorDocument> documents = new ArrayList<>(chunkTotal);
 
             int offsetCursor = 0;
 
-            // 构建向量文档
             for (int i = 0; i < chunkTotal; i++) {
 
-                String chunk = chunks.get(i);
-                if (StrUtil.isBlank(chunk)) {
-                    continue;
-                }
+                String chunk = chunkTexts.get(i);
+                List<Float> vector = embeddings.get(i);
 
                 String chunkId = UUID.randomUUID().toString();
 
@@ -104,16 +131,16 @@ public class FileVectorServiceImpl implements FileVectorService {
                 VectorDocument document = new VectorDocument();
                 document.setId(chunkId);
                 document.setContent(chunk);
-                document.setEmbedding(embeddingService.embed(chunk));
+                document.setEmbedding(vector);
 
                 JsonObject metadata = new JsonObject();
 
-                // 文档级
+                /* ---------- document level ---------- */
                 metadata.addProperty("documentId", documentId);
                 metadata.addProperty("fileHash", documentId);
                 metadata.addProperty("fileName", fileName);
 
-                // chunk 级
+                /* ---------- chunk level ---------- */
                 metadata.addProperty("chunkId", chunkId);
                 metadata.addProperty("chunkIndex", i);
                 metadata.addProperty("chunkTotal", chunkTotal);
@@ -122,12 +149,12 @@ public class FileVectorServiceImpl implements FileVectorService {
                 metadata.addProperty("chunkSize", CHUNK_SIZE);
                 metadata.addProperty("chunkOverlap", CHUNK_OVERLAP);
 
-                // Tika 元数据
+                /* ---------- tika metadata ---------- */
                 if (tikaResult.getMetadata() != null) {
                     tikaResult.getMetadata().forEach(metadata::addProperty);
                 }
 
-                // 外部透传 metadata
+                /* ---------- external metadata ---------- */
                 if (externalMetadata != null) {
                     externalMetadata.forEach(
                             (k, v) -> metadata.addProperty(k, String.valueOf(v))
@@ -138,7 +165,8 @@ public class FileVectorServiceImpl implements FileVectorService {
                 documents.add(document);
             }
 
-            // 写入 Milvus
+            /* ========================= write to milvus ========================= */
+
             if (!documents.isEmpty()) {
                 milvusService.add(collectionName, documents);
             }
@@ -155,5 +183,4 @@ public class FileVectorServiceImpl implements FileVectorService {
             throw new RuntimeException("写入 Milvus 失败", e);
         }
     }
-
 }
