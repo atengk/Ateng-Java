@@ -42,7 +42,7 @@ CREATE TABLE task_job
     execute_start_time     DATETIME     NULL COMMENT '执行开始时间',
     lock_time              DATETIME     NULL COMMENT '锁定时间',
 
-    fail_reason            VARCHAR(2000) NULL COMMENT '最终失败原因',
+    fail_reason            TEXT         NULL COMMENT '最终失败原因',
 
     version                INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
 
@@ -79,7 +79,7 @@ CREATE TABLE task_job_log
 
     execute_duration BIGINT      NULL COMMENT '耗时(ms)',
 
-    error_message    VARCHAR(2000) NULL COMMENT '错误信息',
+    error_message    TEXT        NULL COMMENT '错误信息',
 
     create_time      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
 
@@ -89,110 +89,6 @@ CREATE TABLE task_job_log
   DEFAULT CHARSET = utf8mb4
   COMMENT ='任务执行日志表';
 
-```
-
-### 插入测试数据
-
-```sql
--- 无参任务
-INSERT INTO task_job
-(
-    job_code,
-    job_name,
-    biz_type,
-    biz_id,
-    bean_name,
-    method_name,
-    method_param_types,
-    method_params,
-    max_retry_count,
-    retry_interval_seconds,
-    execute_status,
-    next_execute_time,
-    version
-)
-VALUES
-(
-    'no_param_job',
-    '无参测试任务',
-    'order',
-    'TEST-001',
-    'orderTaskService',
-    'noParamTask',
-    '[]',
-    '[]',
-    2,
-    3,
-    0,
-    NOW(),
-    0
-);
--- 基础参数任务
-INSERT INTO task_job
-(
-    job_code,
-    job_name,
-    biz_type,
-    biz_id,
-    bean_name,
-    method_name,
-    method_param_types,
-    method_params,
-    max_retry_count,
-    retry_interval_seconds,
-    execute_status,
-    next_execute_time,
-    version
-)
-VALUES
-(
-    'sync_order_job',
-    '同步订单任务',
-    'order',
-    'ORDER-10001',
-    'orderTaskService',
-    'syncOrder',
-    '["java.lang.Long","java.lang.String"]',
-    '[10001,"admin"]',
-    2,
-    3,
-    0,
-    NOW(),
-    0
-);
--- 复杂对象任务
-INSERT INTO task_job
-(
-    job_code,
-    job_name,
-    biz_type,
-    biz_id,
-    bean_name,
-    method_name,
-    method_param_types,
-    method_params,
-    max_retry_count,
-    retry_interval_seconds,
-    execute_status,
-    next_execute_time,
-    version
-)
-VALUES
-(
-    'create_order_job',
-    '创建订单任务',
-    'order',
-    'ORDER-20001',
-    'orderTaskService',
-    'createOrder',
-    '["io.github.atengk.task.dto.OrderDTO"]',
-    '[{"orderId":20001,"userName":"Tom","amount":199.99}]',
-    2,
-    3,
-    0,
-    NOW(),
-    0
-);
 ```
 
 ### 创建实体类
@@ -693,6 +589,73 @@ public class ReflectInvokeUtil {
 
 ```
 
+### 创建枚举
+
+```java
+package io.github.atengk.task.enums;
+
+import java.util.Arrays;
+
+/**
+ * 任务执行状态枚举
+ *
+ * @author Ateng
+ * @since 2026-02-12
+ */
+public enum TaskExecuteStatusEnum {
+
+    /**
+     * 待执行
+     */
+    PENDING(0, "待执行"),
+
+    /**
+     * 执行中
+     */
+    RUNNING(1, "执行中"),
+
+    /**
+     * 执行失败
+     */
+    FAILED(2, "失败"),
+
+    /**
+     * 执行成功
+     */
+    SUCCESS(3, "成功");
+
+
+    private final int code;
+
+    private final String name;
+
+    TaskExecuteStatusEnum(int code, String name) {
+        this.code = code;
+        this.name = name;
+    }
+
+    public static TaskExecuteStatusEnum fromCode(Integer code) {
+        if (code == null) {
+            return null;
+        }
+        return Arrays.stream(values())
+                .filter(e -> e.code == code)
+                .findFirst()
+                .orElseThrow(() ->
+                        new IllegalArgumentException("未知的任务执行状态 code: " + code));
+    }
+
+    public int getCode() {
+        return code;
+    }
+
+    public String getName() {
+        return name;
+    }
+}
+
+```
+
 ### 创建执行器
 
 ```java
@@ -701,11 +664,11 @@ package io.github.atengk.task.executor;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.exceptions.ExceptionUtil;
 import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.atengk.task.entity.TaskJob;
 import io.github.atengk.task.entity.TaskJobLog;
+import io.github.atengk.task.enums.TaskExecuteStatusEnum;
 import io.github.atengk.task.service.ITaskJobLogService;
 import io.github.atengk.task.service.ITaskJobService;
 import io.github.atengk.task.util.ReflectInvokeUtil;
@@ -803,7 +766,7 @@ public class TaskExecutor {
 
             Page<TaskJob> result = taskJobService.lambdaQuery()
                     .eq(TaskJob::getBizType, bizType)
-                    .eq(TaskJob::getExecuteStatus, 0)
+                    .eq(TaskJob::getExecuteStatus, TaskExecuteStatusEnum.PENDING.getCode())
                     .le(TaskJob::getNextExecuteTime, LocalDateTime.now())
                     .page(page);
 
@@ -926,7 +889,7 @@ public class TaskExecutor {
      */
     private boolean canExecute(TaskJob job) {
 
-        if (job.getExecuteStatus() == 3) {
+        if (job.getExecuteStatus() == TaskExecuteStatusEnum.SUCCESS.getCode()) {
             return false;
         }
 
@@ -943,7 +906,7 @@ public class TaskExecutor {
      */
     private boolean lockJob(TaskJob job) {
 
-        if (job.getExecuteStatus() == 1
+        if (job.getExecuteStatus() == TaskExecuteStatusEnum.RUNNING.getCode()
                 && job.getLockTime() != null
                 && job.getLockTime().isAfter(
                 LocalDateTime.now().minusMinutes(LOCK_TIMEOUT_MINUTES))) {
@@ -958,7 +921,7 @@ public class TaskExecutor {
 
         TaskJob update = new TaskJob();
         update.setId(job.getId());
-        update.setExecuteStatus(1);
+        update.setExecuteStatus(TaskExecuteStatusEnum.RUNNING.getCode());
         update.setLockTime(LocalDateTime.now());
         update.setVersion(job.getVersion());
 
@@ -1005,7 +968,7 @@ public class TaskExecutor {
 
         } catch (Exception e) {
 
-            errorMsg = ExceptionUtil.stacktraceToString(e);
+            errorMsg = ExceptionUtil.stacktraceToString(e, -1);
 
             log.error("{} 执行异常 jobCode={}",
                     LOG_PREFIX,
@@ -1038,7 +1001,7 @@ public class TaskExecutor {
 
         taskJobService.lambdaUpdate()
                 .eq(TaskJob::getId, job.getId())
-                .set(TaskJob::getExecuteStatus, 3)
+                .set(TaskJob::getExecuteStatus, TaskExecuteStatusEnum.SUCCESS.getCode())
                 .set(TaskJob::getFailReason, null)
                 .set(TaskJob::getLockTime, null)
                 .update();
@@ -1067,9 +1030,8 @@ public class TaskExecutor {
         taskJobService.lambdaUpdate()
                 .eq(TaskJob::getId, job.getId())
                 .set(TaskJob::getRetryCount, nextRetry)
-                .set(TaskJob::getExecuteStatus, finalFail ? 2 : 0)
-                .set(TaskJob::getFailReason,
-                        StrUtil.sub(errorMsg, 0, 2000))
+                .set(TaskJob::getExecuteStatus, finalFail ? TaskExecuteStatusEnum.FAILED.getCode() : TaskExecuteStatusEnum.PENDING.getCode())
+                .set(TaskJob::getFailReason, errorMsg)
                 .set(TaskJob::getNextExecuteTime, nextTime)
                 .set(TaskJob::getLockTime, null)
                 .update();
@@ -1108,10 +1070,10 @@ public class TaskExecutor {
         logEntity.setJobCode(job.getJobCode());
         logEntity.setBizType(job.getBizType());
         logEntity.setExecuteTime(LocalDateTime.now());
-        logEntity.setExecuteStatus(success ? 3 : 2);
+        logEntity.setExecuteStatus(success ? TaskExecuteStatusEnum.SUCCESS.getCode() : TaskExecuteStatusEnum.FAILED.getCode());
         logEntity.setRetryCount(retryCount);
         logEntity.setExecuteDuration(duration);
-        logEntity.setErrorMessage(StrUtil.sub(errorMsg, 0, 2000));
+        logEntity.setErrorMessage(errorMsg);
 
         taskJobLogService.save(logEntity);
 
@@ -1190,12 +1152,11 @@ public class OrderTaskService {
 ```java
 package io.github.atengk.task.controller;
 
+import io.github.atengk.task.entity.TaskJob;
 import io.github.atengk.task.executor.TaskExecutor;
+import io.github.atengk.task.service.ITaskJobService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/task")
@@ -1203,12 +1164,78 @@ import org.springframework.web.bind.annotation.RestController;
 public class TaskTestController {
 
     private final TaskExecutor taskExecutor;
+    private final ITaskJobService taskJobService;
 
-    @GetMapping("/execute")
-    public String execute(@RequestParam String code) {
+    @GetMapping("/executeByCode")
+    public String executeByCode(@RequestParam String code) {
         taskExecutor.executeByCode(code);
         return "执行完成";
     }
+
+    @GetMapping("/executeByBizType")
+    public String executeByBizType() {
+        taskExecutor.executeByBizType("TEST_BIZ_ORDER");
+        return "执行完成";
+    }
+
+    @PostMapping("/createJob")
+    public String createJob() {
+
+        TaskJob taskJob = new TaskJob();
+
+        // 生成唯一任务编码（无-的UUID）
+        taskJob.setJobCode(cn.hutool.core.util.IdUtil.fastSimpleUUID());
+
+        // 任务信息
+        taskJob.setJobName("创建订单任务");
+        taskJob.setJobDesc("创建订单任务（详情）");
+
+        // 业务类型
+        taskJob.setBizType("TEST_BIZ_ORDER");
+        // 业务ID（可选）
+        taskJob.setBizId("TEST_BIZ_ORDER");
+
+        // Spring 容器中的 Bean 名称
+        taskJob.setBeanName("orderTaskService");
+
+        // 要执行的方法
+        taskJob.setMethodName("syncOrder");
+
+        // 参数类型
+        java.util.List<String> paramTypes =
+                cn.hutool.core.collection.CollUtil.newArrayList(
+                        "java.lang.Long",
+                        "java.lang.String"
+                );
+
+        taskJob.setMethodParamTypes(
+                cn.hutool.json.JSONUtil.toJsonStr(paramTypes)
+        );
+
+        // 参数值
+        java.util.List<Object> params =
+                cn.hutool.core.collection.CollUtil.newArrayList(
+                        123,
+                        "hello"
+                );
+
+        taskJob.setMethodParams(
+                cn.hutool.json.JSONUtil.toJsonStr(params)
+        );
+
+        // 执行时间
+        taskJob.setNextExecuteTime(java.time.LocalDateTime.now());
+
+        // 重试相关
+        taskJob.setRetryCount(0);
+        taskJob.setMaxRetryCount(3);
+        taskJob.setRetryIntervalSeconds(60);
+
+        taskJobService.save(taskJob);
+
+        return "创建成功，jobCode=" + taskJob.getJobCode();
+    }
+
 
 }
 
@@ -1216,7 +1243,23 @@ public class TaskTestController {
 
 ### 调用接口
 
+**创建任务**
+
 ```
-GET /task/execute?code=create_order_job
+POST /task/createJob
+```
+
+**执行指定编码的任务**
+
+```
+GET /task/executeByCode?code=ee8c53945688403681844fc3b9910a2e
+```
+
+**批量执行指定业务类型的任务**
+
+后续可以通过外部定时任务框架走定时任务来执行 executeByBizType ，补偿失败的任务。
+
+```
+GET /task/executeByBizType
 ```
 

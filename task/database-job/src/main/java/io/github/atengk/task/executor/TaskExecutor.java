@@ -3,11 +3,11 @@ package io.github.atengk.task.executor;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.exceptions.ExceptionUtil;
 import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.atengk.task.entity.TaskJob;
 import io.github.atengk.task.entity.TaskJobLog;
+import io.github.atengk.task.enums.TaskExecuteStatusEnum;
 import io.github.atengk.task.service.ITaskJobLogService;
 import io.github.atengk.task.service.ITaskJobService;
 import io.github.atengk.task.util.ReflectInvokeUtil;
@@ -105,7 +105,7 @@ public class TaskExecutor {
 
             Page<TaskJob> result = taskJobService.lambdaQuery()
                     .eq(TaskJob::getBizType, bizType)
-                    .eq(TaskJob::getExecuteStatus, 0)
+                    .eq(TaskJob::getExecuteStatus, TaskExecuteStatusEnum.PENDING.getCode())
                     .le(TaskJob::getNextExecuteTime, LocalDateTime.now())
                     .page(page);
 
@@ -228,7 +228,7 @@ public class TaskExecutor {
      */
     private boolean canExecute(TaskJob job) {
 
-        if (job.getExecuteStatus() == 3) {
+        if (job.getExecuteStatus() == TaskExecuteStatusEnum.SUCCESS.getCode()) {
             return false;
         }
 
@@ -245,7 +245,7 @@ public class TaskExecutor {
      */
     private boolean lockJob(TaskJob job) {
 
-        if (job.getExecuteStatus() == 1
+        if (job.getExecuteStatus() == TaskExecuteStatusEnum.RUNNING.getCode()
                 && job.getLockTime() != null
                 && job.getLockTime().isAfter(
                 LocalDateTime.now().minusMinutes(LOCK_TIMEOUT_MINUTES))) {
@@ -260,7 +260,7 @@ public class TaskExecutor {
 
         TaskJob update = new TaskJob();
         update.setId(job.getId());
-        update.setExecuteStatus(1);
+        update.setExecuteStatus(TaskExecuteStatusEnum.RUNNING.getCode());
         update.setLockTime(LocalDateTime.now());
         update.setVersion(job.getVersion());
 
@@ -307,7 +307,7 @@ public class TaskExecutor {
 
         } catch (Exception e) {
 
-            errorMsg = ExceptionUtil.stacktraceToString(e);
+            errorMsg = ExceptionUtil.stacktraceToString(e, -1);
 
             log.error("{} 执行异常 jobCode={}",
                     LOG_PREFIX,
@@ -340,7 +340,7 @@ public class TaskExecutor {
 
         taskJobService.lambdaUpdate()
                 .eq(TaskJob::getId, job.getId())
-                .set(TaskJob::getExecuteStatus, 3)
+                .set(TaskJob::getExecuteStatus, TaskExecuteStatusEnum.SUCCESS.getCode())
                 .set(TaskJob::getFailReason, null)
                 .set(TaskJob::getLockTime, null)
                 .update();
@@ -369,9 +369,8 @@ public class TaskExecutor {
         taskJobService.lambdaUpdate()
                 .eq(TaskJob::getId, job.getId())
                 .set(TaskJob::getRetryCount, nextRetry)
-                .set(TaskJob::getExecuteStatus, finalFail ? 2 : 0)
-                .set(TaskJob::getFailReason,
-                        StrUtil.sub(errorMsg, 0, 2000))
+                .set(TaskJob::getExecuteStatus, finalFail ? TaskExecuteStatusEnum.FAILED.getCode() : TaskExecuteStatusEnum.PENDING.getCode())
+                .set(TaskJob::getFailReason, errorMsg)
                 .set(TaskJob::getNextExecuteTime, nextTime)
                 .set(TaskJob::getLockTime, null)
                 .update();
@@ -410,10 +409,10 @@ public class TaskExecutor {
         logEntity.setJobCode(job.getJobCode());
         logEntity.setBizType(job.getBizType());
         logEntity.setExecuteTime(LocalDateTime.now());
-        logEntity.setExecuteStatus(success ? 3 : 2);
+        logEntity.setExecuteStatus(success ? TaskExecuteStatusEnum.SUCCESS.getCode() : TaskExecuteStatusEnum.FAILED.getCode());
         logEntity.setRetryCount(retryCount);
         logEntity.setExecuteDuration(duration);
-        logEntity.setErrorMessage(StrUtil.sub(errorMsg, 0, 2000));
+        logEntity.setErrorMessage(errorMsg);
 
         taskJobLogService.save(logEntity);
 
