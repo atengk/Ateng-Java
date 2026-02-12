@@ -115,6 +115,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- OSHI 硬件信息获取 -->
+        <dependency>
+            <groupId>com.github.oshi</groupId>
+            <artifactId>oshi-core</artifactId>
+            <version>6.9.3</version>
+        </dependency>
     </dependencies>
 
     <!-- Spring Boot 依赖管理 -->
