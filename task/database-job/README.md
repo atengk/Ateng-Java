@@ -37,7 +37,7 @@ CREATE TABLE task_job
 
     retry_interval_seconds INT          NOT NULL DEFAULT 60 COMMENT '重试间隔(秒)',
 
-    next_execute_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下次执行时间',
+    next_execute_time      DATETIME     NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下次执行时间',
 
     execute_start_time     DATETIME     NULL COMMENT '执行开始时间',
     lock_time              DATETIME     NULL COMMENT '锁定时间',
@@ -519,35 +519,96 @@ import cn.hutool.core.util.ReflectUtil;
 import java.lang.reflect.Method;
 import java.util.List;
 
+/**
+ * 反射调用工具类
+ * <p>
+ * 功能说明：
+ * 1. 支持通过 Spring Bean + 方法名动态调用方法
+ * 2. 支持基础类型参数
+ * 3. 支持复杂对象参数（JSON转Bean）
+ * 4. 支持无参方法
+ * <p>
+ * 参数格式说明：
+ * method_param_types  : ["java.lang.Long","java.lang.String"]
+ * method_params       : [10001,"admin"]
+ * <p>
+ * 注意：
+ * 1. 参数类型数组顺序必须与参数值数组顺序一致
+ * 2. 参数数量必须匹配
+ *
+ * @author Ateng
+ * @since 2026-02-12
+ */
 public class ReflectInvokeUtil {
 
     /**
-     * 反射调用方法
+     * 反射调用指定方法
+     *
+     * @param bean           Spring 容器中的 Bean 实例
+     * @param methodName     方法名
+     * @param paramTypesJson 方法参数类型(JSON数组)
+     * @param paramsJson     方法参数值(JSON数组)
+     * @return 方法返回值
      */
     public static Object invoke(Object bean,
                                 String methodName,
                                 String paramTypesJson,
                                 String paramsJson) {
 
+        if (bean == null) {
+            throw new IllegalArgumentException("反射调用失败：Bean 不能为空");
+        }
+
+        if (StrUtil.isBlank(methodName)) {
+            throw new IllegalArgumentException("反射调用失败：方法名不能为空");
+        }
+
+        // 构建参数类型数组
         Class<?>[] paramTypes = buildParamTypes(paramTypesJson);
+
+        // 构建参数值数组
         Object[] args = buildArgs(paramTypes, paramsJson);
 
+        // 查找方法
         Method method = ReflectUtil.getMethod(bean.getClass(), methodName, paramTypes);
 
         if (method == null) {
-            throw new IllegalArgumentException("Method not found: " + methodName);
+            throw new IllegalArgumentException(
+                    StrUtil.format("反射调用失败：未找到方法 {}，参数类型={}",
+                            methodName,
+                            paramTypesJson)
+            );
         }
 
         if (paramTypes.length != args.length) {
-            throw new IllegalArgumentException("Parameter size mismatch");
+            throw new IllegalArgumentException(
+                    StrUtil.format("反射调用失败：参数数量不匹配，期望 {} 个，实际 {} 个",
+                            paramTypes.length,
+                            args.length)
+            );
         }
 
-        return ReflectUtil.invoke(bean, method, args);
+        try {
+            return ReflectUtil.invoke(bean, method, args);
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    StrUtil.format("反射调用方法失败：{}#{}",
+                            bean.getClass().getName(),
+                            methodName),
+                    e
+            );
+        }
     }
 
+    /**
+     * 构建参数类型数组
+     *
+     * @param paramTypesJson 参数类型JSON
+     * @return Class数组
+     */
     private static Class<?>[] buildParamTypes(String paramTypesJson) {
 
-        if (StrUtil.isBlank(paramTypesJson) || "[]".equals(paramTypesJson)) {
+        if (StrUtil.isBlank(paramTypesJson) || "[]" .equals(paramTypesJson)) {
             return new Class<?>[0];
         }
 
@@ -558,13 +619,28 @@ public class ReflectInvokeUtil {
                 .toArray(Class<?>[]::new);
     }
 
+    /**
+     * 构建参数值数组
+     *
+     * @param paramTypes 参数类型数组
+     * @param paramsJson 参数值JSON
+     * @return 参数对象数组
+     */
     private static Object[] buildArgs(Class<?>[] paramTypes, String paramsJson) {
 
-        if (StrUtil.isBlank(paramsJson) || "[]".equals(paramsJson)) {
+        if (StrUtil.isBlank(paramsJson) || "[]" .equals(paramsJson)) {
             return new Object[0];
         }
 
         List<Object> paramList = JSONUtil.toList(paramsJson, Object.class);
+
+        if (paramList.size() != paramTypes.length) {
+            throw new IllegalArgumentException(
+                    StrUtil.format("参数数量不匹配：期望 {} 个，实际 {} 个",
+                            paramTypes.length,
+                            paramList.size())
+            );
+        }
 
         Object[] args = new Object[paramTypes.length];
 
@@ -573,8 +649,17 @@ public class ReflectInvokeUtil {
             Class<?> targetType = paramTypes[i];
             Object value = paramList.get(i);
 
+            if (value == null) {
+                args[i] = null;
+                continue;
+            }
+
+            // 如果是JSON对象，则转为复杂类型
             if (JSONUtil.isTypeJSON(String.valueOf(value))) {
-                args[i] = JSONUtil.toBean(JSONUtil.parseObj(value), targetType);
+                args[i] = JSONUtil.toBean(
+                        JSONUtil.parseObj(value),
+                        targetType
+                );
             } else {
                 args[i] = Convert.convert(targetType, value);
             }
@@ -583,11 +668,25 @@ public class ReflectInvokeUtil {
         return args;
     }
 
+    /**
+     * 加载Class
+     *
+     * @param className 类全限定名
+     * @return Class对象
+     */
     private static Class<?> loadClass(String className) {
+
+        if (StrUtil.isBlank(className)) {
+            throw new IllegalArgumentException("参数类型不能为空");
+        }
+
         try {
             return Class.forName(className);
         } catch (Exception e) {
-            throw new RuntimeException("Load class error: " + className, e);
+            throw new RuntimeException(
+                    StrUtil.format("加载参数类型失败：{}", className),
+                    e
+            );
         }
     }
 }
@@ -619,37 +718,53 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 数据库驱动任务执行服务
+ * 数据库驱动任务执行器
  * <p>
- * 特性：
- * 1. MyBatis-Plus 乐观锁抢占
- * 2. 防死锁恢复（lock_time）
- * 3. 自动重试
- * 4. 无长事务
- * 5. 成功标记成功，不删除
+ * 设计目标：
+ * 1. 支持一次性任务
+ * 2. 支持异步补偿任务
+ * 3. MyBatis-Plus 乐观锁控制并发
+ * 4. lock_time 防死锁恢复
+ * 5. 自动重试
+ * 6. 成功仅标记成功，不删除
+ * 7. 无长事务
  * <p>
- * 适用于一次性任务 / 异步补偿任务
+ * 适用于中小型业务系统
  *
  * @author Ateng
+ * @since 2026-02-12
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class TaskExecutor {
 
+    /**
+     * 锁超时时间（分钟）
+     */
     private static final int LOCK_TIMEOUT_MINUTES = 5;
 
-    private final ITaskJobLogService taskJobLogService;
+    /**
+     * 日志前缀
+     */
+    private static final String LOG_PREFIX = "[TaskExecutor]";
+
     private final ITaskJobService taskJobService;
+    private final ITaskJobLogService taskJobLogService;
+
+    /* ========================================================= */
+    /* ======================= 对外方法 ========================= */
+    /* ========================================================= */
 
     /**
      * 根据任务编码执行任务
      *
-     * @param jobCode 任务编码
+     * @param jobCode 任务唯一编码
      */
     public void executeByCode(String jobCode) {
 
         if (ObjectUtil.isEmpty(jobCode)) {
+            log.warn("{} jobCode 为空", LOG_PREFIX);
             return;
         }
 
@@ -658,7 +773,7 @@ public class TaskExecutor {
                 .one();
 
         if (ObjectUtil.isEmpty(job)) {
-            log.warn("未找到任务 jobCode={}", jobCode);
+            log.warn("{} 未找到任务 jobCode={}", LOG_PREFIX, jobCode);
             return;
         }
 
@@ -668,16 +783,18 @@ public class TaskExecutor {
     /**
      * 根据业务类型批量执行任务
      *
-     * @param bizType 业务类型
+     * @param bizType 业务类型，查询出批量执行
      */
     public void executeByBizType(String bizType) {
 
         if (ObjectUtil.isEmpty(bizType)) {
+            log.warn("{} bizType 为空", LOG_PREFIX);
             return;
         }
 
-        final int pageSize = 100;
+        log.info("{} 开始扫描 bizType={}", LOG_PREFIX, bizType);
 
+        final int pageSize = 100;
         int pageNo = 1;
 
         while (true) {
@@ -696,11 +813,16 @@ public class TaskExecutor {
                 break;
             }
 
+            log.info("{} 扫描到任务数量={}", LOG_PREFIX, records.size());
+
             for (TaskJob job : records) {
                 try {
                     execute(job);
                 } catch (Exception ex) {
-                    log.error("执行任务异常 jobCode={}", job.getJobCode(), ex);
+                    log.error("{} 批量执行异常 jobCode={}",
+                            LOG_PREFIX,
+                            job.getJobCode(),
+                            ex);
                 }
             }
 
@@ -710,6 +832,8 @@ public class TaskExecutor {
 
             pageNo++;
         }
+
+        log.info("{} bizType={} 扫描结束", LOG_PREFIX, bizType);
     }
 
     /**
@@ -718,44 +842,87 @@ public class TaskExecutor {
      * @param jobs 任务列表
      */
     public void executeBatch(List<TaskJob> jobs) {
+
         if (CollectionUtil.isEmpty(jobs)) {
+            log.warn("{} 批量执行任务为空", LOG_PREFIX);
             return;
         }
 
+        log.info("{} 开始批量执行任务，数量={}", LOG_PREFIX, jobs.size());
+
+        int successCount = 0;
+        int failCount = 0;
+
         for (TaskJob job : jobs) {
+
             try {
+
                 execute(job);
+
+                successCount++;
+
             } catch (Exception ex) {
-                log.error("批量执行任务异常 jobCode={}", job.getJobCode(), ex);
+
+                failCount++;
+
+                log.error("{} 批量执行异常 jobCode={}",
+                        LOG_PREFIX,
+                        job.getJobCode(),
+                        ex);
             }
         }
+
+        log.info("{} 批量执行结束，总数={}, 成功={}, 异常={}",
+                LOG_PREFIX,
+                jobs.size(),
+                successCount,
+                failCount);
     }
 
     /**
-     * 执行任务（供调度调用）
+     * 执行任务入口
+     *
+     * @param job 任务
      */
     public void execute(TaskJob job) {
 
         if (job == null) {
+            log.warn("{} 传入任务为空", LOG_PREFIX);
             return;
         }
 
-        // 状态检查
+        log.info("{} 准备执行 jobCode={}, id={}, status={}, retry={}/{}",
+                LOG_PREFIX,
+                job.getJobCode(),
+                job.getId(),
+                job.getExecuteStatus(),
+                job.getRetryCount(),
+                job.getMaxRetryCount());
+
         if (!canExecute(job)) {
+            log.info("{} 任务不可执行 jobCode={}",
+                    LOG_PREFIX,
+                    job.getJobCode());
             return;
         }
 
-        // 乐观锁抢占
         if (!lockJob(job)) {
+            log.warn("{} 抢占失败 jobCode={}, version={}",
+                    LOG_PREFIX,
+                    job.getJobCode(),
+                    job.getVersion());
             return;
         }
 
-        // 真正执行
         doExecute(job);
     }
 
+    /* ========================================================= */
+    /* ======================= 内部逻辑 ========================= */
+    /* ========================================================= */
+
     /**
-     * 判断是否可执行
+     * 判断任务是否可执行
      */
     private boolean canExecute(TaskJob job) {
 
@@ -776,11 +943,16 @@ public class TaskExecutor {
      */
     private boolean lockJob(TaskJob job) {
 
-        // 防止死锁
         if (job.getExecuteStatus() == 1
                 && job.getLockTime() != null
                 && job.getLockTime().isAfter(
                 LocalDateTime.now().minusMinutes(LOCK_TIMEOUT_MINUTES))) {
+
+            log.warn("{} 任务仍被锁定 jobCode={}, lockTime={}",
+                    LOG_PREFIX,
+                    job.getJobCode(),
+                    job.getLockTime());
+
             return false;
         }
 
@@ -788,10 +960,15 @@ public class TaskExecutor {
         update.setId(job.getId());
         update.setExecuteStatus(1);
         update.setLockTime(LocalDateTime.now());
-        update.setExecuteStartTime(LocalDateTime.now());
         update.setVersion(job.getVersion());
 
-        return taskJobService.updateById(update);
+        boolean success = taskJobService.updateById(update);
+
+        if (success) {
+            log.info("{} 抢占成功 jobCode={}", LOG_PREFIX, job.getJobCode());
+        }
+
+        return success;
     }
 
     /**
@@ -801,13 +978,19 @@ public class TaskExecutor {
 
         boolean success = false;
         String errorMsg = null;
+
         long startTime = System.currentTimeMillis();
 
-        int retryCount = job.getRetryCount() == null ? 0 : job.getRetryCount();
-        int maxRetry = job.getMaxRetryCount();
-        int retryInterval = job.getRetryIntervalSeconds();
+        int retryCount = ObjectUtil.defaultIfNull(job.getRetryCount(), 0);
+        int maxRetry = ObjectUtil.defaultIfNull(job.getMaxRetryCount(), 0);
+        int retryInterval = ObjectUtil.defaultIfNull(job.getRetryIntervalSeconds(), 0);
 
         try {
+
+            log.info("{} 调用方法 bean={}, method={}",
+                    LOG_PREFIX,
+                    job.getBeanName(),
+                    job.getMethodName());
 
             Object bean = SpringUtil.getBean(job.getBeanName());
 
@@ -824,11 +1007,19 @@ public class TaskExecutor {
 
             errorMsg = ExceptionUtil.stacktraceToString(e);
 
-            log.error("任务执行异常，jobCode={}", job.getJobCode(), e);
-
+            log.error("{} 执行异常 jobCode={}",
+                    LOG_PREFIX,
+                    job.getJobCode(),
+                    e);
         }
 
         long duration = System.currentTimeMillis() - startTime;
+
+        log.info("{} 执行结束 jobCode={}, success={}, duration={}ms",
+                LOG_PREFIX,
+                job.getJobCode(),
+                success,
+                duration);
 
         saveLog(job, retryCount, success, duration, errorMsg);
 
@@ -852,11 +1043,11 @@ public class TaskExecutor {
                 .set(TaskJob::getLockTime, null)
                 .update();
 
-        log.info("任务执行成功，jobCode={}", job.getJobCode());
+        log.info("{} 任务标记成功 jobCode={}", LOG_PREFIX, job.getJobCode());
     }
 
     /**
-     * 失败处理
+     * 处理失败及重试逻辑
      */
     @Transactional(rollbackFor = Exception.class)
     public void handleFail(TaskJob job,
@@ -869,20 +1060,37 @@ public class TaskExecutor {
 
         boolean finalFail = nextRetry >= maxRetry;
 
+        LocalDateTime nextTime = finalFail
+                ? null
+                : LocalDateTime.now().plusSeconds(retryInterval);
+
         taskJobService.lambdaUpdate()
                 .eq(TaskJob::getId, job.getId())
                 .set(TaskJob::getRetryCount, nextRetry)
                 .set(TaskJob::getExecuteStatus, finalFail ? 2 : 0)
                 .set(TaskJob::getFailReason,
                         StrUtil.sub(errorMsg, 0, 2000))
-                .set(TaskJob::getNextExecuteTime,
-                        finalFail ? null :
-                                LocalDateTime.now().plusSeconds(retryInterval))
+                .set(TaskJob::getNextExecuteTime, nextTime)
                 .set(TaskJob::getLockTime, null)
                 .update();
 
-        log.warn("任务执行失败，jobCode={}，retry={}/{}",
-                job.getJobCode(), nextRetry, maxRetry);
+        if (finalFail) {
+
+            log.error("{} 任务最终失败 jobCode={}, retry={}/{}",
+                    LOG_PREFIX,
+                    job.getJobCode(),
+                    nextRetry,
+                    maxRetry);
+
+        } else {
+
+            log.warn("{} 任务失败等待重试 jobCode={}, retry={}/{}, nextExecuteTime={}",
+                    LOG_PREFIX,
+                    job.getJobCode(),
+                    nextRetry,
+                    maxRetry,
+                    nextTime);
+        }
     }
 
     /**
@@ -900,14 +1108,17 @@ public class TaskExecutor {
         logEntity.setJobCode(job.getJobCode());
         logEntity.setBizType(job.getBizType());
         logEntity.setExecuteTime(LocalDateTime.now());
-        logEntity.setExecuteStatus(success ? 2 : 3);
+        logEntity.setExecuteStatus(success ? 1 : 2);
         logEntity.setRetryCount(retryCount);
         logEntity.setExecuteDuration(duration);
-        logEntity.setErrorMessage(
-                StrUtil.sub(errorMsg, 0, 2000)
-        );
+        logEntity.setErrorMessage(StrUtil.sub(errorMsg, 0, 2000));
 
         taskJobLogService.save(logEntity);
+
+        log.info("{} 已记录执行日志 jobCode={}, success={}",
+                LOG_PREFIX,
+                job.getJobCode(),
+                success);
     }
 }
 
