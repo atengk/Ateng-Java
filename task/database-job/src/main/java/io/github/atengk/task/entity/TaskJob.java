@@ -1,6 +1,10 @@
 package io.github.atengk.task.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -10,11 +14,16 @@ import java.time.LocalDateTime;
 
 /**
  * <p>
- * 任务定义表
+ * 一次性任务 / 异步补偿任务表
+ * </p>
+ *
+ * <p>
+ * 用于存储需要执行的任务信息，
+ * 支持延迟执行、失败重试、乐观锁控制。
  * </p>
  *
  * @author Ateng
- * @since 2026-02-11
+ * @since 2026-02-12
  */
 @Getter
 @Setter
@@ -49,10 +58,16 @@ public class TaskJob implements Serializable {
     private String jobDesc;
 
     /**
-     * 业务类型，如 order/report/user 等
+     * 业务类型
      */
     @TableField("biz_type")
     private String bizType;
+
+    /**
+     * 业务ID
+     */
+    @TableField("biz_id")
+    private String bizId;
 
     /**
      * Spring Bean名称
@@ -79,6 +94,19 @@ public class TaskJob implements Serializable {
     private String methodParams;
 
     /**
+     * 执行状态
+     * 0=待执行 1=执行中 2=失败 3=成功
+     */
+    @TableField("execute_status")
+    private Integer executeStatus;
+
+    /**
+     * 已重试次数
+     */
+    @TableField("retry_count")
+    private Integer retryCount;
+
+    /**
      * 最大重试次数
      */
     @TableField("max_retry_count")
@@ -87,20 +115,26 @@ public class TaskJob implements Serializable {
     /**
      * 重试间隔(秒)
      */
-    @TableField("retry_interval")
-    private Integer retryInterval;
+    @TableField("retry_interval_seconds")
+    private Integer retryIntervalSeconds;
 
     /**
-     * 执行状态 0=待执行 1=执行中 2=执行失败
-     */
-    @TableField("execute_status")
-    private Integer executeStatus;
-
-    /**
-     * 最终失败原因
+     * 下次执行时间
      */
     @TableField("next_execute_time")
     private LocalDateTime nextExecuteTime;
+
+    /**
+     * 执行开始时间
+     */
+    @TableField("execute_start_time")
+    private LocalDateTime executeStartTime;
+
+    /**
+     * 锁定时间
+     */
+    @TableField("lock_time")
+    private LocalDateTime lockTime;
 
     /**
      * 最终失败原因
@@ -111,8 +145,8 @@ public class TaskJob implements Serializable {
     /**
      * 乐观锁版本号
      */
-    @TableField("version")
     @Version
+    @TableField("version")
     private Integer version;
 
     /**

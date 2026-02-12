@@ -1,9 +1,11 @@
 package io.github.atengk.task.executor;
 
+import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.exceptions.ExceptionUtil;
-import cn.hutool.core.thread.ThreadUtil;
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.atengk.task.entity.TaskJob;
 import io.github.atengk.task.entity.TaskJobLog;
 import io.github.atengk.task.service.ITaskJobLogService;
@@ -15,31 +17,123 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.concurrent.TimeUnit;
+import java.util.List;
 
 /**
  * 数据库驱动任务执行服务
- *
+ * <p>
  * 特性：
- * 1. 乐观锁抢占
- * 2. 无长事务
- * 3. 支持多实例部署
- * 4. 成功删除，失败保留
- * 5. 支持人工重置后再次执行
+ * 1. MyBatis-Plus 乐观锁抢占
+ * 2. 防死锁恢复（lock_time）
+ * 3. 自动重试
+ * 4. 无长事务
+ * 5. 成功标记成功，不删除
+ * <p>
+ * 适用于一次性任务 / 异步补偿任务
  *
  * @author Ateng
- * @since 2026-02-11
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class TaskExecutor {
 
+    private static final int LOCK_TIMEOUT_MINUTES = 5;
+
     private final ITaskJobLogService taskJobLogService;
     private final ITaskJobService taskJobService;
 
     /**
-     * 执行任务（供调度框架调用）
+     * 根据任务编码执行任务
+     *
+     * @param jobCode 任务编码
+     */
+    public void executeByCode(String jobCode) {
+
+        if (ObjectUtil.isEmpty(jobCode)) {
+            return;
+        }
+
+        TaskJob job = taskJobService.lambdaQuery()
+                .eq(TaskJob::getJobCode, jobCode)
+                .one();
+
+        if (ObjectUtil.isEmpty(job)) {
+            log.warn("未找到任务 jobCode={}", jobCode);
+            return;
+        }
+
+        execute(job);
+    }
+
+    /**
+     * 根据业务类型批量执行任务
+     *
+     * @param bizType 业务类型
+     */
+    public void executeByBizType(String bizType) {
+
+        if (ObjectUtil.isEmpty(bizType)) {
+            return;
+        }
+
+        final int pageSize = 100;
+
+        int pageNo = 1;
+
+        while (true) {
+
+            Page<TaskJob> page = new Page<>(pageNo, pageSize);
+
+            Page<TaskJob> result = taskJobService.lambdaQuery()
+                    .eq(TaskJob::getBizType, bizType)
+                    .eq(TaskJob::getExecuteStatus, 0)
+                    .le(TaskJob::getNextExecuteTime, LocalDateTime.now())
+                    .page(page);
+
+            List<TaskJob> records = result.getRecords();
+
+            if (CollectionUtil.isEmpty(records)) {
+                break;
+            }
+
+            for (TaskJob job : records) {
+                try {
+                    execute(job);
+                } catch (Exception ex) {
+                    log.error("执行任务异常 jobCode={}", job.getJobCode(), ex);
+                }
+            }
+
+            if (records.size() < pageSize) {
+                break;
+            }
+
+            pageNo++;
+        }
+    }
+
+    /**
+     * 批量执行任务
+     *
+     * @param jobs 任务列表
+     */
+    public void executeBatch(List<TaskJob> jobs) {
+        if (CollectionUtil.isEmpty(jobs)) {
+            return;
+        }
+
+        for (TaskJob job : jobs) {
+            try {
+                execute(job);
+            } catch (Exception ex) {
+                log.error("批量执行任务异常 jobCode={}", job.getJobCode(), ex);
+            }
+        }
+    }
+
+    /**
+     * 执行任务（供调度调用）
      */
     public void execute(TaskJob job) {
 
@@ -47,85 +141,153 @@ public class TaskExecutor {
             return;
         }
 
-        // 抢占任务（乐观锁 + 状态 + 时间控制）
+        // 状态检查
+        if (!canExecute(job)) {
+            return;
+        }
+
+        // 乐观锁抢占
         if (!lockJob(job)) {
             return;
         }
 
-        // 真正执行（无事务）
+        // 真正执行
         doExecute(job);
     }
 
     /**
-     * 抢占任务
+     * 判断是否可执行
+     */
+    private boolean canExecute(TaskJob job) {
+
+        if (job.getExecuteStatus() == 3) {
+            return false;
+        }
+
+        if (job.getNextExecuteTime() != null
+                && job.getNextExecuteTime().isAfter(LocalDateTime.now())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 乐观锁抢占任务
      */
     private boolean lockJob(TaskJob job) {
 
-        job.setExecuteStatus(1);
+        // 防止死锁
+        if (job.getExecuteStatus() == 1
+                && job.getLockTime() != null
+                && job.getLockTime().isAfter(
+                LocalDateTime.now().minusMinutes(LOCK_TIMEOUT_MINUTES))) {
+            return false;
+        }
 
-        return taskJobService.updateById(job);
+        TaskJob update = new TaskJob();
+        update.setId(job.getId());
+        update.setExecuteStatus(1);
+        update.setLockTime(LocalDateTime.now());
+        update.setExecuteStartTime(LocalDateTime.now());
+        update.setVersion(job.getVersion());
+
+        return taskJobService.updateById(update);
     }
-
 
     /**
      * 真正执行任务
      */
     private void doExecute(TaskJob job) {
 
-        int attempt = 0;
         boolean success = false;
         String errorMsg = null;
         long startTime = System.currentTimeMillis();
 
-        int maxRetry = job.getMaxRetryCount() == null ? 0 : job.getMaxRetryCount();
-        int retryInterval = job.getRetryInterval() == null ? 0 : job.getRetryInterval();
+        int retryCount = job.getRetryCount() == null ? 0 : job.getRetryCount();
+        int maxRetry = job.getMaxRetryCount();
+        int retryInterval = job.getRetryIntervalSeconds();
 
-        while (attempt <= maxRetry) {
+        try {
 
-            try {
+            Object bean = SpringUtil.getBean(job.getBeanName());
 
-                attempt++;
+            ReflectInvokeUtil.invoke(
+                    bean,
+                    job.getMethodName(),
+                    job.getMethodParamTypes(),
+                    job.getMethodParams()
+            );
 
-                Object bean = SpringUtil.getBean(job.getBeanName());
+            success = true;
 
-                ReflectInvokeUtil.invoke(
-                        bean,
-                        job.getMethodName(),
-                        job.getMethodParamTypes(),
-                        job.getMethodParams()
-                );
+        } catch (Exception e) {
 
-                success = true;
-                break;
+            errorMsg = ExceptionUtil.stacktraceToString(e);
 
-            } catch (Exception e) {
+            log.error("任务执行异常，jobCode={}", job.getJobCode(), e);
 
-                errorMsg = ExceptionUtil.stacktraceToString(e);
-                log.error("任务执行失败，jobCode={}, 第{}次尝试", job.getJobCode(), attempt, e);
-
-                if (attempt > maxRetry) {
-                    break;
-                }
-
-                ThreadUtil.sleep(retryInterval, TimeUnit.SECONDS);
-            }
         }
 
         long duration = System.currentTimeMillis() - startTime;
 
-        // 写执行日志（短事务）
-        saveLog(job, attempt - 1, success, duration, errorMsg);
+        saveLog(job, retryCount, success, duration, errorMsg);
 
-        // 更新任务状态
         if (success) {
-            deleteSuccessJob(job.getId());
+            markSuccess(job);
         } else {
-            markFail(job.getId(), errorMsg, retryInterval);
+            handleFail(job, errorMsg, retryCount, maxRetry, retryInterval);
         }
     }
 
     /**
-     * 写执行日志（独立事务）
+     * 标记成功
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void markSuccess(TaskJob job) {
+
+        taskJobService.lambdaUpdate()
+                .eq(TaskJob::getId, job.getId())
+                .set(TaskJob::getExecuteStatus, 3)
+                .set(TaskJob::getFailReason, null)
+                .set(TaskJob::getLockTime, null)
+                .update();
+
+        log.info("任务执行成功，jobCode={}", job.getJobCode());
+    }
+
+    /**
+     * 失败处理
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void handleFail(TaskJob job,
+                           String errorMsg,
+                           int retryCount,
+                           int maxRetry,
+                           int retryInterval) {
+
+        int nextRetry = retryCount + 1;
+
+        boolean finalFail = nextRetry >= maxRetry;
+
+        taskJobService.lambdaUpdate()
+                .eq(TaskJob::getId, job.getId())
+                .set(TaskJob::getRetryCount, nextRetry)
+                .set(TaskJob::getExecuteStatus, finalFail ? 2 : 0)
+                .set(TaskJob::getFailReason,
+                        StrUtil.sub(errorMsg, 0, 2000))
+                .set(TaskJob::getNextExecuteTime,
+                        finalFail ? null :
+                                LocalDateTime.now().plusSeconds(retryInterval))
+                .set(TaskJob::getLockTime, null)
+                .update();
+
+        log.warn("任务执行失败，jobCode={}，retry={}/{}",
+                job.getJobCode(), nextRetry, maxRetry);
+    }
+
+    /**
+     * 写执行日志
      */
     @Transactional(rollbackFor = Exception.class)
     public void saveLog(TaskJob job,
@@ -137,42 +299,15 @@ public class TaskExecutor {
         TaskJobLog logEntity = new TaskJobLog();
         logEntity.setJobId(job.getId());
         logEntity.setJobCode(job.getJobCode());
+        logEntity.setBizType(job.getBizType());
         logEntity.setExecuteTime(LocalDateTime.now());
-        logEntity.setExecuteStatus(success ? 1 : 2);
+        logEntity.setExecuteStatus(success ? 2 : 3);
         logEntity.setRetryCount(retryCount);
         logEntity.setExecuteDuration(duration);
         logEntity.setErrorMessage(
-                StrUtil.sub(errorMsg, 0, 5000) // 防止日志过大
+                StrUtil.sub(errorMsg, 0, 2000)
         );
-        logEntity.setCreateTime(LocalDateTime.now());
 
         taskJobLogService.save(logEntity);
-    }
-
-    /**
-     * 成功后删除任务（独立事务）
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void deleteSuccessJob(Long jobId) {
-        taskJobService.removeById(jobId);
-    }
-
-    /**
-     * 标记失败（独立事务）
-     * 同时设置 next_execute_time，防止立即被再次拉取
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void markFail(Long jobId,
-                         String errorMsg,
-                         int retryInterval) {
-
-        taskJobService.lambdaUpdate()
-                .eq(TaskJob::getId, jobId)
-                .set(TaskJob::getExecuteStatus, 2)
-                .set(TaskJob::getFailReason,
-                        StrUtil.sub(errorMsg, 0, 5000))
-                .set(TaskJob::getNextExecuteTime,
-                        LocalDateTime.now().plusSeconds(retryInterval))
-                .update();
     }
 }
