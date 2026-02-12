@@ -225,3 +225,21 @@ SQL工具类
 ## ImageUtil
 
 图片工具类
+
+
+
+## OshiUtil
+
+OSHI 系统监控工具类
+
+**添加依赖**
+
+```xml
+<!-- OSHI 硬件信息获取 -->
+<dependency>
+    <groupId>com.github.oshi</groupId>
+    <artifactId>oshi-core</artifactId>
+    <version>6.9.3</version>
+</dependency>
+```
+
