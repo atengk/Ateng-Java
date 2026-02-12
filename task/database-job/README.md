@@ -1108,7 +1108,7 @@ public class TaskExecutor {
         logEntity.setJobCode(job.getJobCode());
         logEntity.setBizType(job.getBizType());
         logEntity.setExecuteTime(LocalDateTime.now());
-        logEntity.setExecuteStatus(success ? 1 : 2);
+        logEntity.setExecuteStatus(success ? 3 : 2);
         logEntity.setRetryCount(retryCount);
         logEntity.setExecuteDuration(duration);
         logEntity.setErrorMessage(StrUtil.sub(errorMsg, 0, 2000));
