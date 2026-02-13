@@ -243,3 +243,20 @@ OSHI 系统监控工具类
 </dependency>
 ```
 
+
+
+## SshClientUtil 
+
+Apache MINA SSHD 是 The Apache Software Foundation 旗下的 Java SSH 实现项目，为 Java 应用程序提供 SSH 客户端与服务器功能。它广泛用于嵌入式管理、自动化部署和安全文件传输场景，以模块化设计和可扩展性著称。
+
+**添加依赖**
+
+```xml
+<!-- Apache MINA SSHD -->
+<dependency>
+    <groupId>org.apache.sshd</groupId>
+    <artifactId>sshd-core</artifactId>
+    <version>2.17.1</version>
+</dependency>
+```
+
