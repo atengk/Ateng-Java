@@ -252,10 +252,22 @@ Apache MINA SSHD 是 The Apache Software Foundation 旗下的 Java SSH 实现项
 **添加依赖**
 
 ```xml
-<!-- Apache MINA SSHD -->
+<!-- Apache MINA SSHD 核心模块 -->
 <dependency>
     <groupId>org.apache.sshd</groupId>
     <artifactId>sshd-core</artifactId>
+    <version>2.17.1</version>
+</dependency>
+<!-- Apache MINA SSHD 公共模块 -->
+<dependency>
+    <groupId>org.apache.sshd</groupId>
+    <artifactId>sshd-common</artifactId>
+    <version>2.17.1</version>
+</dependency>
+<!-- Apache MINA SSHD OpenSSH 私钥解析模块 -->
+<dependency>
+    <groupId>org.apache.sshd</groupId>
+    <artifactId>sshd-openpgp</artifactId>
     <version>2.17.1</version>
 </dependency>
 ```

@@ -161,10 +161,10 @@
         <!-- Central Repository -->
         <repository>
             <id>central</id>
-            <name>阿里云中央仓库</name>
-            <url>https://maven.aliyun.com/repository/central</url>
-            <!--<name>Maven官方中央仓库</name>
-            <url>https://repo.maven.apache.org/maven2/</url>-->
+            <!--<name>阿里云中央仓库</name>
+            <url>https://maven.aliyun.com/repository/central</url>-->
+            <name>Maven官方中央仓库</name>
+            <url>https://repo.maven.apache.org/maven2/</url>
         </repository>
     </repositories>
 
