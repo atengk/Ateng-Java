@@ -63,7 +63,8 @@ Email address: 2385569970@qq.com
 
 ## 参考文档
 
-[参考文档](https://developer.aliyun.com/article/937829?spm=5176.26934566.main.8.9a9353b9SjoRpi)
+- 以上的破解地址已失效，地址请使用这个项目的：[链接](https://github.com/yu-xiaoyao/jrebel-license-active-server)
+- [参考文档](https://developer.aliyun.com/article/937829?spm=5176.26934566.main.8.9a9353b9SjoRpi)
+- [参考文档2](https://blog.csdn.net/m0_68477586/article/details/135686444)
 
-[参考文档2](https://blog.csdn.net/m0_68477586/article/details/135686444)
 
