@@ -8,7 +8,7 @@
     <groupId>io.github.atengk</groupId>
     <artifactId>optional</artifactId>
     <version>1.0.0</version>
-    <name>optional-web</name>
+    <name>optional</name>
     <description>Java8 Optional 模块</description>
     <url>https://atengk.github.io/dev</url>
 
