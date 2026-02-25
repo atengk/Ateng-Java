@@ -15,5 +15,6 @@
     <!-- 项目包含的子模块 -->
     <modules>
         <module>optional</module>
+        <module>functional-interface</module>
     </modules>
 </project>
