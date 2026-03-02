@@ -26,5 +26,6 @@
         <module>spring-cloud-seata-demo</module>
         <module>spring-cloud-stream</module>
         <module>open-telemetry</module>
+        <module>spring-grpc</module>
     </modules>
 </project>
