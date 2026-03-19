@@ -135,6 +135,30 @@ public class JSONObjectTests {
         private Map<String, String> map;
     }
 
+    // 基于字段反序列化
+    @Test
+    void testSerializer11() {
+        TestSerializerEntity11 user = new TestSerializerEntity11();
+        user.setId(1L);
+        user.setABBCCdd("阿腾");
+        user.setName("Ateng");
+        String str = JSONObject.toJSONString(user,
+                // 基于字段反序列化
+                JSONWriter.Feature.FieldBased
+        );
+        System.out.println(str);
+        // {"aBBCCdd":"阿腾","id":1,"name":"Ateng"}
+        String str2 = JSONObject.toJSONString(user);
+        System.out.println(str2);
+        // {"ABBCCdd":"阿腾","id":1,"name":"Ateng"}
+    }
+    @Data
+    public static class TestSerializerEntity11 {
+        private Long id;
+        private String name;
+        private String aBBCCdd;
+    }
+
     // 输出缺省值
     @Test
     void testSerializer12() {
