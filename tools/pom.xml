@@ -32,5 +32,6 @@
         <module>apache-fesod</module>
         <module>jackson3</module>
         <module>apache-tika</module>
+        <module>sshj</module>
     </modules>
 </project>

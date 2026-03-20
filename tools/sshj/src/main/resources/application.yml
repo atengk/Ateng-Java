@@ -1,0 +1,15 @@
+server:
+  port: 11017
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
+---
+sshj:
+  host: 192.168.1.10
+  port: 38101
+  username: root
+  password: Admin@123
