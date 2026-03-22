@@ -13,3 +13,10 @@ sshj:
   port: 38101
   username: root
   password: Admin@123
+  connect-timeout: 5000
+  kex-timeout: 10000
+  heartbeat-interval: 30
+  pool-size: 8
+  strict-host-key-checking: false
+  #known-hosts-path: ~/.ssh/known_hosts
+  known-hosts-path: ""
