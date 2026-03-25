@@ -16,5 +16,6 @@
     <modules>
         <module>optional</module>
         <module>functional-interface</module>
+        <module>java-new-syntax</module>
     </modules>
 </project>
