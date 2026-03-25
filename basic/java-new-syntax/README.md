@@ -2981,7 +2981,312 @@ public class StructuredConcurrencyExample {
 
 ### record 数据类（替代 DTO / VO）
 
+```java
+import java.util.List;
+
+/**
+ * record 示例（JDK16+，JDK14 预览）
+ */
+public class RecordExample {
+
+    /**
+     * 1. 定义 record（自动生成构造器、getter、toString、equals、hashCode）
+     */
+    public record User(String name, int age) {
+
+        // =========================
+        // 2. 自定义构造（校验逻辑）
+        // =========================
+        public User {
+            if (age < 0) {
+                throw new IllegalArgumentException("年龄不能为负");
+            }
+        }
+
+        // =========================
+        // 3. 自定义方法
+        // =========================
+        public String display() {
+            return name + "(" + age + ")";
+        }
+    }
+
+    /**
+     * 4. 嵌套 record（DTO 场景）
+     */
+    public record Order(String orderId, double amount) {}
+
+    /**
+     * 核心方法：record 使用
+     */
+    public static void recordUsage() {
+
+        // =========================
+        // 5. 创建对象（无需 new getter/setter）
+        // =========================
+        User user = new User("张三", 20);
+
+        System.out.println("User：" + user);
+
+        // =========================
+        // 6. 获取字段（类似 getter，但无 get 前缀）
+        // =========================
+        System.out.println("姓名：" + user.name());
+        System.out.println("年龄：" + user.age());
+
+        // =========================
+        // 7. equals / hashCode 自动生成
+        // =========================
+        User u1 = new User("张三", 20);
+        User u2 = new User("张三", 20);
+
+        System.out.println("是否相等：" + u1.equals(u2));
+
+
+        // =========================
+        // 8. 不可变（字段 final）
+        // =========================
+        // user.name = "李四"; ❌ 编译错误
+
+        // =========================
+        // 9. 集合使用（DTO 列表）
+        // =========================
+        List<User> users = List.of(
+                new User("张三", 20),
+                new User("李四", 25)
+        );
+
+        users.forEach(System.out::println);
+
+
+        // =========================
+        // 10. 结合 Stream 使用（项目常见🔥）
+        // =========================
+        List<String> names = users.stream()
+                .map(User::name)
+                .toList();
+
+        System.out.println("姓名列表：" + names);
+
+
+        // =========================
+        // 11. record 作为返回值（推荐）
+        // =========================
+        User result = buildUser();
+
+        System.out.println("返回对象：" + result);
+
+
+        // =========================
+        // 12. 多 record 组合（接口返回）
+        // =========================
+        Order order = new Order("ORD001", 99.9);
+
+        System.out.println("订单：" + order);
+    }
+
+    /**
+     * 模拟接口返回 DTO
+     */
+    public static User buildUser() {
+        return new User("王五", 30);
+    }
+
+    public static void main(String[] args) {
+        recordUsage();
+    }
+}
+```
+
+输出
+
+```
+User：User[name=张三, age=20]
+姓名：张三
+年龄：20
+是否相等：true
+User[name=张三, age=20]
+User[name=李四, age=25]
+姓名列表：[张三, 李四]
+返回对象：User[name=王五, age=30]
+订单：Order[orderId=ORD001, amount=99.9]
+```
+
+
+
 ### sealed 类（限制继承结构）
+
+```java
+import java.util.List;
+
+/**
+ * sealed 类示例（JDK17+）
+ */
+public class SealedClassExample {
+
+    // =========================
+    // 1. 定义 sealed 父类（限制继承）
+    // =========================
+    public sealed interface Shape
+            permits Circle, Rectangle, Triangle {
+    }
+
+    // =========================
+    // 2. 子类必须声明：final / sealed / non-sealed
+    // =========================
+    public static final class Circle implements Shape {
+        private final double radius;
+
+        public Circle(double radius) {
+            this.radius = radius;
+        }
+
+        public double radius() {
+            return radius;
+        }
+    }
+
+    public static final class Rectangle implements Shape {
+        private final double width;
+        private final double height;
+
+        public Rectangle(double width, double height) {
+            this.width = width;
+            this.height = height;
+        }
+
+        public double width() {
+            return width;
+        }
+
+        public double height() {
+            return height;
+        }
+    }
+
+    // sealed 子类（还能继续限制）
+    public static sealed class Triangle implements Shape
+            permits RightTriangle {
+    }
+
+    // final 子类（不能再被继承）
+    public static final class RightTriangle extends Triangle {
+        private final double a;
+        private final double b;
+
+        public RightTriangle(double a, double b) {
+            this.a = a;
+            this.b = b;
+        }
+
+        public double a() { return a; }
+        public double b() { return b; }
+    }
+
+    /**
+     * 核心方法：sealed 类使用
+     */
+    public static void sealedUsage() {
+
+        // =========================
+        // 3. 创建对象
+        // =========================
+        List<Shape> shapes = List.of(
+                new Circle(2),
+                new Rectangle(3, 4),
+                new RightTriangle(3, 4)
+        );
+
+        // =========================
+        // 4. switch + 类型判断（推荐🔥）
+        // =========================
+        for (Shape shape : shapes) {
+
+            double area = calculateArea(shape);
+
+            System.out.println("面积：" + area);
+        }
+
+
+        // =========================
+        // 5. 项目场景：状态/类型控制
+        // =========================
+        Result result = new Success("成功数据");
+
+        handleResult(result);
+    }
+
+    /**
+     * 计算面积（结合 instanceof 模式匹配）
+     */
+    public static double calculateArea(Shape shape) {
+
+        if (shape instanceof Circle c) {
+            return Math.PI * c.radius() * c.radius();
+        } else if (shape instanceof Rectangle r) {
+            return r.width() * r.height();
+        } else if (shape instanceof RightTriangle t) {
+            return t.a() * t.b() / 2;
+        } else {
+            throw new IllegalStateException("未知类型");
+        }
+    }
+
+
+    // =========================
+    // 6. 项目实战：返回结果封装（推荐🔥）
+    // =========================
+    public sealed interface Result permits Success, Error {
+    }
+
+    public static final class Success implements Result {
+        private final String data;
+
+        public Success(String data) {
+            this.data = data;
+        }
+
+        public String data() { return data; }
+    }
+
+    public static final class Error implements Result {
+        private final String message;
+
+        public Error(String message) {
+            this.message = message;
+        }
+
+        public String message() { return message; }
+    }
+
+    /**
+     * 统一处理结果
+     */
+    public static void handleResult(Result result) {
+
+        if (result instanceof Success s) {
+            System.out.println("成功：" + s.data());
+        } else if (result instanceof Error e) {
+            System.out.println("失败：" + e.message());
+        }
+    }
+
+    public static void main(String[] args) {
+        sealedUsage();
+    }
+}
+```
+
+输出
+
+```
+面积：12.566370614359172
+面积：12.0
+面积：6.0
+成功：成功数据
+```
+
+
 
 ------
 
@@ -2989,9 +3294,570 @@ public class StructuredConcurrencyExample {
 
 ### switch 表达式（更简洁）
 
+```java
+import java.util.List;
+
+/**
+ * switch 表达式示例（JDK14+）
+ */
+public class SwitchExpressionExample {
+
+    /**
+     * 核心方法：switch 表达式使用
+     */
+    public static void switchUsage() {
+
+        // =========================
+        // 1. 基础写法（返回值🔥）
+        // =========================
+        int day = 3;
+
+        String result = switch (day) {
+            case 1 -> "周一";
+            case 2 -> "周二";
+            case 3 -> "周三";
+            default -> "未知";
+        };
+
+        System.out.println("结果：" + result);
+
+
+        // =========================
+        // 2. 多 case 合并
+        // =========================
+        String type = switch (day) {
+            case 1, 2, 3, 4, 5 -> "工作日";
+            case 6, 7 -> "周末";
+            default -> "非法";
+        };
+
+        System.out.println("类型：" + type);
+
+
+        // =========================
+        // 3. 代码块（yield 返回值）
+        // =========================
+        int score = 85;
+
+        String level = switch (score / 10) {
+            case 10, 9 -> {
+                System.out.println("优秀");
+                yield "A";
+            }
+            case 8 -> {
+                System.out.println("良好");
+                yield "B";
+            }
+            case 7 -> "C";
+            default -> "D";
+        };
+
+        System.out.println("等级：" + level);
+
+
+        // =========================
+        // 4. 替代 if-else（推荐🔥）
+        // =========================
+        String role = "ADMIN";
+
+        String permission = switch (role) {
+            case "ADMIN" -> "全部权限";
+            case "USER" -> "普通权限";
+            default -> "游客权限";
+        };
+
+        System.out.println("权限：" + permission);
+
+
+        // =========================
+        // 5. 枚举（最佳实践🔥）
+        // =========================
+        Status status = Status.SUCCESS;
+
+        String msg = switch (status) {
+            case SUCCESS -> "成功";
+            case FAIL -> "失败";
+            case PROCESSING -> "处理中";
+        };
+
+        System.out.println("状态：" + msg);
+
+
+        // =========================
+        // 6. 避免 fall-through（更安全）
+        // =========================
+        // ❗ 不再需要 break，避免遗漏
+
+
+        // =========================
+        // 7. 结合方法封装（项目推荐）
+        // =========================
+        System.out.println("计算结果：" + calc(10, 5, "+"));
+
+
+        // =========================
+        // 8. 结合 Stream 使用
+        // =========================
+        List<String> roles = List.of("ADMIN", "USER", "GUEST");
+
+        List<String> perms = roles.stream()
+                .map(r -> switch (r) {
+                    case "ADMIN" -> "ALL";
+                    case "USER" -> "NORMAL";
+                    default -> "NONE";
+                })
+                .toList();
+
+        System.out.println("权限列表：" + perms);
+
+
+        // =========================
+        // 9. null 处理（注意⚠️）
+        // =========================
+        String input = null;
+
+        try {
+            String res = switch (input) {
+                case "A" -> "1";
+                default -> "0";
+            };
+        } catch (NullPointerException e) {
+            System.out.println("switch 不支持 null");
+        }
+
+
+        // =========================
+        // 10. 项目实战（状态转换🔥）
+        // =========================
+        int code = 200;
+
+        String desc = getStatusDesc(code);
+
+        System.out.println("HTTP状态：" + desc);
+    }
+
+    /**
+     * 示例枚举
+     */
+    enum Status {
+        SUCCESS, FAIL, PROCESSING
+    }
+
+    /**
+     * 封装方法（项目常用）
+     */
+    public static String calc(int a, int b, String op) {
+        return switch (op) {
+            case "+" -> String.valueOf(a + b);
+            case "-" -> String.valueOf(a - b);
+            case "*" -> String.valueOf(a * b);
+            case "/" -> b != 0 ? String.valueOf(a / b) : "除0错误";
+            default -> "非法操作";
+        };
+    }
+
+    /**
+     * 状态码映射
+     */
+    public static String getStatusDesc(int code) {
+        return switch (code) {
+            case 200 -> "OK";
+            case 404 -> "Not Found";
+            case 500 -> "Server Error";
+            default -> "Unknown";
+        };
+    }
+
+    public static void main(String[] args) {
+        switchUsage();
+    }
+}
+```
+
+输出
+
+```
+结果：周三
+类型：工作日
+良好
+等级：B
+权限：全部权限
+状态：成功
+计算结果：15
+权限列表：[ALL, NORMAL, NONE]
+switch 不支持 null
+HTTP状态：OK
+```
+
+
+
 ### instanceof 模式匹配
 
+```java
+import java.util.List;
+
+/**
+ * instanceof 模式匹配示例（JDK16+）
+ */
+public class InstanceofPatternExample {
+
+    /**
+     * 父类
+     */
+    static class Shape {}
+
+    static class Circle extends Shape {
+        double radius;
+        Circle(double radius) { this.radius = radius; }
+    }
+
+    static class Rectangle extends Shape {
+        double width;
+        double height;
+        Rectangle(double w, double h) {
+            this.width = w;
+            this.height = h;
+        }
+    }
+
+    /**
+     * 核心方法：instanceof 模式匹配
+     */
+    public static void instanceofUsage() {
+
+        // =========================
+        // 1. 传统写法（对比）
+        // =========================
+        Object obj1 = "hello";
+
+        if (obj1 instanceof String) {
+            String s = (String) obj1;
+            System.out.println("传统写法：" + s.toUpperCase());
+        }
+
+        // =========================
+        // 2. 新写法（推荐🔥）
+        // =========================
+        Object obj2 = "world";
+
+        if (obj2 instanceof String s) {
+            System.out.println("模式匹配：" + s.toUpperCase());
+        }
+
+
+        // =========================
+        // 3. 作用域（仅在 if 内有效）
+        // =========================
+        Object obj3 = 123;
+
+        if (obj3 instanceof Integer i) {
+            System.out.println("数字：" + (i + 1));
+        }
+
+
+        // =========================
+        // 4. 结合条件判断（更强🔥）
+        // =========================
+        Object obj4 = "Java";
+
+        if (obj4 instanceof String s && s.length() > 3) {
+            System.out.println("长度大于3：" + s);
+        }
+
+
+        // =========================
+        // 5. 多类型判断（项目常见）
+        // =========================
+        List<Object> list = List.of(
+                "text",
+                100,
+                new Circle(2),
+                new Rectangle(3, 4)
+        );
+
+        for (Object obj : list) {
+            handle(obj);
+        }
+
+
+        // =========================
+        // 6. 替代复杂强转（推荐🔥）
+        // =========================
+        Shape shape = new Circle(3);
+
+        double area = calcArea(shape);
+
+        System.out.println("面积：" + area);
+
+
+        // =========================
+        // 7. null 安全（不会 NPE）
+        // =========================
+        Object obj5 = null;
+
+        if (obj5 instanceof String s) {
+            // 不会进入
+            System.out.println(s);
+        } else {
+            System.out.println("null 不匹配");
+        }
+
+
+        // =========================
+        // 8. 项目实战：通用处理器
+        // =========================
+        process("日志");
+        process(123);
+    }
+
+    /**
+     * 通用处理方法
+     */
+    public static void handle(Object obj) {
+        if (obj instanceof String s) {
+            System.out.println("字符串：" + s);
+        } else if (obj instanceof Integer i) {
+            System.out.println("整数：" + i);
+        } else if (obj instanceof Circle c) {
+            System.out.println("圆：" + c.radius);
+        } else if (obj instanceof Rectangle r) {
+            System.out.println("矩形：" + r.width + "," + r.height);
+        }
+    }
+
+    /**
+     * 计算面积
+     */
+    public static double calcArea(Shape shape) {
+        if (shape instanceof Circle c) {
+            return Math.PI * c.radius * c.radius;
+        } else if (shape instanceof Rectangle r) {
+            return r.width * r.height;
+        }
+        throw new IllegalArgumentException("未知类型");
+    }
+
+    /**
+     * 项目示例：统一处理
+     */
+    public static void process(Object obj) {
+        if (obj instanceof String s) {
+            System.out.println("处理字符串：" + s);
+        } else if (obj instanceof Integer i) {
+            System.out.println("处理数字：" + i);
+        } else {
+            System.out.println("未知类型");
+        }
+    }
+
+    public static void main(String[] args) {
+        instanceofUsage();
+    }
+}
+```
+
+输出
+
+```
+传统写法：HELLO
+模式匹配：WORLD
+数字：124
+长度大于3：Java
+字符串：text
+整数：100
+圆：2.0
+矩形：3.0,4.0
+面积：28.274333882308138
+null 不匹配
+处理字符串：日志
+处理数字：123
+```
+
+
+
 ### switch 模式匹配（JDK21）
+
+```java
+import java.util.List;
+
+/**
+ * switch 模式匹配示例（JDK21🔥）
+ */
+public class SwitchPatternExample {
+
+    /**
+     * 示例类
+     */
+    static class Circle {
+        double radius;
+        Circle(double radius) { this.radius = radius; }
+    }
+
+    static class Rectangle {
+        double width;
+        double height;
+        Rectangle(double w, double h) {
+            this.width = w;
+            this.height = h;
+        }
+    }
+
+    /**
+     * sealed 类型（推荐结合使用🔥）
+     */
+    sealed interface Shape permits CircleShape, RectShape {}
+
+    static final class CircleShape implements Shape {
+        double r;
+        CircleShape(double r) { this.r = r; }
+    }
+
+    static final class RectShape implements Shape {
+        double w, h;
+        RectShape(double w, double h) {
+            this.w = w;
+            this.h = h;
+        }
+    }
+
+    /**
+     * 核心方法：switch 模式匹配
+     */
+    public static void switchPatternUsage() {
+
+        // =========================
+        // 1. 基础类型匹配🔥
+        // =========================
+        Object obj = "hello";
+
+        String result = switch (obj) {
+            case String s -> "字符串：" + s.toUpperCase();
+            case Integer i -> "整数：" + (i + 1);
+            case null -> "空值";
+            default -> "未知类型";
+        };
+
+        System.out.println("结果：" + result);
+
+
+        // =========================
+        // 2. 多类型分支（替代 if-else）
+        // =========================
+        List<Object> list = List.of("A", 1, 2.5);
+
+        for (Object o : list) {
+            String res = switch (o) {
+                case String s -> "String:" + s;
+                case Integer i -> "Integer:" + i;
+                case Double d -> "Double:" + d;
+                default -> "Other";
+            };
+            System.out.println(res);
+        }
+
+
+        // =========================
+        // 3. 条件守卫（when🔥）
+        // =========================
+        Object value = "Java";
+
+        String msg = switch (value) {
+            case String s when s.length() > 3 -> "长字符串：" + s;
+            case String s -> "短字符串：" + s;
+            default -> "其他";
+        };
+
+        System.out.println("条件匹配：" + msg);
+
+
+        // =========================
+        // 4. 结合 sealed（最佳实践🔥）
+        // =========================
+        Shape shape = new CircleShape(2);
+
+        double area = switch (shape) {
+            case CircleShape c -> Math.PI * c.r * c.r;
+            case RectShape r -> r.w * r.h;
+        };
+
+        System.out.println("面积：" + area);
+
+
+        // =========================
+        // 5. null 处理（JDK21支持）
+        // =========================
+        Object obj2 = null;
+
+        String res2 = switch (obj2) {
+            case null -> "空对象";
+            case String s -> s;
+            default -> "其他";
+        };
+
+        System.out.println("null处理：" + res2);
+
+
+        // =========================
+        // 6. 嵌套结构处理（项目常用🔥）
+        // =========================
+        System.out.println(handleResult("OK"));
+        System.out.println(handleResult(500));
+
+
+        // =========================
+        // 7. 替代 instanceof + 强转（核心价值🔥）
+        // =========================
+        Object input = new Rectangle(3, 4);
+
+        double area2 = calc(input);
+
+        System.out.println("面积2：" + area2);
+    }
+
+    /**
+     * 项目实战：统一处理返回值
+     */
+    public static String handleResult(Object obj) {
+        return switch (obj) {
+            case String s -> "成功：" + s;
+            case Integer code when code >= 400 -> "错误码：" + code;
+            default -> "未知响应";
+        };
+    }
+
+    /**
+     * 计算面积（替代 instanceof）
+     */
+    public static double calc(Object obj) {
+        return switch (obj) {
+            case Circle c -> Math.PI * c.radius * c.radius;
+            case Rectangle r -> r.width * r.height;
+            default -> throw new IllegalArgumentException("未知类型");
+        };
+    }
+
+    public static void main(String[] args) {
+        switchPatternUsage();
+    }
+}
+```
+
+输出
+
+```
+结果：字符串：HELLO
+String:A
+Integer:1
+Double:2.5
+条件匹配：长字符串：Java
+面积：12.566370614359172
+null处理：空对象
+成功：OK
+错误码：500
+面积2：12.0
+```
+
+
 
 ------
 
@@ -2999,7 +3865,345 @@ public class StructuredConcurrencyExample {
 
 ### Stream.toList()（替代 collect）
 
+```java
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Stream.toList() 示例（JDK16+）
+ */
+public class StreamToListExample {
+
+    /**
+     * 核心方法：toList 使用
+     */
+    public static void toListUsage() {
+
+        List<String> list = List.of("a", "b", "c");
+
+        // =========================
+        // 1. 传统写法（对比）
+        // =========================
+        List<String> oldList = list.stream()
+                .map(String::toUpperCase)
+                .collect(Collectors.toList());
+
+        System.out.println("旧写法：" + oldList);
+
+
+        // =========================
+        // 2. 新写法（推荐🔥）
+        // =========================
+        List<String> newList = list.stream()
+                .map(String::toUpperCase)
+                .toList();
+
+        System.out.println("新写法：" + newList);
+
+
+        // =========================
+        // 3. 不可变集合（重要⚠️）
+        // =========================
+        try {
+            newList.add("D"); // ❌ 会抛异常
+        } catch (Exception e) {
+            System.out.println("不可变：" + e);
+        }
+
+
+        // =========================
+        // 4. 与 collect 的区别
+        // =========================
+        List<String> mutableList = list.stream()
+                .collect(Collectors.toList()); // 可变
+
+        mutableList.add("D"); // ✅ 正常
+
+        System.out.println("可变集合：" + mutableList);
+
+
+        // =========================
+        // 5. 转可变 List（推荐写法）
+        // =========================
+        List<String> copy = new ArrayList<>(list.stream().toList());
+
+        copy.add("D");
+
+        System.out.println("转换为可变：" + copy);
+
+
+        // =========================
+        // 6. 链式操作（项目常用🔥）
+        // =========================
+        List<Integer> result = list.stream()
+                .filter(s -> !s.isBlank())
+                .map(String::length)
+                .sorted()
+                .toList();
+
+        System.out.println("链式结果：" + result);
+
+
+        // =========================
+        // 7. 结合 Optional
+        // =========================
+        List<String> safeList = Optional.ofNullable(list)
+                .orElse(List.of())
+                .stream()
+                .toList();
+
+        System.out.println("安全转换：" + safeList);
+
+
+        // =========================
+        // 8. 空流处理
+        // =========================
+        List<String> empty = List.<String>of().stream().toList();
+
+        System.out.println("空集合：" + empty);
+
+
+        // =========================
+        // 9. 项目实战：DTO 转换🔥
+        // =========================
+        List<User> users = List.of(
+                new User("张三"),
+                new User("李四")
+        );
+
+        List<String> names = users.stream()
+                .map(User::name)
+                .toList();
+
+        System.out.println("姓名列表：" + names);
+
+
+        // =========================
+        // 10. 总结：推荐使用 toList()
+        // =========================
+        System.out.println("\n推荐：默认使用 toList()");
+        System.out.println("需要可变集合 → new ArrayList<>(...)");
+    }
+
+    /**
+     * 示例 record（JDK16+）
+     */
+    public record User(String name) {}
+
+    public static void main(String[] args) {
+        toListUsage();
+    }
+}
+```
+
+输出
+
+```
+旧写法：[A, B, C]
+新写法：[A, B, C]
+不可变：java.lang.UnsupportedOperationException
+可变集合：[a, b, c, D]
+转换为可变：[a, b, c, D]
+链式结果：[1, 1, 1]
+安全转换：[a, b, c]
+空集合：[]
+姓名列表：[张三, 李四]
+
+推荐：默认使用 toList()
+需要可变集合 → new ArrayList<>(...)
+```
+
+
+
 ### Map.computeIfAbsent 实战
+
+```java
+import java.util.*;
+
+/**
+ * Map.computeIfAbsent 示例（JDK8+）
+ */
+public class ComputeIfAbsentExample {
+
+    /**
+     * 核心方法：computeIfAbsent 使用
+     */
+    public static void computeUsage() {
+
+        // =========================
+        // 1. 基础用法（不存在才创建🔥）
+        // =========================
+        Map<String, List<String>> map = new HashMap<>();
+
+        map.computeIfAbsent("A", k -> new ArrayList<>()).add("1");
+        map.computeIfAbsent("A", k -> new ArrayList<>()).add("2");
+
+        System.out.println("基础用法：" + map);
+
+
+        // =========================
+        // 2. 替代传统写法（对比）
+        // =========================
+        Map<String, List<String>> oldMap = new HashMap<>();
+
+        if (!oldMap.containsKey("A")) {
+            oldMap.put("A", new ArrayList<>());
+        }
+        oldMap.get("A").add("1");
+
+        System.out.println("传统写法：" + oldMap);
+
+
+        // =========================
+        // 3. 分组场景（项目常用🔥）
+        // =========================
+        List<String> list = List.of("A-1", "A-2", "B-1");
+
+        Map<String, List<String>> group = new HashMap<>();
+
+        for (String item : list) {
+            String key = item.split("-")[0];
+
+            group.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
+        }
+
+        System.out.println("分组：" + group);
+
+
+        // =========================
+        // 4. 嵌套 Map（多级分组🔥）
+        // =========================
+        Map<String, Map<String, List<String>>> multiMap = new HashMap<>();
+
+        for (String item : list) {
+            String[] arr = item.split("-");
+            String k1 = arr[0];
+            String k2 = arr[1];
+
+            multiMap
+                    .computeIfAbsent(k1, k -> new HashMap<>())
+                    .computeIfAbsent(k2, k -> new ArrayList<>())
+                    .add(item);
+        }
+
+        System.out.println("多级分组：" + multiMap);
+
+
+        // =========================
+        // 5. 计数统计
+        // =========================
+        Map<String, Integer> countMap = new HashMap<>();
+
+        for (String item : list) {
+            String key = item.split("-")[0];
+
+            countMap.compute(key, (k, v) -> v == null ? 1 : v + 1);
+        }
+
+        System.out.println("计数：" + countMap);
+
+
+        // =========================
+        // 6. 缓存场景（懒加载🔥）
+        // =========================
+        Map<String, String> cache = new HashMap<>();
+
+        String value = cache.computeIfAbsent("key", k -> {
+            System.out.println("执行查询DB...");
+            return "数据";
+        });
+
+        System.out.println("缓存结果：" + value);
+
+        // 第二次不会执行
+        cache.computeIfAbsent("key", k -> {
+            System.out.println("不会执行");
+            return "新数据";
+        });
+
+
+        // =========================
+        // 7. 避免 null（注意⚠️）
+        // =========================
+        Map<String, String> nullMap = new HashMap<>();
+
+        nullMap.computeIfAbsent("A", k -> null); // 不会存入
+
+        System.out.println("null值：" + nullMap);
+
+
+        // =========================
+        // 8. 结合 Stream 使用
+        // =========================
+        Map<String, List<String>> streamGroup = new HashMap<>();
+
+        list.forEach(item -> {
+            String key = item.split("-")[0];
+            streamGroup.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
+        });
+
+        System.out.println("Stream分组：" + streamGroup);
+
+
+        // =========================
+        // 9. 项目实战：构建索引🔥
+        // =========================
+        List<User> users = List.of(
+                new User("张三", "IT"),
+                new User("李四", "IT"),
+                new User("王五", "HR")
+        );
+
+        Map<String, List<User>> deptMap = new HashMap<>();
+
+        users.forEach(u ->
+                deptMap.computeIfAbsent(u.dept(), k -> new ArrayList<>()).add(u)
+        );
+
+        System.out.println("部门索引：" + deptMap);
+
+
+        // =========================
+        // 10. 推荐总结
+        // =========================
+        System.out.println("\n推荐场景：");
+        System.out.println("✔ 分组");
+        System.out.println("✔ 缓存");
+        System.out.println("✔ 初始化集合");
+    }
+
+    /**
+     * 示例 record
+     */
+    public record User(String name, String dept) {}
+
+    public static void main(String[] args) {
+        computeUsage();
+    }
+}
+```
+
+输出
+
+```
+基础用法：{A=[1, 2]}
+传统写法：{A=[1]}
+分组：{A=[A-1, A-2], B=[B-1]}
+多级分组：{A={1=[A-1], 2=[A-2]}, B={1=[B-1]}}
+计数：{A=2, B=1}
+执行查询DB...
+缓存结果：数据
+null值：{}
+Stream分组：{A=[A-1, A-2], B=[B-1]}
+部门索引：{HR=[User[name=王五, dept=HR]], IT=[User[name=张三, dept=IT], User[name=李四, dept=IT]]}
+
+推荐场景：
+✔ 分组
+✔ 缓存
+✔ 初始化集合
+```
+
+
 
 ------
 
@@ -3007,9 +4211,497 @@ public class StructuredConcurrencyExample {
 
 ### var 局部变量类型推断（JDK10）
 
+```java
+import java.util.*;
+import java.util.stream.*;
+
+/**
+ * var 局部变量类型推断示例（JDK10）
+ */
+public class VarExample {
+
+    /**
+     * 核心方法：var 使用
+     */
+    public static void varUsage() {
+
+        // =========================
+        // 1. 基础用法（自动推断类型🔥）
+        // =========================
+        var name = "张三";       // String
+        var age = 20;           // int
+        var price = 99.9;       // double
+
+        System.out.println("name 类型：" + ((Object) name).getClass().getSimpleName());
+        System.out.println("age 类型：" + ((Object) age).getClass().getSimpleName());
+
+
+        // =========================
+        // 2. 集合推断（推荐🔥）
+        // =========================
+        var list = List.of("A", "B", "C"); // List<String>
+
+        for (var item : list) {
+            System.out.println("元素：" + item);
+        }
+
+
+        // =========================
+        // 3. Stream 使用（可读性更好）
+        // =========================
+        var result = list.stream()
+                .map(String::toUpperCase)
+                .toList();
+
+        System.out.println("结果：" + result);
+
+
+        // =========================
+        // 4. Map 推断
+        // =========================
+        var map = Map.of("A", 1, "B", 2);
+
+        map.forEach((k, v) -> System.out.println(k + ":" + v));
+
+
+        // =========================
+        // 5. for 循环
+        // =========================
+        for (var i = 0; i < 3; i++) {
+            System.out.println("i：" + i);
+        }
+
+
+        // =========================
+        // 6. Lambda 参数（JDK11+）
+        // =========================
+        list.forEach((var s) -> System.out.println("Lambda：" + s));
+
+
+        // =========================
+        // 7. try-with-resources（结合 var）
+        // =========================
+        try (var stream = list.stream()) {
+            stream.forEach(System.out::println);
+        }
+
+
+        // =========================
+        // 8. 复杂类型简化（项目常用🔥）
+        // =========================
+        var users = List.of(
+                new User("张三", 20),
+                new User("李四", 25)
+        );
+
+        var names = users.stream()
+                .map(User::name)
+                .toList();
+
+        System.out.println("姓名：" + names);
+
+
+        // =========================
+        // 9. 注意：必须初始化
+        // =========================
+        // var x; ❌ 编译错误
+
+        // =========================
+        // 10. 注意：不能用于成员变量
+        // =========================
+        // class Test { var x = 10; } ❌
+
+        // =========================
+        // 11. 注意：避免降低可读性
+        // =========================
+        var obj = getUser();
+
+        System.out.println("对象：" + obj);
+    }
+
+    /**
+     * 示例方法
+     */
+    public static User getUser() {
+        return new User("王五", 30);
+    }
+
+    /**
+     * 示例 record
+     */
+    public record User(String name, int age) {}
+
+    public static void main(String[] args) {
+        varUsage();
+    }
+}
+```
+
+输出
+
+```
+name 类型：String
+age 类型：Integer
+元素：A
+元素：B
+元素：C
+结果：[A, B, C]
+B:2
+A:1
+i：0
+i：1
+i：2
+Lambda：A
+Lambda：B
+Lambda：C
+A
+B
+C
+姓名：[张三, 李四]
+对象：User[name=王五, age=30]
+```
+
+
+
 ### Objects 工具类增强（判空/比较）
+
+```java
+import java.util.*;
+import java.util.Objects;
+
+/**
+ * Objects 工具类示例（JDK8+ 增强）
+ */
+public class ObjectsExample {
+
+    /**
+     * 示例实体
+     */
+    static class User {
+        private String name;
+        private Integer age;
+
+        public User(String name, Integer age) {
+            this.name = name;
+            this.age = age;
+        }
+
+        public String getName() { return name; }
+        public Integer getAge() { return age; }
+
+        @Override
+        public String toString() {
+            return name + "(" + age + ")";
+        }
+    }
+
+    /**
+     * 核心方法：Objects 常用操作
+     */
+    public static void objectsUsage() {
+
+        // =========================
+        // 1. 判空（isNull / nonNull）
+        // =========================
+        User user = null;
+
+        System.out.println("isNull：" + Objects.isNull(user));
+        System.out.println("nonNull：" + Objects.nonNull(user));
+
+
+        // =========================
+        // 2. requireNonNull（强制非空🔥）
+        // =========================
+        try {
+            Objects.requireNonNull(user, "用户不能为空");
+        } catch (Exception e) {
+            System.out.println("异常：" + e.getMessage());
+        }
+
+
+        // =========================
+        // 3. requireNonNullElse（默认值）
+        // =========================
+        User defaultUser = new User("默认", 0);
+
+        User u1 = Objects.requireNonNullElse(user, defaultUser);
+
+        System.out.println("默认值：" + u1);
+
+
+        // =========================
+        // 4. requireNonNullElseGet（懒加载）
+        // =========================
+        User u2 = Objects.requireNonNullElseGet(user, () -> {
+            System.out.println("执行创建默认用户");
+            return new User("懒加载", 1);
+        });
+
+        System.out.println("懒加载：" + u2);
+
+
+        // =========================
+        // 5. equals（安全比较🔥）
+        // =========================
+        String a = null;
+        String b = "test";
+
+        System.out.println("equals：" + Objects.equals(a, b)); // 不会 NPE
+
+
+        // =========================
+        // 6. deepEquals（集合比较）
+        // =========================
+        List<String> list1 = List.of("A", "B");
+        List<String> list2 = List.of("A", "B");
+
+        System.out.println("deepEquals：" + Objects.deepEquals(list1, list2));
+
+
+        // =========================
+        // 7. hash（生成 hashCode）
+        // =========================
+        int hash = Objects.hash("A", 1);
+
+        System.out.println("hash：" + hash);
+
+
+        // =========================
+        // 8. compare（比较器）
+        // =========================
+        int cmp = Objects.compare(10, 20, Integer::compareTo);
+
+        System.out.println("compare：" + cmp);
+
+
+        // =========================
+        // 9. Stream 判空（项目常用🔥）
+        // =========================
+        List<User> users = Arrays.asList(
+                new User("张三", 20),
+                null,
+                new User("李四", 25)
+        );
+
+        List<User> filtered = users.stream()
+                .filter(Objects::nonNull)
+                .toList();
+
+        System.out.println("过滤 null：" + filtered);
+
+
+        // =========================
+        // 10. 项目实战：参数校验🔥
+        // =========================
+        createUser("王五", 30);
+
+        try {
+            createUser(null, 10);
+        } catch (Exception e) {
+            System.out.println("参数异常：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 模拟创建用户（参数校验）
+     */
+    public static User createUser(String name, Integer age) {
+
+        // 参数校验（推荐写法）
+        Objects.requireNonNull(name, "name 不能为空");
+        Objects.requireNonNull(age, "age 不能为空");
+
+        return new User(name, age);
+    }
+
+    public static void main(String[] args) {
+        objectsUsage();
+    }
+}
+```
+
+输出
+
+```
+isNull：true
+nonNull：false
+异常：用户不能为空
+默认值：默认(0)
+执行创建默认用户
+懒加载：懒加载(1)
+equals：false
+deepEquals：true
+hash：2977
+compare：-1
+过滤 null：[张三(20), 李四(25)]
+参数异常：name 不能为空
+```
+
+
 
 ### Pattern Matching + 解构（JDK21）
 
-------
+```java
+import java.util.List;
+
+/**
+ * Pattern Matching + 解构示例（JDK21🔥）
+ */
+public class PatternMatchingDeconstructExample {
+
+    /**
+     * record（天然支持解构🔥）
+     */
+    public record User(String name, int age) {}
+
+    public record Order(String id, double amount) {}
+
+    /**
+     * sealed 类型（推荐组合使用）
+     */
+    sealed interface Result permits Success, Error {}
+
+    public record Success(String data) implements Result {}
+
+    public record Error(String msg) implements Result {}
+
+    /**
+     * 核心方法：模式匹配 + 解构
+     */
+    public static void patternUsage() {
+
+        // =========================
+        // 1. record 解构（核心🔥）
+        // =========================
+        Object obj = new User("张三", 20);
+
+        if (obj instanceof User(String name, int age)) {
+            System.out.println("解构 User：" + name + "," + age);
+        }
+
+
+        // =========================
+        // 2. switch 解构（推荐🔥）
+        // =========================
+        Object input = new Order("ORD001", 99.9);
+
+        String result = switch (input) {
+            case Order(String id, double amount) ->
+                    "订单：" + id + " 金额：" + amount;
+            case User(String name, int age) ->
+                    "用户：" + name + " 年龄：" + age;
+            default -> "未知";
+        };
+
+        System.out.println(result);
+
+
+        // =========================
+        // 3. 条件匹配（when🔥）
+        // =========================
+        Object obj2 = new User("李四", 17);
+
+        String msg = switch (obj2) {
+            case User(String name, int age) when age >= 18 ->
+                    "成年用户：" + name;
+            case User(String name, int age) ->
+                    "未成年：" + name;
+            default -> "未知";
+        };
+
+        System.out.println(msg);
+
+
+        // =========================
+        // 4. 嵌套解构（复杂对象🔥）
+        // =========================
+        record Wrapper(User user) {}
+
+        Object obj3 = new Wrapper(new User("王五", 30));
+
+        if (obj3 instanceof Wrapper(User(String name, int age))) {
+            System.out.println("嵌套解构：" + name + "," + age);
+        }
+
+
+        // =========================
+        // 5. 结合 sealed（最佳实践🔥）
+        // =========================
+        Result r = new Success("OK");
+
+        String res = switch (r) {
+            case Success(String data) -> "成功：" + data;
+            case Error(String err) -> "失败：" + err;
+        };
+
+        System.out.println(res);
+
+
+        // =========================
+        // 6. List 遍历 + 解构
+        // =========================
+        List<Object> list = List.of(
+                new User("A", 10),
+                new Order("B", 20.0)
+        );
+
+        for (Object o : list) {
+            String s = switch (o) {
+                case User(String name, int age) ->
+                        "User:" + name;
+                case Order(String id, double amount) ->
+                        "Order:" + id;
+                default -> "Other";
+            };
+            System.out.println(s);
+        }
+
+
+        // =========================
+        // 7. 替代 getter（核心价值🔥）
+        // =========================
+        User user = new User("赵六", 40);
+
+        if (user instanceof User(String name, int age)) {
+            System.out.println("无需 getter：" + name + "," + age);
+        }
+
+
+        // =========================
+        // 8. 项目实战：统一返回处理🔥
+        // =========================
+        System.out.println(handle(new Success("数据")));
+        System.out.println(handle(new Error("异常")));
+    }
+
+    /**
+     * 项目实战：统一处理返回值
+     */
+    public static String handle(Result result) {
+        return switch (result) {
+            case Success(String data) -> "成功：" + data;
+            case Error(String msg) -> "失败：" + msg;
+        };
+    }
+
+    public static void main(String[] args) {
+        patternUsage();
+    }
+}
+```
+
+输出
+
+```
+解构 User：张三,20
+订单：ORD001 金额：99.9
+未成年：李四
+嵌套解构：王五,30
+成功：OK
+User:A
+Order:B
+无需 getter：赵六,40
+成功：数据
+失败：异常
+```
 
