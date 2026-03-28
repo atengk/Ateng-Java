@@ -1,4 +1,4 @@
-package local.ateng.java.config.config;
+package io.github.atengk.config.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

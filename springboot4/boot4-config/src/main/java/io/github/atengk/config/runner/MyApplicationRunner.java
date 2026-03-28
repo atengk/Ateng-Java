@@ -1,7 +1,7 @@
-package local.ateng.java.config.runner;
+package io.github.atengk.config.runner;
 
 import cn.hutool.extra.spring.SpringUtil;
-import local.ateng.java.config.config.AppProperties;
+import io.github.atengk.config.config.AppProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +20,7 @@ import java.util.Arrays;
  */
 @Component
 @Slf4j
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+@RequiredArgsConstructor
 public class MyApplicationRunner implements ApplicationRunner {
     private final AppProperties appProperties;
 
