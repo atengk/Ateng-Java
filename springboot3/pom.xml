@@ -34,5 +34,7 @@
         <module>jasypt</module>
         <module>boot3-deploy</module>
         <module>boot3-web</module>
+        <module>boot3-interceptor</module>
+        <module>boot3-filter</module>
     </modules>
 </project>
