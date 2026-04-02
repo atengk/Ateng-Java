@@ -16,5 +16,6 @@
     <modules>
         <module>sa-token</module>
         <module>spring-security</module>
+        <module>license</module>
     </modules>
 </project>
