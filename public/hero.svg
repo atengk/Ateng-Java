@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+    <defs>
+        <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#6366f1"/>
+            <stop offset="100%" stop-color="#06b6d4"/>
+        </linearGradient>
+
+        <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stop-color="#6366f1" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+        </radialGradient>
+    </defs>
+
+    <!-- 外环 -->
+    <circle cx="250" cy="250" r="240"
+            fill="none"
+            stroke="url(#heroGrad)"
+            stroke-width="1"
+            stroke-dasharray="12 8"
+            opacity="0.35">
+        <animateTransform attributeName="transform"
+                          type="rotate"
+                          from="0 250 250"
+                          to="360 250 250"
+                          dur="25s"
+                          repeatCount="indefinite"/>
+    </circle>
+
+    <!-- 中环 -->
+    <circle cx="250" cy="250" r="180"
+            fill="none"
+            stroke="#5af2ff"
+            stroke-width="0.6"
+            stroke-dasharray="8 8"
+            opacity="0.25">
+        <animateTransform attributeName="transform"
+                          type="rotate"
+                          from="360 250 250"
+                          to="0 250 250"
+                          dur="20s"
+                          repeatCount="indefinite"/>
+    </circle>
+
+    <!-- 内环 -->
+    <circle cx="250" cy="250" r="130"
+            fill="none"
+            stroke="#6366f1"
+            stroke-width="0.4"
+            stroke-dasharray="4 4"
+            opacity="0.2">
+        <animateTransform attributeName="transform"
+                          type="rotate"
+                          from="0 250 250"
+                          to="360 250 250"
+                          dur="15s"
+                          repeatCount="indefinite"/>
+    </circle>
+
+    <!-- 核心结构（克制高级感） -->
+    <g transform="translate(250,250) scale(2.2) translate(-250,-250)">
+        <!-- 节点 -->
+        <circle cx="250" cy="150" r="4" fill="#5af2ff"/>
+        <circle cx="187.5" cy="320" r="4" fill="#6366f1"/>
+        <circle cx="312.5" cy="320" r="4" fill="#6366f1"/>
+
+        <!-- 连线 -->
+        <path d="M250 150 L187.5 320 M250 150 L312.5 320 M218.75 260 L281.25 260"
+              fill="none"
+              stroke="url(#heroGrad)"
+              stroke-width="1.5"
+              stroke-dasharray="300"
+              opacity="0.5">
+            <animate attributeName="stroke-dashoffset"
+                     from="600" to="0"
+                     dur="5s"
+                     repeatCount="indefinite"/>
+        </path>
+
+        <!-- 十字 -->
+        <path d="M225 180 L275 180 M250 180 L250 340"
+              fill="none"
+              stroke="#5af2ff"
+              stroke-width="1.2"
+              opacity="0.35">
+            <animate attributeName="opacity"
+                     values="0.2;0.7;0.2"
+                     dur="4s"
+                     repeatCount="indefinite"/>
+        </path>
+
+        <!-- 核心粒子 -->
+        <circle cx="250" cy="250" r="3" fill="#5af2ff">
+            <animate attributeName="r"
+                     values="2;5;2"
+                     dur="3s"
+                     repeatCount="indefinite"/>
+        </circle>
+    </g>
+</svg>
