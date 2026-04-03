@@ -83,7 +83,7 @@ export default defineConfig({
             {
                 text: '关于',
                 items: [
-                    {text: '运维技术网站', link: 'https://atengk.github.io/ops/'},
+                    {text: '运维技术网站', link: 'https://atengk.github.io/linux/'},
                     {text: '后端技术网站', link: 'https://atengk.github.io/java/'},
                     {text: '前端技术网站', link: 'https://atengk.github.io/vue/'},
                     {text: '工程化框架技术网站', link: 'https://atengk.github.io/project/'},
