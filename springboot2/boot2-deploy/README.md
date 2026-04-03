@@ -907,7 +907,7 @@ gpg --keyserver keyserver.ubuntu.com --recv-keys 1234ABCD5678EF90123456789ABCDEF
     <version>1.0.2</version>
     <name>boot2-deploy</name>
     <description>SpringBoot2 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 许可证信息 -->
     <licenses>
@@ -1070,7 +1070,7 @@ gpg --keyserver keyserver.ubuntu.com --recv-keys 1234ABCD5678EF90123456789ABCDEF
     <version>1.0.2</version>
     <name>boot2-deploy</name>
     <description>SpringBoot2 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 许可证信息 -->
     <licenses>

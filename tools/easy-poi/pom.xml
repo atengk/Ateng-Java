@@ -9,7 +9,7 @@
     <artifactId>easy-poi</artifactId>
     <version>1.0.0</version>
     <description>EasyPoi Excel工具</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

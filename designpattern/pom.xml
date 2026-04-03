@@ -9,7 +9,7 @@
     <artifactId>designpattern</artifactId>
     <version>1.0.0</version>
     <description>设计模式</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 打包方式为 POM，表示该项目为聚合项目 -->
     <packaging>pom</packaging>

@@ -13,7 +13,7 @@
         MQTT 模块
         HiveMQ MQTT Client是一个兼容MQTT 5.0和MQTT 3.1.1的高性能Java客户端库，具有不同的API风格和背压支持
     </description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

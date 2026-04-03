@@ -27,7 +27,7 @@
     <version>1.0.0</version>
     <name>boot4-web</name>
     <description>SpringBoot4 演示模块</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

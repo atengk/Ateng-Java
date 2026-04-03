@@ -9,7 +9,7 @@
     <artifactId>decorator</artifactId>
     <version>1.0.0</version>
     <description>装饰器模式</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

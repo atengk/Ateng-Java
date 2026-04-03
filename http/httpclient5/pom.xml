@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <name>httpclient5</name>
     <description>Apache HttpClient 5 是一款功能强大的 Java HTTP 客户端库，用于发送 HTTP/HTTPS 请求，支持同步和异步操作。</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

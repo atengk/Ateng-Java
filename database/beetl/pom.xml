@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <name>beetl</name>
     <description>Beetl 是一个高性能、强表达能力的 Java 模板引擎，非常适合生成 SQL、DDL、代码等“结构化文本”。</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

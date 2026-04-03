@@ -12,7 +12,7 @@
     <description>Apache Tika 是处理文件上传、识别文件真实类型（MIME Type）以及提取文档内容（如 PDF, Word,
         Excel）最常用的方案
     </description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

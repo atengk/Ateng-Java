@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <name>rest-client</name>
     <description>Spring Boot 3 全新的同步 HTTP 客户端</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

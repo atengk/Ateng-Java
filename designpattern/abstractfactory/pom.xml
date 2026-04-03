@@ -9,7 +9,7 @@
     <artifactId>abstractfactory</artifactId>
     <version>1.0.0</version>
     <description>抽象工厂模式</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

@@ -12,7 +12,7 @@
     <description>
         SpringBoot WebSocket（原生）单机版
     </description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

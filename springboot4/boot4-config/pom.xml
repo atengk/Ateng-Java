@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <name>boot4-config</name>
     <description>SpringBoot4配置相关的模块</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

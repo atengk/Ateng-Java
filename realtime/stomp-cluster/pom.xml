@@ -13,7 +13,7 @@
         当使用Spring Boot构建WebSocket应用程序时，STOMP（Simple Text Oriented Messaging Protocol）是一个非常常见的选择。
         STOMP是一种用于在客户端和服务器之间进行异步消息传输的简单协议，它提供了一种易于使用的方式来处理实时消息传递。
     </description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

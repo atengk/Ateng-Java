@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <name>easy-poi-boot3</name>
     <description>EasyPoi Excel工具（基于SpringBoot3）</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>

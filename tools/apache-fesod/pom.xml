@@ -9,7 +9,7 @@
     <artifactId>apache-fesod</artifactId>
     <version>1.0.0</version>
     <description>Apache Fesod 快速、简洁、解决大文件内存溢出的 Java 处理电子表格工具</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>
