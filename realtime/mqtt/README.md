@@ -4,7 +4,7 @@
 
 **EMQX** 是一款高性能、分布式的 MQTT 消息服务器，支持百万级并发连接和高吞吐消息处理。它提供集群部署、规则引擎、认证鉴权、数据桥接等能力，常用于构建大规模物联网和实时数据平台。
 
-- [服务端EMQX安装文档](https://atengk.github.io/ops/#/work/docker/service/emqx/)
+- [服务端EMQX安装文档](https://atengk.github.io/Ateng-Linux/work/docker/service/emqx/README)
 
 
 

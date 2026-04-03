@@ -1,7 +1,7 @@
 # WebSocket STOMP
 
-- [RabbitMQ使用（开启 STOMP）](https://atengk.github.io/ops/#/work/docker/service/rabbitmq/)
-- [Vue3 使用 WebSocket STOMP 示例](https://atengk.github.io/Ateng-Vue/#/apps/stomp/)
+- [RabbitMQ使用（开启 STOMP）](https://atengk.github.io/Ateng-Linux/work/docker/service/rabbitmq/README)
+- [Vue3 使用 WebSocket STOMP 示例](https://atengk.github.io/Ateng-Vue/apps/realtime/stomp/README)
 
 
 

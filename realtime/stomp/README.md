@@ -623,7 +623,7 @@ public void registerStompEndpoints(StompEndpointRegistry registry) {
 
 ### 安装RabbitMQ
 
-参考链接：[地址](https://atengk.github.io/ops/#/work/kubernetes/service/rabbitmq/v4.0.2/)
+参考链接：[地址](https://atengk.github.io/Ateng-Linux/work/kubernetes/service/rabbitmq/v4.0.2/README)
 
 ### 队列模式
 

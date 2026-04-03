@@ -5,7 +5,7 @@ Docker 是一个开源的容器化平台，通过容器技术实现应用的打�
 通过 `IntelliJ IDEA` 将源码打包后制作容器镜像，最终部署在服务器上。
 
 - [官网链接](https://www.docker.com/)
-- [安装文档](https://atengk.github.io/ops/#/work/docker/deploy/v27.3.1/)
+- [安装文档](https://atengk.github.io/Ateng-Linux/work/docker/deploy/v27.3.1/README)
 
 
 
@@ -171,7 +171,7 @@ CMD ["-server", "-Xms128m", "-Xmx1024m", "-jar", "springboot3-demo-v1.0.jar", "-
 
 - kubeconfig
     - 将Kubernetes节点上的 `~/.kube/config` 配置文件拷贝出来，注意修改配置文件的服务地址(kube-apiserver)
-    - 自定义用户的kubeconfig参考[链接](https://atengk.github.io/ops/#/work/kubernetes/OPS?id=%e5%88%9b%e5%bb%ba%e7%94%a8%e6%88%b7%e5%b9%b6%e5%af%bc%e5%87%bakubeconfig)，如果导入了多个集群的配置最好是自定义用户，因为全部导入默认的kubeconfig名称都是一样的，就会导致IDEA名称重复，在自定义时保证各个集群的名字是唯一的即可
+    - 自定义用户的kubeconfig参考[链接](https://atengk.github.io/Ateng-Linux/work/kubernetes/OPS#%E7%94%A8%E6%88%B7%E5%92%8Ckubeconfig)，如果导入了多个集群的配置最好是自定义用户，因为全部导入默认的kubeconfig名称都是一样的，就会导致IDEA名称重复，在自定义时保证各个集群的名字是唯一的即可
 
 ### IDEA配置Kubernetes
 

@@ -4,7 +4,7 @@
 
 ## 配置概览
 
-OnlyOffice信息，安装文档参考：[链接](https://atengk.github.io/ops/#/work/docker/service/onlyoffice/)
+OnlyOffice信息，安装文档参考：[链接](https://atengk.github.io/Ateng-Linux/work/docker/service/onlyoffice/README)
 
 ```
 Address: http://47.108.128.105:20046
