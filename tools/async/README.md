@@ -1318,7 +1318,7 @@ public class ThreadPoolController {
 
 Java 21 引入了 **虚拟线程（Virtual Threads）**，它们是**轻量级线程**，由 JVM 管理，不直接映射到操作系统线程。相比传统线程池，**虚拟线程池更适用于高并发任务**，能减少上下文切换的开销。
 
-详情参考：[使用SpringBoot3虚拟线程](/work/Ateng-Java/springboot3/virtual/)
+详情参考：[使用SpringBoot3虚拟线程](/springboot3/virtual/README)
 
 ### 前提条件
 

@@ -827,7 +827,7 @@ spring:
 
 ### 整合OpenFeign
 
-参考 [OpenFeign使用文档](/work/Ateng-Java/distributed/spring-cloud-openfeign/) 整合
+参考 [OpenFeign使用文档](/distributed/spring-cloud-openfeign/README) 整合
 
 添加配置文件，开启feign对sentinel的支持
 
@@ -873,7 +873,7 @@ public class LoadBalancerController {
 
 ### 整合Dubbo
 
-参考 [Dubbo使用文档](/work/Ateng-Java/distributed/spring-cloud-dubbo-provider/) 整合
+参考 [Dubbo使用文档](/distributed/spring-cloud-dubbo-provider/README) 整合
 
 添加依赖
 

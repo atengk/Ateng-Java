@@ -1703,7 +1703,7 @@ public final class ExcelUtil {
 
 假设我们希望 Excel 表头结构如下：
 
-```
+```text
 | 基本信息        | 联系方式      | 成绩信息        | 地理位置   | 时间信息         |
 | 用户ID | 姓名 | 年龄 | 手机号 | 邮箱 | 分数 | 比例 | 省份 | 城市 | 生日       | 创建时间           |
 ```
@@ -3678,7 +3678,7 @@ ExcelStyleUtil.applyByTitle(workbook, 0, "风险等级", 3, (wb, cell) -> {
 
 注意：`replace` 数组格式必须是："显示值_实际值"
 
-```
+```text
     // 1→青年 2→中年 3→老年
     @Excel(name = "年龄段", replace = {"青年_1", "中年_2", "老年_3"})
     private Integer number;
@@ -3694,7 +3694,7 @@ ExcelStyleUtil.applyByTitle(workbook, 0, "风险等级", 3, (wb, cell) -> {
 
 重点是 `dict = "ageDict"` ，这个 key 要和 handler 里保持一致。
 
-```
+```text
 @Excel(name = "年龄段", dict = "ageDict")
 private Integer number;
 ```
@@ -3765,7 +3765,7 @@ public class NumberDictHandler implements IExcelDictHandler {
 
 **字段配置**
 
-```
+```text
 @Excel(name = "年龄段")
 private Integer number;
 ```
@@ -3886,7 +3886,7 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 
 **使用方法**
 
-```java
+```text
     @Test
     public void testSimpleExportWithHandler() {
         List<MyUser> userList = InitData.getDataList();
@@ -4010,7 +4010,7 @@ public enum UserStatus {
 
 注意：`replace` 数组格式必须是："显示值_实际值"
 
-```
+```text
     // 1→青年 2→中年 3→老年
     @Excel(name = "年龄段", replace = {"青年_1", "中年_2", "老年_3"}, addressList = true)
     private Integer number;
@@ -4020,13 +4020,13 @@ public enum UserStatus {
 
 ![image-20260122085841144](./assets/image-20260122085841144.png)
 
-#### 使用`IExcelDictHandler` 
+#### 使用`IExcelDictHandler`
 
 **在字段上加字典标识**
 
 重点是 `dict = "ageDict"` ，这个 key 要和 handler 里保持一致。
 
-```
+```text
 @Excel(name = "年龄段", dict = "ageDict", addressList = true)
 private Integer number;
 ```
@@ -4225,7 +4225,7 @@ private String email;
 
 #### Map / 自定义表头脱敏
 
-```
+```text
 ExcelExportEntity phoneEntity = new ExcelExportEntity("手机号", "phoneNumber");
 phoneEntity.setDesensitizationRule("3_4");
 
@@ -4337,7 +4337,7 @@ public static List<CourseExcel> getDataList() {
 
 #### 使用示例
 
-```
+```text
     @Test
     public void testCourseExport() {
         List<CourseExcel> courseList = getDataList();
@@ -4911,7 +4911,7 @@ private static OrderExcel newOrder(String orderNo, String name, String phone, St
 
 使用ExcelExportEntity.setReplace构建映射：显示值_原始值（String）
 
-```java
+```text
     @Test
     public void testSimpleExportWithMap_Dict() {
         List<MyUser> userList = InitData.getDataList();
@@ -4959,7 +4959,7 @@ private static OrderExcel newOrder(String orderNo, String name, String phone, St
 
 #### 生成下拉
 
-```java
+```text
     @Test
     public void testSimpleExportWithMap_DictAndDropdown() {
         List<MyUser> userList = InitData.getDataList();
@@ -4988,11 +4988,7 @@ private static OrderExcel newOrder(String orderNo, String name, String phone, St
         // 年龄段列，字典映射 + 下拉
         ExcelExportEntity ageEntity = new ExcelExportEntity("年龄段", "number");
         // 显示值_原始值
-        ageEntity.setReplace(new String[]{
-                "青年_1",
-                "中年_2",
-                "老年_3"
-        });
+        ageEntity.setReplace(new String[]{"青年_1", "中年_2", "老年_3"});
         // 下拉框，根据 Replace 的值生成
         ageEntity.setAddressList(true);
         entityList.add(ageEntity);
@@ -5128,7 +5124,7 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 
 **使用方法**
 
-```java
+```text
     @Test
     public void testSimpleExportWithMap_DataHandler() {
         List<MyUser> userList = InitData.getDataList();
@@ -5168,6 +5164,8 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 
 ## 模板导出（Template Export）
 
+<div v-pre>
+
 | 功能                   | 指令      | 普通变量示例                              | 列表变量示例（$fe 中使用）              |
 | ---------------------- | --------- | ----------------------------------------- | --------------------------------------- |
 | 普通取值               | 无指令    | `{{name}}`                                | `t.name`                                |
@@ -5191,11 +5189,13 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 | 计算表达式             | `cal:`    | `{{cal:(price*count)}}`                   | `cal:(t.price*t.count)`                 |
 | 常量输出               | `'常量'`  | `{{'正常'}}`                              | `'正常'`                                |
 
+</div>
+
 ### 填充普通变量数据
 
 **创建模版**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5205,9 +5205,13 @@ src
 
 EasyPOI 模板语法：
 
+<div v-pre>
+
 - 普通变量：`{{name}}`
 
-```
+</div>
+
+```text
 姓名：{{ name }}
 年龄：{{ age }}
 ```
@@ -5238,7 +5242,7 @@ EasyPOI 模板语法：
 
 **创建模版**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5248,6 +5252,8 @@ src
 
 EasyPOI 模板语法：
 
+<div v-pre>
+
 - 列表变量：`{{ $fe:  集合名   单个元素别名   第1个字段 第1个字段 ... 第n个字段 }}`
 - 其中 `集合名` 就是data中的list：`data.list`
 
@@ -5255,7 +5261,9 @@ EasyPOI 模板语法：
 | ------------------ | ----- | ------------- | ------- | ------- | ------- | ---------- | ---------- | -------- | --------------- |
 | {{ $fe:list t.name | t.age | t.phoneNumber | t.email | t.score | t.ratio | t.birthday | t.province | t.city   | t.createTime }} |
 
-```
+</div>
+
+```text
 姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
 {{ $fe:list t.name	t.age	t.phoneNumber	t.email	t.score	t.ratio	t.birthday	t.province	t.city	t.createTime }}
 ```
@@ -5286,7 +5294,7 @@ EasyPOI 模板语法：
 
 **创建模版**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5296,19 +5304,15 @@ src
 
 EasyPOI 模板语法：
 
+<div v-pre>
+
 - 普通变量：`{{name}}`
 - 列表变量：`{{ $fe:  集合名   单个元素别名   第1个字段 第1个字段 ... 第n个字段 }}`
 - 其中 `集合名` 就是data中的list：`data.list`
 
-| 标题：{{ title }}  |       |               |         |         |         |            |                    |                  |                 |
-| ------------------ | ----- | ------------- | ------- | ------- | ------- | ---------- | ------------------ | ---------------- | --------------- |
-|                    |       |               |         |         |         |            |                    |                  |                 |
-| 姓名               | 年龄  | 手机号码      | 邮箱    | 分数    | 比例    | 生日       | 所在省份           | 所在城市         | 创建时间        |
-| {{ $fe:list t.name | t.age | t.phoneNumber | t.email | t.score | t.ratio | t.birthday | t.province         | t.city           | t.createTime }} |
-|                    |       |               |         |         |         |            |                    |                  |                 |
-|                    |       |               |         |         |         |            | 作者：{{ author }} | 时间：{{ time }} |                 |
+</div>
 
-```
+```text
 标题：{{ title }}									
 									
 姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
@@ -5346,7 +5350,7 @@ EasyPOI 模板语法：
 
 **创建模版**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5356,7 +5360,7 @@ src
 
 Sheet1
 
-```
+```text
 用户信息	姓名	{{ name }}
 	年龄	{{ age }}
 	性别	{{ sex }}
@@ -5366,16 +5370,16 @@ Sheet1
 
 Sheet2
 
-```
+```text
 用户信息	姓名	{{ name }}
 	年龄	{{ age }}
 ```
 
 **使用方法**
 
-- 模版导出扫描全部的sheet的变量：params.setScanAllsheet(true)
-- 模版导出扫描指定名称sheet的变量：params.setSheetName(new String[]{"Sheet1", "Sheet2"})
-- 模版导出扫描指定索引sheet的变量：params.setSheetNum(new Integer[]{0,1})
+- 模版导出扫描全部的sheet的变量：`params.setScanAllsheet(true)`
+- 模版导出扫描指定名称sheet的变量：`params.setSheetName(new String[]{"Sheet1", "Sheet2"})`
+- 模版导出扫描指定索引sheet的变量：`params.setSheetNum(new Integer[]{0,1})`
 
 ```java
     @Test
@@ -5411,7 +5415,7 @@ Sheet2
 
 **创建模版**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5421,7 +5425,7 @@ src
 
 **模版内容**
 
-```
+```text
 字段说明	模板表达式
 姓名	{{name}}
 年龄（数值）	{{n:age}}
@@ -5485,7 +5489,7 @@ src
 
 **创建模版**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5495,7 +5499,7 @@ src
 
 **模版内容**
 
-```
+```text
 字段说明	模板表达式
 性别原始值	{{gender}}
 性别字典翻译(dict)	{{dict:genderDict;gender}}
@@ -5628,7 +5632,7 @@ public class GenderDictHandler implements IExcelDictHandler {
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5638,7 +5642,7 @@ src
 
 **模板内容**
 
-```
+```text
 序号	姓名	年龄(数值)	年龄描述	生日	成绩	百分比	创建时间	金额
 {{ $fe:list &INDEX&	t.name	n:t.age	t.age > 18 ? '成年': '未成年'	fd:(t.birthday;yyyy-MM-dd)	fn:(t.score;###.00)	fn:(t.ratio;0.00%)	fd:(t.createTime;yyyy-MM-dd HH:mm:ss)	fn:(t.amount;#,###.00) }}
 ```
@@ -5689,7 +5693,7 @@ src
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5701,7 +5705,7 @@ src
 
 - 字典使用，dict:字典名称:字段名称：dict:genderDict;gender
 
-```
+```text
 序号	姓名	性别	年龄(数值)	年龄描述	生日	成绩	百分比	创建时间	金额
 {{ $fe:list &INDEX&	t.name	dict:genderDict;t.gender	n:t.age	t.age > 18 ? '成年': '未成年'	fd:(t.birthday;yyyy-MM-dd)	fn:(t.score;###.00)	fn:(t.ratio;0.00%)	fd:(t.createTime;yyyy-MM-dd HH:mm:ss)	fn:(t.amount;#,###.00) }}
 ```
@@ -5856,7 +5860,7 @@ public class GenderDictHandler implements IExcelDictHandler {
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5866,7 +5870,7 @@ src
 
 **模板内容**
 
-```
+```text
 {{#fe: titles t.dateStr}}
 ```
 
@@ -5917,7 +5921,7 @@ src
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -5929,7 +5933,7 @@ src
 
 - 需要合并的表头必须使用变量提供
 
-```
+```text
 {{tempName}}{{merge:cal:le:(colList) * 1}}
 {{#fe:colList t.name}}
 ```
@@ -5992,7 +5996,7 @@ src
 
 1. `$fe` 和 `v_fe` 绝对不能在同一个单元格
 
-```
+```text
 {{$fe:data	{{v_fe:titles t.val}}
 ```
 
@@ -6000,7 +6004,7 @@ src
 
 3. `#fe` 只负责生成横向表头
 
-```
+```text
 {{#fe:titles t.name}}
 ```
 
@@ -6014,7 +6018,7 @@ title.put("val", "t." + 字段名);
 
 6. EasyPOI 对 `t.val` 会进行二次解析：
 
-```
+```text
 "t.2024-1"  →  {{t.2024-1}}  →  row.get("2024-1")
 ```
 
@@ -6022,7 +6026,7 @@ title.put("val", "t." + 字段名);
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -6032,7 +6036,7 @@ src
 
 **模板内容**
 
-```
+```text
 	{{#fe:titles t.name}}
 {{$fe:data	{{v_fe:titles t.val}}
 ```
@@ -6115,7 +6119,7 @@ src
 
 1. `$fe` 和 `v_fe` 绝对不能在同一个单元格
 
-```
+```text
 {{$fe:data	{{v_fe:titles t.val}}
 ```
 
@@ -6123,7 +6127,7 @@ src
 
 3. `#fe` 只负责生成横向表头
 
-```
+```text
 {{#fe:titles t.name}}
 ```
 
@@ -6137,7 +6141,7 @@ title.put("val", "t." + 字段名);
 
 6. EasyPOI 对 `t.val` 会进行二次解析：
 
-```
+```text
 "t.2024-1"  →  {{t.2024-1}}  →  row.get("2024-1")
 ```
 
@@ -6145,7 +6149,7 @@ title.put("val", "t." + 字段名);
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -6155,7 +6159,7 @@ src
 
 **模板内容**
 
-```
+```text
 {{tempName}}{{merge:cal:le:(titles) + 3}}			
 {{author}}	序号	姓名	{{#fe:titles t.name}}
 	{{$fe:data &INDEX& 	t.name	{{v_fe:titles t.val}}
@@ -6248,13 +6252,13 @@ EasyPOI 中模板图片的本质：
 
 普通变量：
 
-```
+```text
 {{photo}}
 ```
 
 列表变量：
 
-```
+```text
 序号	姓名	头像
 {{ $fe:list &INDEX&	t.name	t.photo }}
 ```
@@ -6277,7 +6281,7 @@ EasyPOI 中模板图片的本质：
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -6287,7 +6291,7 @@ src
 
 **模板内容**
 
-```
+```text
 姓名	头像
 {{name}}	{{photo}}
 ```
@@ -6358,7 +6362,7 @@ image.setColspan(2);
 
 **创建模板**
 
-```
+```text
 src
  └─ main
     └─ resources
@@ -6368,7 +6372,7 @@ src
 
 **模板**
 
-```
+```text
 序号	姓名	头像
 {{ $fe:list &INDEX&	t.name	t.photo }}
 ```
@@ -6622,7 +6626,7 @@ public class MyUser implements Serializable {
 
 注意：`replace` 数组格式必须是："显示值_实际值"
 
-```
+```text
     // 1→青年 2→中年 3→老年
     @Excel(name = "年龄段", replace = {"青年_1", "中年_2", "老年_3"})
     private Integer number;
@@ -6736,7 +6740,7 @@ public enum UserStatus {
 
 重点是 `dict = "ageDict"` ，这个 key 要和 handler 里保持一致。
 
-```
+```text
 @Excel(name = "年龄段", dict = "ageDict")
 private Integer number;
 ```
@@ -7337,8 +7341,8 @@ public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
 ### 导入获取Key-Value
 
 EasyPoi 的 Key-Value 导入不是“Excel 表格导入”，
- 而是“基于 Excel 的配置文件解析器”，
- `titleRows` = 扫描深度，而不是表头行数。
+而是“基于 Excel 的配置文件解析器”，
+`titleRows` = 扫描深度，而不是表头行数。
 
 ![image-20260125090419637](./assets/image-20260125090419637.png)
 
@@ -7700,7 +7704,7 @@ public final class WordUtil {
 
 **模版准备**
 
-```
+```text
 我
 
 我叫 {{name}}，今年 {{age}} 岁。对我来说，{{age}} 岁是一个既不算年轻、又还未真正成熟的阶段，很多事情都在摸索、尝试和建立中。虽然有时候会迷茫，但我知道成长本来就是在不确定中慢慢找方向。
@@ -7733,7 +7737,7 @@ public final class WordUtil {
 
 **模版准备**
 
-```
+```text
 我
 
 我叫 {{name}}，今年 {{age}} 岁。对我来说，{{age}} 岁是一个既不算年轻、又还未真正成熟的阶段，很多事情都在摸索、尝试和建立中。虽然有时候会迷茫，但我知道成长本来就是在不确定中慢慢找方向。
@@ -7855,7 +7859,7 @@ public final class WordUtil {
 
 **模版准备**
 
-```
+```text
 我
 
 我叫 {{name}}，今年 {{age}} 岁。对我来说，{{age}} 岁是一个既不算年轻、又还未真正成熟的阶段，很多事情都在摸索、尝试和建立中。虽然有时候会迷茫，但我知道成长本来就是在不确定中慢慢找方向。

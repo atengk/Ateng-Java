@@ -4050,7 +4050,7 @@ public enum UserStatus {
 
 ![image-20260122085841144](./assets/image-20260122085841144.png)
 
-#### 使用`IExcelDictHandler` 
+#### 使用`IExcelDictHandler`
 
 **在字段上加字典标识**
 
@@ -4970,11 +4970,7 @@ private static OrderExcel newOrder(String orderNo, String name, String phone, St
         // 年龄字典映射
         ExcelExportEntity ageEntity = new ExcelExportEntity("年龄段", "number");
         // 映射：显示值_原始值
-        ageEntity.setReplace(new String[]{
-                "青年_1",
-                "中年_2",
-                "老年_3"
-        });
+        ageEntity.setReplace(new String[]{"青年_1", "中年_2", "老年_3"});
         entityList.add(ageEntity);
 
         ExportParams params = new ExportParams();
@@ -5018,11 +5014,7 @@ private static OrderExcel newOrder(String orderNo, String name, String phone, St
         // 年龄段列，字典映射 + 下拉
         ExcelExportEntity ageEntity = new ExcelExportEntity("年龄段", "number");
         // 显示值_原始值
-        ageEntity.setReplace(new String[]{
-                "青年_1",
-                "中年_2",
-                "老年_3"
-        });
+        ageEntity.setReplace(new String[]{"青年_1", "中年_2", "老年_3"});
         // 下拉框，根据 Replace 的值生成
         ageEntity.setAddressList(true);
         entityList.add(ageEntity);
@@ -5198,6 +5190,8 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 
 ## 模板导出（Template Export）
 
+<div v-pre>
+
 | 功能                   | 指令      | 普通变量示例                              | 列表变量示例（$fe 中使用）              |
 | ---------------------- | --------- | ----------------------------------------- | --------------------------------------- |
 | 普通取值               | 无指令    | `{{name}}`                                | `t.name`                                |
@@ -5221,6 +5215,8 @@ public class NumberDataHandler implements IExcelDataHandler<Object> {
 | 计算表达式             | `cal:`    | `{{cal:(price*count)}}`                   | `cal:(t.price*t.count)`                 |
 | 常量输出               | `'常量'`  | `{{'正常'}}`                              | `'正常'`                                |
 
+</div>
+
 ### 填充普通变量数据
 
 **创建模版**
@@ -5235,7 +5231,11 @@ src
 
 EasyPOI 模板语法：
 
+<div v-pre>
+
 - 普通变量：`{{name}}`
+
+</div>
 
 ```
 姓名：{{ name }}
@@ -5278,6 +5278,8 @@ src
 
 EasyPOI 模板语法：
 
+<div v-pre>
+
 - 列表变量：`{{ $fe:  集合名   单个元素别名   第1个字段 第1个字段 ... 第n个字段 }}`
 - 其中 `集合名` 就是data中的list：`data.list`
 
@@ -5285,7 +5287,9 @@ EasyPOI 模板语法：
 | ------------------ | ----- | ------------- | ------- | ------- | ------- | ---------- | ---------- | -------- | --------------- |
 | {{ $fe:list t.name | t.age | t.phoneNumber | t.email | t.score | t.ratio | t.birthday | t.province | t.city   | t.createTime }} |
 
-```
+</div>
+
+```text
 姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
 {{ $fe:list t.name	t.age	t.phoneNumber	t.email	t.score	t.ratio	t.birthday	t.province	t.city	t.createTime }}
 ```
@@ -5326,6 +5330,8 @@ src
 
 EasyPOI 模板语法：
 
+<div v-pre>
+
 - 普通变量：`{{name}}`
 - 列表变量：`{{ $fe:  集合名   单个元素别名   第1个字段 第1个字段 ... 第n个字段 }}`
 - 其中 `集合名` 就是data中的list：`data.list`
@@ -5338,7 +5344,9 @@ EasyPOI 模板语法：
 |                    |       |               |         |         |         |            |                    |                  |                 |
 |                    |       |               |         |         |         |            | 作者：{{ author }} | 时间：{{ time }} |                 |
 
-```
+</div>
+
+```text
 标题：{{ title }}									
 									
 姓名	年龄	手机号码	邮箱	分数	比例	生日	所在省份	所在城市	创建时间
@@ -5403,9 +5411,9 @@ Sheet2
 
 **使用方法**
 
-- 模版导出扫描全部的sheet的变量：params.setScanAllsheet(true)
-- 模版导出扫描指定名称sheet的变量：params.setSheetName(new String[]{"Sheet1", "Sheet2"})
-- 模版导出扫描指定索引sheet的变量：params.setSheetNum(new Integer[]{0,1})
+- 模版导出扫描全部的sheet的变量：`params.setScanAllsheet(true)`
+- 模版导出扫描指定名称sheet的变量：`params.setSheetName(new String[]{"Sheet1", "Sheet2"})`
+- 模版导出扫描指定索引sheet的变量：`params.setSheetNum(new Integer[]{0,1})`
 
 ```java
     @Test
@@ -7367,8 +7375,8 @@ public class MyUserVerifyHandler implements IExcelVerifyHandler<MyUser> {
 ### 导入获取Key-Value
 
 EasyPoi 的 Key-Value 导入不是“Excel 表格导入”，
- 而是“基于 Excel 的配置文件解析器”，
- `titleRows` = 扫描深度，而不是表头行数。
+而是“基于 Excel 的配置文件解析器”，
+`titleRows` = 扫描深度，而不是表头行数。
 
 ![image-20260125090419637](./assets/image-20260125090419637.png)
 

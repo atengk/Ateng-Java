@@ -34,7 +34,8 @@
 #忽略根目录下的文件
 /temp/
 /logs/
- 
+/node_modules/
+
 #忽略特定文件夹名
 tmp/
 temp/
@@ -43,3 +44,5 @@ other/
 target/
 logs/
 .idea/
+cache/
+dist/

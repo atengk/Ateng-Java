@@ -76,7 +76,7 @@ service.vgroupMapping.my_tx_group=atengSeata
 
 ### 集成Mybatis Plus
 
-参考 [Mybatis Plus使用文档](/work/Ateng-Java/database/mybatis-plus/)  集成数据库
+参考 [Mybatis Plus使用文档](/database/mybatis-plus/README)  集成数据库
 
 ### 创建undo_log表
 

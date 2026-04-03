@@ -4712,7 +4712,7 @@ public class RedissonPubSubConsumer implements SmartLifecycle {
 
 ### 创建线程池
 
-这部分参考：[线程池](/work/Ateng-Java/tools/thread-pool/) 文档添加配置即可
+这部分参考：[线程池](/tools/thread-pool/README) 文档添加配置即可
 
 ```yaml
 ---

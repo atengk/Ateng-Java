@@ -10,7 +10,7 @@
 
 ## 基础配置
 
-基于 [异常处理](/work/Ateng-Java/springboot3/exception/) 模块做开发演示
+基于 [异常处理](/springboot3/exception/README) 模块做开发演示
 
 ### 添加依赖
 
@@ -761,7 +761,7 @@ userId=10001&money=1000&timestamp=1740385175094&nonce=Nelz05HNnlHLidxwl0Q59G8d1P
 
 ### 集成Mybati-Flex
 
-参考文档集成Mybati-Flex数据库框架：[Mybati-Flex使用文档](/work/Ateng-Java/database/mybatis-flex/)
+参考文档集成Mybati-Flex数据库框架：[Mybati-Flex使用文档](/database/mybatis-flex/README)
 
 最终使用代码生成器将相关表生成代码
 

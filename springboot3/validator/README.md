@@ -6,7 +6,7 @@ Spring Boot Validation 是一个用于简化 Java 应用程序中数据校验的
 
 **注意：**
 
-该模块是基于[全局异常处理模块](/work/Ateng-Java/springboot3/exception/)
+该模块是基于[全局异常处理模块](/springboot3/exception/README)
 
 
 

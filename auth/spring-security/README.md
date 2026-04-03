@@ -8,7 +8,7 @@ SpringSecurity6通过集成JWT实现无状态认证。用户登录成功后，�
 
 ## 基础配置
 
-基于 [异常处理](/work/Ateng-Java/springboot3/exception/) 模块做开发演示
+基于 [异常处理](/springboot3/exception/README) 模块做开发演示
 
 ### 添加依赖
 
@@ -1040,7 +1040,7 @@ http://localhost:12002/user/login?username=admin&password=Admin@123
 
 ### 基础配置
 
-参考 [RedisTemplate使用文档](/work/Ateng-Java/cache/redis-template/) 完成Redis的配置
+参考 [RedisTemplate使用文档](/cache/redis-template/README) 完成Redis的配置
 
 ### 添加配置属性
 

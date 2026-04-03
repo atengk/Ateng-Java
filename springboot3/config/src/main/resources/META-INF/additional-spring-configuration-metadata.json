@@ -1,0 +1,122 @@
+{
+  "groups": [
+    {
+      "name": "common",
+      "type": "local.ateng.java.config.config.CommonProperties",
+      "sourceType": "local.ateng.java.config.config.CommonProperties",
+      "description": "通用应用配置（CommonProperties）"
+    }
+  ],
+  "properties": [
+    {
+      "name": "common.name",
+      "type": "java.lang.String",
+      "description": "应用名称（必填项）",
+      "sourceType": "local.ateng.java.config.config.CommonProperties",
+      "defaultValue": "MyApp"
+    },
+    {
+      "name": "common.enabled",
+      "type": "java.lang.Boolean",
+      "description": "是否启用该功能模块",
+      "defaultValue": true,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.port",
+      "type": "java.lang.Integer",
+      "description": "服务监听端口号",
+      "defaultValue": 8080,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.max-size",
+      "type": "java.lang.Long",
+      "description": "最大处理数据大小（单位：MB）",
+      "defaultValue": 1024,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.threshold",
+      "type": "java.lang.Double",
+      "description": "阈值比例（0~1）",
+      "defaultValue": 0.75,
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.tags",
+      "type": "java.util.List<java.lang.String>",
+      "description": "标签列表",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.metadata",
+      "type": "java.util.Map<java.lang.String,java.lang.String>",
+      "description": "键值对元信息",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.env",
+      "type": "local.ateng.java.config.config.CommonProperties$EnvType",
+      "description": "运行环境类型",
+      "defaultValue": "DEV",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.timeout",
+      "type": "java.time.Duration",
+      "description": "请求超时时间（支持 10s、1m 等格式）",
+      "defaultValue": "30s",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.release-date",
+      "type": "java.time.LocalDate",
+      "description": "发布日期（格式：yyyy-MM-dd）",
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    },
+    {
+      "name": "common.host",
+      "type": "java.lang.String",
+      "description": "（已弃用）旧版主机配置，请使用 common.name 替代",
+      "deprecation": {
+        "level": "warning",
+        "reason": "已迁移至 common.name",
+        "replacement": "common.name"
+      },
+      "sourceType": "local.ateng.java.config.config.CommonProperties"
+    }
+  ],
+  "hints": [
+    {
+      "name": "common.enabled",
+      "values": [
+        { "value": true, "description": "启用" },
+        { "value": false, "description": "禁用" }
+      ]
+    },
+    {
+      "name": "common.port",
+      "values": [
+        { "value": 8080, "description": "默认 HTTP 端口" },
+        { "value": 8443, "description": "默认 HTTPS 端口" }
+      ]
+    },
+    {
+      "name": "common.tags",
+      "values": [
+        { "value": "alpha", "description": "Alpha 标签" },
+        { "value": "beta", "description": "Beta 标签" },
+        { "value": "release", "description": "正式发布标签" }
+      ]
+    },
+    {
+      "name": "common.env",
+      "values": [
+        { "value": "DEV", "description": "开发环境" },
+        { "value": "TEST", "description": "测试环境" },
+        { "value": "PROD", "description": "生产环境" }
+      ]
+    }
+  ]
+}

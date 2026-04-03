@@ -1047,11 +1047,11 @@ alter table public.file_part_detail
 
 #### 集成MyBatis Flex
 
-参考 [Mybati-Flex使用文档](/work/Ateng-Java/database/mybatis-flex/) 完成集成数据库，最后将数据库的file_detail和file_part_detail表生成代码
+参考 [Mybati-Flex使用文档](/database/mybatis-flex/README) 完成集成数据库，最后将数据库的file_detail和file_part_detail表生成代码
 
 #### 集成MyBatis Plus
 
-参考 [Mybati Plus使用文档](/work/Ateng-Java/database/mybatis-plus/) 完成集成数据库，最后将数据库的file_detail和file_part_detail表生成代码
+参考 [Mybati Plus使用文档](/database/mybatis-plus/README) 完成集成数据库，最后将数据库的file_detail和file_part_detail表生成代码
 
 ![image-20250228090147326](./assets/image-20250228090147326.png)
 

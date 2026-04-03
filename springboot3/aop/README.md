@@ -1335,9 +1335,9 @@ curl -Ss -H "Authorization: Bearer 2385569970" \
 
 ### 配置Redis环境
 
-参考文档：[RedisTemplate使用文档](/work/Ateng-Java/cache/redis-template/)
+参考文档：[RedisTemplate使用文档](/cache/redis-template/README)
 
-也可以选择其他缓存框架，更多参考 [缓存相关文档](/work/Ateng-Java/cache/)
+也可以选择其他缓存框架，更多参考 [缓存相关文档](/cache/)
 
 ### 创建注解
 

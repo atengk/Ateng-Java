@@ -6,10 +6,10 @@ PostGIS 是 PostgreSQL 的空间扩展插件，为数据库添加了地理信息
 
 - [官网链接](https://postgis.net/)
 
-- [Mybatis Flex使用文档](/work/Ateng-Java/database/mybatis-flex/)
+- [Mybatis Flex使用文档](/database/mybatis-flex/README)
 
 - [PostgreSQL安装文档](https://atengk.github.io/ops/#/work/docker/service/postgresql/)
-- [PostGIS SQL的使用](/work/Ateng-Java/database/mybatis-flex-postgis/SQL.md)
+- [PostGIS SQL的使用](/database/mybatis-flex-postgis/SQL)
 
 
 
@@ -17,7 +17,7 @@ PostGIS 是 PostgreSQL 的空间扩展插件，为数据库添加了地理信息
 
 ### 集成Mybatis Flex框架
 
-参考 [Mybatis Flex使用文档](/work/Ateng-Java/database/mybatis-flex/) 集成框架
+参考 [Mybatis Flex使用文档](/database/mybatis-flex/README) 集成框架
 
 pom.xml关键配置
 
