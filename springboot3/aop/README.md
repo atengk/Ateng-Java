@@ -1335,7 +1335,7 @@ curl -Ss -H "Authorization: Bearer 2385569970" \
 
 ### 配置Redis环境
 
-参考文档：[RedisTemplate使用文档](/cache/redis-template/README)
+参考文档：[RedisTemplate使用文档](/cache/redis-template/README.md)
 
 也可以选择其他缓存框架，更多参考 [缓存相关文档](/cache/)
 

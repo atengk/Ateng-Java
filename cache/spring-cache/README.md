@@ -10,7 +10,7 @@
 
 ### 添加依赖
 
-使用Redis作为缓存提供者，若要使用本地缓存参考[文档](/cache/caffeine/README)
+使用Redis作为缓存提供者，若要使用本地缓存参考[文档](/cache/caffeine/README.md)
 
 ```xml
 <!-- Spring Boot Redis 数据库集成，支持多种 Redis 数据结构和操作 -->

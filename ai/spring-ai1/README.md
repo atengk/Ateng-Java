@@ -1126,7 +1126,7 @@ POST /api/ai/rag/chat?message=Spring AI 支持哪些核心能力？
 
 ## 接入 MCP Server
 
-MCP Server 开发参考：[链接](/ai/spring-ai1-mcp-server/README)
+MCP Server 开发参考：[链接](/ai/spring-ai1-mcp-server/README.md)
 
 ### 基础配置
 

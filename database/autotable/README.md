@@ -20,11 +20,11 @@
 
 ### Mybatis Plus
 
-参考：[Mybatis Plus使用文档](/database/mybatis-plus/README)
+参考：[Mybatis Plus使用文档](/database/mybatis-plus/README.md)
 
 ### Mybatis Flex
 
-参考：[Mybatis Flex使用文档](/database/mybatis-flex/README)
+参考：[Mybatis Flex使用文档](/database/mybatis-flex/README.md)
 
 
 
