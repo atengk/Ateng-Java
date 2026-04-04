@@ -51,7 +51,7 @@ Hutool = Hu + tool，是原公司项目底层代码剥离后的开源库，“Hu
 </dependencyManagement>
 ```
 
-映入依赖，此时引入依赖就不需要设备版本号了
+引入依赖，此时引入依赖就不需要设备版本号了
 
 ```xml
 <dependency>
@@ -94,6 +94,179 @@ Hutool = Hu + tool，是原公司项目底层代码剥离后的开源库，“Hu
 
 ## 使用Hutool
 
-见 `test` 包下的测试代码
+### BeanUtil
 
-![image-20250226112925787](./assets/image-20250226112925787.png)
+Bean工具类主要是针对这些setXXX和getXXX方法进行操作，比如将Bean对象转为Map等等。
+
+见测试类：BeanUtilTests
+
+### CaptchaUtil
+
+验证码工具
+
+见测试类：CaptchaTests
+
+### CollUtil
+
+集合工具
+
+见测试类：CollUtilTests
+
+### Convert
+
+类型转换工具类
+
+见测试类：ConvertTests
+
+### CoordinateUtil
+
+坐标系转换相关工具类
+
+见测试类：CoordinateUtilTests
+
+### DateUtil
+
+日期时间工具类
+
+见测试类：DateUtilTests
+
+### EmojiUtil
+
+Emoji工具类
+
+见测试类：EmojiUtilTests
+
+### ExceptionUtil
+
+针对异常封装，例如包装为RuntimeException。
+
+见测试类：ExceptionUtilTests
+
+### FileUtil
+
+文件工具类
+
+见测试类：FileUtilTests
+
+### FTPUtil
+
+FTP工具类和配置
+
+见测试类：FtpUtilTests
+
+### HttpUtil
+
+HTTP客户端
+
+见测试类：HttpUtilTests
+
+### IdUtil
+
+ID生成工具类
+
+见测试类：IdUtilTests
+
+### JsonUtil
+
+JSON 工具类
+
+见测试类：JsonUtilTests
+
+### JWTUtil
+
+JWT就是一种网络身份认证和信息交换格式
+
+见测试类：JWTUtilTests
+
+### LogFactory和StaticLog
+
+Logfactory.get方法不再需要（或者不是必须）传入当前类名，会自动解析当前类名
+
+见测试类：LogFactoryTests
+
+### MachineFingerprintUtil
+
+获取机器唯一指纹
+
+见测试类：MachineFingerprintTest
+
+### MetaUtil
+
+MetaUtil 数据库表元数据读取
+
+见测试类：MetaUtilTests
+
+### NetUtil
+
+网络工具
+
+见测试类：NetUtilTests
+
+### NumberUtil
+
+数字工具
+
+见测试类：NumberUtilTests
+
+### OshiUtil
+
+系统信息工具类
+
+见测试类：OshiUtilTests
+
+### ReUtil
+
+正则工具
+
+见测试类：ReUtilTests
+
+### SecureUtil
+
+加密解密工具
+
+见测试类：SecureUtilTests
+
+### SpringUtil
+
+Spring中Bean获取的工具类——SpringUtil
+
+见测试类：SpringUtilTests
+
+### StrUtil
+
+字符串工具类
+
+见测试类：StrUtilTests
+
+### TreeUtil
+
+树工具类
+
+见测试类：TreeUtilTests
+
+### UrlBuilder
+
+UrlBuilder主要应用于http模块，在构建HttpRequest时，用户传入的URL五花八门，为了做大最好的适应性，减少用户对URL的处理，使用UrlBuilder完成URL的规范化。
+
+见测试类：UrlBuilderUtilTests
+
+### URLUtil
+
+URL工具
+
+见测试类：URLUtilTests
+
+### XmlUtil
+
+简化XML的创建、读和写的过程
+
+见测试类：XmlUtilTests
+
+### ZipUtil
+
+压缩包工具类
+
+见测试类：ZipUtils
+
+
+

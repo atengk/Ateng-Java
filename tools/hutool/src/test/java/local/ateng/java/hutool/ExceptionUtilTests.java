@@ -18,4 +18,10 @@ public class ExceptionUtilTests {
         String str = ExceptionUtil.stacktraceToString(new RuntimeException("1111"));
         StaticLog.error(str);
     }
+    // 堆栈转为完整字符串（不限制长度）
+    @Test
+    void test0() {
+        String str = ExceptionUtil.stacktraceToString(new RuntimeException("1111"), -1);
+        StaticLog.error(str);
+    }
 }
