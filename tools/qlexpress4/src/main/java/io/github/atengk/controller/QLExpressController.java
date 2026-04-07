@@ -1,12 +1,12 @@
 package io.github.atengk.controller;
 
-import io.github.atengk.util.QLExpressUtil;
+import io.github.atengk.service.QLExpressService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -20,20 +20,17 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class QLExpressController {
 
-    private final QLExpressUtil qlExpressUtil;
+    private final QLExpressService service;
 
     /**
-     * 测试表达式执行
+     * 表达式执行
      */
-    @GetMapping("/test")
-    public Object test() {
+    @PostMapping("/exec")
+    public Object exec(@RequestBody Map<String, Object> req) {
+        String expression = (String) req.get("expression");
+        Map<String, Object> params = (Map<String, Object>) req.get("params");
 
-        Map<String, Object> params = new HashMap<>();
-        params.put("a", 10);
-        params.put("b", 20);
-
-        String expression = "a + b * 2";
-
-        return qlExpressUtil.execute(expression, params);
+        return service.execute(expression, params);
     }
+
 }

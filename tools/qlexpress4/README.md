@@ -316,26 +316,26 @@ public class QLExpressConfig {
 所有业务统一走这个工具类，避免散落调用。
 
 ```java
-package io.github.atengk.util;
+package io.github.atengk.service;
 
 import com.alibaba.qlexpress4.Express4Runner;
 import com.alibaba.qlexpress4.QLOptions;
 import com.alibaba.qlexpress4.QLResult;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
 /**
- * QLExpress 执行工具类
+ * QLExpress 执行服务
  *
  * @author Ateng
  * @date 2026/04/07
  */
-@Component
+@Service
 @RequiredArgsConstructor
-public class QLExpressUtil {
-
+public class QLExpressService {
+    
     private final Express4Runner runner;
 
     /**
@@ -351,8 +351,8 @@ public class QLExpressUtil {
 
         return result.getResult();
     }
-}
 
+}
 ```
 
 ### Controller 测试接口（验证使用）
@@ -360,13 +360,13 @@ public class QLExpressUtil {
 ```java
 package io.github.atengk.controller;
 
-import io.github.atengk.util.QLExpressUtil;
+import io.github.atengk.service.QLExpressService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -380,22 +380,152 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class QLExpressController {
 
-    private final QLExpressUtil qlExpressUtil;
+    private final QLExpressService service;
 
     /**
-     * 测试表达式执行
+     * 表达式执行
      */
-    @GetMapping("/test")
-    public Object test() {
+    @PostMapping("/exec")
+    public Object exec(@RequestBody Map<String, Object> req) {
+        String expression = (String) req.get("expression");
+        Map<String, Object> params = (Map<String, Object>) req.get("params");
 
-        Map<String, Object> params = new HashMap<>();
-        params.put("a", 10);
-        params.put("b", 20);
-
-        String expression = "a + b * 2";
-
-        return qlExpressUtil.execute(expression, params);
+        return service.execute(expression, params);
     }
+
 }
 ```
+
+**执行简单表达式**
+
+```
+POST: /ql/exec
+Body:
+{
+  "expression": "a + b * c",
+  "params": {"a":1,"b":2,"c":3}
+}
+```
+
+返回：7
+
+**执行规则表达式**
+
+```
+POST: /ql/exec
+Body:
+{
+  "expression": "score > 70 && level == 'VIP'",
+  "params": {"score": 75, "level": "VIP"}
+}
+```
+
+返回：true
+
+---
+
+### 企业级规则
+
+------
+
+**企业级规则1：风控综合评分模型（多层嵌套 + 分段策略）**
+
+```json
+POST: /ql/exec
+Body:
+{
+  "expression": "if(score >= 90 && (level == 'VIP' || level == 'SVIP') && (region in ['CN','US','SG'])){return 'PASS'}else if(score >= 75 && riskControl == false){return 'REVIEW'}else if(score >= 60){return 'MANUAL_CHECK'}else{return 'REJECT'}",
+  "params": {
+    "score": 82,
+    "level": "VIP",
+    "region": "CN",
+    "riskControl": false
+  }
+}
+```
+
+返回：REVIEW
+
+------
+
+**企业级规则2：电商动态优惠叠加（多条件 + 叠加折扣 + 边界控制）**
+
+```json
+POST: /ql/exec
+Body:
+{
+  "expression": "if(amount > 2000){return amount * 0.7}else if(amount > 1000 && userType == 'VIP'){return amount * 0.8}else if(amount > 500 || coupon == true){return amount * 0.9}else{return amount}",
+  "params": {
+    "amount": 1500,
+    "userType": "VIP",
+    "coupon": false
+  }
+}
+```
+
+返回：1200.0
+
+------
+
+**企业级规则3：审批流多级决策 + 部门 + 风险 + 金额联动**
+
+```json
+POST: /ql/exec
+Body:
+{
+  "expression": "if(amount > 50000 && department == 'FINANCE' && riskLevel != 'HIGH'){return 'AUTO_APPROVE'}else if(amount > 20000 && (department == 'IT' || department == 'OPS')){return 'SECOND_APPROVE'}else if(riskLevel == 'HIGH' || amount > 100000){return 'ESCALATE'}else{return 'DIRECT_PASS'}",
+  "params": {
+    "amount": 30000,
+    "department": "IT",
+    "riskLevel": "LOW"
+  }
+}
+```
+
+返回：SECOND_APPROVE
+
+------
+
+**企业级规则4：用户分层 + 行为 + 标签 + 时间窗口复合判断**
+
+```json
+POST: /ql/exec
+Body:
+{
+  "expression": "if(age >= 18 && status == 'ACTIVE' && (tags in ['gold','platinum','diamond']) && loginDays >= 7){return 'CORE_USER'}else if(age >= 18 && loginDays >= 3 && (tags == 'silver' || purchaseCount > 1)){return 'GROWING_USER'}else if(age < 18 || status == 'NEW'){return 'NEW_USER'}else{return 'LOW_VALUE'}",
+  "params": {
+    "age": 28,
+    "status": "ACTIVE",
+    "tags": "gold",
+    "loginDays": 10,
+    "purchaseCount": 0
+  }
+}
+```
+
+返回：CORE_USER
+
+------
+
+**企业级规则5：安全风控 + 多维拦截（IP + 行为 + 地域 + 时间）**
+
+```json
+POST: /ql/exec
+Body:
+{
+  "expression": "if(blackIp == true || failLoginCount > 5){return 'BLOCK'}else if(!(region in ['CN','SG','HK']) && vpn == true){return 'SUSPICIOUS'}else if(hour >= 0 && hour <= 5 && abnormalBehavior == true){return 'VERIFY'}else{return 'ALLOW'}",
+  "params": {
+    "blackIp": false,
+    "failLoginCount": 3,
+    "region": "US",
+    "vpn": true,
+    "hour": 2,
+    "abnormalBehavior": true
+  }
+}
+```
+
+返回：SUSPICIOUS
+
+------
 
