@@ -283,7 +283,8 @@ export default defineConfig({
                         text: '工具库',
                         items: [
                             { text: 'Hutool', link: '/tools/hutool/README' },
-                            { text: 'Lombok', link: '/tools/lombok/README' }
+                            { text: 'Lombok', link: '/tools/lombok/README' },
+                            { text: 'QLExpress', link: '/tools/qlexpress4/README' },
                         ]
                     },
                     {

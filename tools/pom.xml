@@ -33,5 +33,6 @@
         <module>jackson3</module>
         <module>apache-tika</module>
         <module>sshj</module>
+        <module>qlexpress4</module>
     </modules>
 </project>
