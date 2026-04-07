@@ -1,0 +1,20 @@
+server:
+  port: 12022
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
+---
+# XSS 配置
+xss:
+  enabled: true
+  exclude-paths:
+    - /login
+    - /logout
+    - /captcha
+    - /static/*
+    - /api/public/**
+---

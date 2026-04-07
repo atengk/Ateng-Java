@@ -36,5 +36,7 @@
         <module>boot3-web</module>
         <module>boot3-interceptor</module>
         <module>boot3-filter</module>
+        <module>xss</module>
+        <module>crypto</module>
     </modules>
 </project>
