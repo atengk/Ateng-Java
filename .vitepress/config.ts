@@ -166,7 +166,9 @@ export default defineConfig({
                     { text: '异常处理', link: '/springboot3/exception/README' },
                     { text: 'AOP切面', link: '/springboot3/aop/README' },
                     { text: '拦截器', link: '/springboot3/boot3-interceptor/README' },
-                    { text: '过滤器', link: '/springboot3/boot3-filter/README' }
+                    { text: '过滤器', link: '/springboot3/boot3-filter/README' },
+                    { text: 'XSS', link: '/springboot3/xss/README' },
+                    { text: '接口加密解密', link: '/springboot3/crypto/README' },
                   ]
                 },
                 {
