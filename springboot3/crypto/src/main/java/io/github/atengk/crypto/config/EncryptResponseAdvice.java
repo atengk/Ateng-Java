@@ -1,5 +1,6 @@
 package io.github.atengk.crypto.config;
 
+import io.github.atengk.crypto.annotation.Crypto;
 import io.github.atengk.crypto.util.CryptoUtil;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
@@ -19,7 +20,13 @@ public class EncryptResponseAdvice implements ResponseBodyAdvice<Object> {
     @Override
     public boolean supports(MethodParameter returnType,
                             Class<? extends HttpMessageConverter<?>> converterType) {
-        return true;
+        Crypto crypto = returnType.getMethodAnnotation(Crypto.class);
+
+        if (crypto == null) {
+            crypto = returnType.getContainingClass().getAnnotation(Crypto.class);
+        }
+
+        return crypto != null && crypto.encrypt();
     }
 
     @Override

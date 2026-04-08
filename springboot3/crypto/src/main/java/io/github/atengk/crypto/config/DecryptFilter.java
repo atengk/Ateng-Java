@@ -1,24 +1,24 @@
 package io.github.atengk.crypto.config;
 
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import io.github.atengk.crypto.annotation.Crypto;
 import io.github.atengk.crypto.dto.EncryptRequest;
 import io.github.atengk.crypto.util.CryptoUtil;
 import io.github.atengk.crypto.util.ReplayAttackUtil;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerExecutionChain;
+import org.springframework.web.servlet.HandlerMapping;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * 解密过滤器
- * <p>
- * 功能：
- * 1. 仅拦截 JSON 请求（POST / PUT / PATCH）
- * 2. 自动跳过 GET / DELETE / 文件上传
- * 3. 支持白名单接口
- * 4. 防重放 + 验签 + 解密
  *
  * @author 孔余
  * @since 2026-01-29
@@ -26,9 +26,12 @@ import java.io.IOException;
 public class DecryptFilter implements Filter {
 
     private final StringRedisTemplate redisTemplate;
+    private final List<HandlerMapping> handlerMappings;
 
-    public DecryptFilter(StringRedisTemplate redisTemplate) {
+    public DecryptFilter(StringRedisTemplate redisTemplate,
+                         List<HandlerMapping> handlerMappings) {
         this.redisTemplate = redisTemplate;
+        this.handlerMappings = handlerMappings;
     }
 
     @Override
@@ -38,74 +41,65 @@ public class DecryptFilter implements Filter {
         HttpServletRequest req = (HttpServletRequest) request;
 
         /*
-         * 1. 请求方式过滤（只处理有 Body 的请求）
+         * 1. 快速放行（方法 + ContentType）
          */
-        String method = req.getMethod();
-        if (!"POST".equalsIgnoreCase(method)
-                && !"PUT".equalsIgnoreCase(method)
-                && !"PATCH".equalsIgnoreCase(method)) {
-
+        if (!shouldProcess(req)) {
             chain.doFilter(request, response);
             return;
         }
 
         /*
-         * 2. Content-Type 过滤（只处理 JSON）
+         * 2. 获取 HandlerMethod
          */
-        String contentType = req.getContentType();
-        if (StrUtil.isBlank(contentType)
-                || !contentType.toLowerCase().contains("application/json")) {
-
+        HandlerMethod handlerMethod = getHandler(req);
+        if (handlerMethod == null) {
             chain.doFilter(request, response);
             return;
         }
 
         /*
-         * 3. 白名单接口（按需扩展）
+         * 3. 判断是否需要解密
          */
-        String uri = req.getRequestURI();
-        if (uri.contains("/login")
-                || uri.contains("/captcha")
-                || uri.contains("/public")) {
-
+        Crypto crypto = getCrypto(handlerMethod);
+        if (ObjectUtil.isNull(crypto) || !crypto.decrypt()) {
             chain.doFilter(request, response);
             return;
         }
 
         /*
-         * 4. 包装请求（只在需要时）
+         * 4. 包装请求
          */
         CachedBodyHttpServletRequest wrapper = new CachedBodyHttpServletRequest(req);
         String body = wrapper.getBody();
 
         if (StrUtil.isBlank(body)) {
-            chain.doFilter(request, response);
-            return;
+            throw new RuntimeException("请求体不能为空");
         }
 
         try {
 
             /*
-             * 5. 转换请求体
+             * 5. 解析请求体
              */
-            EncryptRequest encryptRequest = JSONUtil.toBean(body, EncryptRequest.class);
-
-            if (encryptRequest == null
-                    || StrUtil.isBlank(encryptRequest.getData())) {
-
-                throw new RuntimeException("非法加密请求");
-            }
+            EncryptRequest encryptRequest = parseRequest(body);
 
             /*
-             * 6. 防重放
+             * 6. 参数完整性校验
+             */
+            validateRequest(encryptRequest);
+
+            /*
+             * 7. 防重放
              */
             ReplayAttackUtil.checkTimestamp(encryptRequest.getTimestamp());
             ReplayAttackUtil.checkNonce(encryptRequest.getNonce(), redisTemplate);
 
             /*
-             * 7. 验签
+             * 8. 验签（method + path）
              */
             boolean verify = CryptoUtil.verify(
+                    normalizeMethod(req.getMethod()),
+                    normalizePath(req),
                     encryptRequest.getData(),
                     encryptRequest.getTimestamp(),
                     encryptRequest.getNonce(),
@@ -117,7 +111,7 @@ public class DecryptFilter implements Filter {
             }
 
             /*
-             * 8. 解密
+             * 9. 解密
              */
             String decryptData = CryptoUtil.decrypt(encryptRequest.getData());
 
@@ -126,7 +120,7 @@ public class DecryptFilter implements Filter {
             }
 
             /*
-             * 9. 替换请求体
+             * 10. 替换请求体
              */
             HttpServletRequest newRequest =
                     new DecryptedHttpServletRequest(wrapper, decryptData);
@@ -134,11 +128,112 @@ public class DecryptFilter implements Filter {
             chain.doFilter(newRequest, response);
 
         } catch (Exception e) {
-
-            /*
-             * 统一异常（避免直接 500）
-             */
             throw new RuntimeException("请求解密失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 判断是否需要处理
+     */
+    private boolean shouldProcess(HttpServletRequest req) {
+
+        String method = req.getMethod();
+
+        if (!"POST".equalsIgnoreCase(method)
+                && !"PUT".equalsIgnoreCase(method)
+                && !"PATCH".equalsIgnoreCase(method)) {
+            return false;
+        }
+
+        String contentType = req.getContentType();
+
+        return StrUtil.isNotBlank(contentType)
+                && contentType.toLowerCase().contains("application/json");
+    }
+
+    /**
+     * 获取 @Crypto 注解
+     */
+    private Crypto getCrypto(HandlerMethod handlerMethod) {
+
+        Crypto crypto = handlerMethod.getMethodAnnotation(Crypto.class);
+
+        if (crypto == null) {
+            crypto = handlerMethod.getBeanType().getAnnotation(Crypto.class);
+        }
+
+        return crypto;
+    }
+
+    /**
+     * 解析请求体
+     */
+    private EncryptRequest parseRequest(String body) {
+
+        try {
+            return JSONUtil.toBean(body, EncryptRequest.class);
+        } catch (Exception e) {
+            throw new RuntimeException("请求体格式错误");
+        }
+    }
+
+    /**
+     * 参数校验
+     */
+    private void validateRequest(EncryptRequest req) {
+
+        if (ObjectUtil.isNull(req)
+                || StrUtil.isBlank(req.getData())
+                || ObjectUtil.isNull(req.getTimestamp())
+                || StrUtil.isBlank(req.getNonce())
+                || StrUtil.isBlank(req.getSign())) {
+
+            throw new RuntimeException("加密参数不完整");
+        }
+    }
+
+    /**
+     * 标准化 Method
+     */
+    private String normalizeMethod(String method) {
+        return StrUtil.toUpperCase(method);
+    }
+
+    /**
+     * 标准化 Path
+     */
+    private String normalizePath(HttpServletRequest req) {
+
+        String path = req.getRequestURI();
+
+        if (StrUtil.isBlank(path)) {
+            return "/";
+        }
+
+        path = path.replaceAll("//+", "/");
+
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        return path;
+    }
+
+    /**
+     * 获取 HandlerMethod
+     */
+    private HandlerMethod getHandler(HttpServletRequest request) {
+
+        try {
+            for (HandlerMapping mapping : handlerMappings) {
+                HandlerExecutionChain chain = mapping.getHandler(request);
+                if (chain != null && chain.getHandler() instanceof HandlerMethod) {
+                    return (HandlerMethod) chain.getHandler();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return null;
     }
 }

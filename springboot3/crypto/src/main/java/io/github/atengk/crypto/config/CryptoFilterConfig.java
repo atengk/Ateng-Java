@@ -5,6 +5,9 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.HandlerMapping;
+
+import java.util.List;
 
 /**
  * 加密过滤器配置
@@ -19,11 +22,13 @@ public class CryptoFilterConfig {
      * 注册解密过滤器
      */
     @Bean
-    public FilterRegistrationBean<Filter> decryptFilter(StringRedisTemplate redisTemplate) {
+    public FilterRegistrationBean<Filter> decryptFilter(
+            StringRedisTemplate redisTemplate,
+            List<HandlerMapping> handlerMappings) {
 
         FilterRegistrationBean<Filter> registration = new FilterRegistrationBean<>();
 
-        registration.setFilter(new DecryptFilter(redisTemplate));
+        registration.setFilter(new DecryptFilter(redisTemplate, handlerMappings));
 
         /*
          * 拦截路径（按需调整）

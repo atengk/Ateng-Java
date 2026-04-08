@@ -257,96 +257,202 @@ public class EncryptRequest {
 package io.github.atengk.crypto.util;
 
 import cn.hutool.core.codec.Base64;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.HMac;
 import cn.hutool.crypto.digest.HmacAlgorithm;
 import cn.hutool.crypto.symmetric.AES;
-import cn.hutool.extra.spring.SpringUtil;
 import io.github.atengk.crypto.config.CryptoProperties;
 
 import java.nio.charset.StandardCharsets;
 
 /**
  * 加密工具类
- * <p>
- * 功能：
- * 1. AES 加密解密（带 IV）
- * 2. HmacSHA256 签名
- * 3. 签名校验
  *
  * @author 孔余
  * @since 2026-01-29
  */
 public class CryptoUtil {
 
-    private static final CryptoProperties cryptoProperties = SpringUtil.getBean(CryptoProperties.class);
+    private static byte[] AES_KEY;
+    private static byte[] AES_IV;
+    private static byte[] SIGN_KEY;
+
+    private static AES AES_INSTANCE;
+    private static HMac HMAC_INSTANCE;
 
     /**
-     * AES Key（16/24/32字节）
+     * 初始化（由 Spring 调用）
      */
-    private static final byte[] AES_KEY = Base64.decode(cryptoProperties.getAesKey());
-    
-    /**
-     * IV（必须和前端一致）
-     */
-    private static final byte[] AES_IV = Base64.decode(cryptoProperties.getIv());
-    
-    /**
-     * 签名 Key
-     */
-    private static final byte[] SIGN_KEY = cryptoProperties.getSignKey().getBytes(StandardCharsets.UTF_8);
+    public static void init(CryptoProperties properties) {
+
+        AES_KEY = Base64.decode(properties.getAesKey());
+        AES_IV = Base64.decode(properties.getIv());
+        SIGN_KEY = properties.getSignKey().getBytes(StandardCharsets.UTF_8);
+
+        AES_INSTANCE = new AES("CBC", "PKCS5Padding", AES_KEY, AES_IV);
+        HMAC_INSTANCE = new HMac(HmacAlgorithm.HmacSHA256, SIGN_KEY);
+    }
 
     /**
-     * AES 加密（CBC + PKCS5Padding）
+     * AES 加密
      */
     public static String encrypt(String data) {
-        AES aes = new AES("CBC", "PKCS5Padding", AES_KEY, AES_IV);
-        return aes.encryptBase64(data);
+
+        if (StrUtil.isBlank(data)) {
+            return StrUtil.EMPTY;
+        }
+
+        return AES_INSTANCE.encryptBase64(data);
     }
 
     /**
      * AES 解密
      */
     public static String decrypt(String data) {
-        AES aes = new AES("CBC", "PKCS5Padding", AES_KEY, AES_IV);
-        return aes.decryptStr(data);
+
+        if (StrUtil.isBlank(data)) {
+            return StrUtil.EMPTY;
+        }
+
+        return AES_INSTANCE.decryptStr(data);
     }
 
     /**
-     * 生成签名（推荐结构化拼接）
+     * 生成签名
      */
-    public static String sign(String data, long timestamp, String nonce) {
+    public static String sign(String method,
+                              String path,
+                              String data,
+                              long timestamp,
+                              String nonce) {
 
-        String content = buildSignContent(data, timestamp, nonce);
+        String content = buildSignContent(method, path, data, timestamp, nonce);
 
-        HMac mac = new HMac(HmacAlgorithm.HmacSHA256, SIGN_KEY);
-        return mac.digestHex(content);
+        return HMAC_INSTANCE.digestHex(content);
     }
 
     /**
-     * 校验签名
+     * 校验签名（常量时间比较）
      */
-    public static boolean verify(String data, long timestamp, String nonce, String sign) {
+    public static boolean verify(String method,
+                                 String path,
+                                 String data,
+                                 long timestamp,
+                                 String nonce,
+                                 String sign) {
 
-        String localSign = sign(data, timestamp, nonce);
+        if (StrUtil.isBlank(sign)) {
+            return false;
+        }
 
-        return localSign.equalsIgnoreCase(sign);
+        String localSign = sign(method, path, data, timestamp, nonce);
+
+        return constantTimeEquals(localSign, sign);
     }
 
     /**
-     * 构建签名字符串（避免拼接歧义）
+     * 构建签名字符串
      */
-    private static String buildSignContent(String data, long timestamp, String nonce) {
+    private static String buildSignContent(String method,
+                                           String path,
+                                           String data,
+                                           long timestamp,
+                                           String nonce) {
 
-        /*
-         * 使用 key=value 结构，避免：
-         * data=12 + 34 和 data=1 + 234 冲突
-         */
-        return "data=" + data +
+        return "method=" + normalizeMethod(method) +
+                "&path=" + normalizePath(path) +
+                "&data=" + safe(data) +
                 "&timestamp=" + timestamp +
-                "&nonce=" + nonce;
+                "&nonce=" + safe(nonce);
     }
 
+    /**
+     * Method 标准化
+     */
+    private static String normalizeMethod(String method) {
+        return StrUtil.toUpperCase(StrUtil.blankToDefault(method, "GET"));
+    }
+
+    /**
+     * Path 标准化
+     */
+    private static String normalizePath(String path) {
+
+        if (StrUtil.isBlank(path)) {
+            return "/";
+        }
+
+        path = path.replaceAll("//+", "/");
+
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        return path;
+    }
+
+    /**
+     * 防止 null
+     */
+    private static String safe(String str) {
+        return ObjectUtil.defaultIfNull(str, "");
+    }
+
+    /**
+     * 常量时间比较（防时序攻击）
+     */
+    private static boolean constantTimeEquals(String a, String b) {
+
+        if (a == null || b == null) {
+            return false;
+        }
+
+        if (a.length() != b.length()) {
+            return false;
+        }
+
+        int result = 0;
+
+        for (int i = 0; i < a.length(); i++) {
+            result |= a.charAt(i) ^ b.charAt(i);
+        }
+
+        return result == 0;
+    }
 }
+```
+
+### 初始化类加密
+
+```java
+package io.github.atengk.crypto.config;
+
+import io.github.atengk.crypto.util.CryptoUtil;
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * 加密初始化配置
+ *
+ * @author 孔余
+ * @since 2026-01-29
+ */
+@Configuration
+public class CryptoInitConfig {
+
+    private final CryptoProperties cryptoProperties;
+
+    public CryptoInitConfig(CryptoProperties cryptoProperties) {
+        this.cryptoProperties = cryptoProperties;
+    }
+
+    @PostConstruct
+    public void init() {
+        CryptoUtil.init(cryptoProperties);
+    }
+}
+
 ```
 
 ### 防重放工具类
@@ -354,7 +460,7 @@ public class CryptoUtil {
 ```java
 package io.github.atengk.crypto.util;
 
-
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -368,41 +474,139 @@ import java.time.Duration;
  */
 public class ReplayAttackUtil {
 
-    private static final long EXPIRE_TIME = 5 * 60 * 1000;
+    /**
+     * 默认时间窗口（毫秒）
+     */
+    private static final long DEFAULT_EXPIRE_TIME = 5 * 60 * 1000;
+
+    /**
+     * 允许的最大未来偏移（毫秒）
+     */
+    private static final long MAX_FUTURE_TIME = 60 * 1000;
+
+    /**
+     * Redis Key 前缀
+     */
+    private static final String NONCE_PREFIX = "crypto:nonce:";
 
     /**
      * 校验时间戳
      */
     public static void checkTimestamp(Long timestamp) {
 
+        checkTimestamp(timestamp, DEFAULT_EXPIRE_TIME);
+    }
+
+    /**
+     * 校验时间戳（支持自定义窗口）
+     */
+    public static void checkTimestamp(Long timestamp, long expireTime) {
+
+        if (ObjectUtil.isNull(timestamp)) {
+            throw new RuntimeException("timestamp 不能为空");
+        }
+
         long now = System.currentTimeMillis();
 
-        if (timestamp == null || Math.abs(now - timestamp) > EXPIRE_TIME) {
+        /*
+         * 1. 防止过期请求
+         */
+        if (now - timestamp > expireTime) {
             throw new RuntimeException("请求已过期");
+        }
+
+        /*
+         * 2. 防止未来时间攻击（客户端时间伪造）
+         */
+        if (timestamp - now > MAX_FUTURE_TIME) {
+            throw new RuntimeException("非法请求（时间异常）");
         }
     }
 
     /**
-     * 校验 nonce（必须唯一）
+     * 校验 nonce（默认）
      */
-    public static void checkNonce(String nonce, StringRedisTemplate redisTemplate) {
+    public static void checkNonce(String nonce,
+                                  StringRedisTemplate redisTemplate) {
+
+        checkNonce(null, nonce, redisTemplate, DEFAULT_EXPIRE_TIME);
+    }
+
+    /**
+     * 校验 nonce（支持 appId 隔离）
+     */
+    public static void checkNonce(String appId,
+                                  String nonce,
+                                  StringRedisTemplate redisTemplate,
+                                  long expireTime) {
 
         if (StrUtil.isBlank(nonce)) {
             throw new RuntimeException("nonce 不能为空");
         }
 
-        String key = "crypto:nonce:" + nonce;
+        /*
+         * 构建 Redis Key
+         * 格式：
+         * crypto:nonce:{appId}:{nonce}
+         */
+        String key = buildNonceKey(appId, nonce);
 
         Boolean success = redisTemplate.opsForValue()
-                .setIfAbsent(key, "1", Duration.ofMinutes(5));
+                .setIfAbsent(key, "1", Duration.ofMillis(expireTime));
 
-        if (Boolean.FALSE.equals(success)) {
+        /*
+         * null 也视为失败（极端情况）
+         */
+        if (!Boolean.TRUE.equals(success)) {
             throw new RuntimeException("重复请求");
         }
     }
-}
 
+    /**
+     * 构建 nonce key
+     */
+    private static String buildNonceKey(String appId, String nonce) {
+
+        if (StrUtil.isBlank(appId)) {
+            return NONCE_PREFIX + nonce;
+        }
+
+        return NONCE_PREFIX + appId + ":" + nonce;
+    }
+}
 ```
+
+### 接口加解密注解
+
+```java
+package io.github.atengk.crypto.annotation;
+
+import java.lang.annotation.*;
+
+/**
+ * 接口加解密注解
+ *
+ * @author 孔余
+ * @since 2026-01-29
+ */
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface Crypto {
+
+    /**
+     * 是否解密请求
+     */
+    boolean decrypt() default true;
+
+    /**
+     * 是否加密响应
+     */
+    boolean encrypt() default true;
+}
+```
+
+
 
 ## 请求解密配置
 
@@ -541,25 +745,25 @@ public class DecryptedHttpServletRequest extends CachedBodyHttpServletRequest {
 ```java
 package io.github.atengk.crypto.config;
 
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import io.github.atengk.crypto.annotation.Crypto;
 import io.github.atengk.crypto.dto.EncryptRequest;
 import io.github.atengk.crypto.util.CryptoUtil;
 import io.github.atengk.crypto.util.ReplayAttackUtil;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerExecutionChain;
+import org.springframework.web.servlet.HandlerMapping;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * 解密过滤器
- * <p>
- * 功能：
- * 1. 仅拦截 JSON 请求（POST / PUT / PATCH）
- * 2. 自动跳过 GET / DELETE / 文件上传
- * 3. 支持白名单接口
- * 4. 防重放 + 验签 + 解密
  *
  * @author 孔余
  * @since 2026-01-29
@@ -567,9 +771,12 @@ import java.io.IOException;
 public class DecryptFilter implements Filter {
 
     private final StringRedisTemplate redisTemplate;
+    private final List<HandlerMapping> handlerMappings;
 
-    public DecryptFilter(StringRedisTemplate redisTemplate) {
+    public DecryptFilter(StringRedisTemplate redisTemplate,
+                         List<HandlerMapping> handlerMappings) {
         this.redisTemplate = redisTemplate;
+        this.handlerMappings = handlerMappings;
     }
 
     @Override
@@ -579,74 +786,65 @@ public class DecryptFilter implements Filter {
         HttpServletRequest req = (HttpServletRequest) request;
 
         /*
-         * 1. 请求方式过滤（只处理有 Body 的请求）
+         * 1. 快速放行（方法 + ContentType）
          */
-        String method = req.getMethod();
-        if (!"POST".equalsIgnoreCase(method)
-                && !"PUT".equalsIgnoreCase(method)
-                && !"PATCH".equalsIgnoreCase(method)) {
-
+        if (!shouldProcess(req)) {
             chain.doFilter(request, response);
             return;
         }
 
         /*
-         * 2. Content-Type 过滤（只处理 JSON）
+         * 2. 获取 HandlerMethod
          */
-        String contentType = req.getContentType();
-        if (StrUtil.isBlank(contentType)
-                || !contentType.toLowerCase().contains("application/json")) {
-
+        HandlerMethod handlerMethod = getHandler(req);
+        if (handlerMethod == null) {
             chain.doFilter(request, response);
             return;
         }
 
         /*
-         * 3. 白名单接口（按需扩展）
+         * 3. 判断是否需要解密
          */
-        String uri = req.getRequestURI();
-        if (uri.contains("/login")
-                || uri.contains("/captcha")
-                || uri.contains("/public")) {
-
+        Crypto crypto = getCrypto(handlerMethod);
+        if (ObjectUtil.isNull(crypto) || !crypto.decrypt()) {
             chain.doFilter(request, response);
             return;
         }
 
         /*
-         * 4. 包装请求（只在需要时）
+         * 4. 包装请求
          */
         CachedBodyHttpServletRequest wrapper = new CachedBodyHttpServletRequest(req);
         String body = wrapper.getBody();
 
         if (StrUtil.isBlank(body)) {
-            chain.doFilter(request, response);
-            return;
+            throw new RuntimeException("请求体不能为空");
         }
 
         try {
 
             /*
-             * 5. 转换请求体
+             * 5. 解析请求体
              */
-            EncryptRequest encryptRequest = JSONUtil.toBean(body, EncryptRequest.class);
-
-            if (encryptRequest == null
-                    || StrUtil.isBlank(encryptRequest.getData())) {
-
-                throw new RuntimeException("非法加密请求");
-            }
+            EncryptRequest encryptRequest = parseRequest(body);
 
             /*
-             * 6. 防重放
+             * 6. 参数完整性校验
+             */
+            validateRequest(encryptRequest);
+
+            /*
+             * 7. 防重放
              */
             ReplayAttackUtil.checkTimestamp(encryptRequest.getTimestamp());
             ReplayAttackUtil.checkNonce(encryptRequest.getNonce(), redisTemplate);
 
             /*
-             * 7. 验签
+             * 8. 验签（method + path）
              */
             boolean verify = CryptoUtil.verify(
+                    normalizeMethod(req.getMethod()),
+                    normalizePath(req),
                     encryptRequest.getData(),
                     encryptRequest.getTimestamp(),
                     encryptRequest.getNonce(),
@@ -658,7 +856,7 @@ public class DecryptFilter implements Filter {
             }
 
             /*
-             * 8. 解密
+             * 9. 解密
              */
             String decryptData = CryptoUtil.decrypt(encryptRequest.getData());
 
@@ -667,7 +865,7 @@ public class DecryptFilter implements Filter {
             }
 
             /*
-             * 9. 替换请求体
+             * 10. 替换请求体
              */
             HttpServletRequest newRequest =
                     new DecryptedHttpServletRequest(wrapper, decryptData);
@@ -675,12 +873,113 @@ public class DecryptFilter implements Filter {
             chain.doFilter(newRequest, response);
 
         } catch (Exception e) {
-
-            /*
-             * 统一异常（避免直接 500）
-             */
             throw new RuntimeException("请求解密失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 判断是否需要处理
+     */
+    private boolean shouldProcess(HttpServletRequest req) {
+
+        String method = req.getMethod();
+
+        if (!"POST".equalsIgnoreCase(method)
+                && !"PUT".equalsIgnoreCase(method)
+                && !"PATCH".equalsIgnoreCase(method)) {
+            return false;
+        }
+
+        String contentType = req.getContentType();
+
+        return StrUtil.isNotBlank(contentType)
+                && contentType.toLowerCase().contains("application/json");
+    }
+
+    /**
+     * 获取 @Crypto 注解
+     */
+    private Crypto getCrypto(HandlerMethod handlerMethod) {
+
+        Crypto crypto = handlerMethod.getMethodAnnotation(Crypto.class);
+
+        if (crypto == null) {
+            crypto = handlerMethod.getBeanType().getAnnotation(Crypto.class);
+        }
+
+        return crypto;
+    }
+
+    /**
+     * 解析请求体
+     */
+    private EncryptRequest parseRequest(String body) {
+
+        try {
+            return JSONUtil.toBean(body, EncryptRequest.class);
+        } catch (Exception e) {
+            throw new RuntimeException("请求体格式错误");
+        }
+    }
+
+    /**
+     * 参数校验
+     */
+    private void validateRequest(EncryptRequest req) {
+
+        if (ObjectUtil.isNull(req)
+                || StrUtil.isBlank(req.getData())
+                || ObjectUtil.isNull(req.getTimestamp())
+                || StrUtil.isBlank(req.getNonce())
+                || StrUtil.isBlank(req.getSign())) {
+
+            throw new RuntimeException("加密参数不完整");
+        }
+    }
+
+    /**
+     * 标准化 Method
+     */
+    private String normalizeMethod(String method) {
+        return StrUtil.toUpperCase(method);
+    }
+
+    /**
+     * 标准化 Path
+     */
+    private String normalizePath(HttpServletRequest req) {
+
+        String path = req.getRequestURI();
+
+        if (StrUtil.isBlank(path)) {
+            return "/";
+        }
+
+        path = path.replaceAll("//+", "/");
+
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        return path;
+    }
+
+    /**
+     * 获取 HandlerMethod
+     */
+    private HandlerMethod getHandler(HttpServletRequest request) {
+
+        try {
+            for (HandlerMapping mapping : handlerMappings) {
+                HandlerExecutionChain chain = mapping.getHandler(request);
+                if (chain != null && chain.getHandler() instanceof HandlerMethod) {
+                    return (HandlerMethod) chain.getHandler();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return null;
     }
 }
 ```
@@ -697,6 +996,9 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.HandlerMapping;
+
+import java.util.List;
 
 /**
  * 加密过滤器配置
@@ -711,16 +1013,18 @@ public class CryptoFilterConfig {
      * 注册解密过滤器
      */
     @Bean
-    public FilterRegistrationBean<Filter> decryptFilter(StringRedisTemplate redisTemplate) {
+    public FilterRegistrationBean<Filter> decryptFilter(
+            StringRedisTemplate redisTemplate,
+            List<HandlerMapping> handlerMappings) {
 
         FilterRegistrationBean<Filter> registration = new FilterRegistrationBean<>();
 
-        registration.setFilter(new DecryptFilter(redisTemplate));
+        registration.setFilter(new DecryptFilter(redisTemplate, handlerMappings));
 
         /*
          * 拦截路径（按需调整）
          */
-        registration.addUrlPatterns("/api/*");
+        registration.addUrlPatterns("/*");
 
         /*
          * 执行顺序（建议靠前）
@@ -745,8 +1049,9 @@ public class CryptoFilterConfig {
 代码功能：统一对响应结果进行 AES 加密 + 包装
 
 ```java
-package io.github.atengk.crypto.advice;
+package io.github.atengk.crypto.config;
 
+import io.github.atengk.crypto.annotation.Crypto;
 import io.github.atengk.crypto.util.CryptoUtil;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
@@ -766,16 +1071,22 @@ public class EncryptResponseAdvice implements ResponseBodyAdvice<Object> {
     @Override
     public boolean supports(MethodParameter returnType,
                             Class<? extends HttpMessageConverter<?>> converterType) {
-        return true;
+        Crypto crypto = returnType.getMethodAnnotation(Crypto.class);
+
+        if (crypto == null) {
+            crypto = returnType.getContainingClass().getAnnotation(Crypto.class);
+        }
+
+        return crypto != null && crypto.encrypt();
     }
 
     @Override
     public Object beforeBodyWrite(Object body,
-                                 MethodParameter returnType,
-                                 MediaType selectedContentType,
-                                 Class<? extends HttpMessageConverter<?>> selectedConverterType,
-                                 org.springframework.http.server.ServerHttpRequest request,
-                                 org.springframework.http.server.ServerHttpResponse response) {
+                                  MethodParameter returnType,
+                                  MediaType selectedContentType,
+                                  Class<? extends HttpMessageConverter<?>> selectedConverterType,
+                                  org.springframework.http.server.ServerHttpRequest request,
+                                  org.springframework.http.server.ServerHttpResponse response) {
 
         String json = cn.hutool.json.JSONUtil.toJsonStr(body);
 
@@ -784,46 +1095,260 @@ public class EncryptResponseAdvice implements ResponseBodyAdvice<Object> {
         return encrypt;
     }
 }
+
 ```
 
-### 前端对接规范（Vue3 / TS）
+## 测试使用
 
-加密流程
+### 后端接口
 
-```vue
+```java
+package io.github.atengk.crypto.controller;
+
+import io.github.atengk.crypto.annotation.Crypto;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/crypto")
+public class TestController {
+
+    @Crypto
+    @GetMapping("/get")
+    public String get(@RequestParam String name) {
+        return "GET 接收参数：" + name;
+    }
+
+    @Crypto(decrypt = true, encrypt = false)
+    @PostMapping("/post")
+    public Map<String, Object> post(@RequestBody Map<String, Object> body) {
+        return body;
+    }
+
+    @PostMapping("/ignore")
+    public Map<String, Object> ignore(@RequestBody Map<String, Object> body) {
+        return body;
+    }
+}
+
+```
+
+### 前端调用
+
+#### 核心加密工具（前端）
+
+代码功能：实现 AES + 签名（与后端 CryptoUtil 对齐）
+
+```ts
 import CryptoJS from "crypto-js"
 
-const AES_KEY = "xxx"
-const IV = "xxx"
-const SIGN_KEY = "xxx"
+const AES_KEY = "QD2RQPTG8ujbImZVwYeVeQ=="
+const IV = "paY8aTRpCzpppJ5hwb64pw=="
+const SIGN_KEY = "676182be2b2adc09ab80a989f305222c454b7002dfb0b4fa3ef97c230ff94f2c"
+
+function normalizePath(path: string) {
+  return path.replace(/\/+/g, "/").replace(/\/$/, "") || "/"
+}
 
 export function encrypt(data: any) {
   const json = JSON.stringify(data)
 
   const encrypted = CryptoJS.AES.encrypt(
     json,
-    CryptoJS.enc.Utf8.parse(AES_KEY),
+    CryptoJS.enc.Base64.parse(AES_KEY),
     {
-      iv: CryptoJS.enc.Utf8.parse(IV),
+      iv: CryptoJS.enc.Base64.parse(IV),
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7
     }
   ).toString()
 
+  return encrypted
+}
+
+export function decrypt(data: string) {
+  const decrypted = CryptoJS.AES.decrypt(
+    data,
+    CryptoJS.enc.Base64.parse(AES_KEY),
+    {
+      iv: CryptoJS.enc.Base64.parse(IV),
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
+    }
+  )
+
+  return decrypted.toString(CryptoJS.enc.Utf8)
+}
+
+export function sign(method: string, path: string, data: string, timestamp: number, nonce: string) {
+  const content =
+    `method=${method.toUpperCase()}` +
+    `&path=${normalizePath(path)}` +
+    `&data=${data}` +
+    `&timestamp=${timestamp}` +
+    `&nonce=${nonce}`
+
+  return CryptoJS.HmacSHA256(content, SIGN_KEY).toString()
+}
+```
+
+------
+
+#### Axios 封装（核心）
+
+代码功能：自动处理加密请求 + 解密响应（按接口控制）
+
+```ts
+import axios from "axios"
+import { encrypt, decrypt, sign } from "./crypto"
+
+const service = axios.create({
+  baseURL: "/api",
+  timeout: 10000
+})
+
+/**
+ * 请求拦截（加密）
+ */
+service.interceptors.request.use(config => {
+
+  const needEncrypt = config.headers?.["X-Encrypt"] === true
+
+  if (!needEncrypt) {
+    return config
+  }
+
+  const data = config.data || {}
+
+  const encrypted = encrypt(data)
+
   const timestamp = Date.now()
   const nonce = Math.random().toString(36).substring(2)
 
-  const sign = CryptoJS.HmacSHA256(
-    `data=${encrypted}&timestamp=${timestamp}&nonce=${nonce}`,
-    SIGN_KEY
-  ).toString()
+  const path = config.url || ""
 
-  return {
+  const signature = sign(
+    config.method || "POST",
+    path,
+    encrypted,
+    timestamp,
+    nonce
+  )
+
+  config.data = {
     data: encrypted,
     timestamp,
     nonce,
-    sign
+    sign: signature
   }
+
+  return config
+})
+
+/**
+ * 响应拦截（解密）
+ */
+service.interceptors.response.use(res => {
+
+  const needDecrypt = res.config.headers?.["X-Decrypt"] === true
+
+  if (!needDecrypt) {
+    return res
+  }
+
+  const encrypted = res.data
+
+  const decrypted = decrypt(encrypted)
+
+  try {
+    res.data = JSON.parse(decrypted)
+  } catch {
+    res.data = decrypted
+  }
+
+  return res
+})
+
+export default service
+```
+
+------
+
+#### 接口调用示例（对应你 Controller）
+
+------
+
+1. `/crypto/get`（仅响应加密）
+
+```ts
+import service from "./request"
+
+/**
+ * GET：不加密请求，只解密响应
+ */
+export function testGet(name: string) {
+  return service.get("/crypto/get", {
+    params: { name },
+    headers: {
+      "X-Decrypt": true
+    }
+  })
 }
 ```
+
+------
+
+2. `/crypto/post`（仅请求解密）
+
+```ts
+/**
+ * POST：加密请求，不解密响应
+ */
+export function testPost(data: any) {
+  return service.post("/crypto/post", data, {
+    headers: {
+      "X-Encrypt": true
+    }
+  })
+}
+```
+
+------
+
+3. `/crypto/ignore`（完全不加密）
+
+```ts
+/**
+ * 明文接口
+ */
+export function testIgnore(data: any) {
+  return service.post("/crypto/ignore", data)
+}
+```
+
+------
+
+#### 调用示例（页面中）
+
+```ts
+// GET（自动解密）
+testGet("Ateng").then(res => {
+  console.log(res.data)
+})
+
+// POST（自动加密）
+testPost({ name: "Ateng", age: 18 }).then(res => {
+  console.log(res.data)
+})
+
+// 明文
+testIgnore({ hello: "world" }).then(res => {
+  console.log(res.data)
+})
+```
+
+------
+
+
 

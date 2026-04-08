@@ -1,93 +1,167 @@
 package io.github.atengk.crypto.util;
 
 import cn.hutool.core.codec.Base64;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.HMac;
 import cn.hutool.crypto.digest.HmacAlgorithm;
 import cn.hutool.crypto.symmetric.AES;
-import cn.hutool.extra.spring.SpringUtil;
 import io.github.atengk.crypto.config.CryptoProperties;
 
 import java.nio.charset.StandardCharsets;
 
 /**
  * 加密工具类
- * <p>
- * 功能：
- * 1. AES 加密解密（带 IV）
- * 2. HmacSHA256 签名
- * 3. 签名校验
  *
  * @author 孔余
  * @since 2026-01-29
  */
 public class CryptoUtil {
 
-    private static final CryptoProperties cryptoProperties = SpringUtil.getBean(CryptoProperties.class);
+    private static byte[] AES_KEY;
+    private static byte[] AES_IV;
+    private static byte[] SIGN_KEY;
+
+    private static AES AES_INSTANCE;
+    private static HMac HMAC_INSTANCE;
 
     /**
-     * AES Key（16/24/32字节）
+     * 初始化（由 Spring 调用）
      */
-    private static final byte[] AES_KEY = Base64.decode(cryptoProperties.getAesKey());
+    public static void init(CryptoProperties properties) {
+
+        AES_KEY = Base64.decode(properties.getAesKey());
+        AES_IV = Base64.decode(properties.getIv());
+        SIGN_KEY = properties.getSignKey().getBytes(StandardCharsets.UTF_8);
+
+        AES_INSTANCE = new AES("CBC", "PKCS5Padding", AES_KEY, AES_IV);
+        HMAC_INSTANCE = new HMac(HmacAlgorithm.HmacSHA256, SIGN_KEY);
+    }
 
     /**
-     * IV（必须和前端一致）
-     */
-    private static final byte[] AES_IV = Base64.decode(cryptoProperties.getIv());
-
-    /**
-     * 签名 Key
-     */
-    private static final byte[] SIGN_KEY = cryptoProperties.getSignKey().getBytes(StandardCharsets.UTF_8);
-
-    /**
-     * AES 加密（CBC + PKCS5Padding）
+     * AES 加密
      */
     public static String encrypt(String data) {
-        AES aes = new AES("CBC", "PKCS5Padding", AES_KEY, AES_IV);
-        return aes.encryptBase64(data);
+
+        if (StrUtil.isBlank(data)) {
+            return StrUtil.EMPTY;
+        }
+
+        return AES_INSTANCE.encryptBase64(data);
     }
 
     /**
      * AES 解密
      */
     public static String decrypt(String data) {
-        AES aes = new AES("CBC", "PKCS5Padding", AES_KEY, AES_IV);
-        return aes.decryptStr(data);
+
+        if (StrUtil.isBlank(data)) {
+            return StrUtil.EMPTY;
+        }
+
+        return AES_INSTANCE.decryptStr(data);
     }
 
     /**
-     * 生成签名（推荐结构化拼接）
+     * 生成签名
      */
-    public static String sign(String data, long timestamp, String nonce) {
+    public static String sign(String method,
+                              String path,
+                              String data,
+                              long timestamp,
+                              String nonce) {
 
-        String content = buildSignContent(data, timestamp, nonce);
+        String content = buildSignContent(method, path, data, timestamp, nonce);
 
-        HMac mac = new HMac(HmacAlgorithm.HmacSHA256, SIGN_KEY);
-        return mac.digestHex(content);
+        return HMAC_INSTANCE.digestHex(content);
     }
 
     /**
-     * 校验签名
+     * 校验签名（常量时间比较）
      */
-    public static boolean verify(String data, long timestamp, String nonce, String sign) {
+    public static boolean verify(String method,
+                                 String path,
+                                 String data,
+                                 long timestamp,
+                                 String nonce,
+                                 String sign) {
 
-        String localSign = sign(data, timestamp, nonce);
+        if (StrUtil.isBlank(sign)) {
+            return false;
+        }
 
-        return localSign.equalsIgnoreCase(sign);
+        String localSign = sign(method, path, data, timestamp, nonce);
+
+        return constantTimeEquals(localSign, sign);
     }
 
     /**
-     * 构建签名字符串（避免拼接歧义）
+     * 构建签名字符串
      */
-    private static String buildSignContent(String data, long timestamp, String nonce) {
+    private static String buildSignContent(String method,
+                                           String path,
+                                           String data,
+                                           long timestamp,
+                                           String nonce) {
 
-        /*
-         * 使用 key=value 结构，避免：
-         * data=12 + 34 和 data=1 + 234 冲突
-         */
-        return "data=" + data +
+        return "method=" + normalizeMethod(method) +
+                "&path=" + normalizePath(path) +
+                "&data=" + safe(data) +
                 "&timestamp=" + timestamp +
-                "&nonce=" + nonce;
+                "&nonce=" + safe(nonce);
     }
 
+    /**
+     * Method 标准化
+     */
+    private static String normalizeMethod(String method) {
+        return StrUtil.toUpperCase(StrUtil.blankToDefault(method, "GET"));
+    }
+
+    /**
+     * Path 标准化
+     */
+    private static String normalizePath(String path) {
+
+        if (StrUtil.isBlank(path)) {
+            return "/";
+        }
+
+        path = path.replaceAll("//+", "/");
+
+        if (path.length() > 1 && path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        return path;
+    }
+
+    /**
+     * 防止 null
+     */
+    private static String safe(String str) {
+        return ObjectUtil.defaultIfNull(str, "");
+    }
+
+    /**
+     * 常量时间比较（防时序攻击）
+     */
+    private static boolean constantTimeEquals(String a, String b) {
+
+        if (a == null || b == null) {
+            return false;
+        }
+
+        if (a.length() != b.length()) {
+            return false;
+        }
+
+        int result = 0;
+
+        for (int i = 0; i < a.length(); i++) {
+            result |= a.charAt(i) ^ b.charAt(i);
+        }
+
+        return result == 0;
+    }
 }
