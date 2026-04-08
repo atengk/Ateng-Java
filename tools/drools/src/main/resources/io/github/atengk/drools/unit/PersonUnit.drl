@@ -1,0 +1,19 @@
+package io.github.atengk.drools.unit
+
+unit PersonUnit;
+
+import io.github.atengk.drools.model.Person;
+
+rule "Mark adult person"
+when
+    $person : /persons[ age >= 18 ]
+then
+    modify($person) {
+        setAdult(true)
+    };
+    adultNames.add($person.getName());
+end
+
+query FindAdults
+    $person : /persons[ adult == true ]
+end

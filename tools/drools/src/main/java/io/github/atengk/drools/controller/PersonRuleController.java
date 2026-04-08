@@ -1,9 +1,12 @@
-package io.github.atengk.drools.ruleunit.controller;
+package io.github.atengk.drools.controller;
 
-import io.github.atengk.drools.ruleunit.model.Person;
-import io.github.atengk.drools.ruleunit.service.PersonRuleService;
-import io.github.atengk.drools.ruleunit.service.PersonRuleService.RuleResult;
-import org.springframework.web.bind.annotation.*;
+import io.github.atengk.drools.model.Person;
+import io.github.atengk.drools.model.RuleResult;
+import io.github.atengk.drools.service.PersonRuleService;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 

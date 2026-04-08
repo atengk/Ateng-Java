@@ -1,5 +1,6 @@
-package io.github.atengk.drools.ruleunit.unit;
+package io.github.atengk.drools.unit;
 
+import io.github.atengk.drools.model.Person;
 import org.drools.ruleunits.api.DataSource;
 import org.drools.ruleunits.api.DataStore;
 import org.drools.ruleunits.api.RuleUnitData;
@@ -15,19 +16,19 @@ import java.util.Set;
  */
 public class PersonUnit implements RuleUnitData {
 
-    private final DataStore<io.github.atengk.drools.ruleunit.model.Person> persons;
+    private final DataStore<Person> persons;
     private final Set<String> adultNames;
 
     public PersonUnit() {
         this(DataSource.createStore());
     }
 
-    public PersonUnit(DataStore<io.github.atengk.drools.ruleunit.model.Person> persons) {
+    public PersonUnit(DataStore<Person> persons) {
         this.persons = persons;
         this.adultNames = new HashSet<>();
     }
 
-    public DataStore<io.github.atengk.drools.ruleunit.model.Person> getPersons() {
+    public DataStore<Person> getPersons() {
         return persons;
     }
 
