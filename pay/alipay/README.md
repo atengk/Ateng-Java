@@ -425,7 +425,7 @@ public class AlipayController {
 
 ### 前端页面（展示支付二维码）
 
-Vue3 可以参考使用 VueUse 的 useQRCode 生成二维码图片，链接：[二维码生成：useQuCode](https://atengk.github.io/Ateng-Vue/#/apps/vueuse-integrations/?id=%e4%ba%8c%e7%bb%b4%e7%a0%81%e7%94%9f%e6%88%90%ef%bc%9auseqrcode)
+Vue3 可以参考使用 VueUse 的 useQRCode 生成二维码图片，链接：[二维码生成：useQuCode](https://atengk.github.io/Ateng-Vue/apps/vueuse/vueuse-integrations/README#%E4%BA%8C%E7%BB%B4%E7%A0%81%E7%94%9F%E6%88%90-useqrcode)
 
 ```html
 <!DOCTYPE html>

@@ -410,7 +410,7 @@ Nexus3 安装参考文档：[链接](https://atengk.github.io/Ateng-Linux/work/d
     <version>1.0.0</version>
     <name>boot3-deploy</name>
     <description>SpringBoot3 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 项目属性 -->
     <properties>
@@ -898,7 +898,7 @@ gpg --keyserver keyserver.ubuntu.com --recv-keys 1234ABCD5678EF90123456789ABCDEF
     <version>1.0.2</version>
     <name>boot3-deploy</name>
     <description>SpringBoot3 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 许可证信息 -->
     <licenses>
@@ -1061,7 +1061,7 @@ gpg --keyserver keyserver.ubuntu.com --recv-keys 1234ABCD5678EF90123456789ABCDEF
     <version>1.0.2</version>
     <name>boot3-deploy</name>
     <description>SpringBoot2 发布到仓库 模块</description>
-    <url>https://atengk.github.io/dev</url>
+    <url>https://atengk.github.io</url>
 
     <!-- 许可证信息 -->
     <licenses>

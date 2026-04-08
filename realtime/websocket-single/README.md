@@ -2117,7 +2117,7 @@ public class WebSocketController {
 
 ### Vue3使用
 
- 前端Vue使用WebSocket参考文档：[链接](https://atengk.github.io/Ateng-Vue/#/apps/web-socket/)
+ 前端Vue使用WebSocket参考文档：[链接](https://atengk.github.io/Ateng-Vue/apps/realtime/web-socket/README)
 
 其他的都一样，就是心跳的配置需要修改一下
 
