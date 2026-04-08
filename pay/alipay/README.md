@@ -83,7 +83,7 @@ https://openapi-sandbox.dl.alipaydev.com/gateway.do
 
 **application.yml 配置**
 
-注意这个回调地址 `notify-url`，需要支付宝能访问到的地址，内网可以使用FRP穿透到公网：[FRP内网穿透参考文档](https://atengk.github.io/ops/#/work/service/frp/)
+注意这个回调地址 `notify-url`，需要支付宝能访问到的地址，内网可以使用FRP穿透到公网：[FRP内网穿透参考文档](https://atengk.github.io/Ateng-Linux/work/service/frp/README)
 
 ```yaml
 ---

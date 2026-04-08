@@ -286,7 +286,7 @@ Maven 会从 **本地仓库**（`~/.m2/repository`）找到 SNAPSHOT 或 Release
 
 ## 发布到 Nexus3 / 私服
 
-Nexus3 安装参考文档：[链接](https://atengk.github.io/ops/#/work/docker/service/nexus/)
+Nexus3 安装参考文档：[链接](https://atengk.github.io/Ateng-Linux/work/docker/service/nexus/README)
 
 ### 上传
 

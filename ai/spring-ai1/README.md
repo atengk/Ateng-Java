@@ -728,7 +728,7 @@ RAG（Retrieval-Augmented Generation，检索增强生成）用于在模型回�
 
 - 官网：[https://milvus.io](https://milvus.io)
 
-- Milvus服务安装文档：[链接](https://atengk.github.io/ops/#/work/docker/service/milvus/)
+- Milvus服务安装文档：[链接](https://atengk.github.io/Ateng-Linux/work/docker/service/milvus/README)
 
 
 
