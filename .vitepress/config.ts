@@ -287,6 +287,7 @@ export default defineConfig({
                             { text: 'Hutool', link: '/tools/hutool/README' },
                             { text: 'Lombok', link: '/tools/lombok/README' },
                             { text: 'QLExpress', link: '/tools/qlexpress4/README' },
+                            { text: 'Drools', link: '/tools/drools/README' },
                         ]
                     },
                     {

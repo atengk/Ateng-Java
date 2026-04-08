@@ -34,5 +34,6 @@
         <module>apache-tika</module>
         <module>sshj</module>
         <module>qlexpress4</module>
+        <module>drools</module>
     </modules>
 </project>

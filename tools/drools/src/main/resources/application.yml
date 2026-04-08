@@ -1,0 +1,10 @@
+server:
+  port: 11019
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
+---
