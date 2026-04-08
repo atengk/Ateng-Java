@@ -63,16 +63,24 @@
             <version>${fastjson2.version}</version>
         </dependency>
 
-        <!-- Drools 规则引擎 -->
-        <dependency>
-            <groupId>org.drools</groupId>
-            <artifactId>drools-engine</artifactId>
-        </dependency>
-
-        <!-- RuleUnit 核心 -->
+        <!-- Drools 9 RuleUnit 核心执行引擎依赖 -->
+        <!-- 用于支持 RuleUnit（规则单元）模式的执行 -->
         <dependency>
             <groupId>org.drools</groupId>
             <artifactId>drools-ruleunits-engine</artifactId>
+            <version>${drools.version}</version>
+        </dependency>
+
+        <!-- KIE Maven 插件 -->
+        <!-- 作用：在 Maven 构建阶段对 DRL 规则进行编译、校验与打包 -->
+        <!-- 用于生成 KIE 模块（KieModule），确保规则可以被 Drools 引擎正确加载 -->
+        <!-- scope=provided 表示仅在构建阶段使用，运行时不需要 -->
+        <dependency>
+            <groupId>org.kie</groupId>
+            <artifactId>kie-maven-plugin</artifactId>
+            <version>${drools.version}</version>
+            <type>maven-plugin</type>
+            <scope>provided</scope>
         </dependency>
 
     </dependencies>
@@ -84,13 +92,6 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.drools</groupId>
-                <artifactId>drools-bom</artifactId>
-                <version>${drools.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

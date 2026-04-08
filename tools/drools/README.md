@@ -50,7 +50,7 @@ Drools 是一个用 Java 编写的开源 **业务规则管理系统（BRMS）** 
 `src/main/resources/META-INF/ruleunits/person.drl`
 
 ```
-package io.github.atengk.drools.rules
+package io.github.atengk.drools.ruleunit
 
 import io.github.atengk.drools.model.Person
 import io.github.atengk.drools.ruleunit.PersonUnit
