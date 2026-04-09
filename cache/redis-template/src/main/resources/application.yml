@@ -12,9 +12,9 @@ spring:
 spring:
   data:
     redis:
-      host: 192.168.1.10 # Redis服务器地址
-      database: 41 # Redis数据库索引（默认为0）
-      port: 42784 # Redis服务器连接端口
+      host: 192.168.1.12 # Redis服务器地址
+      database: 0 # Redis数据库索引（默认为0）
+      port: 40003 # Redis服务器连接端口
       password: Admin@123 # Redis服务器连接密码（默认为空）
       client-type: lettuce  # 默认使用Lettuce作为Redis客户端
       lettuce:
@@ -26,9 +26,9 @@ spring:
           time-between-eviction-runs: 1s # 空闲对象逐出器线程的运行间隔时间.空闲连接线程释放周期时间
       timeout: 5000ms # 连接超时时间（毫秒）
     redis-dev:
-      host: 192.168.1.10 # Redis服务器地址
-      database: 101 # Redis数据库索引（默认为0）
-      port: 42784 # Redis服务器连接端口
+      host: 192.168.1.12 # Redis服务器地址
+      database: 1 # Redis数据库索引（默认为0）
+      port: 40003 # Redis服务器连接端口
       password: Admin@123 # Redis服务器连接密码（默认为空）
       client-type: lettuce  # 默认使用Lettuce作为Redis客户端
       lettuce:

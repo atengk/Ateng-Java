@@ -1,6 +1,6 @@
 package local.ateng.java.redis.service;
 
-import org.springframework.data.redis.connection.MessageListener;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -11,7 +11,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Redis 服务
+ * RedisService 接口，封装了基于 RedisTemplate 的 Redis 操作。
  *
  * @author 孔余
  * @since 2025-07-31
@@ -48,6 +48,26 @@ public interface RedisService {
     void set(String key, Object value, Duration duration);
 
     /**
+     * 类型转换工具方法：将 Object 转换为指定类型
+     *
+     * @param value 原始对象
+     * @param clazz 目标类型
+     * @param <T>   目标类型泛型
+     * @return 转换后的对象，或 null（若原始对象为 null）
+     */
+    <T> T convertValue(Object value, Class<T> clazz);
+
+    /**
+     * 类型转换工具方法：将 Object 转换为指定类型
+     *
+     * @param value         原始对象
+     * @param typeReference 目标类型引用（支持泛型）
+     * @param <T>           目标类型泛型
+     * @return 转换后的对象，失败返回 null
+     */
+    <T> T convertValue(Object value, TypeReference<T> typeReference);
+
+    /**
      * 获取缓存值（Object 原始类型）
      *
      * @param key 缓存键
@@ -66,6 +86,16 @@ public interface RedisService {
     <T> T get(String key, Class<T> clazz);
 
     /**
+     * 获取缓存值并自动反序列化为指定泛型类型（支持复杂类型，如 List<T>、Map<String, T> 等）。
+     *
+     * @param key           缓存键
+     * @param typeReference 泛型类型引用，用于指定目标类型
+     * @param <T>           泛型类型
+     * @return 指定类型的对象，可能为 null
+     */
+    <T> T get(String key, TypeReference<T> typeReference);
+
+    /**
      * 获取缓存值并反序列化为 List 类型
      *
      * @param key   缓存键
@@ -74,26 +104,6 @@ public interface RedisService {
      * @return 列表对象，可能为空
      */
     <T> List<T> getList(String key, Class<T> clazz);
-
-    /**
-     * 获取缓存值并反序列化为 Set 类型
-     *
-     * @param key   缓存键
-     * @param clazz 集合中元素的类型
-     * @param <T>   泛型类型
-     * @return Set 集合对象，可能为空
-     */
-    <T> Set<T> getSet(String key, Class<T> clazz);
-
-    /**
-     * 获取缓存值并反序列化为 Map 类型
-     *
-     * @param key   缓存键
-     * @param clazz Map 中 value 的类型（key 默认为 String）
-     * @param <T>   泛型类型
-     * @return Map 对象，可能为空
-     */
-    <T> Map<String, T> getMap(String key, Class<T> clazz);
 
     /**
      * 批量获取多个 key 的缓存值（原始类型）
@@ -285,6 +295,15 @@ public interface RedisService {
     Set<String> scanKeys(String pattern);
 
     /**
+     * 使用 SCAN 命令匹配 key（支持自定义每批次返回数量）
+     *
+     * @param pattern 匹配模式（如：user:*）
+     * @param count   每批次 scan 数量（建议 >= 100）
+     * @return 匹配到的 key 集合（非阻塞）
+     */
+    Set<String> scanKeys(String pattern, int count);
+
+    /**
      * 遍历 Hash 中的所有字段，返回匹配 pattern 的字段列表。
      *
      * @param hash    Hash 键
@@ -292,6 +311,16 @@ public interface RedisService {
      * @return 匹配的字段列表
      */
     Set<String> scanHashKeys(String hash, String pattern);
+
+    /**
+     * 遍历 Hash 中的所有字段，返回匹配 pattern 的字段列表（支持自定义每批次返回数量）
+     *
+     * @param hash    Hash 键
+     * @param pattern 字段匹配模式，支持通配符
+     * @param count   每批次 scan 数量（建议 >= 100）
+     * @return 匹配的字段列表
+     */
+    Set<String> scanHashKeys(String hash, String pattern, int count);
 
     /**
      * 获取指定 key 的类型（string、list、hash、set、zset 等）
@@ -664,24 +693,6 @@ public interface RedisService {
      */
     long lRemove(String key, long count, Object value);
 
-    /**
-     * 阻塞方式弹出左侧元素（支持多个 key）
-     *
-     * @param timeout 超时时间（秒）
-     * @param keys    Redis键数组
-     * @return 弹出的元素封装（键值对）
-     */
-    Map.Entry<String, Object> blPop(int timeout, String... keys);
-
-    /**
-     * 阻塞方式弹出右侧元素（支持多个 key）
-     *
-     * @param timeout 超时时间（秒）
-     * @param keys    Redis键数组
-     * @return 弹出的元素封装（键值对）
-     */
-    Map.Entry<String, Object> brPop(int timeout, String... keys);
-
     // ---------------------------------- Set 操作 ----------------------------------
 
     /**
@@ -765,6 +776,38 @@ public interface RedisService {
      * @return 集合大小
      */
     long sSize(String key);
+
+    /**
+     * 将集合元素转换为指定类型的 Set。
+     *
+     * @param source 原始集合
+     * @param clazz  目标类型 Class
+     * @param <T>    目标类型
+     * @return 转换后的 Set
+     */
+    <T> Set<T> convertToSet(Collection<?> source, Class<T> clazz);
+
+    /**
+     * 将集合元素转换为指定类型的 List。
+     *
+     * @param source 原始集合
+     * @param clazz  目标类型 Class
+     * @param <T>    目标类型
+     * @return 转换后的 List
+     */
+    <T> List<T> convertToList(Collection<?> source, Class<T> clazz);
+
+    /**
+     * 将原始集合转换为指定类型的集合（List 或 Set）。
+     *
+     * @param source     原始集合（可能为 null）
+     * @param clazz      目标类型 Class
+     * @param collection 创建好的目标集合实例（如 new ArrayList<>(), new HashSet<>())
+     * @param <T>        目标类型
+     * @param <C>        返回集合类型（List 或 Set）
+     * @return 转换后的集合（若 source 为空则返回空集合）
+     */
+    <T, C extends Collection<T>> C convertToCollection(Collection<?> source, Class<T> clazz, C collection);
 
     /**
      * 获取两个集合的并集。
@@ -1124,57 +1167,57 @@ public interface RedisService {
     // ------------------ 分布式锁 ------------------
 
     /**
-     * 尝试获取分布式锁，设置锁的唯一标识和过期时间。
+     * 尝试获取锁（一直等待，最多30秒）
      *
-     * @param key    锁的 Redis 键
-     * @param value  锁的持有者标识（唯一）
-     * @param expire 过期时间（秒）
-     * @return 获取成功返回 true，失败返回 false
+     * @param key 锁 key
+     * @return true 成功获取锁；false 失败
      */
-    boolean tryLock(String key, String value, long expire);
+    boolean tryLock(String key);
 
     /**
-     * 尝试获取分布式锁，支持灵活的过期时间单位。
+     * 尝试获取锁（立即返回）
      *
-     * @param key     锁的 Redis 键
-     * @param value   锁的持有者标识（唯一）
-     * @param timeout 过期时间
-     * @param unit    时间单位（如 TimeUnit.SECONDS）
-     * @return 获取成功返回 true，失败返回 false
+     * @param key       锁 key
+     * @param leaseTime 锁的生存时间
+     * @param unit      时间单位
+     * @return true 成功获取锁；false 失败
      */
-    boolean tryLock(String key, String value, long timeout, TimeUnit unit);
+    boolean tryLock(String key, long leaseTime, TimeUnit unit);
 
     /**
-     * 释放分布式锁，只有持有锁的客户端（value 匹配）才能释放。
+     * 尝试获取锁（支持等待）
      *
-     * @param key           锁的 Redis 键
-     * @param expectedValue 期望释放锁的持有者标识
-     * @return 释放成功返回 true，失败返回 false
+     * @param key       锁 key
+     * @param waitTime  最长等待时间
+     * @param leaseTime 锁的生存时间
+     * @param unit      时间单位
+     * @return true 成功获取锁；false 失败
      */
-    boolean releaseLock(String key, String expectedValue);
+    boolean tryLock(String key, long waitTime, long leaseTime, TimeUnit unit);
 
     /**
-     * 尝试续期分布式锁，只有持有锁的客户端（value 匹配）才能续期。
+     * 原子释放锁：只有持有相同 requestId 的线程才会成功删除 key
      *
-     * @param key           锁的 Redis 键
-     * @param expectedValue 当前锁持有者标识
-     * @param timeout       新的过期时间
-     * @param unit          时间单位
-     * @return 续期成功返回 true，否则 false
+     * @param key 锁 key
+     * @return true 释放成功；false 未释放（可能不是当前持有者或锁已过期）
      */
-    boolean renewLock(String key, String expectedValue, long timeout, TimeUnit unit);
+    boolean unlock(String key);
 
     /**
-     * 带重试机制的分布式锁，失败后等待指定时间再重试，最多重试次数限制。
+     * 获取分布式锁对象
      *
-     * @param key        锁的 Redis 键
-     * @param value      锁的持有者标识（唯一）
-     * @param retryTimes 重试次数
-     * @param waitMillis 重试等待时间（毫秒）
-     * @return 获取成功返回 true，失败返回 false
+     * @param name 锁名称
+     * @return RLock 实例
      */
-    boolean lockWithRetry(String key, String value, int retryTimes, long waitMillis);
+    RLock getLock(String name);
 
+    /**
+     * 获取分布式锁对象（加强版，支持自动锁续期）
+     *
+     * @param name 锁名称
+     * @return RLock 实例
+     */
+    RLock getLockPlus(String name);
 
     // ------------------ 计数器操作 ------------------
 
@@ -1257,44 +1300,71 @@ public interface RedisService {
      */
     void publishAsync(String channel, Object message);
 
-    /**
-     * 订阅指定频道的消息，listener 负责处理接收到的消息。
-     *
-     * @param channel  频道名
-     * @param listener 消息监听器（实现 MessageListener 接口）
-     */
-    void subscribe(String channel, MessageListener listener);
+    // --------------------- Lua 脚本操作 ---------------------
 
     /**
-     * 订阅指定频道消息，支持是否自动确认机制。
+     * 在 Redis 中执行 Lua 脚本（返回单一结果）。
      *
-     * @param channel  频道名
-     * @param listener 消息监听器
-     * @param autoAck  是否自动确认消息（业务相关）
+     * @param script     Lua 脚本内容（例如 "return redis.call('set', KEYS[1], ARGV[1])"）
+     * @param keys       脚本中需要用到的 KEYS 参数（如 KEYS[1]、KEYS[2]）
+     * @param args       脚本中需要用到的 ARGV 参数（如 ARGV[1]、ARGV[2]）
+     * @param returnType 返回值类型（用于指定 Redis 返回的数据类型，如 Boolean、Long、String、List 等）
+     * @param <T>        返回值类型（根据 Redis 返回的类型自动转换，例如 String、Long、Boolean 等）
+     * @return 执行结果
+     * <p>
+     * 核心逻辑：
+     * 1. 使用 RScript 对象执行 Lua 脚本
+     * 2. RScript.Mode.READ_WRITE 表示既能读也能写（一般 Lua 脚本会修改数据）
+     * 3. StringCodec 用于将 Redis 数据以字符串方式编码/解码
+     * 4. RScript.ReturnType.VALUE 表示返回单一值（也可以改为 MULTI、BOOLEAN 等）
+     * 5. keys 是脚本的 KEYS 数组，args 是 ARGV 数组
      */
-    void subscribe(String channel, MessageListener listener, boolean autoAck);
+    <T> T eval(String script, Class<T> returnType, List<String> keys, Object... args);
 
     /**
-     * 订阅多个频道消息。
+     * 执行 Lua 脚本但不返回结果。
      *
-     * @param channels 频道名数组
-     * @param listener 消息监听器
+     * @param script Lua 脚本内容
+     * @param keys   脚本中的 KEYS
+     * @param args   脚本中的 ARGV
+     *               <p>
+     *               核心逻辑：
+     *               1. 使用 RScript.eval 执行 Lua 脚本
+     *               2. RScript.ReturnType.VALUE 用于兼容调用，但结果不保存
+     *               3. 常用于只修改 Redis 数据但不关心返回值的场景
      */
-    void subscribeMultiple(String[] channels, MessageListener listener);
+    void evalNoResult(String script, List<String> keys, Object... args);
 
     /**
-     * 取消订阅指定频道。
+     * 通过 SHA1 执行已加载的 Lua 脚本，并返回指定类型结果。
      *
-     * @param channel  频道名
-     * @param listener 消息监听器
+     * @param sha1       Lua 脚本的 SHA1
+     * @param returnType 返回类型 Class
+     * @param keys       脚本中的 KEYS
+     * @param values     脚本中的 ARGV
+     * @param <T>        返回值泛型
+     * @return 脚本执行结果
+     * <p>
+     * 核心逻辑：
+     * 1. 使用 RScript.evalSha 执行 Redis 缓存的 Lua 脚本
+     * 2. 避免重复传输脚本内容，提高性能
      */
-    void unsubscribe(String channel, MessageListener listener);
+    <T> T evalBySha(String sha1, Class<T> returnType, List<String> keys, Object... values);
 
     /**
-     * 取消该监听器的所有订阅。
+     * 将 Lua 脚本加载到 Redis，并返回脚本的 SHA1 值。
      *
-     * @param listener 消息监听器
+     * <p>适用于需要多次执行同一脚本的场景，结合 {@link #evalBySha(String, Class, List, Object...)} 可减少传输和解析开销。</p>
+     *
+     * @param script Lua 脚本内容
+     * @return 脚本在 Redis 中的 SHA1 摘要
+     *
+     * <p>关键代码说明：</p>
+     * <ul>
+     *     <li>底层执行 {@code SCRIPT LOAD} 命令，将脚本缓存到 Redis 端</li>
+     *     <li>返回 SHA1 值可直接用于后续的 {@code EVALSHA} 调用</li>
+     * </ul>
      */
-    void unsubscribeAll(MessageListener listener);
+    String loadScript(String script);
 
 }
