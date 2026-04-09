@@ -289,6 +289,7 @@ export default defineConfig({
                             { text: 'QLExpress 规则引擎', link: '/tools/qlexpress4/README' },
                             { text: 'Drools 规则引擎', link: '/tools/drools/README' },
                             { text: 'Warm Flow 工作流', link: '/tools/warm-flow/README' },
+                            { text: 'ip2region 离线IP管理', link: '/tools/ip2region/README' },
                         ]
                     },
                     {

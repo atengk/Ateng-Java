@@ -36,5 +36,6 @@
         <module>qlexpress4</module>
         <module>drools</module>
         <module>warm-flow</module>
+        <module>ip2region</module>
     </modules>
 </project>
