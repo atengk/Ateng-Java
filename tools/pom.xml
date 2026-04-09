@@ -35,5 +35,6 @@
         <module>sshj</module>
         <module>qlexpress4</module>
         <module>drools</module>
+        <module>warm-flow</module>
     </modules>
 </project>

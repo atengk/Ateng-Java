@@ -286,8 +286,9 @@ export default defineConfig({
                         items: [
                             { text: 'Hutool', link: '/tools/hutool/README' },
                             { text: 'Lombok', link: '/tools/lombok/README' },
-                            { text: 'QLExpress', link: '/tools/qlexpress4/README' },
-                            { text: 'Drools', link: '/tools/drools/README' },
+                            { text: 'QLExpress 规则引擎', link: '/tools/qlexpress4/README' },
+                            { text: 'Drools 规则引擎', link: '/tools/drools/README' },
+                            { text: 'Warm Flow 工作流', link: '/tools/warm-flow/README' },
                         ]
                     },
                     {
