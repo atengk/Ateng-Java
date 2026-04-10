@@ -2,6 +2,7 @@ package io.github.atengk.ip.controller;
 
 import io.github.atengk.ip.model.IpInfo;
 import io.github.atengk.ip.service.Ip2RegionService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @since 2026-04-09
  */
 @RestController
+@ConditionalOnBean(Ip2RegionService.class)
 public class IpController {
 
     private final Ip2RegionService ip2RegionService;

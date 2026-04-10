@@ -8,3 +8,10 @@ logging:
     root: info
     io.github.atengk: debug
 ---
+# ip2region 配置
+ip2region:
+  enabled: true
+  ipv4-db-path: D:/My/files/ip2region/ip2region_v4.xdb
+  ipv6-db-path: D:/My/files/ip2region/ip2region_v6.xdb
+  search-type: memory   # file / vector / memory
+  cache-enabled: true
