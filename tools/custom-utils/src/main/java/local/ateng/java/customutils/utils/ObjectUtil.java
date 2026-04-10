@@ -55,11 +55,11 @@ public final class ObjectUtil {
      * @return true：两个对象相等；false：两个对象不相等
      */
     public static boolean equals(Object obj1, Object obj2) {
-        if (obj1 == null || obj2 == null) {
-            return false;
-        }
         if (obj1 == obj2) {
             return true;
+        }
+        if (obj1 == null || obj2 == null) {
+            return false;
         }
         return obj1.equals(obj2);
     }

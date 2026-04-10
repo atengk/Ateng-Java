@@ -3130,5 +3130,146 @@ public final class CollectionUtil {
         }
     }
 
+    /**
+     * List 转 Map
+     */
+    private static <T> Map<String, T> toMap(List<T> list, Function<T, String> keyFunc) {
+
+        Map<String, T> map = new HashMap<>();
+
+        if (list == null || list.isEmpty()) {
+            return map;
+        }
+
+        for (T item : list) {
+            if (item == null) {
+                continue;
+            }
+
+            String key = keyFunc.apply(item);
+
+            if (key == null) {
+                continue;
+            }
+
+            map.put(key, item);
+        }
+
+        return map;
+    }
+
+    /**
+     * 构建返回结果
+     */
+    private static Map<String, Object> buildResult(
+            List<?> addList,
+            List<?> deleteList,
+            List<?> updateList) {
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("add", addList);
+        result.put("delete", deleteList);
+        result.put("update", updateList);
+        return result;
+    }
+
+    /**
+     * 对比两个对象的字段差异
+     *
+     * @param oldObj 旧对象
+     * @param newObj 新对象
+     * @return 字段差异
+     */
+    private static Map<String, Object> diffObject(Object oldObj, Object newObj) {
+
+        Map<String, Object> changes = new HashMap<>();
+
+        if (oldObj == null || newObj == null) {
+            return changes;
+        }
+
+        Map<String, Object> oldMap = BeanUtil.toMap(oldObj);
+        Map<String, Object> newMap = BeanUtil.toMap(newObj);
+
+        for (String field : oldMap.keySet()) {
+
+            Object oldVal = oldMap.get(field);
+            Object newVal = newMap.get(field);
+
+            if (!ObjectUtil.equals(oldVal, newVal)) {
+
+                Map<String, Object> diff = new HashMap<>();
+                diff.put("old", oldVal);
+                diff.put("new", newVal);
+
+                changes.put(field, diff);
+            }
+        }
+
+        return changes;
+    }
+
+    /**
+     * 计算两个 List 的差异（增删改）
+     *
+     * <p>功能说明：</p>
+     * <ul>
+     *     <li>基于唯一键进行匹配</li>
+     *     <li>新增数据：newList 存在但 oldList 不存在</li>
+     *     <li>删除数据：oldList 存在但 newList 不存在</li>
+     *     <li>修改数据：字段级别精确对比</li>
+     * </ul>
+     *
+     * @param oldList 旧数据
+     * @param newList 新数据
+     * @param keyFunc 唯一键函数
+     * @param <T>     数据类型
+     * @return 差异结果
+     */
+    public static <T> Map<String, Object> diff(
+            List<T> oldList,
+            List<T> newList,
+            Function<T, String> keyFunc) {
+
+        List<T> addList = new ArrayList<>();
+        List<T> deleteList = new ArrayList<>();
+        List<Map<String, Object>> updateList = new ArrayList<>();
+
+        if (keyFunc == null) {
+            return buildResult(addList, deleteList, updateList);
+        }
+
+        Map<String, T> oldMap = toMap(oldList, keyFunc);
+        Map<String, T> newMap = toMap(newList, keyFunc);
+
+        for (Map.Entry<String, T> entry : newMap.entrySet()) {
+            String key = entry.getKey();
+            T newObj = entry.getValue();
+
+            if (!oldMap.containsKey(key)) {
+                addList.add(newObj);
+                continue;
+            }
+
+            T oldObj = oldMap.get(key);
+
+            Map<String, Object> changes = diffObject(oldObj, newObj);
+
+            if (!changes.isEmpty()) {
+                Map<String, Object> updateItem = new HashMap<>();
+                updateItem.put("id", key);
+                updateItem.put("changes", changes);
+                updateList.add(updateItem);
+            }
+        }
+
+        for (Map.Entry<String, T> entry : oldMap.entrySet()) {
+            if (!newMap.containsKey(entry.getKey())) {
+                deleteList.add(entry.getValue());
+            }
+        }
+
+        return buildResult(addList, deleteList, updateList);
+    }
 
 }

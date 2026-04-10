@@ -874,4 +874,30 @@ public class CollectionUtilTests {
         System.out.println(result3);
     }
 
+    @Test
+    void testDiffSimple() {
+
+        List<MyUser> oldList = Arrays.asList(
+                MyUser.builder().id(1L).name("张三").age(20).build(),
+                MyUser.builder().id(2L).name("李四").age(25).build(),
+                MyUser.builder().id(3L).name("王五").age(30).build()
+        );
+
+        List<MyUser> newList = Arrays.asList(
+                MyUser.builder().id(1L).name("张三").age(21).build(), // 修改
+                MyUser.builder().id(3L).name("王五").age(30).build(), // 不变
+                MyUser.builder().id(4L).name("赵六").age(18).build()  // 新增
+        );
+
+        Map<String, Object> diff = CollectionUtil.diff(
+                oldList,
+                newList,
+                user -> String.valueOf(user.getId())
+        );
+
+        //System.out.println(diff);
+        System.out.println(JsonUtil.toJsonString(diff));
+
+    }
+
 }
