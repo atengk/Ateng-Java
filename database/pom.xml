@@ -26,5 +26,6 @@
         <module>mybatis-plus-jdk8</module>
         <module>beetl</module>
         <module>milvus</module>
+        <module>milvus-plus</module>
     </modules>
 </project>

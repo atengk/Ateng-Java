@@ -395,7 +395,8 @@ export default defineConfig({
                     {
                         text: '向量数据库',
                         items: [
-                            { text: 'Milvus', link: '/database/milvus/README' }
+                            { text: 'Milvus', link: '/database/milvus/README' },
+                            { text: 'MilvusPlus', link: '/database/milvus-plus/README' },
                         ]
                     }
                 ]

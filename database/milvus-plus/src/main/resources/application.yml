@@ -1,0 +1,21 @@
+server:
+  port: 15015
+spring:
+  application:
+    name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
+---
+# MilvusPlus 配置
+milvus:
+  uri: http://192.168.1.12:40140
+  # token: root:Milvus
+  enable: true
+  open-log: true
+  db-name: kongyu
+  username: root
+  password: Milvus
+  packages:
+    - io.github.atengk.milvus.entity
