@@ -17,5 +17,7 @@
         <module>optional</module>
         <module>functional-interface</module>
         <module>java-new-syntax</module>
+        <module>thread-local</module>
+        <module>scoped-value</module>
     </modules>
 </project>

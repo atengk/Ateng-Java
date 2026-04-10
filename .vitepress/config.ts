@@ -116,7 +116,9 @@ export default defineConfig({
                         items: [
                             {text: 'Optional', link: '/basic/optional/README'},
                             {text: 'Functional Interface', link: '/basic/functional-interface/README'},
-                            {text: 'Java 新语法', link: '/basic/java-new-syntax/README'}
+                            {text: 'Java 新语法', link: '/basic/java-new-syntax/README'},
+                            {text: 'ThreadLocal', link: '/basic/thread-local/README'},
+                            {text: 'Scoped Value', link: '/basic/scoped-value/README'}
                         ]
                     }
                 ]
