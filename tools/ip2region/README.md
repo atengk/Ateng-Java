@@ -11,7 +11,7 @@
 - [ip2region_v4.xdb](https://github.com/lionsoul2014/ip2region/blob/v3.15.0/data/ip2region_v4.xdb)
 - [ip2region_v6.xdb](https://github.com/lionsoul2014/ip2region/blob/v3.15.0/data/ip2region_v6.xdb)
 
-下载后放到项目 `resources\ip2region\` 目录下
+下载后放到本地目录 `D:/My/files/ip2region/` 下
 
 **添加依赖**
 
