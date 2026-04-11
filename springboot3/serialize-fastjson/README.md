@@ -1,8 +1,8 @@
-# FastJson1
+# FastJson1 序列化和反序列化
 
 fastjson是阿里巴巴的开源JSON解析库，它可以解析JSON格式的字符串，支持将Java Bean序列化为JSON字符串，也可以从JSON字符串反序列化到JavaBean。
 
-- [官方文档](https://github.com/alibaba/fastjson/wiki/Quick-Start-CN)
+以下是序列化和反序列化的应用场景
 
 | **应用场景**                       | **序列化**                  | **反序列化**              |
 | ---------------------------------- | --------------------------- | ------------------------- |
@@ -10,6 +10,8 @@ fastjson是阿里巴巴的开源JSON解析库，它可以解析JSON格式的字�
 | **数据库存储 JSON**                | Java 对象 → JSON 存储       | 读取 JSON → Java 对象     |
 | **Redis 缓存**                     | Java 对象 → JSON 存入 Redis | 取出 JSON → Java 对象     |
 | **消息队列（MQ）**                 | Java 对象 → JSON 发送       | 监听 JSON → Java 对象     |
+
+- [官方文档](https://github.com/alibaba/fastjson/wiki/Quick-Start-CN)
 
 
 
