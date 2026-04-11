@@ -1,48 +1,235 @@
-#忽略根目录下的所有文件
-*
- 
-#忽略子目录下的所有文件
-/*
- 
-#包含目录
-!*/
- 
-#指定不忽略的文件
-!*.css
-!*.js
-!*.ts
-!*.json
-!*.html
-!*.gif
-!*.ico
-!*.jpg
-!*.svg
-!*.png
-!.nojekyll
-!.gitignore
-!*.md
-!*.yaml
-!*.yml
-!*.properties
-!*.sh
-!*Dockerfile*
-!*.java
-!*.xml
-!*.config
-!banner.txt
+# =========================
+# 操作系统文件
+# =========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-#忽略根目录下的文件
-/temp/
-/logs/
-/node_modules/
+# =========================
+# 编辑器 / IDE 配置
+# =========================
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
-#忽略特定文件夹名
+# =========================
+# 日志 / 临时文件 / 缓存
+# =========================
+*.log
+*.log.*
+logs/
+log/
 tmp/
 temp/
-temporary/
-other/
-target/
-logs/
-.idea/
 cache/
+.cache/
+*.tmp
+*.swp
+*.swo
+*.pid
+*.seed
+
+# =========================
+# 环境变量 / 本地密钥
+# =========================
+.env
+.env.*
+!.env.example
+!.env.template
+*.local
+*.secret
+*.key
+*.pem
+*.p12
+*.jks
+
+# =========================
+# 构建产物 / 发布包
+# =========================
 dist/
+build/
+out/
+release/
+target/
+generated/
+coverage/
+reports/
+
+# =========================
+# Java / Spring Boot / Maven / Gradle
+# =========================
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+.mvn/wrapper/maven-wrapper.jar
+.gradle/
+**/build/
+**/target/
+
+# 保留包装脚本，通常应提交
+!mvnw
+!gradlew
+!gradlew.bat
+!.mvn/wrapper/maven-wrapper.properties
+!.gitignore
+
+# =========================
+# Node.js / 前端工程
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# 常见前端框架构建目录
+.nuxt/
+.next/
+.svelte-kit/
+.storybook-out/
+.parcel-cache/
+.vite/
+vite.svg
+
+# 前端本地配置
+.env.development.local
+.env.production.local
+.env.test.local
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# =========================
+# Go
+# =========================
+bin/
+pkg/
+*.test
+coverage.out
+
+# =========================
+# .NET
+# =========================
+bin/
+obj/
+*.rsuser
+*.suo
+*.user
+*.userprefs
+
+# =========================
+# Rust
+# =========================
+target/
+Cargo.lock
+# 如果是应用项目，通常建议提交 Cargo.lock；如果是库项目，可按需保留上面这一行
+
+# =========================
+# Docker / 容器
+# =========================
+docker-data/
+docker-volume/
+*.tar
+*.tar.gz
+docker-compose.override.yml
+
+# =========================
+# 数据库 / 备份 / 导出文件
+# =========================
+*.sql
+*.dump
+*.bak
+*.backup
+*.db
+*.sqlite
+*.sqlite3
+
+# =========================
+# 上传文件 / 本地测试数据
+# =========================
+uploads/
+upload/
+files/
+attachments/
+test-data/
+mock-data/
+
+# =========================
+# 文档生成 / 静态站点
+# =========================
+site/
+public/assets/
+docs/_build/
+
+# =========================
+# 其他常见生成文件
+# =========================
+*.orig
+*.rej
+*.diff
+*.patch
+*.DS_Store?
+
+# =========================
+# 自定义规则（忽略区）
+# =========================
+
+debug-data/
+logs/
+*.log
+/logs/error.log
+/config/private.yml
+/config/**/temp.yml
+module-output/
+module-a/
+module-b/temp/
+.env
+.env.*
+*.secret
+
+# =========================
+# 自定义规则（覆盖区 / 不忽略）
+# =========================
+
+!/ateng/
+!/cache/
+!/kongyu/**/
+
+!/logs/keep.log
+!/config/public.yml
+!/config/module-a/**/keep.yml
+!module-b/keep.txt
+!.env.example
+!module-a/src/**/keep.json
