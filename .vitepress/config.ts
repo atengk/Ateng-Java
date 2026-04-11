@@ -101,7 +101,8 @@ export default defineConfig({
                         text: '环境安装',
                         items: [
                             {text: 'IntelliJ IDEA', link: '/doc/software-setup/install-idea/'},
-                            {text: 'JRebel', link: '/doc/software-setup/install-plugin-jrebel/'}
+                            {text: 'IntelliJ IDEA 配置', link: '/doc/software-setup/config-idea/'},
+                            {text: 'JRebel', link: '/doc/software-setup/install-plugin-jrebel/'},
                         ]
                     }
                 ]
