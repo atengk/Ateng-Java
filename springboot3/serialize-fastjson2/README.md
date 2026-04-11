@@ -551,12 +551,9 @@ public class RedisTemplateConfig {
 ```java
 package local.ateng.java.serialize.controller;
 
+import com.alibaba.fastjson.JSONObject;
 import local.ateng.java.serialize.entity.MyUser;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -564,19 +561,17 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 @RestController
-@RequestMapping("/redis")
-@RequiredArgsConstructor
-public class RedisController {
-    private final RedisTemplate<String, Object> redisTemplate;
+@RequestMapping("/fastjson")
+public class FastjsonController {
 
     // 序列化
     @GetMapping("/serialize")
-    public String serialize() {
+    public MyUser serialize() {
         Map<String, Object> map = Map.of("name", "ateng", "age", 26L);
-        MyUser myUser = MyUser.builder()
+        return MyUser.builder()
                 .id(1L)
                 .name("ateng")
-                .age(null)
+                .age(25)
                 .phoneNumber("1762306666")
                 .email("kongyu2385569970@gmail.com")
                 .score(new BigDecimal("1E+20"))
@@ -590,20 +585,42 @@ public class RedisController {
                 .set(Set.of("1", "2", "3"))
                 .map(new HashMap<>(map))
                 .build();
-        redisTemplate.opsForValue().set("myUser", myUser);
+    }
+
+    // 反序列化
+    @PostMapping("/deserialize")
+    public String deserialize(@RequestBody MyUser myUser) {
+        System.out.println(myUser);
         return "ok";
     }
 
     // 反序列化
-    @GetMapping("/deserialize")
-    public String deserialize() {
-        MyUser myUser = (MyUser) redisTemplate.opsForValue().get("myUser");
+    @PostMapping("/deserialize2")
+    public String deserialize2(@RequestBody JSONObject myUser) {
         System.out.println(myUser);
-        System.out.println(myUser.getCreateTime());
+        return "ok";
+    }
+
+    // 反序列化
+    @PostMapping("/deserialize3")
+    public String deserialize3(@RequestBody List<String> list) {
+        System.out.println(list);
+        return "ok";
+    }
+
+    // 反序列化
+    @PostMapping("/test")
+    public String test(@RequestBody String str) {
+        System.out.println(str);
+        JSONObject jsonObject = JSONObject.parseObject(str);
+        System.out.println(jsonObject);
+        System.out.println(jsonObject.getDouble("score"));
+        System.out.println(JSONObject.parseObject(str, MyUser.class));
         return "ok";
     }
 
 }
+
 ```
 
 序列化到Redis
