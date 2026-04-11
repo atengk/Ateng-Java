@@ -40,7 +40,7 @@ private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Us
 
 输入 `zs` + Tab 快速生成 Java 类注释模板，用于统一类级说明与作者信息。
 
-```id="kq8v2m"
+```
  /**
  * $CLASS_COMMENT$
  *
