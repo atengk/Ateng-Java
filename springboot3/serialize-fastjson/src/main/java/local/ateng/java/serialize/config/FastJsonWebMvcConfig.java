@@ -4,7 +4,6 @@ import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.support.config.FastJsonConfig;
 import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter;
-import local.ateng.java.serialize.serializer.DefaultValueFilter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -40,14 +39,6 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
         config.setSerializerFeatures(
                 // 输出为 null 的字段，否则默认会被忽略
                 SerializerFeature.WriteMapNullValue,
-                // String 类型为 null 时输出 ""
-                SerializerFeature.WriteNullStringAsEmpty,
-                // Number 类型为 null 时输出 0
-                SerializerFeature.WriteNullNumberAsZero,
-                // Boolean 类型为 null 时输出 false
-                SerializerFeature.WriteNullBooleanAsFalse,
-                // 集合类型为 null 时输出 []
-                SerializerFeature.WriteNullListAsEmpty,
                 // 禁用循环引用检测，避免出现 "$ref" 结构
                 SerializerFeature.DisableCircularReferenceDetect,
                 // BigDecimal 输出为纯字符串（不使用科学计数法）
@@ -69,12 +60,11 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
                 Feature.AllowArbitraryCommas,
                 // 忽略 JSON 中不存在的字段
                 Feature.IgnoreNotMatch,
-                // 使用 BigDecimal 处理浮动精度，避免科学计数法的输出
+                // 将小数解析为 BigDecimal（而不是 Double）
                 Feature.UseBigDecimal,
                 // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
                 Feature.AllowISO8601DateFormat
         );
-        config.setSerializeFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);
         converter.setSupportedMediaTypes(Collections.singletonList(MediaType.APPLICATION_JSON));
         return converter;

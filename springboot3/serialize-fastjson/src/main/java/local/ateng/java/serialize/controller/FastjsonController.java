@@ -7,8 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/fastjson")
@@ -17,19 +16,23 @@ public class FastjsonController {
     // 序列化
     @GetMapping("/serialize")
     public MyUser serialize() {
+        Map<String, Object> map = Map.of("name", "ateng", "age", 26L);
         return MyUser.builder()
                 .id(1L)
                 .name("ateng")
                 .age(25)
                 .phoneNumber("1762306666")
                 .email("kongyu2385569970@gmail.com")
-                .score(new BigDecimal("8800000000000000000000000000.911000000000000000000000"))
+                .score(new BigDecimal("1E+20"))
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
-                .province("<")
+                .province(null)
                 .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .createTime2(new Date())
+                .list(List.of("1", "2"))
+                .set(Set.of("1", "2", "3"))
+                .map(new HashMap<>(map))
                 .build();
     }
 
@@ -39,12 +42,14 @@ public class FastjsonController {
         System.out.println(myUser);
         return "ok";
     }
+
     // 反序列化
     @PostMapping("/deserialize2")
     public String deserialize2(@RequestBody JSONObject myUser) {
         System.out.println(myUser);
         return "ok";
     }
+
     // 反序列化
     @PostMapping("/deserialize3")
     public String deserialize3(@RequestBody List<String> list) {

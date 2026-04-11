@@ -47,7 +47,6 @@ import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.support.config.FastJsonConfig;
 import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter;
-import local.ateng.java.serialize.serializer.DefaultValueFilter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -83,14 +82,6 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
         config.setSerializerFeatures(
                 // 输出为 null 的字段，否则默认会被忽略
                 SerializerFeature.WriteMapNullValue,
-                // String 类型为 null 时输出 ""
-                SerializerFeature.WriteNullStringAsEmpty,
-                // Number 类型为 null 时输出 0
-                SerializerFeature.WriteNullNumberAsZero,
-                // Boolean 类型为 null 时输出 false
-                SerializerFeature.WriteNullBooleanAsFalse,
-                // 集合类型为 null 时输出 []
-                SerializerFeature.WriteNullListAsEmpty,
                 // 禁用循环引用检测，避免出现 "$ref" 结构
                 SerializerFeature.DisableCircularReferenceDetect,
                 // BigDecimal 输出为纯字符串（不使用科学计数法）
@@ -112,12 +103,11 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
                 Feature.AllowArbitraryCommas,
                 // 忽略 JSON 中不存在的字段
                 Feature.IgnoreNotMatch,
-                // 使用 BigDecimal 处理浮动精度，避免科学计数法的输出
+                // 将小数解析为 BigDecimal（而不是 Double）
                 Feature.UseBigDecimal,
                 // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
                 Feature.AllowISO8601DateFormat
         );
-        config.setSerializeFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);
         converter.setSupportedMediaTypes(Collections.singletonList(MediaType.APPLICATION_JSON));
         return converter;
@@ -130,6 +120,8 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
     }
 
 }
+
+
 ```
 
 ### 使用
@@ -144,8 +136,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/fastjson")
@@ -154,19 +145,23 @@ public class FastjsonController {
     // 序列化
     @GetMapping("/serialize")
     public MyUser serialize() {
+        Map<String, Object> map = Map.of("name", "ateng", "age", 26L);
         return MyUser.builder()
                 .id(1L)
                 .name("ateng")
                 .age(25)
                 .phoneNumber("1762306666")
                 .email("kongyu2385569970@gmail.com")
-                .score(new BigDecimal("8800000000000000000000000000.911000000000000000000000"))
+                .score(new BigDecimal("1E+20"))
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
-                .province("<")
+                .province(null)
                 .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .createTime2(new Date())
+                .list(List.of("1", "2"))
+                .set(Set.of("1", "2", "3"))
+                .map(new HashMap<>(map))
                 .build();
     }
 
@@ -213,7 +208,7 @@ curl -X GET http://localhost:12013/fastjson/serialize
 示例输出：
 
 ```json
-{"age":25,"birthday":"2000-01-01 00:00:00","city":"重庆市","createTime":"2025-03-06 11:37:07","createTime2":"2025-03-06 11:37:07","createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":null,"name":"ateng","num":0,"phoneNumber":"1762306666","province":"<","ratio":0.7147,"score":"8800000000000000000000000000.911000000000000000000000"}
+{"age":25,"birthday":"2000-01-01","city":"重庆市","createTime":"2026-04-11 20:56:05","createTime2":"2026-04-11 20:56:05","createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":["1","2"],"map":{"name":"ateng","age":26},"name":"ateng","num":0,"phoneNumber":"1762306666","province":null,"ratio":0.7147,"score":100000000000000000000.0,"set":["3","2","1"]}
 ```
 
 **访问反序列化接口**
@@ -221,13 +216,13 @@ curl -X GET http://localhost:12013/fastjson/serialize
 ```
 curl -X POST http://192.168.100.2:12013/fastjson/deserialize \
      -H "Content-Type: application/json" \
-     -d '{"age":25,"birthday":"2000-01-01 00:00:00","city":"重庆市","createTime":"2025-03-06 11:37:07","createTime2":"2025-03-06 11:37:07","createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":null,"name":"ateng","num":0,"phoneNumber":"1762306666","province":"<","ratio":0.7147,"score":"8800000000000000000000000000.911000000000000000000000"}'
+     -d '{"age":25,"birthday":"2000-01-01","city":"重庆市","createTime":"2026-04-11 20:56:05","createTime2":"2026-04-11 20:56:05","createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":["1","2"],"map":{"name":"ateng","age":26},"name":"ateng","num":0,"phoneNumber":"1762306666","province":null,"ratio":0.7147,"score":100000000000000000000.0,"set":["3","2","1"]}'
 ```
 
 控制台打印
 
 ```
-MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=8800000000000000000000000000.911000000000000000000000, ratio=0.7147, birthday=2000-01-01, province=<, city=重庆市, createTime=2025-03-06T11:37:07, createTime2=Thu Mar 06 11:37:07 CST 2025, createTime3=null, num=0, list=null)
+MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=100000000000000000000.0, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2026-04-11T20:56:05, createTime2=Sat Apr 11 20:56:05 CST 2026, createTime3=null, num=0, list=[1, 2], set=[1, 2, 3], map={name=ateng, age=26})
 ```
 
 
@@ -237,17 +232,6 @@ MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@
 在Spring Boot集成Redis时，数据的序列化与反序列化是至关重要的，通常通过`RedisTemplate`来完成。默认情况下，Spring Boot使用JDK的原生序列化方式或Jackson来序列化对象。如果需要使用Fastjson，可以自定义Redis的序列化机制，采用Fastjson进行高效的对象与JSON的转换。通过配置`RedisTemplate`的序列化器，开发者可以利用Fastjson对Redis中存储的对象进行序列化和反序列化。Fastjson在性能上相较于其他序列化库表现更优，尤其是在大规模数据访问时，可以显著提升应用性能，确保在分布式缓存系统中对数据的高效处理和快速响应。
 
 ### 配置（默认）
-
-使用 `GenericFastJsonRedisSerializer` 这个有点小问题，一些类型会带有后缀，有些不便于开发修改数据，建议还是 自定义序列化器 配置。
-
-```java
-public GenericFastJsonRedisSerializer() {
-    config.setReaderFeatures(JSONReader.Feature.SupportAutoType);
-    config.setWriterFeatures(JSONWriter.Feature.WriteClassName);
-}
-```
-
-![image-20250306140136614](./assets/image-20250306140136614.png)
 
 ```java
 package local.ateng.java.serialize.config;
@@ -307,8 +291,6 @@ public class RedisTemplateConfig {
 
 #### 配置序列化器
 
-注意修改为自己的包名：`config.setReaderFilters(JSONReader.autoTypeFilter("local.ateng.java."));`
-
 ```java
 package local.ateng.java.serialize.serializer;
 
@@ -317,102 +299,165 @@ import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.parser.ParserConfig;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.alibaba.fastjson.util.IOUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
 
+import java.util.Objects;
+
 /**
- * 基于 Fastjson 1.x 的 Redis 序列化器
- * 适用于 Spring Data Redis 中的 value 序列化方案。
+ * Fastjson1 Redis序列化器
  * <p>
- * 说明：
- * - 支持类型信息输出（WriteClassName）
- * - 支持空值字段输出（WriteMapNullValue）
- * - 支持安全反序列化（白名单机制）
- * - 通用 UTF-8 编码
+ * 功能：
+ * 1. 支持类型信息序列化
+ * 2. 支持安全反序列化（白名单控制）
+ * 3. 提供日志输出，便于排查问题
  *
- * @param <T> 序列化对象类型
- * @author 孔余
- * @since 2025-11-05
+ * @param <T> 序列化类型
+ * @author Ateng
+ * @since 2026-04-11
  */
+@Slf4j
 public class FastJsonRedisSerializer<T> implements RedisSerializer<T> {
 
-    private static final ParserConfig GLOBAL_PARSER_CONFIG = new ParserConfig();
+    /**
+     * 空字节数组
+     */
+    private static final byte[] EMPTY_BYTES = new byte[0];
+
+    /**
+     * 全局解析配置（线程安全）
+     */
+    private static final ParserConfig GLOBAL_CONFIG = new ParserConfig();
 
     static {
-        // 启用 AutoType 支持（反序列化时保留类型信息）
-        GLOBAL_PARSER_CONFIG.setAutoTypeSupport(true);
-        // 禁止 com.sun.、java.、org.apache. 等类被加载（防止安全漏洞）
-        GLOBAL_PARSER_CONFIG.addDeny("java.");
-        GLOBAL_PARSER_CONFIG.addDeny("javax.");
-        GLOBAL_PARSER_CONFIG.addDeny("com.sun.");
-        GLOBAL_PARSER_CONFIG.addDeny("sun.");
-        GLOBAL_PARSER_CONFIG.addDeny("org.apache.");
-        GLOBAL_PARSER_CONFIG.addDeny("org.springframework.");
-        GLOBAL_PARSER_CONFIG.addDeny("com.alibaba.");
-        GLOBAL_PARSER_CONFIG.addDeny("ognl.");
-        GLOBAL_PARSER_CONFIG.addDeny("bsh.");
-        GLOBAL_PARSER_CONFIG.addDeny("c3p0.");
-        GLOBAL_PARSER_CONFIG.addDeny("net.sf.ehcache.");
-        GLOBAL_PARSER_CONFIG.addDeny("org.yaml.");
-        GLOBAL_PARSER_CONFIG.addDeny("org.hibernate.");
-        GLOBAL_PARSER_CONFIG.addDeny("org.jboss.");
-    }
+        // 开启AutoType（必须配合白名单使用）
+        GLOBAL_CONFIG.setAutoTypeSupport(true);
 
-    private final Class<T> clazz;
+        // 黑名单（高危包）
+        GLOBAL_CONFIG.addDeny("java.");
+        GLOBAL_CONFIG.addDeny("javax.");
+        GLOBAL_CONFIG.addDeny("sun.");
+        GLOBAL_CONFIG.addDeny("com.sun.");
+        GLOBAL_CONFIG.addDeny("org.apache.");
+        GLOBAL_CONFIG.addDeny("org.springframework.");
+        GLOBAL_CONFIG.addDeny("com.alibaba.");
+        GLOBAL_CONFIG.addDeny("ognl.");
+        GLOBAL_CONFIG.addDeny("bsh.");
+        GLOBAL_CONFIG.addDeny("c3p0.");
+        GLOBAL_CONFIG.addDeny("org.yaml.");
+        GLOBAL_CONFIG.addDeny("org.hibernate.");
+        GLOBAL_CONFIG.addDeny("org.jboss.");
 
-    public FastJsonRedisSerializer(Class<T> clazz) {
-        this.clazz = clazz;
+        // 建议：生产环境应增加白名单（更安全）
+         GLOBAL_CONFIG.addAccept("local.ateng.");
+         GLOBAL_CONFIG.addAccept("io.github.atengk.");
     }
 
     /**
-     * 序列化：将对象转为 JSON 字节数组
+     * 目标类型
+     */
+    private final Class<T> clazz;
+
+    /**
+     * 构造方法
+     */
+    public FastJsonRedisSerializer(Class<T> clazz) {
+        this.clazz = Objects.requireNonNull(clazz, "clazz不能为空");
+    }
+
+    /**
+     * 序列化：对象转字节数组
      */
     @Override
     public byte[] serialize(T object) throws SerializationException {
         if (object == null) {
-            return new byte[0];
+            return EMPTY_BYTES;
         }
+
         try {
-            return JSON.toJSONBytes(
+            byte[] result = JSON.toJSONBytes(
                     object,
                     // 输出类型信息（反序列化时才能还原具体类）
                     SerializerFeature.WriteClassName,
                     // 输出为 null 的字段，否则默认会被忽略
                     SerializerFeature.WriteMapNullValue,
-                    // 禁用循环引用检测，避免 $ref 结构
+                    // 禁用循环引用检测，避免出现 "$ref" 结构
                     SerializerFeature.DisableCircularReferenceDetect,
-                    // BigDecimal 输出为纯字符串，避免科学计数法
+                    // BigDecimal 输出为纯字符串（不使用科学计数法）
                     SerializerFeature.WriteBigDecimalAsPlain
             );
-        } catch (Exception ex) {
-            throw new SerializationException("Redis 序列化失败: " + ex.getMessage(), ex);
+
+            if (log.isDebugEnabled()) {
+                log.debug("Redis序列化成功，类型：{}，字节大小：{}", clazz.getName(), result.length);
+            }
+
+            return result;
+        } catch (Exception e) {
+            log.error("Redis序列化失败，类型：{}，对象：{}", clazz.getName(), object, e);
+            throw new SerializationException(buildSerializeError(object), e);
         }
     }
 
     /**
-     * 反序列化：将 JSON 字节数组转回对象
+     * 反序列化：字节数组转对象
      */
     @Override
     public T deserialize(byte[] bytes) throws SerializationException {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
+
         try {
-            return JSON.parseObject(
+            T result = JSON.parseObject(
                     new String(bytes, IOUtils.UTF8),
                     clazz,
-                    GLOBAL_PARSER_CONFIG,
+                    GLOBAL_CONFIG,
+                    // 允许 JSON 中包含注释（// 或 /* */）
+                    Feature.AllowComment,
+                    // 允许字段名不加双引号
+                    Feature.AllowUnQuotedFieldNames,
+                    // 允许单引号作为字符串定界符
+                    Feature.AllowSingleQuotes,
+                    // 字段名使用常量池优化内存
+                    Feature.InternFieldNames,
+                    // 允许多余的逗号
+                    Feature.AllowArbitraryCommas,
                     // 忽略 JSON 中不存在的字段
                     Feature.IgnoreNotMatch,
-                    // 支持 ISO8601 日期格式
+                    // 将小数解析为 BigDecimal（而不是 Double）
+                    Feature.UseBigDecimal,
+                    // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
                     Feature.AllowISO8601DateFormat
             );
-        } catch (Exception ex) {
-            throw new SerializationException("Redis 反序列化失败: " + ex.getMessage(), ex);
+
+            if (log.isDebugEnabled()) {
+                log.debug("Redis反序列化成功，类型：{}，字节大小：{}", clazz.getName(), bytes.length);
+            }
+
+            return result;
+        } catch (Exception e) {
+            log.error("Redis反序列化失败，类型：{}，字节长度：{}", clazz.getName(), bytes.length, e);
+            throw new SerializationException(buildDeserializeError(bytes), e);
         }
     }
-}
 
+    /**
+     * 构建序列化异常信息
+     */
+    private String buildSerializeError(T object) {
+        return "Fastjson序列化失败，type=" + clazz.getName()
+                + ", valueClass=" + (object == null ? "null" : object.getClass().getName());
+    }
+
+    /**
+     * 构建反序列化异常信息
+     */
+    private String buildDeserializeError(byte[] bytes) {
+        return "Fastjson反序列化失败，type=" + clazz.getName()
+                + ", bytesLength=" + (bytes == null ? 0 : bytes.length);
+    }
+}
 ```
 
 #### 配置序列化和反序列化
@@ -488,8 +533,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/redis")
@@ -500,22 +544,49 @@ public class RedisController {
     // 序列化
     @GetMapping("/serialize")
     public String serialize() {
+        Map<String, Object> map = Map.of("name", "ateng", "age", 26L);
         MyUser myUser = MyUser.builder()
                 .id(1L)
                 .name("ateng")
                 .age(null)
                 .phoneNumber("1762306666")
                 .email("kongyu2385569970@gmail.com")
-                .score(new BigDecimal("88.911"))
+                .score(new BigDecimal("1E+20"))
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
                 .province(null)
                 .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .createTime2(new Date())
-                .list(List.of("1","2"))
+                .list(List.of("1", "2"))
+                .set(Set.of("1", "2", "3"))
+                .map(new HashMap<>(map))
                 .build();
         redisTemplate.opsForValue().set("myUser", myUser);
+        return "ok";
+    }
+
+    @GetMapping("/serializeList")
+    public String serializeList() {
+        Map<String, Object> map = Map.of("name", "ateng", "age", 26L);
+        MyUser myUser = MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(null)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .score(new BigDecimal("1E+20"))
+                .ratio(0.7147)
+                .birthday(LocalDate.parse("2000-01-01"))
+                .province(null)
+                .city("重庆市")
+                .createTime(LocalDateTime.now())
+                .createTime2(new Date())
+                .list(List.of("1", "2"))
+                .set(Set.of("1", "2", "3"))
+                .map(new HashMap<>(map))
+                .build();
+        redisTemplate.opsForValue().set("myUserList", Collections.singletonList(myUser));
         return "ok";
     }
 
@@ -528,39 +599,29 @@ public class RedisController {
         return "ok";
     }
 
+    // 反序列化
+    @GetMapping("/deserializeList")
+    public String deserializeList() {
+        List<MyUser> myUserList = (List<MyUser>) redisTemplate.opsForValue().get("myUserList");
+        System.out.println(myUserList);
+        System.out.println(myUserList.get(0).getName());
+        return "ok";
+    }
+
 }
 ```
 
 序列化到Redis
 
 ```json
-{
-    "@type": "local.ateng.java.serialize.entity.MyUser",
-    "age": null,
-    "birthday": "2000-01-01 00:00:00.000",
-    "city": "重庆市",
-    "createTime": "2025-03-06 14:17:55.734",
-    "createTime2": "2025-03-06 14:17:55.734",
-    "createTime3": null,
-    "email": "kongyu2385569970@gmail.com",
-    "id": 1,
-    "list": [
-        "1",
-        "2"
-    ],
-    "name": "ateng",
-    "num": 0,
-    "phoneNumber": "1762306666",
-    "province": null,
-    "ratio": 0.7147,
-    "score": 88.911
-}
+{"@type":"local.ateng.java.serialize.entity.MyUser","age":null,"birthday":"2000-01-01","city":"重庆市","createTime":"2026-04-11T20:49:40.323213100","createTime2":1775911780323,"createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":["1","2"],"map":{"@type":"java.util.HashMap","name":"ateng","age":26L},"name":"ateng","num":0,"phoneNumber":"1762306666","province":null,"ratio":0.7147D,"score":100000000000000000000,"set":["2","3","1"]}
 ```
 
 反序列化输出
 
 ```
-MyUser(id=1, name=ateng, age=null, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2025-03-06T14:17:55.734, createTime2=Thu Mar 06 14:17:55 CST 2025, createTime3=null, num=0, list=[1, 2])
+MyUser(id=1, name=ateng, age=null, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=100000000000000000000, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2026-04-11T20:49:40.323213100, createTime2=Sat Apr 11 20:49:40 CST 2026, createTime3=null, num=0, list=[1, 2], set=[1, 2, 3], map={name=ateng, age=26})
+2026-04-11T20:49:40.323213100
 ```
 
 
@@ -678,14 +739,6 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
         config.setSerializerFeatures(
                 // 输出为 null 的字段，否则默认会被忽略
                 SerializerFeature.WriteMapNullValue,
-                // String 类型为 null 时输出 ""
-                SerializerFeature.WriteNullStringAsEmpty,
-                // Number 类型为 null 时输出 0
-                SerializerFeature.WriteNullNumberAsZero,
-                // Boolean 类型为 null 时输出 false
-                SerializerFeature.WriteNullBooleanAsFalse,
-                // 集合类型为 null 时输出 []
-                SerializerFeature.WriteNullListAsEmpty,
                 // 禁用循环引用检测，避免出现 "$ref" 结构
                 SerializerFeature.DisableCircularReferenceDetect,
                 // BigDecimal 输出为纯字符串（不使用科学计数法）
@@ -707,7 +760,7 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
                 Feature.AllowArbitraryCommas,
                 // 忽略 JSON 中不存在的字段
                 Feature.IgnoreNotMatch,
-                // 使用 BigDecimal 处理浮动精度，避免科学计数法的输出
+                // 将小数解析为 BigDecimal（而不是 Double）
                 Feature.UseBigDecimal,
                 // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
                 Feature.AllowISO8601DateFormat
@@ -725,6 +778,8 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
     }
 
 }
+
+
 ```
 
 #### 配置默认值
