@@ -20,7 +20,7 @@ private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger($C
 
 变量：
 
-* CLASS = className()
+- CLASS = className()
 
 含义说明：
 
@@ -64,6 +64,3 @@ DATE 使用 IDEA 内置日期函数 date("yyyy-MM-dd")，用于自动生成当�
 
 ![image-20260411115850810](./assets/image-20260411115850810.png)
 
----
-
-### 
