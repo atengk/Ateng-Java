@@ -4934,3 +4934,863 @@ public class RedissonQueueConsumer implements SmartLifecycle {
 
 ```
 
+
+
+## RedisJSON
+
+### JSON
+
+```java
+package local.ateng.java.redisjdk8;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import local.ateng.java.redisjdk8.entity.UserInfoEntity;
+import local.ateng.java.redisjdk8.init.InitData;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+import org.redisson.api.RJsonBucket;
+import org.redisson.api.RedissonClient;
+import org.redisson.codec.JacksonCodec;
+import org.redisson.codec.JsonCodec;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * Redisson RJsonBucket 操作 Redis ReJSON模块 的 JSON 测试类
+ *
+ * @author ateng
+ * @since 2026-04-11
+ */
+@Slf4j
+@SpringBootTest
+public class RedisJsonBucketJSONTests {
+
+    @Autowired
+    private RedissonClient redissonClient;
+
+    /**
+     * 写入 JSON
+     */
+    @Test
+    void set() {
+        String key = "user:json";
+        JsonCodec codec = new JacksonCodec<>(UserInfoEntity.class);
+        RJsonBucket<UserInfoEntity> bucket = redissonClient.getJsonBucket(key, codec);
+
+        UserInfoEntity user = new InitData().getList().get(0);
+        bucket.set(user);
+        log.info("保存用户 JSON 成功，key={}", key);
+    }
+
+    /**
+     * 读取 JSON（整对象）
+     */
+    @Test
+    void get() {
+        String key = "user:json";
+        JsonCodec codec = new JacksonCodec<>(UserInfoEntity.class);
+        RJsonBucket<UserInfoEntity> bucket = redissonClient.getJsonBucket(key, codec);
+
+        UserInfoEntity user = bucket.get();
+        log.info("读取用户 JSON 成功，user={}", user);
+    }
+
+    /**
+     * 覆盖更新 JSON（整对象）
+     */
+    @Test
+    void update() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        UserInfoEntity user = new InitData().getList().get(1);
+        bucket.set(user);
+
+        log.info("覆盖更新成功，key={}", key);
+    }
+
+    /**
+     * CAS 原子更新
+     */
+    @Test
+    void compareAndSet() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        UserInfoEntity oldVal = bucket.get();
+        UserInfoEntity newVal = new InitData().getList().get(2);
+
+        boolean result = bucket.compareAndSet(oldVal, newVal);
+        log.info("CAS更新结果={}, newVal={}", result, newVal);
+    }
+
+    /**
+     * 获取旧值并更新
+     */
+    @Test
+    void getAndSet() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        UserInfoEntity newVal = new InitData().getList().get(3);
+        UserInfoEntity oldVal = bucket.getAndSet(newVal);
+
+        log.info("旧值={}, 新值={}", oldVal, newVal);
+    }
+
+    /**
+     * 设置过期时间
+     */
+    @Test
+    void expire() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        boolean result = bucket.expire(Duration.ofMinutes(10));
+        log.info("设置过期时间结果={}", result);
+    }
+
+    /**
+     * 判断 key 是否存在
+     */
+    @Test
+    void isExists() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        boolean exists = bucket.isExists();
+        log.info("是否存在={}", exists);
+    }
+
+    /**
+     * 修改 JSON 指定字段
+     */
+    @Test
+    void setField() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        bucket.set("$.name", "Ateng");
+        log.info("修改 name 字段成功");
+    }
+
+    /**
+     * 获取 JSON 指定字段
+     */
+    @Test
+    void getField() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        List<String> list = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<String>>() {}),
+                "$.name"
+        );
+
+        String name = (list != null && !list.isEmpty()) ? list.get(0) : null;
+        log.info("name={}", name);
+    }
+
+    /**
+     * 删除 JSON 字段
+     */
+    @Test
+    void deleteField() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        long count = bucket.delete("$.age");
+        log.info("删除字段数量={}", count);
+    }
+
+    /**
+     * 字段级 CAS
+     */
+    @Test
+    void compareAndSetField() {
+        String key = "user:json";
+        RJsonBucket<UserInfoEntity> bucket =
+                redissonClient.getJsonBucket(key, new JacksonCodec<>(UserInfoEntity.class));
+
+        boolean result = bucket.compareAndSet("$.age", 26, 18);
+        log.info("字段CAS结果={}", result);
+    }
+
+}
+```
+
+### JSONArray
+
+```java
+package local.ateng.java.redisjdk8;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import local.ateng.java.redisjdk8.entity.UserInfoEntity;
+import local.ateng.java.redisjdk8.init.InitData;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+import org.redisson.api.RJsonBucket;
+import org.redisson.api.RedissonClient;
+import org.redisson.codec.JacksonCodec;
+import org.redisson.codec.JsonCodec;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.List;
+
+/**
+ * Redisson RJsonBucket 操作 Redis ReJSON模块 的 JSON 数组 测试类
+ *
+ * @author ateng
+ * @since 2026-04-11
+ */
+@Slf4j
+@SpringBootTest
+public class RedisJsonBucketJSONArrayTests {
+
+    @Autowired
+    private RedissonClient redissonClient;
+
+    /**
+     * 写入 JSON 数组（整个 key 是数组）
+     */
+    @Test
+    void setArray() {
+        String key = "user:json:list";
+
+        // 注意：这里必须用 TypeReference
+        JsonCodec codec = new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+        });
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key, codec);
+
+        List<UserInfoEntity> list = new InitData().getList();
+
+        bucket.set(list);
+
+        log.info("写入JSON数组成功，size={}", list.size());
+    }
+
+    /**
+     * 读取整个 JSON 数组
+     */
+    @Test
+    void getArray() {
+        String key = "user:json:list";
+
+        JsonCodec codec = new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+        });
+        RJsonBucket<List<UserInfoEntity>> bucket = redissonClient.getJsonBucket(key, codec);
+
+        List<UserInfoEntity> list = bucket.get();
+
+        log.info("读取数组成功，size={}", list == null ? 0 : list.size());
+    }
+
+    /**
+     * 获取数组指定元素
+     */
+    @Test
+    void getArrayIndex() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                        }));
+
+        List<UserInfoEntity> list = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[0]"
+        );
+
+        UserInfoEntity user = (list != null && !list.isEmpty()) ? list.get(0) : null;
+
+        log.info("第一个元素={}", user);
+    }
+
+    /**
+     * 数组追加元素（对象）
+     */
+    @Test
+    void addArrayElement() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                        }));
+
+        UserInfoEntity user = new InitData().getList().get(0);
+
+        // 根数组用 "$"
+        bucket.arrayAppend("$", user);
+
+        log.info("追加元素成功");
+    }
+
+    /**
+     * 批量追加元素
+     */
+    @Test
+    void addArrayBatch() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                        }));
+
+        List<UserInfoEntity> list = new InitData().getList();
+
+        bucket.arrayAppend("$", list.toArray());
+
+        log.info("批量追加成功，count={}", list.size());
+    }
+
+    /**
+     * 指定位置插入元素
+     */
+    @Test
+    void insertArrayElement() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                        }));
+
+        UserInfoEntity user = new InitData().getList().get(1);
+
+        bucket.arrayInsertMulti("$", 1, user);
+
+        log.info("插入成功");
+    }
+
+    /**
+     * 删除数组指定索引元素
+     */
+    @Test
+    void removeArrayElement() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        // 删除第0个元素，并返回被删除对象
+        List<UserInfoEntity> removed = bucket.arrayPopMulti(
+                new JacksonCodec<>(UserInfoEntity.class),
+                "$",
+                0
+        );
+
+        log.info("删除元素={}", removed);
+    }
+
+    /**
+     * 获取数组长度
+     */
+    @Test
+    void arraySize() {
+        String key = "user:json:list";
+
+        RJsonBucket<Object> bucket =
+                redissonClient.getJsonBucket(
+                        key,
+                        new JacksonCodec<>(Object.class)
+                );
+
+        List<Long> list = bucket.arraySizeMulti("$");
+        long size = list.get(0);
+
+        log.info("数组长度={}", size);
+    }
+
+    /**
+     * 数组分页（区间获取）
+     */
+    @Test
+    void arrayRange() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                        }));
+
+        List<UserInfoEntity> subList = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                }),
+                "$[0:2]"
+        );
+
+        log.info("分页结果 size={}", subList == null ? 0 : subList.size());
+    }
+
+    /**
+     * 更新数组指定位置元素
+     */
+    @Test
+    void updateArrayIndex() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                        }));
+
+        UserInfoEntity user = new InitData().getList().get(2);
+
+        bucket.set("$[0]", user);
+
+        log.info("更新第0个元素成功");
+    }
+
+    /**
+     * 清空数组
+     */
+    @Test
+    void clearArray() {
+        String key = "user:json:list";
+
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(key,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {
+                        }));
+
+        List<Long> list = bucket.arrayTrimMulti("$", 1, 0);
+
+        log.info("数组已清空, {}", list);
+    }
+
+}
+```
+
+### JSONPath
+
+```java
+package local.ateng.java.redisjdk8;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import local.ateng.java.redisjdk8.entity.UserInfoEntity;
+import local.ateng.java.redisjdk8.init.InitData;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+import org.redisson.api.RJsonBucket;
+import org.redisson.api.RedissonClient;
+import org.redisson.codec.JacksonCodec;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.List;
+
+/**
+ * Redisson RJsonBucket 操作 Redis ReJSON模块 的 JSONPath 测试类
+ *
+ * @author ateng
+ * @since 2026-04-11
+ */
+@Slf4j
+@SpringBootTest
+public class RedisJsonBucketJSONPathTests {
+
+    @Autowired
+    private RedissonClient redissonClient;
+
+    private static final String KEY = "user:json:jsonpath";
+
+    /**
+     * 初始化数组数据
+     */
+    @Test
+    void initArray() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> list = new InitData().getList();
+        bucket.set(list);
+
+        log.info("初始化数组完成 size={}", list.size());
+    }
+
+    /**
+     * JSONPath：取整个数组
+     */
+    @Test
+    void path_array_all() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> result = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[*]"
+        );
+
+        log.info("取整个数组 size={}", result == null ? 0 : result.size());
+    }
+
+    /**
+     * JSONPath：取单个元素
+     */
+    @Test
+    void path_array_index() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> list = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[0]"
+        );
+
+        UserInfoEntity user = (list != null && !list.isEmpty()) ? list.get(0) : null;
+
+        log.info("第一个元素={}", user);
+    }
+
+    /**
+     * JSONPath：数组切片（分页）
+     */
+    @Test
+    void path_array_slice() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> result = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[0:2]"
+        );
+
+        log.info("切片结果 size={}", result == null ? 0 : result.size());
+    }
+
+    /**
+     * JSONPath：取所有 name 字段
+     */
+    @Test
+    void path_array_field_projection() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<String> names = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<String>>() {}),
+                "$[*].name"
+        );
+
+        log.info("names={}", names);
+    }
+
+    /**
+     * JSONPath：嵌套字段 city
+     */
+    @Test
+    void path_array_nested_field() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<String> cities = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<String>>() {}),
+                "$[*].address.city"
+        );
+
+        log.info("cities={}", cities);
+    }
+
+    /**
+     * JSONPath：数组 where（age > 18）
+     */
+    @Test
+    void path_where_age() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> result = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[?(@.age > 18)]"
+        );
+
+        log.info("age>18 size={}", result == null ? 0 : result.size());
+    }
+
+    /**
+     * JSONPath：where + AND 条件
+     */
+    @Test
+    void path_where_and() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> result = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[?(@.age >= 18 && @.name == '傅立诚')]"
+        );
+
+        log.info("AND条件 size={}", result == null ? 0 : result.size());
+    }
+
+    /**
+     * JSONPath：where + OR 条件
+     */
+    @Test
+    void path_where_or() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> result = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[?(@.age > 30 || @.name == '张三')]"
+        );
+
+        log.info("OR条件 size={}", result == null ? 0 : result.size());
+    }
+
+    /**
+     * JSONPath：tags 数组包含过滤
+     */
+    @Test
+    void path_where_tags_contains() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> result = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[?(@.tags[*] == 'java')]"
+        );
+
+        log.info("tags contains java size={}", result == null ? 0 : result.size());
+    }
+
+    /**
+     * JSONPath：where + 返回字段（name）
+     */
+    @Test
+    void path_where_projection() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<String> names = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<String>>() {}),
+                "$[?(@.age > 18)].name"
+        );
+
+        log.info("过滤后names={}", names);
+    }
+
+    /**
+     * JSONPath：多层嵌套 + where
+     */
+    @Test
+    void path_where_nested() {
+        RJsonBucket<List<UserInfoEntity>> bucket =
+                redissonClient.getJsonBucket(
+                        KEY,
+                        new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {})
+                );
+
+        List<UserInfoEntity> result = bucket.get(
+                new JacksonCodec<>(new TypeReference<List<UserInfoEntity>>() {}),
+                "$[?(@.address.city == 'SG')]"
+        );
+
+        log.info("city=SG size={}", result == null ? 0 : result.size());
+    }
+}
+```
+
+## RedisBloom
+
+```java
+package local.ateng.java.redisjdk8;
+
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RScript;
+import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+/**
+ * Redisson RedisBloom 模块使用测试类
+ *
+ * 用于测试 BloomFilter / CuckooFilter / CountMinSketch / TopK 等概率数据结构能力
+ *
+ * @author ateng
+ * @since 2026-04-11
+ */
+@Slf4j
+@SpringBootTest
+public class RedisBloomTests {
+
+    @Autowired
+    private RedissonClient redissonClient;
+
+    /**
+     * 1. BloomFilter 基础用法：判断是否存在（去重场景）
+     */
+    @Test
+    void bloomFilter_basic() {
+        RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter("bf:user");
+
+        // 初始化：预计插入 100000 数据，误判率 0.01
+        bloomFilter.tryInit(100000, 0.01);
+
+        bloomFilter.add("user:1001");
+
+        boolean exists = bloomFilter.contains("user:1001");
+
+        log.info("BloomFilter 判断结果 exists={}", exists);
+    }
+
+    /**
+     * 2. BloomFilter 解决缓存穿透（典型工程用法）
+     */
+    @Test
+    void bloomFilter_cachePenetration() {
+        RBloomFilter<Long> bloomFilter = redissonClient.getBloomFilter("bf:order");
+
+        bloomFilter.tryInit(1000000, 0.01);
+
+        // 预先写入合法ID（通常来自DB初始化）
+        bloomFilter.add(10001L);
+        bloomFilter.add(10002L);
+
+        Long queryId = 10003L;
+
+        // 防穿透判断
+        if (!bloomFilter.contains(queryId)) {
+            log.warn("非法请求，直接拦截 id={}", queryId);
+            return;
+        }
+
+        log.info("允许访问 id={}", queryId);
+    }
+
+    /**
+     * 3. CuckooFilter：通过 Redis 原生命令（CF.*）
+     *
+     * 说明：
+     * Redisson 不提供 API，需要 RScript 执行
+     */
+    @Test
+    void cuckoo_filter_by_script() {
+        String script = ""
+                + "return redis.call('CF.ADD', KEYS[1], ARGV[1])";
+
+        redissonClient.getScript()
+                .eval(RScript.Mode.READ_WRITE,
+                        script,
+                        RScript.ReturnType.INTEGER,
+                        java.util.Collections.singletonList("cf:user"),
+                        "user:1001");
+
+        log.info("CuckooFilter 插入完成");
+    }
+
+    /**
+     * 4. Count-Min Sketch：通过 Redis 原生命令（CMS.INCRBY / CMS.QUERY）
+     *
+     * 用于：UV / PV / 访问计数（近似统计）
+     */
+    @Test
+    void count_min_sketch_by_script() {
+        String key = "cms:visit";
+
+        // 初始化 CMS（只需执行一次）
+        redissonClient.getScript().eval(
+                RScript.Mode.READ_WRITE,
+                "return redis.call('CMS.INITBYPROB', KEYS[1], 0.001, 0.01)",
+                RScript.ReturnType.STATUS,
+                java.util.Collections.singletonList(key)
+        );
+
+        // 计数
+        redissonClient.getScript().eval(
+                RScript.Mode.READ_WRITE,
+                "return redis.call('CMS.INCRBY', KEYS[1], ARGV[1], 1)",
+                RScript.ReturnType.INTEGER,
+                java.util.Collections.singletonList(key),
+                "user:1001"
+        );
+
+        log.info("CMS 计数完成");
+    }
+
+    /**
+     * 5. TopK：热点排行（通过 Redis 原生命令）
+     *
+     * 用于：热词 / 热用户 / 热商品
+     */
+    @Test
+    void topk_by_script() {
+        String key = "topk:keyword";
+
+        // 初始化 TopK（只需一次）
+        redissonClient.getScript().eval(
+                RScript.Mode.READ_WRITE,
+                "return redis.call('TOPK.RESERVE', KEYS[1], 10, 200, 7, 0.9)",
+                RScript.ReturnType.STATUS,
+                java.util.Collections.singletonList(key)
+        );
+
+        // 添加数据
+        redissonClient.getScript().eval(
+                RScript.Mode.READ_WRITE,
+                "return redis.call('TOPK.ADD', KEYS[1], ARGV[1])",
+                RScript.ReturnType.INTEGER,
+                java.util.Collections.singletonList(key),
+                "java"
+        );
+
+        log.info("TopK 更新完成");
+    }
+}
+```
+
