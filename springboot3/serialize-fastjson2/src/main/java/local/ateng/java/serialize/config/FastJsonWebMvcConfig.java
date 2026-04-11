@@ -49,9 +49,7 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
                 // 允许字段名不带引号
                 JSONReader.Feature.AllowUnQuotedFieldNames,
                 // 忽略无法序列化的字段
-                JSONReader.Feature.IgnoreNoneSerializable,
-                // 防止类型不匹配时报错（更安全）
-                JSONReader.Feature.IgnoreAutoTypeNotMatch
+                JSONReader.Feature.IgnoreNoneSerializable
         );
         config.setWriterFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);
