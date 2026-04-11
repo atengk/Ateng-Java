@@ -1,8 +1,5 @@
 package local.ateng.java.serialize.entity;
 
-import com.alibaba.fastjson2.annotation.JSONField;
-import local.ateng.java.serialize.serializer.CustomSerializer;
-import local.ateng.java.serialize.serializer.DefaultNullValue;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,6 +12,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Data
 @Builder
@@ -74,7 +73,7 @@ public class MyUser implements Serializable {
     /**
      * 所在省份
      */
-    @JSONField(serializeUsing = CustomSerializer.class)
+//    @JSONField(serializeUsing = CustomSerializer.class)
     private String province;
 
     /**
@@ -85,13 +84,15 @@ public class MyUser implements Serializable {
     /**
      * 创建时间
      */
-    @JSONField(format = "yyyy-MM-dd HH:mm:ss")
+//    @JSONField(format = "yyyy-MM-dd HH:mm:ss.SSS")
     private LocalDateTime createTime;
     private Date createTime2;
-    @DefaultNullValue("/")
+//    @DefaultNullValue("/")
     private Date createTime3;
     private int num;
     private List<String> list;
+    private Set<String> set;
+    private Map<String, Object> map;
 
 }
 

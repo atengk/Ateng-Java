@@ -33,18 +33,25 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
     private static FastJsonHttpMessageConverter getFastJsonHttpMessageConverter() {
         FastJsonHttpMessageConverter converter = new FastJsonHttpMessageConverter();
         FastJsonConfig config = new FastJsonConfig();
-        config.setDateFormat("yyyy-MM-dd HH:mm:ss");
         config.setWriterFeatures(
                 // 序列化输出空值字段
                 JSONWriter.Feature.WriteNulls,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.BrowserCompatible,
+                // 基于字段反序列化
+                JSONWriter.Feature.FieldBased,
+                // 把 Long 类型转为字符串，避免前端精度丢失
+                JSONWriter.Feature.WriteLongAsString,
                 // 序列化BigDecimal使用toPlainString，避免科学计数法
                 JSONWriter.Feature.WriteBigDecimalAsPlain
         );
         config.setReaderFeatures(
                 // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
-                JSONReader.Feature.SupportSmartMatch
+                JSONReader.Feature.SupportSmartMatch,
+                // 允许字段名不带引号
+                JSONReader.Feature.AllowUnQuotedFieldNames,
+                // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreNoneSerializable,
+                // 防止类型不匹配时报错（更安全）
+                JSONReader.Feature.IgnoreAutoTypeNotMatch
         );
         config.setWriterFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);

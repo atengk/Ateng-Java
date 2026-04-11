@@ -1,4 +1,4 @@
-# Fastjson2
+# Fastjson2 序列化和反序列化
 
 [Fastjson2](https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn) 是一个高性能的 JSON 处理库，用于序列化和反序列化 Java 对象。在 Spring Boot 中集成 Fastjson2，通过自定义 `HttpMessageConverter` 来定制序列化配置，使其替代默认的 Jackson 进行 JSON 处理。这样，Spring Boot 会使用 Fastjson2 来处理 HTTP 请求和响应的 JSON 数据。
 
@@ -49,6 +49,7 @@ import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.support.config.FastJsonConfig;
 import com.alibaba.fastjson2.support.spring6.http.converter.FastJsonHttpMessageConverter;
+import local.ateng.java.serialize.serializer.DefaultValueFilter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -77,19 +78,27 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
     private static FastJsonHttpMessageConverter getFastJsonHttpMessageConverter() {
         FastJsonHttpMessageConverter converter = new FastJsonHttpMessageConverter();
         FastJsonConfig config = new FastJsonConfig();
-        config.setDateFormat("yyyy-MM-dd HH:mm:ss");
         config.setWriterFeatures(
                 // 序列化输出空值字段
                 JSONWriter.Feature.WriteNulls,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.BrowserCompatible,
+                // 基于字段反序列化
+                JSONWriter.Feature.FieldBased,
+                // 把 Long 类型转为字符串，避免前端精度丢失
+                JSONWriter.Feature.WriteLongAsString,
                 // 序列化BigDecimal使用toPlainString，避免科学计数法
                 JSONWriter.Feature.WriteBigDecimalAsPlain
         );
         config.setReaderFeatures(
                 // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
-                JSONReader.Feature.SupportSmartMatch
+                JSONReader.Feature.SupportSmartMatch,
+                // 允许字段名不带引号
+                JSONReader.Feature.AllowUnQuotedFieldNames,
+                // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreNoneSerializable,
+                // 防止类型不匹配时报错（更安全）
+                JSONReader.Feature.IgnoreAutoTypeNotMatch
         );
+        config.setWriterFilters(new DefaultValueFilter());
         converter.setFastJsonConfig(config);
         converter.setDefaultCharset(StandardCharsets.UTF_8);
         converter.setSupportedMediaTypes(Collections.singletonList(MediaType.APPLICATION_JSON));
@@ -103,6 +112,8 @@ public class FastJsonWebMvcConfig implements WebMvcConfigurer {
     }
 
 }
+
+
 ```
 
 ### 使用
@@ -113,36 +124,38 @@ package local.ateng.java.serialize.controller;
 import com.alibaba.fastjson2.JSONObject;
 import local.ateng.java.serialize.entity.MyUser;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/fastjson2")
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+@RequiredArgsConstructor
 public class Fastjson2Controller {
 
     // 序列化
     @GetMapping("/serialize")
     public MyUser serialize() {
+        Map<String, Object> map = Map.of("name", "ateng", "age", 26L);
         return MyUser.builder()
                 .id(1L)
                 .name("ateng")
                 .age(25)
                 .phoneNumber("1762306666")
                 .email("kongyu2385569970@gmail.com")
-                .score(new BigDecimal("8800000000000000000000000000.911000000000000000000000"))
+                .score(new BigDecimal("1E+20"))
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
-                .province("<")
+                .province(null)
                 .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .createTime2(new Date())
+                .list(List.of("1", "2"))
+                .set(Set.of("1", "2", "3"))
+                .map(new HashMap<>(map))
                 .build();
     }
 
@@ -152,12 +165,14 @@ public class Fastjson2Controller {
         System.out.println(myUser);
         return "ok";
     }
+
     // 反序列化
     @PostMapping("/deserialize2")
     public String deserialize2(@RequestBody JSONObject myUser) {
         System.out.println(myUser);
         return "ok";
     }
+
     // 反序列化
     @PostMapping("/deserialize3")
     public String deserialize3(@RequestBody List<String> list) {
@@ -165,7 +180,19 @@ public class Fastjson2Controller {
         return "ok";
     }
 
+    // 反序列化
+    @PostMapping("/test")
+    public String test(@RequestBody String str) {
+        System.out.println(str);
+        JSONObject jsonObject = JSONObject.parseObject(str);
+        System.out.println(jsonObject);
+        System.out.println(jsonObject.getDouble("score"));
+        System.out.println(JSONObject.parseObject(str, MyUser.class));
+        return "ok";
+    }
+
 }
+
 ```
 
 **访问序列化接口**
@@ -177,7 +204,7 @@ curl -X GET http://localhost:12013/fastjson2/serialize
 示例输出：
 
 ```json
-{"age":25,"birthday":"2000-01-01 00:00:00","city":"重庆市","createTime":"2025-03-06 11:37:07","createTime2":"2025-03-06 11:37:07","createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":null,"name":"ateng","num":0,"phoneNumber":"1762306666","province":"<","ratio":0.7147,"score":"8800000000000000000000000000.911000000000000000000000"}
+{"age":25,"birthday":"2000-01-01 00:00:00","city":"重庆市","createTime":"2026-04-11 20:16:23","createTime2":"2026-04-11 20:16:23","createTime3":null,"email":"kongyu2385569970@gmail.com","id":"1","list":["1","2"],"map":{"name":"ateng","age":"26"},"name":"ateng","num":0,"phoneNumber":"1762306666","province":null,"ratio":0.7147,"score":100000000000000000000.0,"set":["3","2","1"]}
 ```
 
 **访问反序列化接口**
@@ -185,13 +212,13 @@ curl -X GET http://localhost:12013/fastjson2/serialize
 ```
 curl -X POST http://192.168.100.2:12013/fastjson2/deserialize \
      -H "Content-Type: application/json" \
-     -d '{"age":25,"birthday":"2000-01-01 00:00:00","city":"重庆市","createTime":"2025-03-06 11:37:07","createTime2":"2025-03-06 11:37:07","createTime3":null,"email":"kongyu2385569970@gmail.com","id":1,"list":null,"name":"ateng","num":0,"phoneNumber":"1762306666","province":"<","ratio":0.7147,"score":"8800000000000000000000000000.911000000000000000000000"}'
+     -d '{"age":25,"birthday":"2000-01-01 00:00:00","city":"重庆市","createTime":"2026-04-11 20:16:23","createTime2":"2026-04-11 20:16:23","createTime3":null,"email":"kongyu2385569970@gmail.com","id":"1","list":["1","2"],"map":{"name":"ateng","age":"26"},"name":"ateng","num":0,"phoneNumber":"1762306666","province":null,"ratio":0.7147,"score":100000000000000000000.0,"set":["3","2","1"]}'
 ```
 
 控制台打印
 
 ```
-MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=8800000000000000000000000000.911000000000000000000000, ratio=0.7147, birthday=2000-01-01, province=<, city=重庆市, createTime=2025-03-06T11:37:07, createTime2=Thu Mar 06 11:37:07 CST 2025, createTime3=null, num=0, list=null)
+MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=100000000000000000000.0, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2026-04-11T20:16:23, createTime2=Sat Apr 11 20:16:23 CST 2026, createTime3=null, num=0, list=[1, 2], set=[1, 2, 3], map={name=ateng, age=26})
 ```
 
 
@@ -279,20 +306,78 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONB;
 import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.filter.Filter;
 import com.alibaba.fastjson2.support.config.FastJsonConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
 
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
+/**
+ * FastJson2 Redis序列化器
+ * <p>
+ * 功能：
+ * 1. 支持JSON与JSONB序列化
+ * 2. 支持自动类型（白名单控制）
+ * 3. 提供日志输出便于问题排查
+ *
+ * @param <T> 序列化类型
+ * @author Ateng
+ * @since 2026-04-11
+ */
 public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
-    private final Class<T> type;
-    private FastJsonConfig config = new FastJsonConfig();
 
+    private static final Logger log = LoggerFactory.getLogger(FastJson2RedisSerializer.class);
+
+    /**
+     * 空字节数组常量
+     */
+    private static final byte[] EMPTY_BYTES = new byte[0];
+
+    /**
+     * 目标类型
+     */
+    private final Class<T> type;
+
+    /**
+     * FastJson配置
+     */
+    private final FastJsonConfig config;
+
+    /**
+     * 是否使用JSONB
+     */
+    private final boolean jsonb;
+
+    /**
+     * 构造方法（默认JSON模式）
+     */
     public FastJson2RedisSerializer(Class<T> type) {
-        config.setCharset(Charset.forName("UTF-8"));
-        config.setDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-        // 配置 JSONWriter 的特性
+        this(type, buildDefaultConfig(), false);
+    }
+
+    /**
+     * 构造方法（自定义配置）
+     */
+    public FastJson2RedisSerializer(Class<T> type, FastJsonConfig config, boolean jsonb) {
+        this.type = Objects.requireNonNull(type, "type不能为空");
+        this.config = Objects.requireNonNull(config, "config不能为空");
+        this.jsonb = jsonb;
+    }
+
+    /**
+     * 构建默认配置
+     */
+    private static FastJsonConfig buildDefaultConfig() {
+        FastJsonConfig config = new FastJsonConfig();
+
+        // 基础配置
+        config.setCharset(StandardCharsets.UTF_8);
+
+        // 序列化特性
         config.setWriterFeatures(
                 // 序列化时输出类型信息
                 JSONWriter.Feature.WriteClassName,
@@ -300,68 +385,107 @@ public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
                 JSONWriter.Feature.NotWriteNumberClassName,
                 // 不输出 Set 类型的类名
                 JSONWriter.Feature.NotWriteSetClassName,
+                // 不输出 Map 类型的类名
+                JSONWriter.Feature.NotWriteHashMapArrayListClassName,
                 // 序列化输出空值字段
                 JSONWriter.Feature.WriteNulls,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.BrowserCompatible,
-                // 序列化BigDecimal使用toPlainString，避免科学计数法
-                JSONWriter.Feature.WriteBigDecimalAsPlain
+                // 基于字段反序列化
+                JSONWriter.Feature.FieldBased
         );
 
-        // 配置 JSONReader 的特性
+        // 反序列化特性
         config.setReaderFeatures(
                 // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
-                JSONReader.Feature.SupportSmartMatch
+                JSONReader.Feature.SupportSmartMatch,
+                // 允许字段名不带引号
+                JSONReader.Feature.AllowUnQuotedFieldNames,
+                // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreNoneSerializable
         );
 
-        // 支持自动类型，要读取带"@type"类型信息的JSON数据，需要显式打开SupportAutoType
+        // 自动类型白名单（建议尽量收敛）
         config.setReaderFilters(
                 JSONReader.autoTypeFilter(
-                        // 按需加上需要支持自动类型的类名前缀，范围越小越安全
-                        "local.ateng.java."
+                        "local.ateng.",
+                        "io.github.ateng."
                 )
         );
-        this.type = type;
-    }
 
-    public FastJsonConfig getFastJsonConfig() {
         return config;
     }
 
-    public void setFastJsonConfig(FastJsonConfig fastJsonConfig) {
-        this.config = fastJsonConfig;
-    }
-
+    /**
+     * 序列化
+     */
     @Override
-    public byte[] serialize(T t) throws SerializationException {
-        if (t == null) {
-            return new byte[0];
+    public byte[] serialize(T value) throws SerializationException {
+        if (value == null) {
+            return EMPTY_BYTES;
         }
+
         try {
-            if (config.isJSONB()) {
-                return JSONB.toBytes(t, config.getSymbolTable(), config.getWriterFilters(), config.getWriterFeatures());
-            } else {
-                return JSON.toJSONBytes(t, config.getDateFormat(), config.getWriterFilters(), config.getWriterFeatures());
+            byte[] result = jsonb
+                    ? JSONB.toBytes(value, config.getSymbolTable(), getWriterFilters(), config.getWriterFeatures())
+                    : JSON.toJSONBytes(value, config.getDateFormat(), getWriterFilters(), config.getWriterFeatures());
+
+            if (log.isDebugEnabled()) {
+                log.debug("Redis序列化成功，类型：{}，字节大小：{}", type.getName(), result.length);
             }
-        } catch (Exception ex) {
-            throw new SerializationException("Could not serialize: " + ex.getMessage(), ex);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Redis序列化失败，类型：{}，对象：{}", type.getName(), value, e);
+            throw new SerializationException(buildSerializeError(value), e);
         }
     }
 
+    /**
+     * 反序列化
+     */
     @Override
     public T deserialize(byte[] bytes) throws SerializationException {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
+
         try {
-            if (config.isJSONB()) {
-                return JSONB.parseObject(bytes, type, config.getSymbolTable(), config.getReaderFilters(), config.getReaderFeatures());
-            } else {
-                return JSON.parseObject(bytes, type, config.getDateFormat(), config.getReaderFilters(), config.getReaderFeatures());
+            T result = jsonb
+                    ? JSONB.parseObject(bytes, type, config.getSymbolTable(), config.getReaderFilters(), config.getReaderFeatures())
+                    : JSON.parseObject(bytes, type, config.getDateFormat(), config.getReaderFilters(), config.getReaderFeatures());
+
+            if (log.isDebugEnabled()) {
+                log.debug("Redis反序列化成功，类型：{}，字节大小：{}", type.getName(), bytes.length);
             }
-        } catch (Exception ex) {
-            throw new SerializationException("Could not deserialize: " + ex.getMessage(), ex);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Redis反序列化失败，类型：{}，字节长度：{}", type.getName(), bytes.length, e);
+            throw new SerializationException(buildDeserializeError(bytes), e);
         }
+    }
+
+    /**
+     * 获取WriterFilters，避免空指针
+     */
+    private Filter[] getWriterFilters() {
+        Filter[] filters = config.getWriterFilters();
+        return filters == null ? new Filter[0] : filters;
+    }
+
+    /**
+     * 构建序列化异常信息
+     */
+    private String buildSerializeError(T value) {
+        return "FastJson2序列化失败，type=" + type.getName()
+                + ", valueClass=" + (value == null ? "null" : value.getClass().getName());
+    }
+
+    /**
+     * 构建反序列化异常信息
+     */
+    private String buildDeserializeError(byte[] bytes) {
+        return "FastJson2反序列化失败，type=" + type.getName()
+                + ", bytesLength=" + (bytes == null ? 0 : bytes.length);
     }
 }
 ```
@@ -429,7 +553,6 @@ package local.ateng.java.serialize.controller;
 
 import local.ateng.java.serialize.entity.MyUser;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -438,32 +561,34 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/redis")
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+@RequiredArgsConstructor
 public class RedisController {
     private final RedisTemplate<String, Object> redisTemplate;
 
     // 序列化
     @GetMapping("/serialize")
     public String serialize() {
+        Map<String, Object> map = Map.of("name", "ateng", "age", 26L);
         MyUser myUser = MyUser.builder()
                 .id(1L)
                 .name("ateng")
                 .age(null)
                 .phoneNumber("1762306666")
                 .email("kongyu2385569970@gmail.com")
-                .score(new BigDecimal("88.911"))
+                .score(new BigDecimal("1E+20"))
                 .ratio(0.7147)
                 .birthday(LocalDate.parse("2000-01-01"))
                 .province(null)
                 .city("重庆市")
                 .createTime(LocalDateTime.now())
                 .createTime2(new Date())
-                .list(List.of("1","2"))
+                .list(List.of("1", "2"))
+                .set(Set.of("1", "2", "3"))
+                .map(new HashMap<>(map))
                 .build();
         redisTemplate.opsForValue().set("myUser", myUser);
         return "ok";
@@ -487,30 +612,40 @@ public class RedisController {
 {
     "@type": "local.ateng.java.serialize.entity.MyUser",
     "age": null,
-    "birthday": "2000-01-01 00:00:00.000",
+    "birthday": "2000-01-01 00:00:00",
     "city": "重庆市",
-    "createTime": "2025-03-06 14:17:55.734",
-    "createTime2": "2025-03-06 14:17:55.734",
+    "createTime": "2026-04-11 20:17:44",
+    "createTime2": "2026-04-11 20:17:44",
     "createTime3": null,
     "email": "kongyu2385569970@gmail.com",
-    "id": 1,
+    "id": "1",
     "list": [
         "1",
         "2"
     ],
+    "map": {
+        "name": "ateng",
+        "age": "26"
+    },
     "name": "ateng",
     "num": 0,
     "phoneNumber": "1762306666",
     "province": null,
     "ratio": 0.7147,
-    "score": 88.911
+    "score": 100000000000000000000,
+    "set": [
+        "3",
+        "2",
+        "1"
+    ]
 }
 ```
 
 反序列化输出
 
 ```
-MyUser(id=1, name=ateng, age=null, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=88.911, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2025-03-06T14:17:55.734, createTime2=Thu Mar 06 14:17:55 CST 2025, createTime3=null, num=0, list=[1, 2])
+MyUser(id=1, name=ateng, age=null, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=100000000000000000000, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2026-04-11T20:17:44, createTime2=Sat Apr 11 20:17:44 CST 2026, createTime3=null, num=0, list=[1, 2], set=[1, 2, 3], map={name=ateng, age=26})
+2026-04-11T20:17:44
 ```
 
 
@@ -696,5 +831,58 @@ public class CustomSerializer implements ObjectWriter {
 ```java
 @JSONField(serializeUsing = CustomSerializer.class)
 private String province;
+```
+
+
+
+## 全局序列化和反序列化配置
+
+配置后再使用 JSON、JSONObject、JSONArray等命令就默认有这些序列化和反序列化配置
+
+```java
+package local.ateng.java.serialize.config;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.JSONWriter;
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * 全局配置fastjson2属性
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-03-06
+ */
+@Configuration
+public class FastJsonGlobalConfig {
+
+    @PostConstruct
+    public void run() {
+        // 设置全局默认的 JSON 序列化特性
+        JSON.config(
+                // 序列化输出空值字段
+                JSONWriter.Feature.WriteNulls,
+                // 基于字段反序列化
+                JSONWriter.Feature.FieldBased,
+                // 把 Long 类型转为字符串，避免前端精度丢失
+                JSONWriter.Feature.WriteLongAsString,
+                // 序列化BigDecimal使用toPlainString，避免科学计数法
+                JSONWriter.Feature.WriteBigDecimalAsPlain
+        );
+        JSON.config(
+                // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                JSONReader.Feature.SupportSmartMatch,
+                // 允许字段名不带引号
+                JSONReader.Feature.AllowUnQuotedFieldNames,
+                // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreNoneSerializable,
+                // 防止类型不匹配时报错（更安全）
+                JSONReader.Feature.IgnoreAutoTypeNotMatch
+        );
+    }
+}
+
 ```
 
