@@ -2069,11 +2069,11 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 
 
-## 🌟 Mapper XML常用标签整理
+## Mapper XML常用标签整理
 
 ------
 
-### 🟣 `#{}` 和 `${}` 的主要差异
+### `#{}` 和 `${}` 的主要差异
 
 |      | `#{}`                                           | `${}`                             |
 | ---- | ----------------------------------------------- | --------------------------------- |
@@ -2084,7 +2084,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🟣 基本标签（适用增删改查）
+### 基本标签（适用增删改查）
 
 🔹`<select>` — 定义**数据的读取语句**
 
@@ -2138,7 +2138,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🟣 动态标签（适用条件拼接）
+### 动态标签（适用条件拼接）
 
 🔹`<![CDATA[]]>` —转义操作
 
@@ -2251,7 +2251,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-### 🟣 resultMap —列与对象的高度自由映射
+### resultMap —列与对象的高度自由映射
 
 ✅适用条件：列名与对象属性不一一对应时，或者需要进行关联时。
  ✅作用：可以进行一对一、一对多甚至是有参赋值。
@@ -2266,7 +2266,7 @@ Page{records=[{"id":1,"name":"阿腾","age":25,"score":99.99,"birthday":"2025-01
 
 ------
 
-#### 🟣 一对一
+**一对一**
 
 association
 
@@ -2298,7 +2298,7 @@ association
 
 ------
 
-#### 🟣 一对多（collection）
+**一对多（collection）**
 
 ✅适用条件：需要获取**一对多**的数据时（如一个用户有多个购买记录)。
  ✅作用：可以将关联的数据按 List 映射到对象中。
@@ -3591,13 +3591,272 @@ public class MyBatisPlusConfiguration {
 
 
 
+
+
+###  JSON 包装 TypeHandler（支持泛型）
+
+轻量包装 + 抽象基类：**用“强类型包装类”替代裸泛型，但通过抽象类统一行为，避免重复代码**
+
+---
+
+#### 定义一个抽象 JSON 包装基类
+
+这个类只负责承载 value，并提供基础能力
+
+```java
+package local.ateng.java.mybatisjdk8.entity;
+
+import java.io.Serializable;
+
+/**
+ * JSON 字段包装基类
+ * <p>
+ * 用于承载数据库 JSON 字段的泛型结构，避免直接使用裸泛型导致的类型擦除问题。
+ *
+ * @author Ateng
+ * @since 2026-04-12
+ */
+public abstract class JsonWrapper<T> implements Serializable {
+
+    /**
+     * 实际数据
+     */
+    private T value;
+
+    /**
+     * 无参构造方法
+     */
+    public JsonWrapper() {
+    }
+
+    /**
+     * 带参构造方法
+     *
+     * @param value 实际数据
+     */
+    public JsonWrapper(T value) {
+        this.value = value;
+    }
+
+    /**
+     * 获取实际数据
+     *
+     * @return value
+     */
+    public T getValue() {
+        return value;
+    }
+
+    /**
+     * 设置实际数据
+     *
+     * @param value 数据
+     */
+    public void setValue(T value) {
+        this.value = value;
+    }
+}
+```
+
+---
+
+#### 针对具体泛型定义“无逻辑子类”
+
+例如：
+
+```java
+package local.ateng.java.mybatisjdk8.entity;
+
+import java.util.List;
+
+/**
+ * MyData 列表包装
+ *
+ * @author Ateng
+ * @since 2026-04-12
+ */
+public class MyDataList extends JsonWrapper<List<MyData>> {
+
+    public MyDataList() {
+    }
+
+    public MyDataList(List<MyData> value) {
+        super(value);
+    }
+}
+```
+
+再比如：
+
+```java
+public class UserMap extends JsonWrapper<Map<String, User>> {
+
+    public UserMap() {
+    }
+
+    public UserMap(Map<String, User> value) {
+        super(value);
+    }
+}
+```
+
+---
+
+#### TypeHandler 只处理 JsonWrapper
+
+重点来了：**不再处理 List，而是处理 JsonWrapper**
+
+```java
+package local.ateng.java.mybatisjdk8.handler;
+
+import cn.hutool.core.util.ObjectUtil;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.JSONWriter;
+import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
+import local.ateng.java.mybatisjdk8.entity.JsonWrapper;
+import local.ateng.java.mybatisjdk8.entity.MyDataList;
+import org.apache.ibatis.type.JdbcType;
+import org.apache.ibatis.type.MappedJdbcTypes;
+import org.apache.ibatis.type.MappedTypes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+
+/**
+ * JsonWrapper 通用 TypeHandler
+ *
+ * @author Ateng
+ * @since 2026-04-12
+ */
+@MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER}) // 数据库字段类型
+@MappedTypes({MyDataList.class})     // Java 类型
+public class JsonWrapperTypeHandler<T extends JsonWrapper>
+        extends AbstractJsonTypeHandler<T> {
+
+    private static final Logger log = LoggerFactory.getLogger(JsonWrapperTypeHandler.class);
+
+    private final Class<T> clazz;
+
+    public JsonWrapperTypeHandler(Class<T> clazz) {
+        this.clazz = clazz;
+    }
+
+    /**
+     * 解析 JSON → 包装类
+     */
+    @Override
+    protected T parse(String json) {
+        if (ObjectUtil.isEmpty(json)) {
+            return null;
+        }
+
+        try {
+            T wrapper = clazz.newInstance();
+
+            // 获取泛型 T
+            Type superType = clazz.getGenericSuperclass();
+
+            if (superType instanceof ParameterizedType) {
+                Type actualType = ((ParameterizedType) superType)
+                        .getActualTypeArguments()[0];
+
+                Object value = JSON.parseObject(
+                        json, actualType,
+                        // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                        JSONReader.Feature.SupportSmartMatch,
+                        // 允许字段名不带引号
+                        JSONReader.Feature.AllowUnQuotedFieldNames,
+                        // 忽略无法序列化的字段
+                        JSONReader.Feature.IgnoreNoneSerializable
+                );
+
+                wrapper.setValue(value);
+            }
+
+            return wrapper;
+
+        } catch (Exception e) {
+            log.error("JsonWrapper 反序列化失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 包装类 → JSON
+     */
+    @Override
+    protected String toJson(T obj) {
+        if (ObjectUtil.isEmpty(obj)) {
+            return null;
+        }
+
+        try {
+            return JSON.toJSONString(
+                    obj.getValue(),
+                    // 序列化输出空值字段
+                    JSONWriter.Feature.WriteNulls,
+                    // 基于字段反序列化
+                    JSONWriter.Feature.FieldBased
+            );
+        } catch (Exception e) {
+            log.error("JsonWrapper 序列化失败", e);
+            return null;
+        }
+    }
+}
+
+```
+
+---
+
+#### 使用方式
+
+**全局使用**
+
+```java
+@Bean
+public ConfigurationCustomizer configurationCustomizer() {
+    return configuration -> {
+
+        configuration.getTypeHandlerRegistry().register(JsonWrapperTypeHandler.class);
+
+    };
+}
+```
+
+**局部使用**
+
+```java
+@TableField(typeHandler = JsonWrapperTypeHandler.class)
+private MyDataList mydataList;
+```
+
+写入数据
+
+```
+project.setMyDataList(new MyDataList(list));
+```
+
+数据库存储：
+
+```json
+[
+  {"id":1,"name":"A"}
+]
+```
+
+
+
 ## 拦截器Interceptor
 
 参考：[官网文档](https://baomidou.com/plugins/)
 
 ------
 
-### 🔹 常用的 SQL 拦截器场景
+### 常用的 SQL 拦截器场景
 
 1. **分页拦截器**
    - 自动对查询语句追加分页逻辑，返回分页数据。
@@ -3624,7 +3883,7 @@ public class MyBatisPlusConfiguration {
 
 ------
 
-### 🔹 MyBatis-Plus 默认内置的常用拦截器
+### MyBatis-Plus 默认内置的常用拦截器
 
 - `PaginationInnerInterceptor`（分页）
 - `OptimisticLockerInnerInterceptor`（乐观锁）
