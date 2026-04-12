@@ -1,7 +1,7 @@
-package local.ateng.java.redisjdk8.controller;
+package local.ateng.java.redis.controller;
 
 
-import local.ateng.java.redisjdk8.service.RedissonService;
+import local.ateng.java.redis.service.RedissonService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;

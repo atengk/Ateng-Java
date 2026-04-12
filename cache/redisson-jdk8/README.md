@@ -33,9 +33,9 @@ Redisson 是一个基于 Redis 的 Java 客户端，提供了丰富的分布式�
 redisson:
   config: |
     singleServerConfig:
-      address: redis://192.168.1.10:42784
+      address: redis://192.168.1.12:40003
       password: Admin@123
-      database: 41
+      database: 0
       clientName: redisson-client
       connectionPoolSize: 64      # 最大连接数
       connectionMinimumIdleSize: 24 # 最小空闲连接
@@ -213,10 +213,7 @@ public class RedissonConfig {
 package local.ateng.java.redisjdk8.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import org.redisson.api.RLock;
-import org.redisson.api.RRateLimiter;
-import org.redisson.api.RateIntervalUnit;
-import org.redisson.api.RateType;
+import org.redisson.api.*;
 
 import java.util.Collection;
 import java.util.List;
@@ -239,7 +236,7 @@ public interface RedissonService {
      * @return RedissonClient
      */
     RedissonClient getClient();
-    
+
     // -------------------------- 通用 Key 管理 --------------------------
 
     /**
@@ -1269,6 +1266,35 @@ public interface RedissonService {
     void unlock(String lockKey);
 
     /**
+     * 在分布式锁内执行任务（阻塞模式）。
+     *
+     * @param lockKey 锁 key
+     * @param task    任务
+     */
+    void executeWithLock(String lockKey, Runnable task);
+
+    /**
+     * 在分布式锁内执行任务（带自动释放时间）。
+     *
+     * @param lockKey   锁 key
+     * @param leaseTime 自动释放时间（秒）
+     * @param task      任务
+     */
+    void executeWithLock(String lockKey, long leaseTime, Runnable task);
+
+    /**
+     * 尝试获取锁并执行任务。
+     *
+     * @param lockKey   锁 key
+     * @param waitTime  等待时间
+     * @param leaseTime 自动释放时间
+     * @param unit      时间单位
+     * @param task      任务
+     * @return 是否执行成功（获取到锁才会执行）
+     */
+    boolean tryExecuteWithLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit, Runnable task);
+
+    /**
      * 判断当前线程是否持有指定的锁。
      *
      * @param key 锁的名称
@@ -1731,12 +1757,15 @@ public interface RedissonService {
 ```java
 package local.ateng.java.redisjdk8.service.impl;
 
+import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import local.ateng.java.redisjdk8.service.RedissonService;
 import org.redisson.api.*;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.client.protocol.ScoredEntry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
@@ -1759,6 +1788,8 @@ import java.util.stream.Collectors;
 @Service
 public class RedissonServiceImpl implements RedissonService {
 
+    private static final Logger log = LoggerFactory.getLogger(RedissonServiceImpl.class);
+
     private final RedissonClient redissonClient;
     private final ObjectMapper objectMapper;
 
@@ -1779,7 +1810,7 @@ public class RedissonServiceImpl implements RedissonService {
     public RedissonClient getClient() {
         return this.redissonClient;
     }
-    
+
     // -------------------------- 通用 Key 管理 --------------------------
 
     /**
@@ -3649,6 +3680,116 @@ public class RedissonServiceImpl implements RedissonService {
         RLock lock = getLock(lockKey);
         if (lock.isHeldByCurrentThread()) {
             lock.unlock();
+        }
+    }
+
+    /**
+     * 阻塞执行（无过期时间，依赖 watchdog 自动续期）
+     */
+    @Override
+    public void executeWithLock(String lockKey, Runnable task) {
+        checkLockKey(lockKey);
+        RLock lock = getLock(lockKey);
+
+        lock.lock();
+        try {
+            log.info("获取分布式锁成功，lockKey={}", lockKey);
+            task.run();
+        } catch (Exception e) {
+            log.error("分布式锁执行任务异常，lockKey={}", lockKey, e);
+            throw e;
+        } finally {
+            safeUnlock(lock, lockKey);
+        }
+    }
+
+    /**
+     * 阻塞执行（带 leaseTime）
+     */
+    @Override
+    public void executeWithLock(String lockKey, long leaseTime, Runnable task) {
+        checkLockKey(lockKey);
+        RLock lock = getLock(lockKey);
+
+        lock.lock(leaseTime, TimeUnit.SECONDS);
+        try {
+            log.info("获取分布式锁成功，lockKey={}，自动释放时间={}秒", lockKey, leaseTime);
+            task.run();
+        } catch (Exception e) {
+            log.error("分布式锁执行任务异常，lockKey={}，leaseTime={}秒", lockKey, leaseTime, e);
+            throw e;
+        } finally {
+            safeUnlock(lock, lockKey);
+        }
+    }
+
+    /**
+     * tryLock 执行（推荐生产使用）
+     */
+    @Override
+    public boolean tryExecuteWithLock(String lockKey,
+                                      long waitTime,
+                                      long leaseTime,
+                                      TimeUnit unit,
+                                      Runnable task) {
+        checkLockKey(lockKey);
+        RLock lock = getLock(lockKey);
+
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(waitTime, leaseTime, unit);
+            if (!locked) {
+                log.warn("尝试获取分布式锁失败，lockKey={}，等待时间={}，自动释放时间={}，时间单位={}",
+                        lockKey, waitTime, leaseTime, unit);
+                return false;
+            }
+
+            log.info("获取分布式锁成功，lockKey={}，等待时间={}，自动释放时间={}，时间单位={}",
+                    lockKey, waitTime, leaseTime, unit);
+
+            task.run();
+            return true;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("获取分布式锁被中断，lockKey={}，等待时间={}，自动释放时间={}，时间单位={}",
+                    lockKey, waitTime, leaseTime, unit, e);
+            return false;
+
+        } catch (Exception e) {
+            log.error("分布式锁执行任务异常，lockKey={}，等待时间={}，自动释放时间={}，时间单位={}",
+                    lockKey, waitTime, leaseTime, unit, e);
+            throw e;
+
+        } finally {
+            if (locked) {
+                safeUnlock(lock, lockKey);
+            }
+        }
+    }
+
+    /**
+     * 安全释放锁（防止误解锁）
+     */
+    private void safeUnlock(RLock lock, String lockKey) {
+        try {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+                log.info("释放分布式锁成功，lockKey={}", lockKey);
+            } else {
+                log.warn("当前线程未持有锁，跳过释放，lockKey={}", lockKey);
+            }
+        } catch (Exception e) {
+            log.error("释放分布式锁异常，lockKey={}", lockKey, e);
+        }
+    }
+
+    /**
+     * 参数校验
+     */
+    private void checkLockKey(String lockKey) {
+        if (StrUtil.isBlank(lockKey)) {
+            throw new IllegalArgumentException("分布式锁 lockKey 不能为空");
         }
     }
 

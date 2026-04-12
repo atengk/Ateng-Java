@@ -1,9 +1,9 @@
-package local.ateng.java.redisjdk8.service.impl;
+package local.ateng.java.redis.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import local.ateng.java.redisjdk8.service.RedissonService;
+import local.ateng.java.redis.service.RedissonService;
 import org.redisson.api.*;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.client.protocol.ScoredEntry;
@@ -173,7 +173,7 @@ public class RedissonServiceImpl implements RedissonService {
     public Set<String> keys(String pattern) {
         RKeys rKeys = redissonClient.getKeys();
         Iterable<String> iterable = rKeys.getKeysByPattern(pattern);
-        Set<String> result = new java.util.HashSet<>();
+        Set<String> result = new HashSet<>();
         for (String key : iterable) {
             result.add(key);
         }

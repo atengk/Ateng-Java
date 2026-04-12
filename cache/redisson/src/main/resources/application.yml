@@ -12,9 +12,9 @@ spring:
 redisson:
   config: |
     singleServerConfig:
-      address: redis://192.168.1.10:42784
+      address: redis://192.168.1.12:40003
       password: Admin@123
-      database: 41
+      database: 0
       clientName: redisson-client
       connectionPoolSize: 64      # 最大连接数
       connectionMinimumIdleSize: 24 # 最小空闲连接

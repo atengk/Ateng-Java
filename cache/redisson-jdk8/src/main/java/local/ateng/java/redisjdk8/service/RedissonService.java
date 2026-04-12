@@ -1054,6 +1054,35 @@ public interface RedissonService {
     void unlock(String lockKey);
 
     /**
+     * 在分布式锁内执行任务（阻塞模式）。
+     *
+     * @param lockKey 锁 key
+     * @param task    任务
+     */
+    void executeWithLock(String lockKey, Runnable task);
+
+    /**
+     * 在分布式锁内执行任务（带自动释放时间）。
+     *
+     * @param lockKey   锁 key
+     * @param leaseTime 自动释放时间（秒）
+     * @param task      任务
+     */
+    void executeWithLock(String lockKey, long leaseTime, Runnable task);
+
+    /**
+     * 尝试获取锁并执行任务。
+     *
+     * @param lockKey   锁 key
+     * @param waitTime  等待时间
+     * @param leaseTime 自动释放时间
+     * @param unit      时间单位
+     * @param task      任务
+     * @return 是否执行成功（获取到锁才会执行）
+     */
+    boolean tryExecuteWithLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit, Runnable task);
+
+    /**
      * 判断当前线程是否持有指定的锁。
      *
      * @param key 锁的名称
