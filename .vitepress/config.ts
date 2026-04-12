@@ -413,8 +413,8 @@ export default defineConfig({
                             { text: 'RedisTemplate', link: '/cache/redis-template/README' },
                             { text: 'RedisTemplate-JDK8', link: '/cache/redis-template-jdk8/README' },
                             { text: 'Redisson', link: '/cache/redisson/README' },
-                            { text: 'Redisson-JDK8', link: '/cache/redisson-jdk8/README' }
-                            { text: 'Redisson 项目实战案例', link: '/cache/redisson-example/README' }
+                            { text: 'Redisson-JDK8', link: '/cache/redisson-jdk8/README' },
+                            { text: 'Redisson 项目实战案例', link: '/cache/redisson-example/README' },
                         ]
                     },
                     {
