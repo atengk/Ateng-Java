@@ -1972,6 +1972,50 @@ public class RedissonServiceImpl implements RedissonService {
     @Override
     public boolean tryExecuteWithLock(String lockKey,
                                       long waitTime,
+                                      TimeUnit unit,
+                                      Runnable task) {
+        checkLockKey(lockKey);
+        RLock lock = getLock(lockKey);
+
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(waitTime, unit);
+            if (!locked) {
+                log.warn("尝试获取分布式锁失败，lockKey={}，等待时间={}，时间单位={}",
+                        lockKey, waitTime, unit);
+                return false;
+            }
+
+            log.info("获取分布式锁成功，lockKey={}，等待时间={}，时间单位={}",
+                    lockKey, waitTime, unit);
+
+            task.run();
+            return true;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("获取分布式锁被中断，lockKey={}，等待时间={}，时间单位={}",
+                    lockKey, waitTime, unit, e);
+            return false;
+
+        } catch (Exception e) {
+            log.error("分布式锁执行任务异常，lockKey={}，等待时间={}，时间单位={}",
+                    lockKey, waitTime, unit, e);
+            throw e;
+
+        } finally {
+            if (locked) {
+                safeUnlock(lock, lockKey);
+            }
+        }
+    }
+
+    /**
+     * tryLock 执行（推荐生产使用）
+     */
+    @Override
+    public boolean tryExecuteWithLock(String lockKey,
+                                      long waitTime,
                                       long leaseTime,
                                       TimeUnit unit,
                                       Runnable task) {

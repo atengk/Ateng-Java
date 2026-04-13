@@ -1287,6 +1287,17 @@ public interface RedissonService {
      *
      * @param lockKey   锁 key
      * @param waitTime  等待时间
+     * @param unit      时间单位
+     * @param task      任务
+     * @return 是否执行成功（获取到锁才会执行）
+     */
+    boolean tryExecuteWithLock(String lockKey, long waitTime, TimeUnit unit, Runnable task);
+
+    /**
+     * 尝试获取锁并执行任务。
+     *
+     * @param lockKey   锁 key
+     * @param waitTime  等待时间
      * @param leaseTime 自动释放时间
      * @param unit      时间单位
      * @param task      任务
@@ -3720,6 +3731,50 @@ public class RedissonServiceImpl implements RedissonService {
             throw e;
         } finally {
             safeUnlock(lock, lockKey);
+        }
+    }
+
+    /**
+     * tryLock 执行（推荐生产使用）
+     */
+    @Override
+    public boolean tryExecuteWithLock(String lockKey,
+                                      long waitTime,
+                                      TimeUnit unit,
+                                      Runnable task) {
+        checkLockKey(lockKey);
+        RLock lock = getLock(lockKey);
+
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(waitTime, unit);
+            if (!locked) {
+                log.warn("尝试获取分布式锁失败，lockKey={}，等待时间={}，时间单位={}",
+                        lockKey, waitTime, unit);
+                return false;
+            }
+
+            log.info("获取分布式锁成功，lockKey={}，等待时间={}，时间单位={}",
+                    lockKey, waitTime, unit);
+
+            task.run();
+            return true;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("获取分布式锁被中断，lockKey={}，等待时间={}，时间单位={}",
+                    lockKey, waitTime, unit, e);
+            return false;
+
+        } catch (Exception e) {
+            log.error("分布式锁执行任务异常，lockKey={}，等待时间={}，时间单位={}",
+                    lockKey, waitTime, unit, e);
+            throw e;
+
+        } finally {
+            if (locked) {
+                safeUnlock(lock, lockKey);
+            }
         }
     }
 
