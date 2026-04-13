@@ -1,4 +1,4 @@
-package local.ateng.java.serialize.config;
+package local.ateng.java.fastjson2.config;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONReader;
