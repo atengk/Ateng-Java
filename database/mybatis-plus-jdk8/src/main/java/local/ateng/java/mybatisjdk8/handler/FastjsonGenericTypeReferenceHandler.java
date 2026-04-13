@@ -49,8 +49,22 @@ public class FastjsonGenericTypeReferenceHandler<T> extends AbstractJsonTypeHand
             return JSON.parseObject(
                     json,
                     this.type,
-                    // 当 JSON 中存在 Java 类中没有的字段时忽略，不抛出异常
-                    Feature.IgnoreNotMatch
+                    // 允许 JSON 中包含注释（// 或 /* */）
+                    Feature.AllowComment,
+                    // 允许字段名不加双引号
+                    Feature.AllowUnQuotedFieldNames,
+                    // 允许单引号作为字符串定界符
+                    Feature.AllowSingleQuotes,
+                    // 字段名使用常量池优化内存
+                    Feature.InternFieldNames,
+                    // 允许多余的逗号
+                    Feature.AllowArbitraryCommas,
+                    // 忽略 JSON 中不存在的字段
+                    Feature.IgnoreNotMatch,
+                    // 将小数解析为 BigDecimal（而不是 Double）
+                    Feature.UseBigDecimal,
+                    // 允许 ISO 8601 日期格式（例如：2023-10-11T14:30:00Z）
+                    Feature.AllowISO8601DateFormat
             );
         } catch (Exception e) {
             // 解析异常时返回 null（可视情况添加日志）
@@ -71,17 +85,9 @@ public class FastjsonGenericTypeReferenceHandler<T> extends AbstractJsonTypeHand
                 return null;
             }
             return JSON.toJSONString(obj,
-                    // Map 类型字段即使为 null 也输出
+                    // 输出为 null 的字段，否则默认会被忽略
                     SerializerFeature.WriteMapNullValue,
-                    // 将 null 的 List 类型字段序列化为空数组 []
-                    SerializerFeature.WriteNullListAsEmpty,
-                    // 将 null 的字符串字段序列化为空字符串 ""
-                    SerializerFeature.WriteNullStringAsEmpty,
-                    // 将 null 的数字字段序列化为 0
-                    SerializerFeature.WriteNullNumberAsZero,
-                    // 将 null 的布尔字段序列化为 false
-                    SerializerFeature.WriteNullBooleanAsFalse,
-                    // 禁用循环引用检测，提高性能（如果存在对象引用自身需谨慎）
+                    // 禁用循环引用检测，避免出现 "$ref" 结构
                     SerializerFeature.DisableCircularReferenceDetect
             );
         } catch (Exception e) {

@@ -62,10 +62,12 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
             return JSON.parseObject(
                     json,
                     type,
-                    // 开启自动类型识别，仅允许指定包名
-                    JSONReader.autoTypeFilter("local.kongyu.java.", "local.ateng.java"),
-                    // 开启智能字段匹配（允许字段名不完全匹配）
-                    JSONReader.Feature.SupportSmartMatch
+                    // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                    JSONReader.Feature.SupportSmartMatch,
+                    // 允许字段名不带引号
+                    JSONReader.Feature.AllowUnQuotedFieldNames,
+                    // 忽略无法序列化的字段
+                    JSONReader.Feature.IgnoreNoneSerializable
             );
         } catch (Exception e) {
             log.error("JSON 解析失败: {}", json, e);
@@ -88,18 +90,10 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
             return JSON.toJSONString(
                     obj,
-                    // 序列化时输出类型信息（用于反序列化）
-                    JSONWriter.Feature.WriteClassName,
-                    // 不输出数字类型的类名（如 Integer、Long 等）
-                    JSONWriter.Feature.NotWriteNumberClassName,
-                    // 不输出 Set 类型的类名（如 HashSet）
-                    JSONWriter.Feature.NotWriteSetClassName,
-                    // 序列化时包含值为 null 的字段
+                    // 序列化输出空值字段
                     JSONWriter.Feature.WriteNulls,
-                    // 为兼容 JavaScript，大整数转为字符串输出
-                    JSONWriter.Feature.BrowserCompatible,
-                    // 序列化 BigDecimal 时使用非科学计数法（toPlainString）
-                    JSONWriter.Feature.WriteBigDecimalAsPlain
+                    // 基于字段反序列化
+                    JSONWriter.Feature.FieldBased
             );
         } catch (Exception e) {
             log.error("对象序列化为 JSON 失败: {}", obj, e);

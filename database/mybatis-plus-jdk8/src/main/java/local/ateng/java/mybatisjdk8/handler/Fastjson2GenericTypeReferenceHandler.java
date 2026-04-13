@@ -49,8 +49,12 @@ public class Fastjson2GenericTypeReferenceHandler<T> extends AbstractJsonTypeHan
             return JSON.parseObject(
                     json,
                     type,
-                    // 支持字段名称的智能匹配，如驼峰与下划线形式自动转换
-                    JSONReader.Feature.SupportSmartMatch
+                    // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+                    JSONReader.Feature.SupportSmartMatch,
+                    // 允许字段名不带引号
+                    JSONReader.Feature.AllowUnQuotedFieldNames,
+                    // 忽略无法序列化的字段
+                    JSONReader.Feature.IgnoreNoneSerializable
             );
         } catch (Exception e) {
             // 解析异常时返回 null（可视情况添加日志）
@@ -72,16 +76,10 @@ public class Fastjson2GenericTypeReferenceHandler<T> extends AbstractJsonTypeHan
             }
             return JSON.toJSONString(
                     obj,
-                    // 不输出数字类型的类名（节省输出）
-                    JSONWriter.Feature.NotWriteNumberClassName,
-                    // 不输出 Set 类型的类名
-                    JSONWriter.Feature.NotWriteSetClassName,
-                    // 序列化时包含 null 字段，保持字段完整性
+                    // 序列化输出空值字段
                     JSONWriter.Feature.WriteNulls,
-                    // 为兼容 JS，大整数用字符串输出，避免精度丢失
-                    JSONWriter.Feature.BrowserCompatible,
-                    // BigDecimal 用 plain string 输出，避免科学计数法
-                    JSONWriter.Feature.WriteBigDecimalAsPlain
+                    // 基于字段反序列化
+                    JSONWriter.Feature.FieldBased
             );
         } catch (Exception e) {
             // 序列化失败时返回 null（可添加日志）

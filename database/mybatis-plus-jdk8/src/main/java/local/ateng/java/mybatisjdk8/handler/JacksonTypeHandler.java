@@ -133,7 +133,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
                     // 配置 JSON 解析相关设置
                     customizeJsonParsing(OBJECT_MAPPER);
                     // 配置反序列化时自动转换的设置
-                    customizeJsonClassType(OBJECT_MAPPER);
+                    //customizeJsonClassType(OBJECT_MAPPER);
                 }
             }
         }
