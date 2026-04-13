@@ -16,8 +16,8 @@ import java.time.LocalDateTime;
  * 用户信息表，存储用户的基本信息
  * </p>
  *
- * @author 孔余
- * @since 2025-01-13
+ * @author Ateng
+ * @since 2026-04-13
  */
 @Getter
 @Setter

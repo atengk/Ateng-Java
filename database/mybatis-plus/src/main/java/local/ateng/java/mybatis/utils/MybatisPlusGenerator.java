@@ -26,12 +26,12 @@ public class MybatisPlusGenerator {
     private static final String ChildPackage = "";
     // 需要生成的表
     private static final List<String> GenerateTable = Arrays.asList(
-            "my_json"
+            "my_user", "project"
     );
 
     public static void main(String[] args) {
         PathEntity path = getPath();
-        FastAutoGenerator.create("jdbc:mysql://192.168.1.10:35725/kongyu", "root", "Admin@123")
+        FastAutoGenerator.create("jdbc:mysql://192.168.1.12:40001/kongyu", "root", "Admin@123")
                 .globalConfig(builder -> builder
                         .author("Ateng")
                         .outputDir(path.getSourceDir())

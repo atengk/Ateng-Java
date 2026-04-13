@@ -1,6 +1,6 @@
 package local.ateng.java.mybatis.controller;
 
-import local.ateng.java.mybatis.service.IMyUserService;
+import local.ateng.java.mybatis.service.IProjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -8,22 +8,22 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * <p>
- * 用户信息表，存储用户的基本信息 前端控制器
+ * 项目表，包含常用字段类型 前端控制器
  * </p>
  *
  * @author Ateng
  * @since 2026-04-13
  */
 @RestController
-@RequestMapping("/myUser")
+@RequestMapping("/project")
 @RequiredArgsConstructor
-public class MyUserController {
+public class ProjectController {
 
-    private final IMyUserService myUserService;
+    private final IProjectService projectService;
 
     @GetMapping("/count")
     public Long count() {
-        return myUserService.count();
+        return projectService.count();
     }
 
 }

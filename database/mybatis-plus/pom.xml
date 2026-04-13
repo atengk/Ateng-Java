@@ -19,6 +19,7 @@
         <spring-boot.version>3.4.1</spring-boot.version>
         <maven-compiler.version>3.12.1</maven-compiler.version>
         <lombok.version>1.18.36</lombok.version>
+        <fastjson.version>1.2.83</fastjson.version>
         <fastjson2.version>2.0.53</fastjson2.version>
         <hutool.version>5.8.35</hutool.version>
         <mybatis-plus.version>3.5.11</mybatis-plus.version>
@@ -47,6 +48,14 @@
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
             <scope>provided</scope>
+        </dependency>
+
+        <!-- 高性能的JSON库 -->
+        <!-- https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn#0-fastjson-20%E4%BB%8B%E7%BB%8D -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>${fastjson.version}</version>
         </dependency>
 
         <!-- 高性能的JSON库 -->
@@ -125,11 +134,11 @@
         </dependency>
 
         <!-- MyBatis Plus 多数据源 -->
-        <dependency>
+        <!--<dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
             <version>4.3.1</version>
-        </dependency>
+        </dependency>-->
 
         <!-- Druid 数据源: 高性能数据库连接池 -->
         <!-- https://mvnrepository.com/artifact/com.alibaba/druid-spring-boot-starter -->
