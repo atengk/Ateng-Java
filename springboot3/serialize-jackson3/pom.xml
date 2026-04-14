@@ -48,10 +48,16 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Jackson 依赖 -->
+        <!-- Spring Boot Redis 数据库集成，支持多种 Redis 数据结构和操作 -->
         <dependency>
-            <groupId>tools.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Lettuce 客户端连接池实现，基于 Apache Commons Pool2 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
         </dependency>
 
     </dependencies>

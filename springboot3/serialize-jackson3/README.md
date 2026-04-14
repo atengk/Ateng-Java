@@ -886,15 +886,15 @@ MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@
 ### 配置
 
 ```java
-package local.ateng.java.serialize.config;
+package io.github.atengk.serialize.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * RedisTemplate 配置类，统一定义 Key/Value 的序列化策略。
@@ -929,18 +929,18 @@ public class RedisTemplateConfig {
         // 设置 Hash Key 序列化器
         template.setHashKeySerializer(stringRedisSerializer);
 
-        // 构建自定义 ObjectMapper（统一 JSON 规则）
-        ObjectMapper objectMapper = JacksonObjectMapperFactory.buildStorageObjectMapper();
+        // 构建自定义 JsonMapper（统一 JSON 规则）
+        JsonMapper jsonMapper = JacksonJsonMapperFactory.buildStorageJsonMapper();
 
         // 创建 Jackson 序列化器（用于 Value）
-        Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer =
-                new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
+        JacksonJsonRedisSerializer<Object> jacksonJsonRedisSerializer =
+                new JacksonJsonRedisSerializer<>(jsonMapper, Object.class);
 
         // 设置 Value 序列化器
-        template.setValueSerializer(jackson2JsonRedisSerializer);
+        template.setValueSerializer(jacksonJsonRedisSerializer);
 
         // 设置 Hash Value 序列化器
-        template.setHashValueSerializer(jackson2JsonRedisSerializer);
+        template.setHashValueSerializer(jacksonJsonRedisSerializer);
 
         // 初始化 RedisTemplate
         template.afterPropertiesSet();
@@ -950,14 +950,15 @@ public class RedisTemplateConfig {
     }
 
 }
+
 ```
 
 ### 使用
 
 ```java
-package local.ateng.java.serialize.controller;
+package io.github.atengk.serialize.controller;
 
-import local.ateng.java.serialize.entity.MyUser;
+import io.github.atengk.serialize.entity.MyUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -972,7 +973,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/redis")
-@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+@RequiredArgsConstructor
 public class RedisController {
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -1018,14 +1019,15 @@ public class RedisController {
 
 ```json
 {
-    "@class": "local.ateng.java.serialize.entity.MyUser",
+    "@class": "io.github.atengk.serialize.entity.MyUser",
+    "aBBCCdd": null,
     "age": 25,
     "birthday": "2000-01-01",
     "city": "重庆市",
-    "createTime": "2026-04-14T08:17:38.4979196",
+    "createTime": "2026-04-14T17:51:28.8368228",
     "createTime2": [
         "java.util.Date",
-        "2026-04-14T08:17:38.497+08:00"
+        "2026-04-14T17:51:28.836+08:00"
     ],
     "createTime3": null,
     "email": "kongyu2385569970@gmail.com",
@@ -1048,7 +1050,7 @@ public class RedisController {
     "name": "ateng",
     "num": 0,
     "phoneNumber": "1762306666",
-    "province": "/",
+    "province": null,
     "ratio": 0.7147,
     "score": [
         "java.math.BigDecimal",
@@ -1057,9 +1059,9 @@ public class RedisController {
     "set": [
         "java.util.ImmutableCollections$SetN",
         [
-            "1",
+            "3",
             "2",
-            "3"
+            "1"
         ]
     ]
 }
@@ -1068,8 +1070,8 @@ public class RedisController {
 反序列化输出
 
 ```
-MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=100000000000000000000, ratio=0.7147, birthday=2000-01-01, province=/, city=重庆市, createTime=2026-04-14T08:17:38.497919600, createTime2=Tue Apr 14 08:17:38 CST 2026, createTime3=null, num=0, list=[1, 2], set=[1, 2, 3], map={name=ateng, age=26})
-2026-04-14T08:17:38.497919600
+MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@gmail.com, score=100000000000000000000, ratio=0.7147, birthday=2000-01-01, province=null, city=重庆市, createTime=2026-04-14T17:48:43.640521, createTime2=Tue Apr 14 17:48:43 CST 2026, createTime3=null, num=0, list=[1, 2], set=[1, 2, 3], map={name=ateng, age=26}, aBBCCdd=null)
+2026-04-14T17:48:43.640521
 ```
 
 
@@ -1079,17 +1081,16 @@ MyUser(id=1, name=ateng, age=25, phoneNumber=1762306666, email=kongyu2385569970@
 ### 配置自定义序列化器
 
 ```java
-package local.ateng.java.serialize.serializer;
+package io.github.atengk.serialize.serializer;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.ValueSerializer;
 
-import java.io.IOException;
-
-public class DefaultValueStringSerializer extends JsonSerializer {
+public class DefaultValueStringSerializer extends ValueSerializer<String> {
     @Override
-    public void serialize(Object value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+    public void serialize(String value, JsonGenerator gen, SerializationContext ctxt) throws JacksonException {
         if (value == null) {
             gen.writeString("/");
         } else {
@@ -1097,7 +1098,6 @@ public class DefaultValueStringSerializer extends JsonSerializer {
         }
     }
 }
-
 
 ```
 

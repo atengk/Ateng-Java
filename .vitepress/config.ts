@@ -195,6 +195,7 @@ export default defineConfig({
                       text: '序列化和反序列化',
                       items: [
                         { text: 'Jackson', link: '/springboot3/serialize-jackson/README' },
+                        { text: 'Jackson3', link: '/springboot3/serialize-jackson3/README' },
                         { text: 'Fastjson', link: '/springboot3/serialize-fastjson/README' },
                         { text: 'Fastjson2', link: '/springboot3/serialize-fastjson2/README' }
                       ]

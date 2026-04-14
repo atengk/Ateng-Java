@@ -1,6 +1,6 @@
 package io.github.atengk.serialize.entity;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
+import io.github.atengk.serialize.serializer.DefaultValueStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -73,6 +73,7 @@ public class MyUser implements Serializable {
     /**
      * 所在省份
      */
+    //@JsonSerialize(using = DefaultValueStringSerializer.class, nullsUsing = DefaultValueStringSerializer.class)
     private String province;
 
     /**
