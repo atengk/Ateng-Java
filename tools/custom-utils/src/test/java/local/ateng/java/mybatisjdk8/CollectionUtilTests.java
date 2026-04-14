@@ -977,4 +977,24 @@ public class CollectionUtilTests {
         // {"add":[],"delete":[],"update":[{"changes":{"age":{"new":21,"old":20}},"id":"1"}]}
     }
 
+
+    @Test
+    void testDiffValue() {
+
+        Map<String, Object> diff = CollectionUtil.diffValue(100, 200);
+
+        System.out.println(JsonUtil.toJsonString(diff));
+        // {"add":[],"delete":[],"update":[{"changes":{"new":200,"old":100}}]}
+    }
+
+    @Test
+    void testDiffValue2() {
+
+        Map<String, Object> diff = CollectionUtil.diffValue("ateng", "阿腾");
+
+        System.out.println(JsonUtil.toJsonString(diff));
+        // {"add":[],"update":[{"changes":{"new":"阿腾","old":"ateng"}}],"delete":[]}
+    }
+
+
 }
