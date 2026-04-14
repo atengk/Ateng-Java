@@ -105,7 +105,7 @@ public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
         config.setReaderFilters(
                 JSONReader.autoTypeFilter(
                         "local.ateng.",
-                        "io.github.ateng."
+                        "io.github.atengk."
                 )
         );
 
