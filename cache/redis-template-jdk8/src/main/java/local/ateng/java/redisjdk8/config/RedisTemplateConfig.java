@@ -1,16 +1,11 @@
 package local.ateng.java.redisjdk8.config;
 
-import com.alibaba.fastjson2.support.spring.data.redis.GenericFastJsonRedisSerializer;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
@@ -30,58 +25,35 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisTemplateConfig {
 
     @Bean
-    public RedisTemplate<String, Object> jacksonRedisTemplate(RedisConnectionFactory connectionFactory) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        RedisTemplate redisTemplate = new RedisTemplate();
+        redisTemplate.setConnectionFactory(redisConnectionFactory);
 
-        // 设置 Key 序列化器
-        StringRedisSerializer keySerializer = new StringRedisSerializer();
-        template.setKeySerializer(keySerializer);
-        template.setHashKeySerializer(keySerializer);
+        /**
+         * 使用StringRedisSerializer来序列化和反序列化redis的key值
+         */
+        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+        redisTemplate.setKeySerializer(stringRedisSerializer);
+        redisTemplate.setHashKeySerializer(stringRedisSerializer);
 
-        // 创建 ObjectMapper 实例，用于 JSON 序列化和反序列化
-        ObjectMapper objectMapper = new ObjectMapper();
-        // 注册 JavaTimeModule 模块，支持 Java 8 日期时间类型（如 LocalDateTime、LocalDate）
-        objectMapper.registerModule(new JavaTimeModule());
-        // 禁用将日期写为时间戳，改为标准 ISO-8601 字符串格式（如 "2025-08-01T15:30:00"）
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        // 启用默认类型信息，解决反序列化时无法恢复原始对象类型的问题（类似 fastjson 的 @type）
-        objectMapper.activateDefaultTyping(
-                // - 使用 LaissezFaireSubTypeValidator：一个宽松的子类型校验器
-                LaissezFaireSubTypeValidator.instance,
-                // - DefaultTyping.NON_FINAL：仅对非 final 类型（如 Object、List、Map、自定义类）启用类型信息
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                // - JsonTypeInfo.As.PROPERTY：将类型信息作为 JSON 属性（字段）存储
-                JsonTypeInfo.As.PROPERTY
-        );
+        /**
+         * 创建 ObjectMapper 实例，用于配置 Jackson 的序列化和反序列化行为
+         */
+        ObjectMapper objectMapper = JacksonObjectMapperFactory.buildStorageObjectMapper();
 
-        // 设置 Value 序列化器
-        GenericJackson2JsonRedisSerializer valueSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
-        template.setValueSerializer(valueSerializer);
-        template.setHashValueSerializer(valueSerializer);
+        // 创建 Jackson2JsonRedisSerializer，用于序列化和反序列化值
+        // 该序列化器使用配置好的 ObjectMapper
+        Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer =
+                new Jackson2JsonRedisSerializer<>(Object.class);
+        jackson2JsonRedisSerializer.setObjectMapper(objectMapper);
 
-        template.afterPropertiesSet();
-        return template;
+        // 设置 RedisTemplate 的值的序列化器
+        redisTemplate.setValueSerializer(jackson2JsonRedisSerializer);
+        redisTemplate.setHashValueSerializer(jackson2JsonRedisSerializer);  // 设置哈希值的序列化器
+
+        // 返回redisTemplate
+        redisTemplate.afterPropertiesSet();
+        return redisTemplate;
     }
-
-    @Bean
-    public RedisTemplate<String, Object> fastjson2RedisTemplate(RedisConnectionFactory connectionFactory) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-
-        // 设置 Key 序列化器
-        StringRedisSerializer keySerializer = new StringRedisSerializer();
-        template.setKeySerializer(keySerializer);
-        template.setHashKeySerializer(keySerializer);
-
-        // 设置 Value 序列化器
-        GenericFastJsonRedisSerializer valueSerializer = new GenericFastJsonRedisSerializer();
-        template.setValueSerializer(valueSerializer);
-        template.setHashValueSerializer(valueSerializer);
-
-        template.afterPropertiesSet();
-        return template;
-    }
-
 
 }
