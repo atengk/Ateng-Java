@@ -1,6 +1,5 @@
 package local.ateng.java.mybatis.handler;
 
-import cn.hutool.core.util.ObjectUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.JSONWriter;
@@ -74,7 +73,7 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public T parse(String json) {
 
-        if (ObjectUtil.isEmpty(json)) {
+        if (json == null || json.trim().isEmpty()) {
             return null;
         }
 
@@ -107,7 +106,7 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public String toJson(T obj) {
 
-        if (ObjectUtil.isEmpty(obj)) {
+        if (obj == null) {
             return null;
         }
 

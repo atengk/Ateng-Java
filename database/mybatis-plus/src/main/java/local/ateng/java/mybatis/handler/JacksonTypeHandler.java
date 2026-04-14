@@ -1,6 +1,5 @@
 package local.ateng.java.mybatis.handler;
 
-import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -80,7 +79,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public T parse(String json) {
 
-        if (ObjectUtil.isEmpty(json)) {
+        if (json == null || json.trim().isEmpty()) {
             return null;
         }
 
@@ -104,7 +103,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public String toJson(T obj) {
 
-        if (ObjectUtil.isEmpty(obj)) {
+        if (obj == null) {
             return null;
         }
 

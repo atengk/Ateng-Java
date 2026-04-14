@@ -2121,12 +2121,12 @@ public class GeometryTypeHandler extends BaseTypeHandler<Geometry> {
 ```java
 package local.ateng.java.mybatis.handler;
 
-import cn.hutool.core.util.ObjectUtil;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.parser.Feature;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 import local.ateng.java.mybatis.entity.MyData;
+import local.ateng.java.mybatis.entity.MyDataList;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedJdbcTypes;
 import org.apache.ibatis.type.MappedTypes;
@@ -2156,7 +2156,7 @@ import java.lang.reflect.Type;
  */
 @MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER})
 // 指定当前 TypeHandler 适用的 JDBC 类型（对应数据库 JSON 字段常见存储类型）
-@MappedTypes({MyData.class})
+@MappedTypes({MyData.class, MyDataList.class})
 // 指定当前 TypeHandler 绑定的 Java 类型（用于全局匹配，泛型类型在此无法生效）
 public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
@@ -2194,7 +2194,7 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public T parse(String json) {
 
-        if (ObjectUtil.isEmpty(json)) {
+        if (json == null || json.trim().isEmpty()) {
             return null;
         }
 
@@ -2237,7 +2237,7 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public String toJson(T obj) {
 
-        if (ObjectUtil.isEmpty(obj)) {
+        if (obj == null) {
             return null;
         }
 
@@ -2263,7 +2263,6 @@ public class FastjsonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 ```java
 package local.ateng.java.mybatis.handler;
 
-import cn.hutool.core.util.ObjectUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.JSONWriter;
@@ -2337,7 +2336,7 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public T parse(String json) {
 
-        if (ObjectUtil.isEmpty(json)) {
+        if (json == null || json.trim().isEmpty()) {
             return null;
         }
 
@@ -2370,7 +2369,7 @@ public class Fastjson2TypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public String toJson(T obj) {
 
-        if (ObjectUtil.isEmpty(obj)) {
+        if (obj == null) {
             return null;
         }
 
@@ -3121,7 +3120,6 @@ public final class JacksonObjectMapperFactory {
 ```java
 package local.ateng.java.mybatis.handler;
 
-import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -3201,7 +3199,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public T parse(String json) {
 
-        if (ObjectUtil.isEmpty(json)) {
+        if (json == null || json.trim().isEmpty()) {
             return null;
         }
 
@@ -3225,7 +3223,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     @Override
     public String toJson(T obj) {
 
-        if (ObjectUtil.isEmpty(obj)) {
+        if (obj == null) {
             return null;
         }
 
