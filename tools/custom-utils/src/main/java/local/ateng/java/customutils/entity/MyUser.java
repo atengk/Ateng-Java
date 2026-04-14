@@ -9,6 +9,9 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Data
 @Builder
@@ -92,4 +95,12 @@ public class MyUser implements Serializable {
      * 带完整时区的日期时间
      */
     private ZonedDateTime zonedDateTime;
+
+    private Date createTime2;
+    private Date createTime3;
+    private int num;
+    private List<String> list;
+    private Set<String> set;
+    private Map<String, Object> map;
+    private String aBBCCdd;
 }
