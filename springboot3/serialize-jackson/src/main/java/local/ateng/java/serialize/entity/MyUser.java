@@ -93,5 +93,6 @@ public class MyUser implements Serializable {
     private List<String> list;
     private Set<String> set;
     private Map<String, Object> map;
+    private String aBBCCdd;
 
 }

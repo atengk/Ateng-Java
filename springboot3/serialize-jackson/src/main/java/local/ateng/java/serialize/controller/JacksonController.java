@@ -36,6 +36,7 @@ public class JacksonController {
                 .list(List.of("1", "2"))
                 .set(Set.of("1", "2", "3"))
                 .map(new HashMap<>(map))
+                .aBBCCdd("aBBCCdd")
                 .build();
     }
 
