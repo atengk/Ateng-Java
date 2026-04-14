@@ -6,6 +6,7 @@ import local.ateng.java.customutils.init.InitData;
 import local.ateng.java.customutils.utils.JsonUtil;
 import org.junit.jupiter.api.Test;
 
+import java.io.Console;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
@@ -89,6 +90,39 @@ public class JsonUtilTests {
         System.out.println(JsonUtil.isJson(str));
         String str2 = "{]";
         System.out.println(JsonUtil.isJson(str2));
+    }
+
+    /**
+     * 测试：Map -> 对象（典型场景：数据库/缓存读取）
+     */
+    @Test
+    void testConvert_MapToObject() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", 2L);
+        map.put("name", "李四");
+        map.put("age", 25);
+
+        MyUser user = JsonUtil.convert(map, MyUser.class);
+        System.out.println(user);
+        // MyUser(id=2, name=李四, age=25, phoneNumber=null, email=null, score=null, ratio=null, birthday=null, province=null, city=null, dateTime=null, createTime=null, instantTime=null, offsetDateTime=null, zonedDateTime=null, createTime2=null, createTime3=null, num=0, list=null, set=null, map=null, aBBCCdd=null)
+    }
+
+    /**
+     * 测试：对象 -> Map（常用于通用处理、日志、动态字段）
+     */
+    @Test
+    void testConvert_ObjectToMap() {
+        MyUser user = MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(null)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .build();
+
+        Map<String, Object> map = JsonUtil.convert(user, new TypeReference<HashMap<String, Object>>() {});
+        System.out.println(map);
+        // {birthday=null, dateTime=null, set=null, city=null, num=0, abbccdd=null, list=null, instantTime=null, score=null, phoneNumber=1762306666, province=null, zonedDateTime=null, createTime=null, name=ateng, offsetDateTime=null, id=1, createTime2=null, map=null, age=null, email=kongyu2385569970@gmail.com, createTime3=null, ratio=null}
     }
 
 }
