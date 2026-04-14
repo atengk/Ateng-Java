@@ -54,8 +54,8 @@ public class TypeHandlerTests {
 
         Project project = new Project();
         project.setName("json");
-//        project.setJsonArray(list);
-        project.setJsonArray(new MyDataList(list));
+        project.setJsonArray(list);
+//        project.setJsonArray(new MyDataList(list));
         projectService.save(project);
     }
 

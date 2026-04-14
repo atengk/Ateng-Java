@@ -2,11 +2,9 @@ package local.ateng.java.mybatis.handler;
 
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import local.ateng.java.mybatis.config.JacksonObjectMapperFactory;
 import local.ateng.java.mybatis.entity.MyData;
 import local.ateng.java.mybatis.entity.MyDataList;
 import org.apache.ibatis.type.JdbcType;
@@ -17,7 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
-import java.util.TimeZone;
+import java.util.List;
 
 /**
  * 基于 Jackson 的通用 JSON TypeHandler 实现
@@ -39,7 +37,7 @@ import java.util.TimeZone;
  */
 @MappedJdbcTypes({JdbcType.VARCHAR, JdbcType.LONGVARCHAR, JdbcType.OTHER})
 // 指定当前 TypeHandler 适用的 JDBC 类型（对应数据库 JSON 字段常见存储类型）
-@MappedTypes({MyData.class, MyDataList.class})
+@MappedTypes({MyData.class, MyDataList.class, List.class})
 // 指定当前 TypeHandler 绑定的 Java 类型（用于全局匹配，泛型类型在此无法生效）
 public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
 
@@ -125,18 +123,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
      * @return 默认 ObjectMapper
      */
     private static ObjectMapper buildDefaultObjectMapper() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        // 设置默认时区
-        objectMapper.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
-        // 支持 Java8 时间类型（LocalDateTime / LocalDate / LocalTime 等）
-        objectMapper.registerModule(new JavaTimeModule());
-        // 禁用时间戳形式（默认是时间戳），改为可读字符串（yyyy-MM-dd HH:mm:ss）
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        // 忽略空 Bean（没有 getter 的对象）序列化时报错
-        objectMapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
-        // 忽略未知字段（数据库字段扩展 / 前端多传字段时不会报错）
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        return objectMapper;
+        return JacksonObjectMapperFactory.buildStorageObjectMapper();
     }
 
 }

@@ -177,8 +177,8 @@ public class Project implements Serializable {
      */
     @TableField(value = "json_array", typeHandler = JacksonTypeHandler.class)
 //    @TableField("json_array")
-    private MyDataList jsonArray;
-//    private List<MyData> jsonArray;
+//    private MyDataList jsonArray;
+    private List<MyData> jsonArray;
 
     /**
      * 地理坐标（经纬度）
