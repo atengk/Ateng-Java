@@ -14,6 +14,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Data
 @Builder
@@ -89,5 +91,7 @@ public class MyUser implements Serializable {
     private Date createTime3;
     private int num;
     private List<String> list;
+    private Set<String> set;
+    private Map<String, Object> map;
 
 }
