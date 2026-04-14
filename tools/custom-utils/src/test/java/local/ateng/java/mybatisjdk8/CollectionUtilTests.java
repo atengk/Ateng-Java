@@ -897,7 +897,84 @@ public class CollectionUtilTests {
 
         //System.out.println(diff);
         System.out.println(JsonUtil.toJsonString(diff));
+        // {"add":[{"id":"4","name":"赵六","age":18,"phoneNumber":null,"email":null,"score":null,"ratio":null,"birthday":null,"province":null,"city":null,"dateTime":null,"createTime":null,"instantTime":null,"offsetDateTime":null,"zonedDateTime":null}],"delete":[{"id":"2","name":"李四","age":25,"phoneNumber":null,"email":null,"score":null,"ratio":null,"birthday":null,"province":null,"city":null,"dateTime":null,"createTime":null,"instantTime":null,"offsetDateTime":null,"zonedDateTime":null}],"update":[{"changes":{"age":{"new":21,"old":20}},"id":"1"}]}
 
+    }
+
+    @Test
+    void testDiffObject() {
+
+        MyUser oldObj = MyUser.builder()
+                .id(1L)
+                .name("张三")
+                .age(20)
+                .build();
+
+        MyUser newObj = MyUser.builder()
+                .id(1L)
+                .name("张三")
+                .age(21) // 修改
+                .build();
+
+        Map<String, Object> diff = CollectionUtil.diffObj(oldObj, newObj);
+
+        System.out.println(JsonUtil.toJsonString(diff));
+        // {"add":[],"delete":[],"update":[{"changes":{"age":{"new":21,"old":20}}}]}
+    }
+
+    @Test
+    void testDiffObject_add() {
+
+        MyUser newObj = MyUser.builder()
+                .id(2L)
+                .name("李四")
+                .age(25)
+                .build();
+
+        Map<String, Object> diff = CollectionUtil.diffObj(null, newObj);
+
+        System.out.println(JsonUtil.toJsonString(diff));
+        // {"add":[{"id":"2","name":"李四","age":25,"phoneNumber":null,"email":null,"score":null,"ratio":null,"birthday":null,"province":null,"city":null,"dateTime":null,"createTime":null,"instantTime":null,"offsetDateTime":null,"zonedDateTime":null}],"delete":[],"update":[]}
+    }
+
+    @Test
+    void testDiffObject_delete() {
+
+        MyUser oldObj = MyUser.builder()
+                .id(3L)
+                .name("王五")
+                .age(30)
+                .build();
+
+        Map<String, Object> diff = CollectionUtil.diffObj(oldObj, null);
+
+        System.out.println(JsonUtil.toJsonString(diff));
+        // {"add":[],"delete":[{"id":"3","name":"王五","age":30,"phoneNumber":null,"email":null,"score":null,"ratio":null,"birthday":null,"province":null,"city":null,"dateTime":null,"createTime":null,"instantTime":null,"offsetDateTime":null,"zonedDateTime":null}],"update":[]}
+    }
+
+    @Test
+    void testDiffObjectWithId() {
+
+        MyUser oldObj = MyUser.builder()
+                .id(1L)
+                .name("张三")
+                .age(20)
+                .build();
+
+        MyUser newObj = MyUser.builder()
+                .id(1L)
+                .name("张三")
+                .age(21)
+                .build();
+
+        Map<String, Object> diff = CollectionUtil.diffObj(
+                oldObj,
+                newObj,
+                user -> String.valueOf(user.getId())
+        );
+
+        System.out.println(JsonUtil.toJsonString(diff));
+        // {"add":[],"delete":[],"update":[{"changes":{"age":{"new":21,"old":20}},"id":"1"}]}
     }
 
 }

@@ -3272,4 +3272,129 @@ public final class CollectionUtil {
         return buildResult(addList, deleteList, updateList);
     }
 
+    /**
+     * 计算两个对象的差异（增删改）
+     *
+     * <p>功能说明：</p>
+     * <ul>
+     *     <li>oldObj 为空，newObj 不为空 → 视为新增</li>
+     *     <li>oldObj 不为空，newObj 为空 → 视为删除</li>
+     *     <li>两者都存在 → 进行字段级差异对比</li>
+     * </ul>
+     *
+     * <p>返回结构说明：</p>
+     * <ul>
+     *     <li>add：新增对象（最多1个）</li>
+     *     <li>delete：删除对象（最多1个）</li>
+     *     <li>update：字段差异（结构同 List diff）</li>
+     * </ul>
+     *
+     * @param oldObj 旧对象
+     * @param newObj 新对象
+     * @return 差异结果
+     */
+    public static Map<String, Object> diffObj(Object oldObj, Object newObj) {
+
+        List<Object> addList = new ArrayList<>();
+        List<Object> deleteList = new ArrayList<>();
+        List<Map<String, Object>> updateList = new ArrayList<>();
+
+        // ===== 新增 =====
+        if (oldObj == null && newObj != null) {
+            addList.add(newObj);
+            return buildResult(addList, deleteList, updateList);
+        }
+
+        // ===== 删除 =====
+        if (oldObj != null && newObj == null) {
+            deleteList.add(oldObj);
+            return buildResult(addList, deleteList, updateList);
+        }
+
+        // ===== 两者都为空 =====
+        if (oldObj == null) {
+            return buildResult(addList, deleteList, updateList);
+        }
+
+        // ===== 字段差异 =====
+        Map<String, Object> changes = diffObject(oldObj, newObj);
+
+        if (!changes.isEmpty()) {
+            Map<String, Object> updateItem = new HashMap<>();
+            updateItem.put("changes", changes);
+            updateList.add(updateItem);
+        }
+
+        return buildResult(addList, deleteList, updateList);
+    }
+
+    /**
+     * 计算两个对象的差异（支持唯一标识，对齐 List diff 结构）
+     *
+     * <p>功能说明：</p>
+     * <ul>
+     *     <li>oldObj 为空，newObj 不为空 → 新增</li>
+     *     <li>oldObj 不为空，newObj 为空 → 删除</li>
+     *     <li>两者都存在 → 字段级差异对比</li>
+     *     <li>支持通过 idFunc 提取唯一标识</li>
+     * </ul>
+     *
+     * @param oldObj 旧对象
+     * @param newObj 新对象
+     * @param idFunc 唯一标识函数
+     * @return 差异结果
+     */
+    public static <T> Map<String, Object> diffObj(
+            T oldObj,
+            T newObj,
+            Function<T, String> idFunc) {
+
+        List<T> addList = new ArrayList<>();
+        List<T> deleteList = new ArrayList<>();
+        List<Map<String, Object>> updateList = new ArrayList<>();
+
+        String id = null;
+
+        if (idFunc != null) {
+            if (newObj != null) {
+                id = idFunc.apply(newObj);
+            } else if (oldObj != null) {
+                id = idFunc.apply(oldObj);
+            }
+        }
+
+        // ===== 新增 =====
+        if (oldObj == null && newObj != null) {
+            addList.add(newObj);
+            return buildResult(addList, deleteList, updateList);
+        }
+
+        // ===== 删除 =====
+        if (oldObj != null && newObj == null) {
+            deleteList.add(oldObj);
+            return buildResult(addList, deleteList, updateList);
+        }
+
+        // ===== 都为空 =====
+        if (oldObj == null) {
+            return buildResult(addList, deleteList, updateList);
+        }
+
+        // ===== 字段差异 =====
+        Map<String, Object> changes = diffObject(oldObj, newObj);
+
+        if (!changes.isEmpty()) {
+            Map<String, Object> updateItem = new HashMap<>();
+
+            if (id != null) {
+                updateItem.put("id", id);
+            }
+
+            updateItem.put("changes", changes);
+            updateList.add(updateItem);
+        }
+
+        return buildResult(addList, deleteList, updateList);
+    }
+
 }
