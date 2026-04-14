@@ -38,5 +38,6 @@
         <module>boot3-filter</module>
         <module>xss</module>
         <module>crypto</module>
+        <module>serialize-jackson3</module>
     </modules>
 </project>
