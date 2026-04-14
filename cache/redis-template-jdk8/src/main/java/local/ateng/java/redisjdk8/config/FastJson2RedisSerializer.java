@@ -1,4 +1,4 @@
-package local.ateng.java.redis.config;
+package local.ateng.java.redisjdk8.config;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONB;

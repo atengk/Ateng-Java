@@ -918,6 +918,61 @@ public class RedisTemplateConfig {
 </dependency>
 ```
 
+#### 配置序列化和反序列化（最小化版）
+
+最小化配置序列化， 如需详细的自定义配置序列化参考下面的步骤。
+
+```java
+package local.ateng.java.redis.config;
+
+import com.alibaba.fastjson2.support.spring6.data.redis.GenericFastJsonRedisSerializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+/**
+ * RedisTemplate 配置类
+ *
+ * <p>
+ * 该类负责配置 RedisTemplate，允许对象进行序列化和反序列化。
+ * 在这里，我们使用了 StringRedisSerializer 来序列化和反序列化 Redis 键，
+ * 使用 GenericFastJsonRedisSerializer 来序列化和反序列化 Redis 值，确保 Redis 能够存储 Java 对象。
+ * </p>
+ *
+ * @author 孔余
+ * @email 2385569970@qq.com
+ * @since 2025-03-06
+ */
+@Configuration
+public class RedisTemplateConfig {
+
+    @Bean
+    public RedisTemplate<String, Object> fastjson2RedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+
+        // 设置 Key 序列化器
+        StringRedisSerializer keySerializer = new StringRedisSerializer();
+        template.setKeySerializer(keySerializer);
+        template.setHashKeySerializer(keySerializer);
+
+        // 设置 Value 序列化器
+        GenericFastJsonRedisSerializer valueSerializer = new GenericFastJsonRedisSerializer();
+        template.setValueSerializer(valueSerializer);
+        template.setHashValueSerializer(valueSerializer);
+
+        template.afterPropertiesSet();
+        return template;
+    }
+
+
+}
+```
+
+
+
 #### 配置序列化器
 
 注意修改为自己的包名：`config.setReaderFilters(JSONReader.autoTypeFilter("local.ateng.java."));`
@@ -929,20 +984,78 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONB;
 import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.filter.Filter;
 import com.alibaba.fastjson2.support.config.FastJsonConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationException;
 
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
+/**
+ * FastJson2 Redis序列化器
+ * <p>
+ * 功能：
+ * 1. 支持JSON与JSONB序列化
+ * 2. 支持自动类型（白名单控制）
+ * 3. 提供日志输出便于问题排查
+ *
+ * @param <T> 序列化类型
+ * @author Ateng
+ * @since 2026-04-11
+ */
 public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
-    private final Class<T> type;
-    private FastJsonConfig config = new FastJsonConfig();
 
+    private static final Logger log = LoggerFactory.getLogger(FastJson2RedisSerializer.class);
+
+    /**
+     * 空字节数组常量
+     */
+    private static final byte[] EMPTY_BYTES = new byte[0];
+
+    /**
+     * 目标类型
+     */
+    private final Class<T> type;
+
+    /**
+     * FastJson配置
+     */
+    private final FastJsonConfig config;
+
+    /**
+     * 是否使用JSONB
+     */
+    private final boolean jsonb;
+
+    /**
+     * 构造方法（默认JSON模式）
+     */
     public FastJson2RedisSerializer(Class<T> type) {
-        config.setCharset(Charset.forName("UTF-8"));
-        config.setDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-        // 配置 JSONWriter 的特性
+        this(type, buildDefaultConfig(), false);
+    }
+
+    /**
+     * 构造方法（自定义配置）
+     */
+    public FastJson2RedisSerializer(Class<T> type, FastJsonConfig config, boolean jsonb) {
+        this.type = Objects.requireNonNull(type, "type不能为空");
+        this.config = Objects.requireNonNull(config, "config不能为空");
+        this.jsonb = jsonb;
+    }
+
+    /**
+     * 构建默认配置
+     */
+    private static FastJsonConfig buildDefaultConfig() {
+        FastJsonConfig config = new FastJsonConfig();
+
+        // 基础配置
+        config.setCharset(StandardCharsets.UTF_8);
+
+        // 序列化特性
         config.setWriterFeatures(
                 // 序列化时输出类型信息
                 JSONWriter.Feature.WriteClassName,
@@ -950,68 +1063,107 @@ public class FastJson2RedisSerializer<T> implements RedisSerializer<T> {
                 JSONWriter.Feature.NotWriteNumberClassName,
                 // 不输出 Set 类型的类名
                 JSONWriter.Feature.NotWriteSetClassName,
+                // 不输出 Map 类型的类名
+                JSONWriter.Feature.NotWriteHashMapArrayListClassName,
                 // 序列化输出空值字段
                 JSONWriter.Feature.WriteNulls,
-                // 在大范围超过JavaScript支持的整数，输出为字符串格式
-                JSONWriter.Feature.BrowserCompatible,
-                // 序列化BigDecimal使用toPlainString，避免科学计数法
-                JSONWriter.Feature.WriteBigDecimalAsPlain
+                // 基于字段反序列化
+                JSONWriter.Feature.FieldBased
         );
 
-        // 配置 JSONReader 的特性
+        // 反序列化特性
         config.setReaderFeatures(
                 // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
-                JSONReader.Feature.SupportSmartMatch
+                JSONReader.Feature.SupportSmartMatch,
+                // 允许字段名不带引号
+                JSONReader.Feature.AllowUnQuotedFieldNames,
+                // 忽略无法序列化的字段
+                JSONReader.Feature.IgnoreNoneSerializable
         );
 
-        // 支持自动类型，要读取带"@type"类型信息的JSON数据，需要显式打开SupportAutoType
+        // 自动类型白名单（建议尽量收敛）
         config.setReaderFilters(
                 JSONReader.autoTypeFilter(
-                        // 按需加上需要支持自动类型的类名前缀，范围越小越安全
-                        "local.ateng.java."
+                        "local.ateng.",
+                        "io.github.atengk."
                 )
         );
-        this.type = type;
-    }
 
-    public FastJsonConfig getFastJsonConfig() {
         return config;
     }
 
-    public void setFastJsonConfig(FastJsonConfig fastJsonConfig) {
-        this.config = fastJsonConfig;
-    }
-
+    /**
+     * 序列化
+     */
     @Override
-    public byte[] serialize(T t) throws SerializationException {
-        if (t == null) {
-            return new byte[0];
+    public byte[] serialize(T value) throws SerializationException {
+        if (value == null) {
+            return EMPTY_BYTES;
         }
+
         try {
-            if (config.isJSONB()) {
-                return JSONB.toBytes(t, config.getSymbolTable(), config.getWriterFilters(), config.getWriterFeatures());
-            } else {
-                return JSON.toJSONBytes(t, config.getDateFormat(), config.getWriterFilters(), config.getWriterFeatures());
+            byte[] result = jsonb
+                    ? JSONB.toBytes(value, config.getSymbolTable(), getWriterFilters(), config.getWriterFeatures())
+                    : JSON.toJSONBytes(value, config.getDateFormat(), getWriterFilters(), config.getWriterFeatures());
+
+            if (log.isDebugEnabled()) {
+                log.debug("Redis序列化成功，类型：{}，字节大小：{}", type.getName(), result.length);
             }
-        } catch (Exception ex) {
-            throw new SerializationException("Could not serialize: " + ex.getMessage(), ex);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Redis序列化失败，类型：{}，对象：{}", type.getName(), value, e);
+            throw new SerializationException(buildSerializeError(value), e);
         }
     }
 
+    /**
+     * 反序列化
+     */
     @Override
     public T deserialize(byte[] bytes) throws SerializationException {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
+
         try {
-            if (config.isJSONB()) {
-                return JSONB.parseObject(bytes, type, config.getSymbolTable(), config.getReaderFilters(), config.getReaderFeatures());
-            } else {
-                return JSON.parseObject(bytes, type, config.getDateFormat(), config.getReaderFilters(), config.getReaderFeatures());
+            T result = jsonb
+                    ? JSONB.parseObject(bytes, type, config.getSymbolTable(), config.getReaderFilters(), config.getReaderFeatures())
+                    : JSON.parseObject(bytes, type, config.getDateFormat(), config.getReaderFilters(), config.getReaderFeatures());
+
+            if (log.isDebugEnabled()) {
+                log.debug("Redis反序列化成功，类型：{}，字节大小：{}", type.getName(), bytes.length);
             }
-        } catch (Exception ex) {
-            throw new SerializationException("Could not deserialize: " + ex.getMessage(), ex);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Redis反序列化失败，类型：{}，字节长度：{}", type.getName(), bytes.length, e);
+            throw new SerializationException(buildDeserializeError(bytes), e);
         }
+    }
+
+    /**
+     * 获取WriterFilters，避免空指针
+     */
+    private Filter[] getWriterFilters() {
+        Filter[] filters = config.getWriterFilters();
+        return filters == null ? new Filter[0] : filters;
+    }
+
+    /**
+     * 构建序列化异常信息
+     */
+    private String buildSerializeError(T value) {
+        return "FastJson2序列化失败，type=" + type.getName()
+                + ", valueClass=" + (value == null ? "null" : value.getClass().getName());
+    }
+
+    /**
+     * 构建反序列化异常信息
+     */
+    private String buildDeserializeError(byte[] bytes) {
+        return "FastJson2反序列化失败，type=" + type.getName()
+                + ", bytesLength=" + (bytes == null ? 0 : bytes.length);
     }
 }
 ```
