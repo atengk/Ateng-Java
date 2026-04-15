@@ -411,6 +411,7 @@ export default defineConfig({
                         items: [
                             { text: 'Milvus', link: '/database/milvus/README' },
                             { text: 'MilvusPlus', link: '/database/milvus-plus/README' },
+                            { text: 'pgvector sql', link: '/database/pgvector/SQL' },
                         ]
                     }
                 ]
