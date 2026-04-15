@@ -62,7 +62,8 @@ export default defineConfig({
             {
                 text: 'AI',
                 items: [
-                    {text: 'AI 相关', link: '/ai/'}
+                    {text: 'Ollama', link: '/ai/ollama/'},
+                    {text: 'Spring AI 相关', link: '/ai/'},
                 ]
             },
 
@@ -232,6 +233,17 @@ export default defineConfig({
                             {text: '配置文件', link: '/springboot4/boot4-config/README'}
                         ]
                     }
+                ]
+            },
+
+            '/ai/ollama/': {
+                text: 'Ollama',
+                collapsed: false,
+                items: [
+                    {
+                        text: 'Ollama 快速开始',
+                        link: '/ai/ollama/quick-start/README',
+                    },
                 ]
             },
 
