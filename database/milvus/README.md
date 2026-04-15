@@ -300,6 +300,8 @@ public class MockEmbeddingServiceImpl implements EmbeddingService {
 
 ### 实现接口（使用 Ollama）
 
+有关更多 Ollama 工具用法请参考：[链接](/ai/ollama/quick-start/README)
+
 ```java
 package io.github.atengk.milvus.service.impl;
 
@@ -1247,6 +1249,8 @@ public class MilvusServiceTest {
 ## 构建知识库
 
 ### 配置 Apache Tika
+
+有关更多 Apache Tika 工具用法请参考：[链接](/tools/apache-tika/README)
 
 #### 添加依赖
 
