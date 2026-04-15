@@ -20,7 +20,7 @@ public class FileVectorTests {
 
     @Test
     void test1() {
-        Path filepath = Paths.get("D:\\temp", "demo.docx");
+        Path filepath = Paths.get("D:\\Temp", "demo.docx");
 
         HashMap<String, Object> metadata = new HashMap<>();
         metadata.put("author", "阿腾");

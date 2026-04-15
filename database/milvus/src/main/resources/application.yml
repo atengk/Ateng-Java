@@ -6,8 +6,8 @@ spring:
 ---
 # Milvus 配置
 milvus:
-  host: 175.178.193.128
-  port: 20016
+  host: 192.168.1.12
+  port: 40140
   database: default
   username: root
   password: Milvus

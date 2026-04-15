@@ -32,7 +32,7 @@ public class FileVectorServiceImpl implements FileVectorService {
 
     public FileVectorServiceImpl(
             MilvusService milvusService,
-            @Qualifier("openAiEmbeddingService") EmbeddingService embeddingService
+            @Qualifier("ollamaEmbeddingServiceImpl") EmbeddingService embeddingService
     ) {
         this.milvusService = milvusService;
         this.embeddingService = embeddingService;
