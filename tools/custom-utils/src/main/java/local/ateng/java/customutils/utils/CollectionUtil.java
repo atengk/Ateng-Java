@@ -390,6 +390,91 @@ public final class CollectionUtil {
     }
 
     /**
+     * 安全获取指定索引元素
+     *
+     * @param list  输入列表
+     * @param index 索引
+     * @param <T>   元素类型
+     * @return 元素，越界或为空返回 null
+     */
+    public static <T> T get(List<T> list, int index) {
+        if (isEmpty(list) || index < 0 || index >= list.size()) {
+            return null;
+        }
+        return list.get(index);
+    }
+
+    /**
+     * 获取最后一个元素
+     */
+    public static <T> T getLast(List<T> list) {
+        if (isEmpty(list)) {
+            return null;
+        }
+        return list.get(list.size() - 1);
+    }
+
+    /**
+     * 按照指定 key 获取集合中的第一个匹配元素
+     *
+     * <p>适用于常见的 getById 场景，例如：根据 id 从列表中查找对象。</p>
+     *
+     * @param collection 输入集合
+     * @param keyMapper  key 提取函数，例如：User::getId
+     * @param targetKey  目标 key
+     * @param <T>        元素类型
+     * @param <K>        key 类型
+     * @return 匹配到的元素，若未找到返回 null
+     */
+    public static <T, K> T getById(Collection<T> collection, Function<T, K> keyMapper, K targetKey) {
+        if (isEmpty(collection) || keyMapper == null) {
+            return null;
+        }
+
+        for (T item : collection) {
+            if (item == null) {
+                continue;
+            }
+            if (Objects.equals(keyMapper.apply(item), targetKey)) {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 按照指定 key 集合批量获取元素
+     *
+     * <p>返回结果按照原集合遍历顺序保留匹配项。</p>
+     *
+     * @param collection 输入集合
+     * @param keyMapper  key 提取函数，例如：User::getId
+     * @param targetKeys 目标 key 集合
+     * @param <T>        元素类型
+     * @param <K>        key 类型
+     * @return 匹配到的元素列表，若无匹配返回空列表
+     */
+    public static <T, K> List<T> getByIds(Collection<T> collection, Function<T, K> keyMapper, Collection<K> targetKeys) {
+        List<T> result = new ArrayList<>();
+        if (isEmpty(collection) || keyMapper == null || isEmpty(targetKeys)) {
+            return result;
+        }
+
+        Set<K> keySet = new HashSet<>(targetKeys);
+        for (T item : collection) {
+            if (item == null) {
+                continue;
+            }
+            if (keySet.contains(keyMapper.apply(item))) {
+                result.add(item);
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * 安全获取集合长度
      *
      * @param collection 输入集合
@@ -609,6 +694,67 @@ public final class CollectionUtil {
     }
 
     /**
+     * 对列表进行原地排序，直接修改原列表顺序
+     *
+     * @param list       待排序列表
+     * @param comparator 比较器
+     * @param <T>        元素类型
+     * @return 排序后的原列表；若输入为 null 返回空列表
+     */
+    public static <T> List<T> sortInPlace(List<T> list, Comparator<T> comparator) {
+        if (list == null) {
+            return Collections.emptyList();
+        }
+        if (list.isEmpty() || comparator == null) {
+            return list;
+        }
+
+        list.sort(comparator);
+        return list;
+    }
+
+    /**
+     * 根据字段提取函数排序（返回新列表）
+     */
+    public static <T, U extends Comparable<? super U>> List<T> sortBy(
+            Collection<T> collection,
+            Function<T, U> keyExtractor,
+            boolean ascending) {
+
+        if (isEmpty(collection) || keyExtractor == null) {
+            return Collections.emptyList();
+        }
+
+        Comparator<T> comparator = Comparator.comparing(keyExtractor, Comparator.nullsLast(Comparator.naturalOrder()));
+        if (!ascending) {
+            comparator = comparator.reversed();
+        }
+
+        return collection.stream().sorted(comparator).collect(Collectors.toList());
+    }
+
+    /**
+     * 根据字段提取函数原地排序
+     */
+    public static <T, U extends Comparable<? super U>> List<T> sortByInPlace(
+            List<T> list,
+            Function<T, U> keyExtractor,
+            boolean ascending) {
+
+        if (isEmpty(list) || keyExtractor == null) {
+            return list;
+        }
+
+        Comparator<T> comparator = Comparator.comparing(keyExtractor, Comparator.nullsLast(Comparator.naturalOrder()));
+        if (!ascending) {
+            comparator = comparator.reversed();
+        }
+
+        list.sort(comparator);
+        return list;
+    }
+
+    /**
      * 反转列表中的元素顺序
      *
      * @param list 输入列表
@@ -770,6 +916,32 @@ public final class CollectionUtil {
             } else {
                 result.put(key, value);
             }
+        }
+
+        return result;
+    }
+
+    /**
+     * 将集合转为 Map<K, List<V>>
+     */
+    public static <T, K, V> Map<K, List<V>> toMapList(
+            Collection<T> collection,
+            Function<T, K> keyMapper,
+            Function<T, V> valueMapper) {
+
+        if (isEmpty(collection) || keyMapper == null || valueMapper == null) {
+            return Collections.emptyMap();
+        }
+
+        Map<K, List<V>> result = new HashMap<>();
+        for (T item : collection) {
+            if (item == null) {
+                continue;
+            }
+            K key = keyMapper.apply(item);
+            V value = valueMapper.apply(item);
+
+            result.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
         }
 
         return result;
@@ -3454,6 +3626,47 @@ public final class CollectionUtil {
         }
 
         return buildResult(addList, deleteList, updateList);
+    }
+
+    /**
+     * 创建可变 ArrayList（支持可变参数）
+     */
+    @SafeVarargs
+    public static <T> List<T> newArrayList(T... elements) {
+        if (elements == null || elements.length == 0) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(Arrays.asList(elements));
+    }
+
+    /**
+     * 创建 HashSet
+     */
+    @SafeVarargs
+    public static <T> Set<T> newHashSet(T... elements) {
+        if (elements == null || elements.length == 0) {
+            return new HashSet<>();
+        }
+        return new HashSet<>(Arrays.asList(elements));
+    }
+
+    /**
+     * 分批处理（常用于批量DB/远程调用）
+     */
+    public static <T> void batchProcess(
+            Collection<T> collection,
+            int batchSize,
+            Consumer<List<T>> consumer) {
+
+        if (isEmpty(collection) || batchSize <= 0 || consumer == null) {
+            return;
+        }
+
+        List<T> list = new ArrayList<>(collection);
+        for (int i = 0; i < list.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, list.size());
+            consumer.accept(list.subList(i, end));
+        }
     }
 
 }
