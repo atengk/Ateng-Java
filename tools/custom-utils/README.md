@@ -53,9 +53,26 @@ JSON 工具类
 
 
 
-## FastJsonUtil 
+## FastJson2Util 
 
 FastJSON2 工具类
+
+**添加依赖**
+
+```xml
+<properties>
+    <fastjson2.version>2.0.61</fastjson2.version>
+</properties>
+<dependencies>
+    <!-- 高性能的JSON库 -->
+    <!-- https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn#0-fastjson-20%E4%BB%8B%E7%BB%8D -->
+    <dependency>
+        <groupId>com.alibaba.fastjson2</groupId>
+        <artifactId>fastjson2</artifactId>
+        <version>${fastjson2.version}</version>
+    </dependency>
+</dependencies>
+```
 
 
 
