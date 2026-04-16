@@ -243,6 +243,23 @@ SQL工具类
 
 
 
+## SqlFormatUtil
+
+SQL格式化工具类
+
+**添加依赖**
+
+```xml
+<!-- SQL格式化 -->
+<dependency>
+    <groupId>com.github.vertical-blank</groupId>
+    <artifactId>sql-formatter</artifactId>
+    <version>2.0.5</version>
+</dependency>
+```
+
+
+
 ## AssertUtil
 
 断言工具类
