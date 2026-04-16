@@ -205,4 +205,48 @@ public class SqlUtilTests {
          */
     }
 
+
+    @Test
+    public void testFormatSqlPretty() {
+        String sql = "SELECT u.id,u.name,o.order_no FROM user u LEFT JOIN orders o ON u.id=o.user_id WHERE u.id=1 AND o.status=1 ORDER BY o.create_time DESC";
+
+        String pretty = SqlUtil.formatSqlPretty(sql);
+
+        System.out.println("【formatSqlPretty】");
+        System.out.println(pretty);
+    }
+
+    @Test
+    public void testFormatSqlPretty2() {
+        String sql = "WITH tmp AS (SELECT * FROM user) SELECT * FROM tmp UNION SELECT * FROM user";
+
+        String pretty = SqlUtil.formatSqlPretty(sql);
+
+        System.out.println("【formatSqlPretty】");
+        System.out.println(pretty);
+    }
+
+    @Test
+    public void testGetOperationType() {
+        String sql1 = "SELECT * FROM user";
+        String sql2 = "INSERT INTO user(id,name) VALUES(1,'test')";
+        String sql3 = "UPDATE user SET name='a' WHERE id=1";
+        String sql4 = "DELETE FROM user WHERE id=1";
+        String sql5 = "CREATE TABLE t(id INT)";
+
+        System.out.println("【SELECT】" + SqlUtil.getOperationTypeName(sql1));
+        System.out.println("【INSERT】" + SqlUtil.getOperationTypeName(sql2));
+        System.out.println("【UPDATE】" + SqlUtil.getOperationTypeName(sql3));
+        System.out.println("【DELETE】" + SqlUtil.getOperationTypeName(sql4));
+        System.out.println("【CREATE】" + SqlUtil.getOperationTypeName(sql5));
+    }
+
+    @Test
+    public void testGetOperationTypeComplex() {
+        // 带 WITH / 子查询 / UNION 的复杂 SQL
+        String sql = "WITH tmp AS (SELECT * FROM user) SELECT * FROM tmp UNION SELECT * FROM user";
+
+        System.out.println("【ComplexType】" + SqlUtil.getOperationType(sql));
+    }
+
 }

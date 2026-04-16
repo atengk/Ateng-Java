@@ -638,5 +638,310 @@ public final class SqlUtil {
         }
     }
 
+    /**
+     * SQL 操作类型
+     */
+    public enum SqlOperationType {
+        SELECT,
+        INSERT,
+        UPDATE,
+        DELETE,
+        MERGE,
+        REPLACE,
+        UPSERT,
+        TRUNCATE,
+        CREATE,
+        ALTER,
+        DROP,
+        CALL,
+        SHOW,
+        DESCRIBE,
+        EXPLAIN,
+        SET,
+        USE,
+        UNKNOWN
+    }
+
+    /**
+     * 美观格式化 SQL
+     * 说明：
+     * 1. 保留解析后的语义结构；
+     * 2. 对常见关键字进行换行缩进；
+     * 3. 适合日志输出、控制台展示、排查问题。
+     *
+     * @param sql 原始 SQL
+     * @return 美观格式化后的 SQL
+     */
+    public static String formatSqlPretty(String sql) {
+        if (StringUtil.isBlank(sql)) {
+            return sql;
+        }
+        try {
+            Statement statement = CCJSqlParserUtil.parse(sql);
+            if (statement == null) {
+                return prettyFormatSql(sql);
+            }
+            return prettyFormatSql(statement.toString());
+        } catch (Exception e) {
+            return prettyFormatSql(sql);
+        }
+    }
+
+    /**
+     * 获取 SQL 操作类型
+     *
+     * @param sql 原始 SQL
+     * @return 操作类型，解析失败返回 UNKNOWN
+     */
+    public static SqlOperationType getOperationType(String sql) {
+        if (StringUtil.isBlank(sql)) {
+            return SqlOperationType.UNKNOWN;
+        }
+        try {
+            Statement statement = CCJSqlParserUtil.parse(sql);
+            if (statement == null) {
+                return SqlOperationType.UNKNOWN;
+            }
+
+            // SELECT（包含 WITH 查询，最终也归类为 SELECT）
+            if (statement instanceof Select) {
+                return SqlOperationType.SELECT;
+            }
+
+            String simpleName = statement.getClass().getSimpleName().toUpperCase();
+
+            if (simpleName.contains("INSERT")) {
+                return SqlOperationType.INSERT;
+            }
+            if (simpleName.contains("UPDATE")) {
+                return SqlOperationType.UPDATE;
+            }
+            if (simpleName.contains("DELETE")) {
+                return SqlOperationType.DELETE;
+            }
+            if (simpleName.contains("MERGE")) {
+                return SqlOperationType.MERGE;
+            }
+            if (simpleName.contains("REPLACE")) {
+                return SqlOperationType.REPLACE;
+            }
+            if (simpleName.contains("UPSERT")) {
+                return SqlOperationType.UPSERT;
+            }
+            if (simpleName.contains("TRUNCATE")) {
+                return SqlOperationType.TRUNCATE;
+            }
+            if (simpleName.contains("CREATE")) {
+                return SqlOperationType.CREATE;
+            }
+            if (simpleName.contains("ALTER")) {
+                return SqlOperationType.ALTER;
+            }
+            if (simpleName.contains("DROP")) {
+                return SqlOperationType.DROP;
+            }
+            if (simpleName.contains("CALL")) {
+                return SqlOperationType.CALL;
+            }
+            if (simpleName.contains("SHOW")) {
+                return SqlOperationType.SHOW;
+            }
+            if (simpleName.contains("DESCRIBE") || "DESC".equals(simpleName)) {
+                return SqlOperationType.DESCRIBE;
+            }
+            if (simpleName.contains("EXPLAIN")) {
+                return SqlOperationType.EXPLAIN;
+            }
+            if (simpleName.contains("SET")) {
+                return SqlOperationType.SET;
+            }
+            if (simpleName.contains("USE")) {
+                return SqlOperationType.USE;
+            }
+
+            return SqlOperationType.UNKNOWN;
+        } catch (Exception e) {
+            return SqlOperationType.UNKNOWN;
+        }
+    }
+
+    /**
+     * 获取 SQL 操作类型名称
+     *
+     * @param sql 原始 SQL
+     * @return 操作类型名称
+     */
+    public static String getOperationTypeName(String sql) {
+        return getOperationType(sql).name();
+    }
+
+    /**
+     * 美观格式化 SQL 的核心实现
+     *
+     * @param sql 原始 SQL
+     * @return 格式化后的 SQL
+     */
+    private static String prettyFormatSql(String sql) {
+        if (StringUtil.isBlank(sql)) {
+            return sql;
+        }
+
+        String prettySql = sql.replaceAll("[\\r\\n]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        if (StringUtil.isBlank(prettySql)) {
+            return prettySql;
+        }
+
+        // 统一首行关键字的换行方式
+        prettySql = prettySql.replaceAll("(?i)^SELECT\\s+", "SELECT\n    ");
+        prettySql = prettySql.replaceAll("(?i)^INSERT\\s+INTO\\s+", "INSERT INTO\n    ");
+        prettySql = prettySql.replaceAll("(?i)^UPDATE\\s+", "UPDATE\n    ");
+        prettySql = prettySql.replaceAll("(?i)^DELETE\\s+FROM\\s+", "DELETE FROM\n    ");
+        prettySql = prettySql.replaceAll("(?i)^MERGE\\s+INTO\\s+", "MERGE INTO\n    ");
+        prettySql = prettySql.replaceAll("(?i)^TRUNCATE\\s+TABLE\\s+", "TRUNCATE TABLE\n    ");
+        prettySql = prettySql.replaceAll("(?i)^CREATE\\s+", "CREATE\n    ");
+        prettySql = prettySql.replaceAll("(?i)^ALTER\\s+", "ALTER\n    ");
+        prettySql = prettySql.replaceAll("(?i)^DROP\\s+", "DROP\n    ");
+        prettySql = prettySql.replaceAll("(?i)^WITH\\s+", "WITH\n    ");
+
+        // 常见子句换行
+        prettySql = prettySql.replaceAll("(?i)\\s+FROM\\s+", "\nFROM ");
+        prettySql = prettySql.replaceAll("(?i)\\s+WHERE\\s+", "\nWHERE ");
+        prettySql = prettySql.replaceAll("(?i)\\s+GROUP\\s+BY\\s+", "\nGROUP BY ");
+        prettySql = prettySql.replaceAll("(?i)\\s+HAVING\\s+", "\nHAVING ");
+        prettySql = prettySql.replaceAll("(?i)\\s+ORDER\\s+BY\\s+", "\nORDER BY ");
+        prettySql = prettySql.replaceAll("(?i)\\s+LIMIT\\s+", "\nLIMIT ");
+        prettySql = prettySql.replaceAll("(?i)\\s+UNION\\s+ALL\\s+", "\nUNION ALL ");
+        prettySql = prettySql.replaceAll("(?i)\\s+UNION\\s+", "\nUNION ");
+        prettySql = prettySql.replaceAll("(?i)\\s+INTERSECT\\s+", "\nINTERSECT ");
+        prettySql = prettySql.replaceAll("(?i)\\s+EXCEPT\\s+", "\nEXCEPT ");
+        prettySql = prettySql.replaceAll("(?i)\\s+LEFT\\s+JOIN\\s+", "\nLEFT JOIN ");
+        prettySql = prettySql.replaceAll("(?i)\\s+RIGHT\\s+JOIN\\s+", "\nRIGHT JOIN ");
+        prettySql = prettySql.replaceAll("(?i)\\s+INNER\\s+JOIN\\s+", "\nINNER JOIN ");
+        prettySql = prettySql.replaceAll("(?i)\\s+FULL\\s+JOIN\\s+", "\nFULL JOIN ");
+        prettySql = prettySql.replaceAll("(?i)\\s+CROSS\\s+JOIN\\s+", "\nCROSS JOIN ");
+        prettySql = prettySql.replaceAll("(?i)\\s+JOIN\\s+", "\nJOIN ");
+        prettySql = prettySql.replaceAll("(?i)\\s+SET\\s+", "\nSET ");
+        prettySql = prettySql.replaceAll("(?i)\\s+VALUES\\s+", "\nVALUES ");
+
+        // ON 子句单独缩进，便于阅读
+        prettySql = prettySql.replaceAll("(?i)\\s+ON\\s+", "\n    ON ");
+
+        return prettySql.trim();
+    }
+
+    /**
+     * 判断是否为查询类 SQL
+     *
+     * @param sql 原始 SQL
+     * @return 是查询 SQL 返回 true，否则返回 false
+     */
+    public static boolean isQuery(String sql) {
+        return getOperationType(sql) == SqlOperationType.SELECT;
+    }
+
+    /**
+     * 判断是否为写入类 SQL
+     *
+     * @param sql 原始 SQL
+     * @return 是写入 SQL 返回 true，否则返回 false
+     */
+    public static boolean isDml(String sql) {
+        SqlOperationType operationType = getOperationType(sql);
+        return operationType == SqlOperationType.INSERT
+                || operationType == SqlOperationType.UPDATE
+                || operationType == SqlOperationType.DELETE
+                || operationType == SqlOperationType.REPLACE
+                || operationType == SqlOperationType.MERGE
+                || operationType == SqlOperationType.UPSERT;
+    }
+
+    /**
+     * 判断是否为结构定义类 SQL
+     *
+     * @param sql 原始 SQL
+     * @return 是 DDL SQL 返回 true，否则返回 false
+     */
+    public static boolean isDdl(String sql) {
+        SqlOperationType operationType = getOperationType(sql);
+        return operationType == SqlOperationType.CREATE
+                || operationType == SqlOperationType.ALTER
+                || operationType == SqlOperationType.DROP
+                || operationType == SqlOperationType.TRUNCATE;
+    }
+
+    /**
+     * 判断是否包含 WHERE 子句
+     *
+     * @param sql 原始 SQL
+     * @return 存在 WHERE 返回 true，否则返回 false
+     */
+    public static boolean hasWhere(String sql) {
+        return StringUtil.isNotBlank(getWhereCondition(sql));
+    }
+
+    /**
+     * 判断是否包含 GROUP BY 子句
+     *
+     * @param sql 原始 SQL
+     * @return 存在 GROUP BY 返回 true，否则返回 false
+     */
+    public static boolean hasGroupBy(String sql) {
+        return StringUtil.isNotBlank(getGroupBy(sql));
+    }
+
+    /**
+     * 判断是否包含 HAVING 子句
+     *
+     * @param sql 原始 SQL
+     * @return 存在 HAVING 返回 true，否则返回 false
+     */
+    public static boolean hasHaving(String sql) {
+        return StringUtil.isNotBlank(getHavingCondition(sql));
+    }
+
+    /**
+     * 判断是否包含 ORDER BY 子句
+     *
+     * @param sql 原始 SQL
+     * @return 存在 ORDER BY 返回 true，否则返回 false
+     */
+    public static boolean hasOrderBy(String sql) {
+        return StringUtil.isNotBlank(getOrderBy(sql));
+    }
+
+    /**
+     * 判断是否包含 LIMIT 子句
+     *
+     * @param sql 原始 SQL
+     * @return 存在 LIMIT 返回 true，否则返回 false
+     */
+    public static boolean hasLimit(String sql) {
+        return StringUtil.isNotBlank(getLimit(sql));
+    }
+
+    /**
+     * 判断是否包含 JOIN 子句
+     *
+     * @param sql 原始 SQL
+     * @return 存在 JOIN 返回 true，否则返回 false
+     */
+    public static boolean hasJoin(String sql) {
+        List<String> joinTables = getJoinTables(sql);
+        return joinTables != null && !joinTables.isEmpty();
+    }
+
+    /**
+     * 判断是否包含 WITH 子句
+     *
+     * @param sql 原始 SQL
+     * @return 存在 WITH 返回 true，否则返回 false
+     */
+    public static boolean hasWith(String sql) {
+        List<String> cteNames = getCteNames(sql);
+        return cteNames != null && !cteNames.isEmpty();
+    }
 
 }
