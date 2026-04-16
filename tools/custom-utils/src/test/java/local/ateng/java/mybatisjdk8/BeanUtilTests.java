@@ -25,11 +25,16 @@ public class BeanUtilTests {
         MyUser1 myUser1 = createMyUser1Sample();
         BeanUtil.copy(myUser1, myUser2);
         System.out.println(myUser2);
+        // MyUser2(id=1, userName=admin, tmp=null, myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:06:11.652720600), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:06:11.652720600)])
         System.out.println(myUser2.getUserName());
+        // admin
         System.out.println(myUser2.getMyUser0List().get(0).getId());
+        // 1001
         myUser2.setId(0L);
         System.out.println(myUser1);
+        // MyUser1(id=1, userName=admin, today=2026-04-16, createTime=2026-04-16T21:06:11.652720600, myUser0=MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:06:11.652720600), myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:06:11.652720600), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:06:11.652720600)])
         System.out.println(myUser2);
+        // MyUser2(id=0, userName=admin, tmp=null, myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:06:11.652720600), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:06:11.652720600)])
     }
 
     @Test
@@ -38,11 +43,16 @@ public class BeanUtilTests {
         MyUser1 myUser1 = createMyUser1Sample();
         BeanUtil.copy(myUser1, myUser2);
         System.out.println(myUser2);
+        // MyUser2(id=1, userName=admin, tmp=null, myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:07:06.802893700), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:07:06.802893700)])
         System.out.println(myUser2.getUserName());
+        // admin
         System.out.println(myUser2.getMyUser0List().get(0).getId());
+        // 1001
         myUser2.setId(0L);
         System.out.println(myUser1);
+        // MyUser1(id=1, userName=admin, today=2026-04-16, createTime=2026-04-16T21:07:06.802893700, myUser0=MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:07:06.802893700), myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:07:06.802893700), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:07:06.802893700)])
         System.out.println(myUser2);
+        // MyUser2(id=0, userName=admin, tmp=null, myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:07:06.802893700), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:07:06.802893700)])
     }
 
     @Test
@@ -55,6 +65,7 @@ public class BeanUtilTests {
         myUser1.setUserName(null);
         BeanUtil.copy(myUser1, myUser2);
         System.out.println(myUser2);
+        // MyUser2(id=null, userName=null, tmp=null, myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:05:44.663116500), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:05:44.663116500)])
     }
 
     /**
@@ -70,6 +81,7 @@ public class BeanUtilTests {
         BeanUtil.copy(a, c);
         BeanUtil.copy(b, c);
         System.out.println(c);
+        // BeanUtilTests.C(a=A, b=B, c=null)
     }
     @Data
     public class A {
@@ -116,7 +128,9 @@ public class BeanUtilTests {
         MyUser1 myUser1 = createMyUser1Sample();
         Map<String, Object> map = BeanUtil.toMap(myUser1);
         System.out.println(myUser1);
+        // MyUser1(id=1, userName=admin, today=2026-04-16, createTime=2026-04-16T21:08:02.973731, myUser0=MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:08:02.972734400), myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:08:02.972734400), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:08:02.972734400)])
         System.out.println(map);
+        // {id=1, userName=admin, today=2026-04-16, createTime=2026-04-16T21:08:02.973731, myUser0={id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:08:02.972734400}, myUser0List=[{id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:08:02.972734400}, {id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:08:02.972734400}]}
     }
 
     @Test
@@ -124,7 +138,9 @@ public class BeanUtilTests {
         MyUser1 myUser1 = createMyUser1Sample();
         String userName = BeanUtil.getProperty(myUser1, "userName");
         System.out.println(userName);
+        // admin
         System.out.println(userName.getClass());
+        // class java.lang.String
     }
 
     @Test
@@ -133,13 +149,16 @@ public class BeanUtilTests {
         BeanUtil.setProperty(myUser1, "userName", "alice");
         String userName = BeanUtil.getProperty(myUser1, "userName");
         System.out.println(userName);
+        //alice
         System.out.println(userName.getClass());
+        //class java.lang.String
     }
 
     @Test
     void getAllFieldNames() {
         List<String> allFieldNames = BeanUtil.getAllFieldNames(MyUser1.class);
         System.out.println(allFieldNames);
+        // [id, userName, today, createTime, myUser0, myUser0List]
     }
 
     @Test
@@ -158,6 +177,7 @@ public class BeanUtilTests {
 
         Map<String, Object> result = BeanUtil.toMapWithValueMapping(task, valueMapping);
         System.out.println(result); // 输出：进行中
+        //{id=1, status=进行中}
 
     }
 
@@ -166,7 +186,9 @@ public class BeanUtilTests {
         MyUser1 myUser1 = createMyUser1Sample();
         Map<String, Object> map = BeanUtil.toDesensitizedMap(myUser1 , Arrays.asList("userName", "createTime", "myUser0","myUser0List"), "*");
         System.out.println(myUser1);
+        //MyUser1(id=1, userName=admin, today=2026-04-16, createTime=2026-04-16T21:11:21.566555700, myUser0=MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:11:21.565558600), myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:11:21.565558600), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:11:21.566555700)])
         System.out.println(map);
+        //{id=1, userName=*, today=2026-04-16, createTime=*, myUser0={id=*, userName=*, today=*, createTime=*}, myUser0List=[{id=*, userName=*, today=*, createTime=*}, {id=*, userName=*, today=*, createTime=*}]}
     }
 
 
@@ -188,7 +210,9 @@ public class BeanUtilTests {
         BeanUtil.copy(source, target);
 
         System.out.println(source);
+        //BeanUtilTests.SourceEntity(username=blair, email=blair@example.com, age=30, userId=1001, active=true, createTime=2026-04-16T21:12:07.030866, balance=1234.56)
         System.out.println(target);
+        //BeanUtilTests.TargetEntity(username=blair, email=blair@example.com, age=30, userId=1001, active=true, createTime=2026-04-16T21:12:07.030866, balance=1234.56)
     }
     @Data
     public class SourceEntity {
@@ -243,7 +267,9 @@ public class BeanUtilTests {
         BeanUtil.copy(source, target);
 
         System.out.println("Source: " + source);
+        //Source: BeanUtilTests.SourceEntity2(username=blair, email=blair@example.com, age=30, userId=1001, active=true, createTime=2026-04-16T21:12:49.373384600, balance=1234.56, status=ACTIVE, meta={role=admin, dept=IT}, tags=[java, backend, spring], nestedObject=BeanUtilTests.NestedObject(field1=nestedField1, field2=999))
         System.out.println("Target: " + target);
+        //Target: BeanUtilTests.TargetEntity2(username=blair, email=blair@example.com, age=30, userId=1001, active=true, createTime=2026-04-16T21:12:49.373384600, balance=1234.56, status=ACTIVE, meta={role=admin, dept=IT}, tags=[java, backend, spring], nestedObject=BeanUtilTests.NestedObject(field1=nestedField1, field2=999))
     }
 
     @Data
@@ -312,7 +338,9 @@ public class BeanUtilTests {
         BeanUtil.copy(parentSource, parentTarget);
 
         System.out.println("Source: " + parentSource);
+        //Source: BeanUtilTests.ParentSource(id=101, name=Parent1, amount=500.75, createdAt=2026-04-16T21:13:19.803112500, nestedItems=[BeanUtilTests.NestedItem(field=nested1, value=10), BeanUtilTests.NestedItem(field=nested2, value=20)], children=[BeanUtilTests.ChildEntity(childId=201, childName=child1), BeanUtilTests.ChildEntity(childId=202, childName=child2)])
         System.out.println("Target: " + parentTarget);
+        //Target: BeanUtilTests.ParentTarget(id=101, name=Parent1, amount=500.75, createdAt=2026-04-16T21:13:19.803112500, nestedItems=[BeanUtilTests.NestedItem(field=nested1, value=10), BeanUtilTests.NestedItem(field=nested2, value=20)], children=[BeanUtilTests.ChildEntity(childId=201, childName=child1), BeanUtilTests.ChildEntity(childId=202, childName=child2)])
     }
 
     @Data
