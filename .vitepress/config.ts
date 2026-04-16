@@ -306,6 +306,7 @@ export default defineConfig({
                             { text: 'Drools 规则引擎', link: '/tools/drools/README' },
                             { text: 'Warm Flow 工作流', link: '/tools/warm-flow/README' },
                             { text: 'ip2region 离线IP管理', link: '/tools/ip2region/README' },
+                            { text: 'SQL 格式化工具', link: '/tools/sql-formatter/README' },
                         ]
                     },
                     {
