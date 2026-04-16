@@ -22,6 +22,7 @@
         <maven-compiler.version>3.12.1</maven-compiler.version>
         <lombok.version>1.18.36</lombok.version>
         <poi.version>5.3.0</poi.version>
+        <fastjson2.version>2.0.53</fastjson2.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -146,6 +147,14 @@
             <groupId>org.apache.sshd</groupId>
             <artifactId>sshd-openpgp</artifactId>
             <version>2.17.1</version>
+        </dependency>
+
+        <!-- 高性能的JSON库 -->
+        <!-- https://github.com/alibaba/fastjson2/wiki/fastjson2_intro_cn#0-fastjson-20%E4%BB%8B%E7%BB%8D -->
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+            <version>${fastjson2.version}</version>
         </dependency>
 
     </dependencies>

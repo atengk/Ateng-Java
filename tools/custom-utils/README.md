@@ -53,6 +53,12 @@ JSON 工具类
 
 
 
+## FastJsonUtil 
+
+FastJSON2 工具类
+
+
+
 ## ValidateUtil
 
 效验工具类
