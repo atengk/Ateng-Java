@@ -542,6 +542,58 @@ public final class FastJson2Util {
     };
 
     /**
+     * Fastjson2 默认序列化特性。
+     * 适用于大多数业务场景，兼顾前端兼容性和字段完整性。
+     */
+    private static final JSONWriter.Feature[] DEFAULT_JSON_WRITER_FEATURES = new JSONWriter.Feature[]{
+            // 序列化时输出 null 字段
+            JSONWriter.Feature.WriteNulls,
+            // 基于字段访问（Field）进行序列化，而不是通过 Getter 方法
+            JSONWriter.Feature.FieldBased,
+            // 序列化时输出 Map 中的 null 值
+            JSONWriter.Feature.WriteMapNullValue,
+    };
+
+    /**
+     * Fastjson2 默认反序列化特性。
+     * 适用于大多数业务场景，兼顾字段匹配和数值解析稳定性。
+     */
+    private static final JSONReader.Feature[] DEFAULT_JSON_READER_FEATURES = new JSONReader.Feature[]{
+            // 默认下是camel case精确匹配，打开这个后，能够智能识别camel/upper/pascal/snake/Kebab五中case
+            JSONReader.Feature.SupportSmartMatch,
+            // 允许字段名不带引号
+            JSONReader.Feature.AllowUnQuotedFieldNames,
+            // 忽略无法序列化的字段
+            JSONReader.Feature.IgnoreNoneSerializable,
+    };
+
+    /**
+     * 对象转 JSON 字符串（默认配置）
+     * <p>
+     * 使用内置默认 JSONWriter.Feature，适用于绝大多数业务场景
+     *
+     * @param obj 待序列化对象
+     * @return JSON 字符串，失败返回 null
+     */
+    public static String toJsonStringWithDefault(Object obj) {
+        return toJsonString(obj, DEFAULT_JSON_WRITER_FEATURES);
+    }
+
+    /**
+     * JSON 字符串转对象（默认配置）
+     * <p>
+     * 使用内置默认 JSONReader.Feature，提升兼容性与容错性
+     *
+     * @param json  JSON 字符串
+     * @param clazz 目标类型
+     * @param <T>   类型参数
+     * @return 目标对象，失败返回 null
+     */
+    public static <T> T parseObjectWithDefault(String json, Class<T> clazz) {
+        return parseObject(json, clazz, DEFAULT_JSON_READER_FEATURES);
+    }
+
+    /**
      * 对象转 JSON 字符串。
      *
      * @param obj 源对象
