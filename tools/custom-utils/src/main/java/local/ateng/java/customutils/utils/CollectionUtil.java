@@ -3570,54 +3570,23 @@ public final class CollectionUtil {
     }
 
     /**
-     * 计算两个原子值的差异（基础类型 / String / Number 等）
+     * 值差异对比（仅标记修改）
      *
-     * <p>功能说明：</p>
-     * <ul>
-     *     <li>oldVal 为空，newVal 不为空 → 新增</li>
-     *     <li>oldVal 不为空，newVal 为空 → 删除</li>
-     *     <li>两者都存在且不相等 → 更新</li>
-     *     <li>两者相等 → 无变化</li>
-     * </ul>
-     *
-     * <p>适用场景：</p>
-     * <ul>
-     *     <li>字段级兜底 diff（非 Bean）</li>
-     *     <li>直接对比简单值（如状态、金额、标识位等）</li>
-     * </ul>
-     *
-     * @param oldVal 旧值
-     * @param newVal 新值
-     * @return 差异结果
+     * @author Ateng
+     * @since 2026-04-17
      */
     public static Map<String, Object> diffValue(Object oldVal, Object newVal) {
 
-        List<Object> addList = new ArrayList<>();
-        List<Object> deleteList = new ArrayList<>();
+        List<Object> addList = Collections.emptyList();
+        List<Object> deleteList = Collections.emptyList();
         List<Map<String, Object>> updateList = new ArrayList<>();
 
-        // ===== 新增 =====
-        if (ObjectUtil.isEmpty(oldVal) && ObjectUtil.isNotEmpty(newVal)) {
-            addList.add(newVal);
-            return buildResult(addList, deleteList, updateList);
-        }
-
-        // ===== 删除 =====
-        if (ObjectUtil.isNotEmpty(oldVal) && ObjectUtil.isEmpty(newVal)) {
-            deleteList.add(oldVal);
-            return buildResult(addList, deleteList, updateList);
-        }
-
-        // ===== 都为空 =====
-        if (ObjectUtil.isEmpty(oldVal)) {
-            return buildResult(addList, deleteList, updateList);
-        }
-
-        // ===== 值变化 =====
+        // 只要不相等（包含 null 对比），就认为是修改
         if (!ObjectUtil.equals(oldVal, newVal)) {
-            Map<String, Object> updateItem = new HashMap<>();
 
-            Map<String, Object> changes = new HashMap<>();
+            Map<String, Object> updateItem = new HashMap<>(4);
+
+            Map<String, Object> changes = new HashMap<>(4);
             changes.put("old", oldVal);
             changes.put("new", newVal);
 
