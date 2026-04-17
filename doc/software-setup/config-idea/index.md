@@ -129,7 +129,44 @@ public class $CLASS_NAME$ implements java.io.Serializable {
 
 ![image-20260417113753237](./assets/image-20260417113753237.png)
 
+### Lombok 实体类模板（lom）
 
+输入 `lom` + Tab，快速生成标准 Lombok 实体类（含常用注解组合）。
+
+```java
+/**
+ * $CLASS_COMMENT$
+ *
+ * @author Ateng
+ * @since $DATE$
+ */
+@lombok.Data
+@lombok.Builder
+@lombok.NoArgsConstructor
+@lombok.AllArgsConstructor
+public class $CLASS_NAME$ implements java.io.Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    $END$
+}
+```
+
+变量：
+
+- CLASS_NAME = completeSmart()
+- CLASS_COMMENT = completeSmart()
+- DATE = date("yyyy-MM-dd")
+
+含义说明：
+
+该模板用于快速生成标准实体类，内置了 Lombok 最常用组合：
+
+- `@Data`：自动生成 getter/setter/toString/equals/hashCode
+- `@Builder`：支持链式构建对象（适合复杂对象构造）
+- `@NoArgsConstructor` / `@AllArgsConstructor`：补齐无参和全参构造
+
+![image-20260417135801995](./assets/image-20260417135801995.png)
 
 ### 列表 转 Map（toMap）
 
