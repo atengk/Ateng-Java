@@ -1231,5 +1231,312 @@ public final class BeanUtil {
         return changes;
     }
 
+    /**
+     * 获取 JavaBean 的所有属性名
+     *
+     * @param clazz 类对象
+     * @return 属性名列表
+     */
+    public static List<String> getPropertyNames(Class<?> clazz) {
+        if (clazz == null) {
+            return Collections.emptyList();
+        }
 
+        try {
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(clazz);
+            return new ArrayList<>(pdMap.keySet());
+        } catch (Exception e) {
+            throw new RuntimeException("获取属性名失败", e);
+        }
+    }
+
+    /**
+     * 获取 JavaBean 的所有属性名
+     *
+     * @param bean Bean 对象
+     * @return 属性名列表
+     */
+    public static List<String> getPropertyNames(Object bean) {
+        if (bean == null) {
+            return Collections.emptyList();
+        }
+        return getPropertyNames(bean.getClass());
+    }
+
+    /**
+     * 获取指定属性的类型
+     * <p>
+     * 优先读取 getter 返回类型，其次读取 setter 参数类型，最后读取字段类型。
+     *
+     * @param bean         Bean 对象
+     * @param propertyName  属性名
+     * @return 属性类型，找不到则返回 null
+     */
+    public static Class<?> getPropertyType(Object bean, String propertyName) {
+        if (bean == null || propertyName == null || propertyName.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(bean.getClass());
+            PropertyDescriptor pd = pdMap.get(propertyName);
+            if (pd != null) {
+                if (pd.getReadMethod() != null) {
+                    return pd.getReadMethod().getReturnType();
+                }
+                if (pd.getWriteMethod() != null && pd.getWriteMethod().getParameterTypes().length > 0) {
+                    return pd.getWriteMethod().getParameterTypes()[0];
+                }
+            }
+
+            Field field = bean.getClass().getDeclaredField(propertyName);
+            return field.getType();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取 Bean 中值为 null 的属性名
+     *
+     * @param bean Bean 对象
+     * @return null 属性名列表
+     */
+    public static List<String> getNullPropertyNames(Object bean) {
+        if (bean == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> nullNames = new ArrayList<>();
+        try {
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(bean.getClass());
+            for (Map.Entry<String, PropertyDescriptor> entry : pdMap.entrySet()) {
+                PropertyDescriptor pd = entry.getValue();
+                if (pd.getReadMethod() == null) {
+                    continue;
+                }
+                Object value = pd.getReadMethod().invoke(bean);
+                if (value == null) {
+                    nullNames.add(entry.getKey());
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("获取 Bean 空属性失败", e);
+        }
+        return nullNames;
+    }
+
+    /**
+     * 获取 Bean 中值不为 null 的属性名
+     *
+     * @param bean Bean 对象
+     * @return 非 null 属性名列表
+     */
+    public static List<String> getNotNullPropertyNames(Object bean) {
+        if (bean == null) {
+            return Collections.emptyList();
+        }
+
+        List<String> notNullNames = new ArrayList<>();
+        try {
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(bean.getClass());
+            for (Map.Entry<String, PropertyDescriptor> entry : pdMap.entrySet()) {
+                PropertyDescriptor pd = entry.getValue();
+                if (pd.getReadMethod() == null) {
+                    continue;
+                }
+                Object value = pd.getReadMethod().invoke(bean);
+                if (value != null) {
+                    notNullNames.add(entry.getKey());
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("获取 Bean 非空属性失败", e);
+        }
+        return notNullNames;
+    }
+
+    /**
+     * 将源对象中非空属性复制到目标对象
+     * <p>
+     * 仅复制源对象中值不为 null 的属性，目标对象中已有值不会被 null 覆盖。
+     *
+     * @param source           源对象
+     * @param target           目标对象
+     * @param ignoreProperties 需要忽略的属性名
+     */
+    public static void copyNonNullProperties(Object source, Object target, String... ignoreProperties) {
+        if (source == null || target == null) {
+            return;
+        }
+
+        Set<String> ignoreSet = ignoreProperties != null ? new HashSet<>(Arrays.asList(ignoreProperties)) : null;
+
+        try {
+            Map<String, PropertyDescriptor> sourceMap = getPropertyDescriptors(source.getClass());
+            Map<String, PropertyDescriptor> targetMap = getPropertyDescriptors(target.getClass());
+
+            for (Map.Entry<String, PropertyDescriptor> entry : sourceMap.entrySet()) {
+                String name = entry.getKey();
+                if (ignoreSet != null && ignoreSet.contains(name)) {
+                    continue;
+                }
+
+                PropertyDescriptor sourcePd = entry.getValue();
+                PropertyDescriptor targetPd = targetMap.get(name);
+
+                if (sourcePd == null || targetPd == null
+                        || sourcePd.getReadMethod() == null
+                        || targetPd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Object value = sourcePd.getReadMethod().invoke(source);
+                if (value != null) {
+                    targetPd.getWriteMethod().invoke(target, value);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("复制非空属性失败", e);
+        }
+    }
+
+    /**
+     * 将源对象中非空属性复制到新对象
+     *
+     * @param source           源对象
+     * @param targetClass      目标类型
+     * @param ignoreProperties 需要忽略的属性名
+     * @param <T>              目标类型
+     * @return 新对象
+     */
+    public static <T> T copyNonNullTo(Object source, Class<T> targetClass, String... ignoreProperties) {
+        if (source == null || targetClass == null) {
+            return null;
+        }
+
+        try {
+            T target = targetClass.getDeclaredConstructor().newInstance();
+            copyNonNullProperties(source, target, ignoreProperties);
+            return target;
+        } catch (Exception e) {
+            throw new RuntimeException("复制非空属性到新对象失败", e);
+        }
+    }
+
+    /**
+     * 合并两个 Bean 的字段数据到目标对象
+     * <p>
+     * sourcePriority = true 时，source 中的非空字段覆盖 target 中的同名字段；
+     * sourcePriority = false 时，仅用 source 的非空字段补充 target 中为 null 的字段。
+     *
+     * @param target          目标对象
+     * @param source          源对象
+     * @param sourcePriority  是否以 source 为优先
+     * @param ignoreProperties 需要忽略的属性名
+     */
+    public static void mergeBean(Object target, Object source, boolean sourcePriority, String... ignoreProperties) {
+        if (target == null || source == null) {
+            return;
+        }
+
+        Set<String> ignoreSet = ignoreProperties != null ? new HashSet<>(Arrays.asList(ignoreProperties)) : null;
+
+        try {
+            Map<String, PropertyDescriptor> targetMap = getPropertyDescriptors(target.getClass());
+            Map<String, PropertyDescriptor> sourceMap = getPropertyDescriptors(source.getClass());
+
+            for (Map.Entry<String, PropertyDescriptor> entry : sourceMap.entrySet()) {
+                String name = entry.getKey();
+                if (ignoreSet != null && ignoreSet.contains(name)) {
+                    continue;
+                }
+
+                PropertyDescriptor sourcePd = entry.getValue();
+                PropertyDescriptor targetPd = targetMap.get(name);
+
+                if (sourcePd == null || targetPd == null
+                        || sourcePd.getReadMethod() == null
+                        || targetPd.getReadMethod() == null
+                        || targetPd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Object sourceValue = sourcePd.getReadMethod().invoke(source);
+                if (sourceValue == null) {
+                    continue;
+                }
+
+                if (sourcePriority) {
+                    targetPd.getWriteMethod().invoke(target, sourceValue);
+                } else {
+                    Object targetValue = targetPd.getReadMethod().invoke(target);
+                    if (targetValue == null) {
+                        targetPd.getWriteMethod().invoke(target, sourceValue);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Bean 合并失败", e);
+        }
+    }
+
+    /**
+     * 将两个 Bean 合并到一个新对象中
+     * <p>
+     * 先复制 first，再按 second 的优先级规则合并 second。
+     * 适合两个实体字段同名、类型兼容的场景。
+     *
+     * @param first           第一个对象
+     * @param second          第二个对象
+     * @param targetClass     目标类型
+     * @param secondPriority  是否以 second 为优先
+     * @param ignoreProperties 需要忽略的属性名
+     * @param <T>             目标类型
+     * @return 合并后的新对象
+     */
+    public static <T> T mergeToNew(Object first,
+                                   Object second,
+                                   Class<T> targetClass,
+                                   boolean secondPriority,
+                                   String... ignoreProperties) {
+        if (targetClass == null) {
+            return null;
+        }
+
+        try {
+            T target = targetClass.getDeclaredConstructor().newInstance();
+
+            if (first != null) {
+                copy(first, target, ignoreProperties);
+            }
+
+            if (second != null) {
+                mergeBean(target, second, secondPriority, ignoreProperties);
+            }
+
+            return target;
+        } catch (Exception e) {
+            throw new RuntimeException("合并两个 Bean 到新对象失败", e);
+        }
+    }
+
+    /**
+     * 将两个 Bean 合并到一个新对象中
+     * <p>
+     * 默认以 second 为优先。
+     *
+     * @param first           第一个对象
+     * @param second          第二个对象
+     * @param targetClass     目标类型
+     * @param ignoreProperties 需要忽略的属性名
+     * @param <T>             目标类型
+     * @return 合并后的新对象
+     */
+    public static <T> T mergeToNew(Object first,
+                                   Object second,
+                                   Class<T> targetClass,
+                                   String... ignoreProperties) {
+        return mergeToNew(first, second, targetClass, true, ignoreProperties);
+    }
 }

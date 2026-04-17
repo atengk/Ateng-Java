@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.junit.jupiter.api.Test;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -83,14 +84,17 @@ public class BeanUtilTests {
         System.out.println(c);
         // BeanUtilTests.C(a=A, b=B, c=null)
     }
+
     @Data
     public class A {
         private String a;
     }
+
     @Data
     public class B {
         private String b;
     }
+
     @Data
     public class C {
         private String a;
@@ -184,13 +188,12 @@ public class BeanUtilTests {
     @Test
     void desensitize() {
         MyUser1 myUser1 = createMyUser1Sample();
-        Map<String, Object> map = BeanUtil.toDesensitizedMap(myUser1 , Arrays.asList("userName", "createTime", "myUser0","myUser0List"), "*");
+        Map<String, Object> map = BeanUtil.toDesensitizedMap(myUser1, Arrays.asList("userName", "createTime", "myUser0", "myUser0List"), "*");
         System.out.println(myUser1);
         //MyUser1(id=1, userName=admin, today=2026-04-16, createTime=2026-04-16T21:11:21.566555700, myUser0=MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:11:21.565558600), myUser0List=[MyUser0(id=1001, userName=alice, today=2026-04-16, createTime=2026-04-15T21:11:21.565558600), MyUser0(id=1002, userName=bob, today=2026-04-14, createTime=2026-04-16T16:11:21.566555700)])
         System.out.println(map);
         //{id=1, userName=*, today=2026-04-16, createTime=*, myUser0={id=*, userName=*, today=*, createTime=*}, myUser0List=[{id=*, userName=*, today=*, createTime=*}, {id=*, userName=*, today=*, createTime=*}]}
     }
-
 
 
     @Test
@@ -214,6 +217,7 @@ public class BeanUtilTests {
         System.out.println(target);
         //BeanUtilTests.TargetEntity(username=blair, email=blair@example.com, age=30, userId=1001, active=true, createTime=2026-04-16T21:12:07.030866, balance=1234.56)
     }
+
     @Data
     public class SourceEntity {
         private String username;
@@ -224,6 +228,7 @@ public class BeanUtilTests {
         private LocalDateTime createTime;
         private BigDecimal balance;
     }
+
     @Data
     public class TargetEntity {
         private String username;
@@ -377,6 +382,178 @@ public class BeanUtilTests {
         private String childName;
     }
 
+    @Data
+    public static class User implements Serializable {
+        private Long id;
+        private String name;
+        private Integer age;
+        private String email;
+        private String address;
+    }
+
+    @Data
+    public static class UserDTO implements Serializable {
+        private Long id;
+        private String name;
+        private Integer age;
+        private String email;
+        private String address;
+    }
+
+    /**
+     * 测试 mergeBean：source 优先覆盖
+     */
+    @Test
+    public void testMergeBeanSourcePriority() {
+
+        User target = new User();
+        target.setId(1L);
+        target.setName("张三");
+        target.setAge(20);
+        target.setEmail("old@mail.com");
+
+        User source = new User();
+        source.setName("李四");
+        source.setAge(25);
+        source.setEmail(null);
+        source.setAddress("北京");
+
+        BeanUtil.mergeBean(target, source, true);
+
+        System.out.println("=== source 优先 ===");
+        System.out.println("name=" + target.getName());
+        System.out.println("age=" + target.getAge());
+        System.out.println("email=" + target.getEmail());
+        System.out.println("address=" + target.getAddress());
+        /*
+        === source 优先 ===
+        name=李四
+        age=25
+        email=old@mail.com
+        address=北京
+         */
+    }
+
+    /**
+     * 测试 mergeBean：仅补充 null
+     */
+    @Test
+    public void testMergeBeanFillNull() {
+
+        User target = new User();
+        target.setId(1L);
+        target.setName("张三");
+        target.setAge(null);
+        target.setEmail("old@mail.com");
+
+        User source = new User();
+        source.setName("李四");
+        source.setAge(30);
+        source.setEmail("new@mail.com");
+
+        BeanUtil.mergeBean(target, source, false);
+
+        System.out.println("=== 只填充 null ===");
+        System.out.println("name=" + target.getName());
+        System.out.println("age=" + target.getAge());
+        System.out.println("email=" + target.getEmail());
+        /*
+        === 只填充 null ===
+        name=张三
+        age=30
+        email=old@mail.com
+         */
+    }
+
+    /**
+     * 测试 mergeToNew：生成新对象（second 优先）
+     */
+    @Test
+    public void testMergeToNew() {
+
+        User first = new User();
+        first.setId(1L);
+        first.setName("张三");
+        first.setAge(20);
+
+        User second = new User();
+        second.setName("李四");
+        second.setEmail("test@mail.com");
+
+        User result = BeanUtil.mergeToNew(first, second, User.class);
+
+        System.out.println("=== mergeToNew ===");
+        System.out.println("id=" + result.getId());
+        System.out.println("name=" + result.getName());
+        System.out.println("age=" + result.getAge());
+        System.out.println("email=" + result.getEmail());
+        /*
+        === mergeToNew ===
+        id=1
+        name=李四
+        age=20
+        email=test@mail.com
+         */
+    }
+
+    /**
+     * 测试 mergeToNew：跨对象（User + DTO）
+     */
+    @Test
+    public void testMergeDifferentBean() {
+
+        User user = new User();
+        user.setId(1L);
+        user.setName("张三");
+        user.setAge(18);
+
+        UserDTO dto = new UserDTO();
+        dto.setName("李四");
+        dto.setEmail("dto@mail.com");
+        dto.setAddress("上海");
+
+        User result = BeanUtil.mergeToNew(user, dto, User.class);
+
+        System.out.println("=== 跨对象合并 ===");
+        System.out.println("id=" + result.getId());
+        System.out.println("name=" + result.getName());
+        System.out.println("age=" + result.getAge());
+        System.out.println("email=" + result.getEmail());
+        System.out.println("address=" + result.getAddress());
+        /*
+        === 跨对象合并 ===
+        id=1
+        name=李四
+        age=18
+        email=dto@mail.com
+        address=上海
+         */
+    }
+
+    /**
+     * 测试 mergeToNew：忽略字段
+     */
+    @Test
+    public void testMergeIgnoreFields() {
+
+        User first = new User();
+        first.setName("张三");
+        first.setAge(20);
+
+        User second = new User();
+        second.setName("李四");
+        second.setAge(30);
+
+        User result = BeanUtil.mergeToNew(first, second, User.class, "name");
+
+        System.out.println("=== 忽略字段 name ===");
+        System.out.println("name=" + result.getName());
+        System.out.println("age=" + result.getAge());
+        /*
+        === 忽略字段 name ===
+        name=null
+        age=30
+         */
+    }
+
 }
-
-
