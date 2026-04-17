@@ -64,3 +64,85 @@ DATE 使用 IDEA 内置日期函数 date("yyyy-MM-dd")，用于自动生成当�
 
 ![image-20260411115850810](./assets/image-20260411115850810.png)
 
+
+
+### 生成类（class）
+
+输入 `class` + Tab 快速生成标准 Java 类模板。
+
+```java
+/**
+ * $CLASS_COMMENT$
+ *
+ * @author Ateng
+ * @since $DATE$
+ */
+public class $CLASS_NAME$ {
+}
+```
+
+变量：
+
+- CLASS_NAME = completeSmart()
+- CLASS_COMMENT = completeSmart()
+- DATE = date("yyyy-MM-dd")
+
+含义说明：
+
+CLASS_NAME 用于自动填充当前类名，避免手动输入类名时出错。
+CLASS_COMMENT 用于填写当前类的业务说明，支持智能补全，也可以直接修改。
+DATE 使用 IDEA 内置日期函数自动生成当前日期，保持类注释时间统一。
+
+该模板适用于快速创建 Controller、Service、Entity、DTO 等标准 Java 类骨架。
+
+![image-20260417113437737](./assets/image-20260417113437737.png)
+
+------
+
+### 序列化（ser）
+
+输入 `ser` + Tab 快速生成可序列化类模板。
+
+```java
+/**
+ * $CLASS_COMMENT$
+ *
+ * @author Ateng
+ * @since $DATE$
+ */
+public class $CLASS_NAME$ implements java.io.Serializable {
+
+    private static final long serialVersionUID = 1L;
+}
+```
+
+变量：
+
+- CLASS_NAME = completeSmart()
+- CLASS_COMMENT = completeSmart()
+- DATE = date("yyyy-MM-dd")
+
+含义说明：
+
+该模板会在类上自动添加 `implements Serializable`，并补充 `serialVersionUID`，用于对象序列化、反序列化以及分布式传输场景。
+适合实体类、缓存对象、RPC 传输对象等需要序列化支持的类。
+
+![image-20260417113753237](./assets/image-20260417113753237.png)
+
+
+
+### 列表 转 Map（toMap）
+
+输入 `toMap` + Tab 快速生成List列表转Map模板。
+
+```java
+list
+        .stream()
+        .collect(Collectors.toMap(
+                AtengEntity::getId,
+                java.util.function.Function.identity(),
+                (existing, replacement) -> replacement,
+                LinkedHashMap::new
+        ));
+```
+
