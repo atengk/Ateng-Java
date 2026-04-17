@@ -12,7 +12,7 @@
 
 ```xml
 <properties>
-    <fesod.version>2.0.0</fesod.version>
+    <fesod.version>2.0.1-incubating</fesod.version>
 </properties>
 
 <dependencies>
