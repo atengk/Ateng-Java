@@ -23,6 +23,7 @@
         <lombok.version>1.18.36</lombok.version>
         <poi.version>5.3.0</poi.version>
         <fastjson2.version>2.0.61</fastjson2.version>
+        <fastjson.version>1.2.83</fastjson.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -155,6 +156,13 @@
             <groupId>com.alibaba.fastjson2</groupId>
             <artifactId>fastjson2</artifactId>
             <version>${fastjson2.version}</version>
+        </dependency>
+
+        <!-- 高性能的JSON库 -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>${fastjson.version}</version>
         </dependency>
 
         <!-- SQL格式化 -->
