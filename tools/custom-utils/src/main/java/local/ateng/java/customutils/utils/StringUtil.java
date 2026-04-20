@@ -28,6 +28,11 @@ public final class StringUtil {
      * 默认分隔符，逗号
      */
     public static final String DEFAULT_DELIMITER = ",";
+    private static final String EMPTY = "";
+    private static final String NULL_TEXT = "null";
+    private static final char PLACEHOLDER_START = '{';
+    private static final char PLACEHOLDER_END = '}';
+    private static final char ESCAPE_CHAR = '\\';
 
     /**
      * 禁止实例化工具类
@@ -1795,45 +1800,230 @@ public final class StringUtil {
     }
 
     /**
-     * 使用 SLF4J 占位符方式格式化字符串
-     * <p>
-     * 示例：
-     * <pre>
-     *     String msg = StringUtil.format("参数1={}, 参数2={}, 参数3={}", "A", "B", "C");
-     *     输出：参数1=A, 参数2=B, 参数3=C
-     * </pre>
+     * 使用 SLF4J 风格的 {} 占位符格式化字符串。
+     * 规则：
+     * 1. {} 按顺序替换参数
+     * 2. 参数不足时，剩余 {} 保持不变
+     * 3. 参数多余时，多余参数自动忽略
+     * 4. \{} 会被视为普通文本 {}
      *
-     * @param template 含 {} 占位符的字符串模板
-     * @param args     替换占位符的参数列表
+     * 示例：
+     * StringUtil.format("参数1={}, 参数2={}, 参数3={}", "A", "B", "C");
+     * 结果：参数1=A, 参数2=B, 参数3=C
+     *
+     * @param template 含 {} 占位符的模板字符串
+     * @param args     参数列表
      * @return 格式化后的字符串
      */
     public static String format(String template, Object... args) {
-        if (template == null || args == null || args.length == 0) {
+        if (template == null) {
+            return null;
+        }
+
+        StringBuilder builder = new StringBuilder(template.length() + (args == null ? 0 : args.length * 16));
+        int argIndex = 0;
+        int length = template.length();
+
+        for (int i = 0; i < length; i++) {
+            char current = template.charAt(i);
+
+            if (current == ESCAPE_CHAR) {
+                if (i + 1 < length) {
+                    char next = template.charAt(i + 1);
+                    if (next == PLACEHOLDER_START && i + 2 < length && template.charAt(i + 2) == PLACEHOLDER_END) {
+                        builder.append(PLACEHOLDER_START).append(PLACEHOLDER_END);
+                        i += 2;
+                        continue;
+                    }
+                    builder.append(next);
+                    i++;
+                    continue;
+                }
+                builder.append(current);
+                continue;
+            }
+
+            if (current == PLACEHOLDER_START
+                    && i + 1 < length
+                    && template.charAt(i + 1) == PLACEHOLDER_END) {
+                if (args != null && argIndex < args.length) {
+                    builder.append(toString(args[argIndex++]));
+                } else {
+                    builder.append(PLACEHOLDER_START).append(PLACEHOLDER_END);
+                }
+                i++;
+                continue;
+            }
+
+            builder.append(current);
+        }
+
+        return builder.toString();
+    }
+
+    /**
+     * 使用索引占位符格式化字符串。
+     * 规则：
+     * 1. {0}、{1}、{2} 按索引替换
+     * 2. 索引不存在时保持原样
+     * 3. 支持 \{0} 形式的转义
+     *
+     * 示例：
+     * StringUtil.formatIndex("姓名={0}，年龄={1}", "张三", 18);
+     * 结果：姓名=张三，年龄=18
+     *
+     * @param template 模板字符串
+     * @param args     参数列表
+     * @return 格式化后的字符串
+     */
+    public static String formatIndex(String template, Object... args) {
+        if (template == null) {
+            return null;
+        }
+        if (isEmpty(template)) {
+            return EMPTY;
+        }
+
+        StringBuilder builder = new StringBuilder(template.length() + (args == null ? 0 : args.length * 16));
+        int length = template.length();
+
+        for (int i = 0; i < length; i++) {
+            char current = template.charAt(i);
+
+            if (current == ESCAPE_CHAR) {
+                if (i + 1 < length) {
+                    builder.append(template.charAt(i + 1));
+                    i++;
+                    continue;
+                }
+                builder.append(current);
+                continue;
+            }
+
+            if (current == PLACEHOLDER_START) {
+                int endIndex = template.indexOf(PLACEHOLDER_END, i + 1);
+                if (endIndex > i + 1) {
+                    String token = template.substring(i + 1, endIndex);
+                    if (isInteger(token)) {
+                        int index = Integer.parseInt(token);
+                        if (args != null && index >= 0 && index < args.length) {
+                            builder.append(toString(args[index]));
+                        } else {
+                            builder.append(template, i, endIndex + 1);
+                        }
+                        i = endIndex;
+                        continue;
+                    }
+                }
+            }
+
+            builder.append(current);
+        }
+
+        return builder.toString();
+    }
+
+    /**
+     * 使用命名占位符格式化字符串。
+     * 规则：
+     * 1. {name} 会从 Map 中读取对应值
+     * 2. 未命中的占位符保持原样
+     * 3. 支持 \{name} 形式的转义
+     *
+     * 示例：
+     * StringUtil.formatNamed("用户={name}，状态={status}", map);
+     *
+     * @param template 模板字符串
+     * @param values    命名参数
+     * @return 格式化后的字符串
+     */
+    public static String formatNamed(String template, Map<String, ?> values) {
+        if (template == null) {
+            return null;
+        }
+        if (isEmpty(template)) {
+            return EMPTY;
+        }
+        if (values == null || values.isEmpty()) {
             return template;
         }
 
-        StringBuilder sb = new StringBuilder(template.length() + args.length * 10);
-        int templateLength = template.length();
-        int argIndex = 0;
-        int cursor = 0;
+        StringBuilder builder = new StringBuilder(template.length() + values.size() * 16);
+        int length = template.length();
 
-        while (cursor < templateLength) {
-            int placeholderIndex = template.indexOf("{}", cursor);
-            if (placeholderIndex == -1 || argIndex >= args.length) {
-                // 没有更多占位符或参数已用完，追加剩余部分
-                sb.append(template.substring(cursor));
-                break;
+        for (int i = 0; i < length; i++) {
+            char current = template.charAt(i);
+
+            if (current == ESCAPE_CHAR) {
+                if (i + 1 < length) {
+                    char next = template.charAt(i + 1);
+                    if (next == PLACEHOLDER_START) {
+                        builder.append(PLACEHOLDER_START);
+                        i++;
+                        continue;
+                    }
+                    builder.append(next);
+                    i++;
+                    continue;
+                }
+                builder.append(current);
+                continue;
             }
 
-            sb.append(template, cursor, placeholderIndex);
-            sb.append(args[argIndex] != null ? args[argIndex].toString() : "null");
+            if (current == PLACEHOLDER_START) {
+                int endIndex = template.indexOf(PLACEHOLDER_END, i + 1);
+                if (endIndex > i + 1) {
+                    String key = template.substring(i + 1, endIndex);
+                    if (values.containsKey(key)) {
+                        builder.append(toString(values.get(key)));
+                    } else {
+                        builder.append(template, i, endIndex + 1);
+                    }
+                    i = endIndex;
+                    continue;
+                }
+            }
 
-            // 跳过"{}"
-            cursor = placeholderIndex + 2;
-            argIndex++;
+            builder.append(current);
         }
 
-        return sb.toString();
+        return builder.toString();
+    }
+
+
+    /**
+     * 判断字符串是否为整数。
+     *
+     * @param str 字符串
+     * @return true：是整数
+     */
+    public static boolean isInteger(String str) {
+        if (isBlank(str)) {
+            return false;
+        }
+        int start = 0;
+        if (str.charAt(0) == '-' || str.charAt(0) == '+') {
+            if (str.length() == 1) {
+                return false;
+            }
+            start = 1;
+        }
+        for (int i = start; i < str.length(); i++) {
+            if (!Character.isDigit(str.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 将对象安全转换为字符串，null 返回 "null"。
+     *
+     * @param value 对象
+     * @return 字符串
+     */
+    private static String toString(Object value) {
+        return value == null ? NULL_TEXT : String.valueOf(value);
     }
 
     /**

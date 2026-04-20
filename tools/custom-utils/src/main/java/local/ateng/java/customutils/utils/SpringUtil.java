@@ -588,32 +588,125 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
     }
 
     /**
-     * 获取客户端真实 IP 地址（考虑多层代理）
+     * 获取客户端真实 IP 地址，兼容多层代理场景。
      *
-     * @return IP 地址
+     * @return 客户端 IP；如果请求不存在则返回 null
      */
     public static String getClientIpAddress() {
         HttpServletRequest request = getHttpServletRequest();
         if (request == null) {
             return null;
         }
+        return getClientIpAddress(request);
+    }
 
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip != null && !ip.isEmpty() && !UNKNOWN.equalsIgnoreCase(ip)) {
-            return ip.split(",")[0];
+    /**
+     * 获取客户端 IP，支持自定义默认值兜底
+     *
+     * @param defaultIp 默认 IP（如 unknown / 0.0.0.0）
+     * @return 客户端 IP
+     */
+    public static String getClientIpAddressOrDefault(String defaultIp) {
+        String ip = getClientIpAddress();
+        return StringUtil.isBlank(ip) ? defaultIp : ip;
+    }
+
+    /**
+     * 获取客户端真实 IP 地址，兼容多层代理场景。
+     *
+     * @param request HTTP 请求
+     * @return 客户端 IP
+     */
+    public static String getClientIpAddress(HttpServletRequest request) {
+        if (request == null) {
+            return null;
         }
 
-        ip = request.getHeader("Proxy-Client-IP");
-        if (ip != null && !ip.isEmpty() && !UNKNOWN.equalsIgnoreCase(ip)) {
+        String ip = resolveClientIp(request);
+        if (StringUtil.isBlank(ip)) {
+            ip = request.getRemoteAddr();
+        }
+
+        return normalizeIp(ip);
+    }
+
+    /**
+     * 解析客户端 IP，按常见代理头部顺序依次获取。
+     *
+     * @param request HTTP 请求
+     * @return 解析到的 IP；未获取到则返回 null
+     */
+    private static String resolveClientIp(HttpServletRequest request) {
+        String[] headerNames = {
+                "X-Forwarded-For",
+                "X-Real-IP",
+                "Proxy-Client-IP",
+                "WL-Proxy-Client-IP",
+                "HTTP_CLIENT_IP",
+                "HTTP_X_FORWARDED_FOR",
+                "CF-Connecting-IP"
+        };
+
+        for (String headerName : headerNames) {
+            String ip = request.getHeader(headerName);
+            String resolvedIp = extractFirstIp(ip);
+            if (StringUtil.isNotBlank(resolvedIp)) {
+                return resolvedIp;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 从代理头中提取第一个有效 IP。
+     * <p>
+     * 例如：X-Forwarded-For: 10.0.0.1, 192.168.1.1
+     * 会返回 10.0.0.1。
+     *
+     * @param ipHeader 代理头值
+     * @return 第一个有效 IP；无效时返回 null
+     */
+    private static String extractFirstIp(String ipHeader) {
+        if (StringUtil.isBlank(ipHeader) || UNKNOWN.equalsIgnoreCase(ipHeader)) {
+            return null;
+        }
+
+        String[] ipArray = StringUtil.split(ipHeader, ",");
+        if (ipArray == null || ipArray.length == 0) {
+            return null;
+        }
+
+        for (String ip : ipArray) {
+            if (StringUtil.isBlank(ip) || UNKNOWN.equalsIgnoreCase(ip)) {
+                continue;
+            }
             return ip;
         }
 
-        ip = request.getHeader("WL-Proxy-Client-IP");
-        if (ip != null && !ip.isEmpty() && !UNKNOWN.equalsIgnoreCase(ip)) {
+        return null;
+    }
+
+    /**
+     * 标准化 IP 地址，处理常见本地回环写法。
+     *
+     * @param ip 原始 IP
+     * @return 标准化后的 IP
+     */
+    private static String normalizeIp(String ip) {
+        if (StringUtil.isBlank(ip)) {
             return ip;
         }
 
-        return request.getRemoteAddr();
+        String trimmedIp = ip.trim();
+        if ("0:0:0:0:0:0:0:1".equals(trimmedIp)) {
+            return "127.0.0.1";
+        }
+        if ("::1".equals(trimmedIp)) {
+            return "127.0.0.1";
+        }
+
+        return trimmedIp;
     }
 
     /**
