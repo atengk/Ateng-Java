@@ -449,6 +449,280 @@ curl http://localhost:11434/api/chat -d '{
 
 
 
+## 使用多模态模型
+
+### qwen2.5vl
+
+Qwen2.5-VL 是其多模态版本，支持图像与文本联合理解与生成，适用于视觉问答、图像描述和文档解析等场景。相比上一代，在视觉细节识别、跨模态推理和复杂场景理解方面有明显提升，并提供多种参数规模，便于在本地或服务端灵活部署，适合构建图文结合的智能应用。
+
+**拉取模型**
+
+根据本地主机资源大小自行选择模型版本
+
+拉取指定版本查看官网 tags：[链接](https://ollama.com/library/qwen2.5vl)
+
+```
+ollama pull qwen2.5vl:3b
+```
+
+**查看模型信息**
+
+```
+ollama show qwen2.5vl:3b
+```
+
+输出
+
+```
+  Model
+    architecture        qwen25vl
+    parameters          3.8B
+    context length      128000
+    embedding length    2048
+    quantization        Q4_K_M
+
+  Capabilities
+    completion
+    vision
+
+  Parameters
+    temperature    0.0001
+
+  System
+    You are a helpful assistant.
+
+  License
+    Apache License
+    Version 2.0, January 2004
+    ...
+```
+
+**运行模型（图像交互）**
+
+```
+ollama run qwen2.5vl:3b
+```
+
+进入后直接输入（注意带图片路径）：
+
+```
+请描述这张图片的内容 C:\Users\admin\Pictures\Saved Pictures\mushrooms-9494682_1280.jpg
+```
+
+------
+
+**调用本地接口（图像生成 / 分析）**
+
+images 参数需要是 base64 编码数据
+
+```
+curl http://localhost:11434/api/generate -d '{
+    "model": "qwen2.5vl:3b",
+    "prompt": "请分析图片中的内容，并提取关键信息",
+    "images": [
+        "/9j/4AAQ...5WF3P//Z"
+    ],
+    "stream": false
+}'
+```
+
+返回示例：
+
+```
+{
+	"model": "qwen2.5vl:3b",
+	"created_at": "2026-04-20T02:50:32.6425193Z",
+	"response": "这张图片展示了几朵蘑菇。蘑菇的菌盖呈现出浅黄色，菌柄较细长，颜色较深。背景模糊，显示出绿色的植物和一些枯枝落叶，整体色调较为柔和。蘑菇生长在地面上，周围有一些绿色的苔藓。",
+	"done": true,
+	"done_reason": "stop",
+	"context": [
+		151644,
+		8948,
+		...,
+		121860,
+		1773
+	],
+	"total_duration": 6554993200,
+	"load_duration": 394246800,
+	"prompt_eval_count": 1410,
+	"prompt_eval_duration": 434777700,
+	"eval_count": 57,
+	"eval_duration": 5453462900
+}
+```
+
+------
+
+**调用 Chat 接口（推荐，支持多轮 + 图像）**
+
+images 参数需要是 base64 编码数据
+
+```
+curl http://localhost:11434/api/chat -d '{
+  "model": "qwen2.5vl:3b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "请分析图片中的内容，并提取关键信息",
+      "images": [
+          "/9j/4AAQ...5WF3P//Z"
+      ],
+    }
+  ]
+}'
+```
+
+返回示例（流式）：
+
+```
+{"model":"qwen2.5vl:3b","created_at":"2026-04-20T02:53:02.7815606Z","message":{"role":"assistant","content":"这张"},"done":false}
+{"model":"qwen2.5vl:3b","created_at":"2026-04-20T02:53:02.8775553Z","message":{"role":"assistant","content":"图片"},"done":false}
+...
+{"model":"qwen2.5vl:3b","created_at":"2026-04-20T02:53:08.0273944Z","message":{"role":"assistant","content":"的"},"done":false}
+{"model":"qwen2.5vl:3b","created_at":"2026-04-20T02:53:08.132449Z","message":{"role":"assistant","content":"苔"},"done":false}
+{"model":"qwen2.5vl:3b","created_at":"2026-04-20T02:53:08.2292909Z","message":{"role":"assistant","content":"藓"},"done":false}
+{"model":"qwen2.5vl:3b","created_at":"2026-04-20T02:53:08.3279859Z","message":{"role":"assistant","content":"。"},"done":false}
+{"model":"qwen2.5vl:3b","created_at":"2026-04-20T02:53:08.4202936Z","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","total_duration":6540629900,"load_duration":258526900,"prompt_eval_count":1410,"prompt_eval_duration":447507400,"eval_count":57,"eval_duration":5627651700}
+```
+
+
+
+### qwen3-vl
+
+Qwen3-VL 是新一代多模态模型，支持图像与文本的联合理解与生成，覆盖视觉问答、图像解析、文档理解等场景。相比 2.5-VL，在复杂视觉推理、细粒度识别和跨模态对齐上进一步增强，并优化长上下文处理能力，适合构建更高精度的图文一体化应用与本地部署方案。
+
+**拉取模型**
+
+根据本地主机资源大小自行选择模型版本
+
+拉取指定版本查看官网 tags：[链接](https://ollama.com/library/qwen3-vl)
+
+```
+ollama pull qwen3-vl:2b
+```
+
+**查看模型信息**
+
+```
+ollama show qwen3-vl:2b
+```
+
+输出
+
+```
+  Model
+    architecture        qwen3vl
+    parameters          2.1B
+    context length      262144
+    embedding length    2048
+    quantization        Q4_K_M
+
+  Capabilities
+    completion
+    vision
+    tools
+    thinking
+
+  Parameters
+    temperature    1
+    top_k          20
+    top_p          0.95
+
+  License
+    Apache License
+    Version 2.0, January 2004
+    ...
+```
+
+**运行模型（本地对话）**
+
+```
+ollama run qwen3-vl:2b
+```
+
+进入后直接输入（注意带图片路径）：
+
+```
+请描述这张图片的内容 C:\Users\admin\Pictures\Saved Pictures\mushrooms-9494682_1280.jpg
+```
+
+------
+
+**调用本地接口（图像生成 / 分析）**
+
+images 参数需要是 base64 编码数据
+
+```
+curl http://localhost:11434/api/generate -d '{
+    "model": "qwen3-vl:2b",
+    "prompt": "请分析图片中的内容，并提取关键信息",
+    "images": [
+        "/9j/4AAQ...5WF3P//Z"
+    ],
+    "stream": false
+}'
+```
+
+返回示例：
+
+```
+{
+	"model": "qwen3-vl:2b",
+	"created_at": "2026-04-20T03:12:13.0876977Z",
+	"response": "### 图片分析与关键信息提...的细节结构。",
+	"done": true,
+	"done_reason": "stop",
+	"context": [
+		151644,
+		872,
+		...,
+		102802,
+		1773
+	],
+	"total_duration": 141154332000,
+	"load_duration": 359845400,
+	"prompt_eval_count": 1101,
+	"prompt_eval_duration": 82328100,
+	"eval_count": 1339,
+	"eval_duration": 139638642800
+}
+```
+
+------
+
+**调用 Chat 接口（推荐，支持多轮 + 图像）**
+
+images 参数需要是 base64 编码数据
+
+```
+curl http://localhost:11434/api/chat -d '{
+  "model": "qwen3-vl:2b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "请分析图片中的内容，并提取关键信息",
+      "images": [
+          "/9j/4AAQ...5WF3P//Z"
+      ],
+    }
+  ]
+}'
+```
+
+返回示例（流式）：
+
+```
+{"model":"qwen3-vl:2b","created_at":"2026-04-20T03:03:10.6177091Z","message":{"role":"assistant","content":"","thinking":"用户"},"done":false}
+{"model":"qwen3-vl:2b","created_at":"2026-04-20T03:03:10.6857399Z","message":{"role":"assistant","content":"","thinking":"让我"},"done":false}
+...
+{"model":"qwen3-vl:2b","created_at":"2026-04-20T03:05:34.3009723Z","message":{"role":"assistant","content":"进一步"},"done":false}
+{"model":"qwen3-vl:2b","created_at":"2026-04-20T03:05:34.407917Z","message":{"role":"assistant","content":"鉴定"},"done":false}
+{"model":"qwen3-vl:2b","created_at":"2026-04-20T03:05:34.5081288Z","message":{"role":"assistant","content":"。"},"done":false}
+{"model":"qwen3-vl:2b","created_at":"2026-04-20T03:05:34.6179617Z","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","total_duration":144840206700,"load_duration":316855400,"prompt_eval_count":1101,"prompt_eval_duration":366277200,"eval_count":1476,"eval_duration":143160774400}
+```
+
+
+
 ## 模型管理
 
 查看已下载模型
