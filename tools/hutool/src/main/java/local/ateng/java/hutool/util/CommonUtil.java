@@ -546,6 +546,320 @@ public final class CommonUtil {
     }
 
     /**
+     * Date 转 LocalDateTime
+     *
+     * @param date 日期
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime toLocalDateTime(java.util.Date date) {
+        if (date == null) {
+            return null;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.of(date);
+    }
+
+    /**
+     * LocalDateTime 转 Date
+     *
+     * @param dateTime 日期时间
+     * @return Date
+     */
+    public static java.util.Date toDate(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        long epochMilli = cn.hutool.core.date.LocalDateTimeUtil.toEpochMilli(dateTime);
+        return cn.hutool.core.date.DateUtil.date(epochMilli);
+    }
+
+    /**
+     * 解析日期时间字符串
+     *
+     * @param value 日期时间字符串
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime parseLocalDateTime(String value) {
+        if (cn.hutool.core.util.StrUtil.isBlank(value)) {
+            return null;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.parse(value);
+    }
+
+    /**
+     * 按指定格式解析日期时间字符串
+     *
+     * @param value   日期时间字符串
+     * @param pattern 格式
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime parseLocalDateTime(String value, String pattern) {
+        if (cn.hutool.core.util.StrUtil.isBlank(value) || cn.hutool.core.util.StrUtil.isBlank(pattern)) {
+            return null;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.parse(value, pattern);
+    }
+
+    /**
+     * 格式化日期时间，默认格式 yyyy-MM-dd HH:mm:ss
+     *
+     * @param dateTime 日期时间
+     * @return 字符串
+     */
+    public static String formatLocalDateTime(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.formatNormal(dateTime);
+    }
+
+    /**
+     * 按指定格式格式化日期时间
+     *
+     * @param dateTime 日期时间
+     * @param pattern  格式
+     * @return 字符串
+     */
+    public static String formatLocalDateTime(java.time.LocalDateTime dateTime, String pattern) {
+        if (dateTime == null || cn.hutool.core.util.StrUtil.isBlank(pattern)) {
+            return null;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.format(dateTime, pattern);
+    }
+
+    /**
+     * 获取当前日期时间
+     *
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime nowLocalDateTime() {
+        return cn.hutool.core.date.LocalDateTimeUtil.now();
+    }
+
+    /**
+     * 获取当前日期
+     *
+     * @return LocalDate
+     */
+    public static java.time.LocalDate todayLocalDate() {
+        return cn.hutool.core.date.LocalDateTimeUtil.ofDate(cn.hutool.core.date.LocalDateTimeUtil.now());
+    }
+
+    /**
+     * 获取指定日期偏移后的日期时间
+     *
+     * @param dateTime   日期时间
+     * @param offsetDays 偏移天数
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime offsetLocalDateTime(java.time.LocalDateTime dateTime, long offsetDays) {
+        if (dateTime == null) {
+            return null;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.offset(dateTime, offsetDays, java.time.temporal.ChronoUnit.DAYS);
+    }
+
+    /**
+     * 获取两个日期时间之间的天数差
+     *
+     * @param start 开始时间
+     * @param end   结束时间
+     * @return 天数
+     */
+    public static long betweenDay(java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return Math.abs(cn.hutool.core.date.LocalDateTimeUtil.between(start, end, java.time.temporal.ChronoUnit.DAYS));
+    }
+
+    /**
+     * 获取两个日期时间之间的小时差
+     *
+     * @param start 开始时间
+     * @param end   结束时间
+     * @return 小时
+     */
+    public static long betweenHour(java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return Math.abs(cn.hutool.core.date.LocalDateTimeUtil.between(start, end, java.time.temporal.ChronoUnit.HOURS));
+    }
+
+    /**
+     * 获取两个日期时间之间的分钟差
+     *
+     * @param start 开始时间
+     * @param end   结束时间
+     * @return 分钟
+     */
+    public static long betweenMinute(java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return Math.abs(cn.hutool.core.date.LocalDateTimeUtil.between(start, end, java.time.temporal.ChronoUnit.MINUTES));
+    }
+
+    /**
+     * 获取两个日期时间之间的秒数差
+     *
+     * @param start 开始时间
+     * @param end   结束时间
+     * @return 秒数
+     */
+    public static long betweenSecond(java.time.LocalDateTime start, java.time.LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return Math.abs(cn.hutool.core.date.LocalDateTimeUtil.between(start, end, java.time.temporal.ChronoUnit.SECONDS));
+    }
+
+    /**
+     * 获取月份第一天开始时间
+     *
+     * @param dateTime 日期时间
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime beginOfMonth(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.toLocalDate().withDayOfMonth(1).atStartOfDay();
+    }
+
+    /**
+     * 获取月份最后一天结束时间
+     *
+     * @param dateTime 日期时间
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime endOfMonth(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return java.time.YearMonth.from(dateTime).atEndOfMonth().atTime(java.time.LocalTime.MAX);
+    }
+
+    /**
+     * 获取年份第一天开始时间
+     *
+     * @param dateTime 日期时间
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime beginOfYear(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.toLocalDate().withDayOfYear(1).atStartOfDay();
+    }
+
+    /**
+     * 获取年份最后一天结束时间
+     *
+     * @param dateTime 日期时间
+     * @return LocalDateTime
+     */
+    public static java.time.LocalDateTime endOfYear(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.toLocalDate().withDayOfYear(dateTime.toLocalDate().lengthOfYear()).atTime(java.time.LocalTime.MAX);
+    }
+
+    /**
+     * 判断日期时间是否同一天
+     *
+     * @param dateTime1 日期时间1
+     * @param dateTime2 日期时间2
+     * @return true-同一天，false-不同
+     */
+    public static boolean isSameDay(java.time.LocalDateTime dateTime1, java.time.LocalDateTime dateTime2) {
+        if (dateTime1 == null || dateTime2 == null) {
+            return false;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.isSameDay(dateTime1, dateTime2);
+    }
+
+    /**
+     * 判断日期时间是否为今天
+     *
+     * @param dateTime 日期时间
+     * @return true-是今天，false-不是
+     */
+    public static boolean isToday(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return false;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.isSameDay(dateTime, cn.hutool.core.date.LocalDateTimeUtil.now());
+    }
+
+    /**
+     * 将日期时间转时间戳
+     *
+     * @param dateTime 日期时间
+     * @return 时间戳
+     */
+    public static long toEpochMilli(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return 0L;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.toEpochMilli(dateTime);
+    }
+
+    /**
+     * 将时间戳转日期时间
+     *
+     * @param epochMilli 时间戳
+     * @return 日期时间
+     */
+    public static java.time.LocalDateTime ofEpochMilliLocalDateTime(long epochMilli) {
+        return cn.hutool.core.date.LocalDateTimeUtil.of(epochMilli);
+    }
+
+    /**
+     * 判断日期时间是否为周末
+     *
+     * @param dateTime 日期时间
+     * @return true-是周末，false-不是
+     */
+    public static boolean isWeekend(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return false;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.isWeekend(dateTime);
+    }
+
+    /**
+     * 判断当前日期时间是否在指定范围内
+     *
+     * @param dateTime 日期时间
+     * @param begin    开始时间
+     * @param end      结束时间
+     * @return true-在范围内，false-不在
+     */
+    public static boolean isIn(java.time.LocalDateTime dateTime,
+                               java.time.LocalDateTime begin,
+                               java.time.LocalDateTime end) {
+        if (dateTime == null || begin == null || end == null) {
+            return false;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.isIn(dateTime, begin, end);
+    }
+
+    /**
+     * 获取指定日期时间是本年的第几周
+     *
+     * @param dateTime 日期时间
+     * @return 周序号
+     */
+    public static int weekOfYear(java.time.LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return 0;
+        }
+        return cn.hutool.core.date.LocalDateTimeUtil.weekOfYear(dateTime);
+    }
+
+    /**
      * 集合是否非空
      *
      * @param collection 集合
