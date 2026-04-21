@@ -6,8 +6,8 @@
 | ---------- | ---------------------------------------- |
 | JDK        | 21                                       |
 | Maven      | 3.9.12                                   |
-| SpringBoot | 3.5.10                                   |
-| SpringAI   | 1.1.2                                    |
+| SpringBoot | 3.5.13                                   |
+| SpringAI   | 1.1.4                                    |
 | Model      | OpenAI（DeepSeek、Qwen 兼容 OpenAI API） |
 
 
@@ -58,6 +58,117 @@ spring:
         options:
           model: gpt-4o-mini
 ```
+
+
+
+## 模型配置
+
+### OpenAI
+
+添加依赖
+
+```xml
+<!-- Spring AI - OpenAI 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-openai</artifactId>
+</dependency>
+```
+
+编辑 `application.yml`
+
+```yaml
+---
+# Spring AI 配置
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: https://api.openai.com
+      chat:
+        options:
+          model: gpt-4o-mini
+          temperature: 0.7
+          max-tokens: 2048
+          top-p: 1.0
+      embedding:
+        options:
+          model: text-embedding-3-small
+```
+
+
+
+### DeepSeek
+
+添加依赖
+
+```xml
+<!-- Spring AI - DeepSeek 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-deepseek</artifactId>
+</dependency>
+```
+
+编辑 `application.yml`
+
+```yaml
+---
+# Spring AI 配置
+spring:
+  ai:
+    openai:
+      api-key: ${DEEPSEEK_API_KEY}
+      base-url: https://api.deepseek.com
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.7
+          max-tokens: 4096
+          top-p: 0.9
+      embedding:
+        base-url: http://localhost:11434
+        api-key: 
+        embeddings-path: /api/embeddings
+        options:
+          model: qwen3-embedding:4b
+```
+
+
+
+### Ollama
+
+添加依赖
+
+```xml
+<!-- Spring AI - Ollama 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-ollama</artifactId>
+</dependency>
+```
+
+编辑 `application.yml` 
+
+```yaml
+---
+# Spring AI 配置
+spring:
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: qwen3.5:2b
+          temperature: 0.7
+          max-tokens: 2048
+          top-p: 1.0
+      embedding:
+        options:
+          model: qwen3-embedding:4b
+```
+
+
 
 ## 基础使用
 
@@ -706,6 +817,245 @@ GET /api/ai/tool/chat?message=我的年龄是25岁，请问是是否成年了？
 
 
 
+
+
+## 接入 MCP Server
+
+MCP Server 开发参考：[链接](/ai/spring-ai1-mcp-server/README.md)
+
+### 基础配置
+
+**添加依赖**
+
+```xml
+<!-- Spring AI MCP Client 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-mcp-client</artifactId>
+</dependency>
+```
+
+**添加配置**
+
+```yaml
+spring:
+  ai:
+    mcp:
+      client:
+        sse:
+          connections:
+            local-mcp:
+              url: http://localhost:19002
+              sse-endpoint: /sse
+        name: ateng-mcp-client
+        version: 1.0.0
+```
+
+**注册 ToolCallbackProvider**
+
+让 Client 能发现 MCP Server + 拿到 Tool 元数据
+
+```java
+@Configuration
+@RequiredArgsConstructor
+public class ChatClientConfig {
+
+    @Bean
+    public ChatClient mcpServerChatClient(
+            ChatClient.Builder builder,
+            ToolCallbackProvider mcpToolCallbackProvider) {
+
+        return builder
+                .defaultToolCallbacks(mcpToolCallbackProvider)
+                .build();
+    }
+
+}
+```
+
+### 创建接口
+
+```java
+package io.github.atengk.ai.controller;
+
+import io.github.atengk.ai.tool.CommonTools;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/ai/mcp-server")
+public class McpServerChatController {
+
+    private final ChatClient mcpServerChatClient;
+
+    /**
+     * 最基础的同步对话
+     */
+    @GetMapping("/chat")
+    public String chat(@RequestParam String message) {
+        return mcpServerChatClient
+                .prompt()
+                .system("""
+                        你可以在必要时调用系统提供的工具，
+                        工具的返回结果是可信的，
+                        不要自行编造结果。
+                        """)
+                .user(message)
+                .call()
+                .content();
+    }
+
+}
+```
+
+```
+GET /api/ai/mcp-server/chat?message=计算1 和 99 的和是多少？ 
+```
+
+![image-20260206205417322](./assets/image-20260206205417322.png)
+
+MCP Server 被调用 Tool 的日志
+
+![image-20260206205343992](./assets/image-20260206205343992.png)
+
+
+
+```
+GET /api/ai/mcp-server/chat?message=请告诉我重庆的气温
+```
+
+![image-20260206211650987](./assets/image-20260206211650987.png)
+
+---
+
+
+
+## 嵌入模型（Embedding）
+
+用于将文本转换为向量（vector），常见应用：
+
+- 语义搜索（Semantic Search）
+- RAG（检索增强生成）
+- 相似度计算（文本去重 / 推荐）
+- 分类与聚类
+
+---
+
+### 基础示例
+
+控制器示例：支持单条/批量输入，并返回结构化结果
+
+```java
+package io.github.atengk.ai.controller;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.ai.embedding.Embedding;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * 向量嵌入接口
+ *
+ * @author Ateng
+ * @since 2026-04-21
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/ai")
+public class EmbeddingController {
+
+    private final EmbeddingModel embeddingModel;
+
+    @Autowired
+    public EmbeddingController(EmbeddingModel embeddingModel) {
+        this.embeddingModel = embeddingModel;
+    }
+
+    /**
+     * 单条文本向量化
+     */
+    @GetMapping("/embedding")
+    public Map<String, Object> embed(@RequestParam("text") String text) {
+        try {
+            EmbeddingResponse response = embeddingModel.embedForResponse(Collections.singletonList(text));
+
+            List<float[]> vectors = response.getResults()
+                    .stream()
+                    .map(Embedding::getOutput)
+                    .collect(Collectors.toList());
+
+            return buildResult(vectors);
+        } catch (Exception e) {
+            log.error("embedding 失败，text={}", text, e);
+            return error("embedding 失败");
+        }
+    }
+
+    /**
+     * 批量文本向量化
+     */
+    @PostMapping("/embedding/batch")
+    public Map<String, Object> embedBatch(@RequestBody List<String> texts) {
+        try {
+            EmbeddingResponse response = embeddingModel.embedForResponse(texts);
+
+            List<float[]> vectors = response.getResults()
+                    .stream()
+                    .map(Embedding::getOutput)
+                    .collect(Collectors.toList());
+
+            return buildResult(vectors);
+        } catch (Exception e) {
+            log.error("embedding 批量失败，texts={}", texts, e);
+            return error("embedding 批量失败");
+        }
+    }
+
+    /**
+     * 构建统一返回结构
+     */
+    private Map<String, Object> buildResult(List<float[]> vectors) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("vectors", vectors);
+        result.put("dimension", vectors.isEmpty() ? 0 : vectors.get(0).length);
+        result.put("count", vectors.size());
+        return result;
+    }
+
+    private Map<String, Object> error(String msg) {
+        return Map.of("success", false, "message", msg);
+    }
+}
+```
+
+返回结构说明
+
+```
+{
+  "vectors": [[0.123, 0.456, ...]],
+  "dimension": 1024,
+  "count": 1
+}
+```
+
+字段说明：
+
+- `vectors`：向量结果（二维数组，支持批量）
+- `dimension`：向量维度（必须统一）
+- `count`：输入文本数量
+
+
+
 ## RAG：接入企业知识库
 
 RAG（Retrieval-Augmented Generation，检索增强生成）用于在模型回答问题前，引入**外部知识内容**，从而避免模型“凭空回答”或依赖过期知识。
@@ -748,11 +1098,19 @@ RAG（Retrieval-Augmented Generation，检索增强生成）用于在模型回�
     <groupId>org.springframework.ai</groupId>
     <artifactId>spring-ai-rag</artifactId>
 </dependency>
+
+<!-- 文档解析（Tika Reader 依赖） -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-tika-document-reader</artifactId>
+</dependency>
 ```
 
 **编辑配置**
 
 ```yaml
+---
+# Spring AI RAG 配置
 spring:
   ai:
     vectorstore:
@@ -760,7 +1118,7 @@ spring:
         initialize-schema: true
         database-name: default
         collection-name: spring_ai_knowledge_ateng
-        embedding-dimension: 1536
+        embedding-dimension: 1024
         metric-type: COSINE
         index-type: IVF_FLAT
         index-parameters: '{"nlist":1024}'
@@ -773,13 +1131,321 @@ spring:
         auto-id: false
 
         client:
-          host: 175.178.193.128
-          port: 20016
+          host: 192.168.1.12
+          port: 40140
           username: root
           password: Milvus
           secure: false
 
 ```
+
+### 快速开始
+
+创建 controller
+
+```java
+package io.github.atengk.ai.controller;
+
+import cn.hutool.core.util.StrUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.reader.tika.TikaDocumentReader;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * 向量库操作接口
+ *
+ * @author Ateng
+ * @since 2026-04-21
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/ai/vector")
+public class VectorStoreController {
+
+    private final VectorStore vectorStore;
+
+    public VectorStoreController(VectorStore vectorStore) {
+        this.vectorStore = vectorStore;
+    }
+
+    /**
+     * 上传文档并向量化入库（带完整分片控制）
+     */
+    @PostMapping("/upload")
+    public Map<String, Object> uploadDocument(@RequestParam("file") MultipartFile file) {
+
+        String fileName = file.getOriginalFilename();
+
+        if (file == null || file.isEmpty()) {
+            return fail("文件不能为空");
+        }
+
+        log.info("开始处理文件: {}", fileName);
+
+        try {
+            // ================== 1. 文档解析 ==================
+            TikaDocumentReader reader = new TikaDocumentReader(new InputStreamResource(file.getInputStream()));
+            List<Document> documents = reader.get();
+
+            if (documents.isEmpty()) {
+                return fail("文档解析失败或内容为空");
+            }
+
+            // ================== 2. 分片参数（重点） ==================
+
+            /**
+             * chunkSize
+             * 每个分片的“目标 token 数”
+             * - 太小：语义断裂
+             * - 太大：embedding 质量下降 + 成本上升
+             * 推荐：
+             * - 中文：300 ~ 600
+             */
+            int chunkSize = 500;
+
+            /**
+             * minChunkSizeChars
+             * 最小字符数阈值（低于这个值的分片会被丢弃或合并）
+             * 作用：
+             * - 防止出现无意义碎片（如几个字）
+             */
+            int minChunkSizeChars = 200;
+
+            /**
+             * minChunkLengthToEmbed
+             * 最小允许参与 embedding 的长度
+             * 小于该值的 chunk 不会被 embedding
+             * 作用：
+             * - 避免 embedding 噪声数据
+             */
+            int minChunkLengthToEmbed = 100;
+
+            /**
+             * maxNumChunks
+             * 单个文档最多分片数量
+             * 防止：
+             * - 超大文件导致 OOM
+             * - 向量库爆炸
+             */
+            int maxNumChunks = 1000;
+
+            /**
+             * keepSeparator
+             * 是否保留分隔符（标点）
+             * 中文建议 true，否则语义会断
+             */
+            boolean keepSeparator = true;
+
+            /**
+             * punctuationMarks
+             * 分割依据的标点
+             * ⚠️ 默认是英文标点，不适合中文
+             * 这里手动补充中文标点（非常关键）
+             */
+            List<Character> punctuationMarks = Arrays.asList(
+                    '。', '！', '？', '；', '，', '\n',
+                    '.', '!', '?', ';', ','
+            );
+
+            // ================== 3. 构建分片器 ==================
+            TokenTextSplitter splitter = new TokenTextSplitter(
+                    chunkSize,
+                    minChunkSizeChars,
+                    minChunkLengthToEmbed,
+                    maxNumChunks,
+                    keepSeparator,
+                    punctuationMarks
+            );
+
+            List<Document> chunks = splitter.apply(documents);
+
+            if (chunks.isEmpty()) {
+                return fail("分片结果为空，请检查参数");
+            }
+
+            // ================== 4. 元数据增强 ==================
+            chunks.forEach((doc) -> {
+                doc.getMetadata().put("source", file.getOriginalFilename());
+                doc.getMetadata().put("filename", fileName);
+                doc.getMetadata().put("uploadTime", System.currentTimeMillis());
+                doc.getMetadata().put("length", doc.getText().length());
+            });
+
+            // ================== 5. 入库（自动 embedding） ==================
+            vectorStore.add(chunks);
+
+            log.info("文件处理完成: {}, 原始文档={}, 分片数={}", fileName, documents.size(), chunks.size());
+
+            return success(Map.of(
+                    "fileName", fileName,
+                    "docCount", documents.size(),
+                    "chunkCount", chunks.size()
+            ));
+
+        } catch (IOException e) {
+            log.error("文件读取失败: {}", fileName, e);
+            return fail("文件读取失败");
+        } catch (Exception e) {
+            log.error("向量化失败: {}", fileName, e);
+            return fail("向量化失败");
+        }
+    }
+
+    /**
+     * 文本直接向量化入库（不走 Tika）
+     */
+    @PostMapping("/ingest/text")
+    public Map<String, Object> ingestText(@RequestParam("text") String text,
+                                          @RequestParam(value = "source", required = false) String source) {
+
+        if (StrUtil.isBlank(text)) {
+            return fail("text 不能为空");
+        }
+
+        // 默认 source（避免为空）
+        if (StrUtil.isBlank(source)) {
+            source = "text_input_" + System.currentTimeMillis();
+        }
+
+        log.info("文本入库开始，source={}", source);
+
+        try {
+            // ================== 1. 构建 Document ==================
+            Document document = new Document(text);
+
+            // 元数据（统一规范）
+            document.getMetadata().put("source", source);
+            document.getMetadata().put("type", "text");
+            document.getMetadata().put("length", text.length());
+            document.getMetadata().put("uploadTime", System.currentTimeMillis());
+
+            List<Document> documents = Collections.singletonList(document);
+
+            // ================== 2. 分片参数（同文件一致） ==================
+            int chunkSize = 500;
+            int minChunkSizeChars = 200;
+            int minChunkLengthToEmbed = 100;
+            int maxNumChunks = 1000;
+            boolean keepSeparator = true;
+
+            List<Character> punctuationMarks = Arrays.asList(
+                    '。', '！', '？', '；', '，', '\n',
+                    '.', '!', '?', ';', ','
+            );
+
+            TokenTextSplitter splitter = new TokenTextSplitter(
+                    chunkSize,
+                    minChunkSizeChars,
+                    minChunkLengthToEmbed,
+                    maxNumChunks,
+                    keepSeparator,
+                    punctuationMarks
+            );
+
+            List<Document> chunks = splitter.apply(documents);
+
+            if (chunks.isEmpty()) {
+                return fail("分片结果为空");
+            }
+
+            // ================== 3. 补充分片级 metadata ==================
+            int total = chunks.size();
+            for (int i = 0; i < total; i++) {
+                Document doc = chunks.get(i);
+                doc.getMetadata().put("chunk_index", i);
+                doc.getMetadata().put("total_chunks", total);
+            }
+
+            // ================== 4. 入库 ==================
+            vectorStore.add(chunks);
+
+            log.info("文本入库完成，source={}, chunk数量={}", source, total);
+
+            return success(Map.of(
+                    "source", source,
+                    "chunkCount", total
+            ));
+
+        } catch (Exception e) {
+            log.error("文本入库失败，source={}", source, e);
+            return fail("文本入库失败");
+        }
+    }
+
+    /**
+     * 向量检索
+     */
+    @GetMapping("/search")
+    public Map<String, Object> search(@RequestParam("query") String query,
+                                      @RequestParam(value = "topK", defaultValue = "5") int topK) {
+
+        if (StrUtil.isBlank(query)) {
+            return fail("query 不能为空");
+        }
+
+        log.info("向量检索: query={}, topK={}", query, topK);
+
+        try {
+            SearchRequest request = SearchRequest.builder()
+                    .query(query)
+                    .topK(topK)
+                    .build();
+
+            List<Document> results = vectorStore.similaritySearch(request);
+
+            List<Map<String, Object>> data = results.stream()
+                    .map(doc -> {
+                        String text = doc.getText();
+                        // 截断，避免返回超大文本
+                        if (StrUtil.length(text) > 300) {
+                            text = StrUtil.sub(text, 0, 300) + "...";
+                        }
+
+                        return Map.of(
+                                "content", text,
+                                "metadata", doc.getMetadata()
+                        );
+                    })
+                    .collect(Collectors.toList());
+
+            return success(data);
+
+        } catch (Exception e) {
+            log.error("检索失败: query={}", query, e);
+            return fail("检索失败");
+        }
+    }
+
+    // ================== 统一返回 ==================
+
+    private Map<String, Object> success(Object data) {
+        return Map.of(
+                "success", true,
+                "data", data
+        );
+    }
+
+    private Map<String, Object> fail(String msg) {
+        return Map.of(
+                "success", false,
+                "message", msg
+        );
+    }
+}
+```
+
+
 
 ### 知识库初始化
 
@@ -1121,120 +1787,6 @@ public class RagChatController {
 POST /api/ai/rag/chat?message=Spring AI 支持哪些核心能力？
 返回：Spring AI 支持 RAG、Tool Calling 和 Chat Memory。
 ```
-
-
-
-## 接入 MCP Server
-
-MCP Server 开发参考：[链接](/ai/spring-ai1-mcp-server/README.md)
-
-### 基础配置
-
-**添加依赖**
-
-```xml
-<!-- Spring AI MCP Client 依赖 -->
-<dependency>
-    <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-starter-mcp-client</artifactId>
-</dependency>
-```
-
-**添加配置**
-
-```yaml
-spring:
-  ai:
-    mcp:
-      client:
-        sse:
-          connections:
-            local-mcp:
-              url: http://localhost:19002
-              sse-endpoint: /sse
-        name: ateng-mcp-client
-        version: 1.0.0
-```
-
-**注册 ToolCallbackProvider**
-
-让 Client 能发现 MCP Server + 拿到 Tool 元数据
-
-```java
-@Configuration
-@RequiredArgsConstructor
-public class ChatClientConfig {
-
-    @Bean
-    public ChatClient mcpServerChatClient(
-            ChatClient.Builder builder,
-            ToolCallbackProvider mcpToolCallbackProvider) {
-
-        return builder
-                .defaultToolCallbacks(mcpToolCallbackProvider)
-                .build();
-    }
-
-}
-```
-
-### 创建接口
-
-```java
-package io.github.atengk.ai.controller;
-
-import io.github.atengk.ai.tool.CommonTools;
-import lombok.RequiredArgsConstructor;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/api/ai/mcp-server")
-public class McpServerChatController {
-
-    private final ChatClient mcpServerChatClient;
-
-    /**
-     * 最基础的同步对话
-     */
-    @GetMapping("/chat")
-    public String chat(@RequestParam String message) {
-        return mcpServerChatClient
-                .prompt()
-                .system("""
-                        你可以在必要时调用系统提供的工具，
-                        工具的返回结果是可信的，
-                        不要自行编造结果。
-                        """)
-                .user(message)
-                .call()
-                .content();
-    }
-
-}
-```
-
-```
-GET /api/ai/mcp-server/chat?message=计算1 和 99 的和是多少？ 
-```
-
-![image-20260206205417322](./assets/image-20260206205417322.png)
-
-MCP Server 被调用 Tool 的日志
-
-![image-20260206205343992](./assets/image-20260206205343992.png)
-
-
-
-```
-GET /api/ai/mcp-server/chat?message=请告诉我重庆的气温
-```
-
-![image-20260206211650987](./assets/image-20260206211650987.png)
 
 
 
