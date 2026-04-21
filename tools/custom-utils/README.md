@@ -338,3 +338,57 @@ Apache MINA SSHD 是 The Apache Software Foundation 旗下的 Java SSH 实现项
 </dependency>
 ```
 
+
+
+## CommonUtil
+
+通用基础工具类（基于 Hutool 工具类）
+
+**添加依赖**
+
+```xml
+<properties>
+    <hutool.version>5.8.44</hutool.version>
+</properties>
+<dependencies>
+    <!-- Hutool: Java工具库，提供了许多实用的工具方法 -->
+    <dependency>
+        <groupId>cn.hutool</groupId>
+        <artifactId>hutool-all</artifactId>
+        <version>${hutool.version}</version>
+    </dependency>
+</dependencies>
+```
+
+
+
+## MachineFingerprintUtil
+
+机器指纹工具类
+
+组成：
+CPU + 主网卡MAC + 磁盘序列号 + 主机名
+特性：
+1. 自动容错（字段缺失不影响整体）
+2. 多磁盘合并（避免随机性）
+3. 统一标准化（保证hash一致）
+4. 内置缓存（避免重复计算）
+
+**添加依赖**
+
+```xml
+<properties>
+    <hutool.version>5.8.44</hutool.version>
+</properties>
+<dependencies>
+    <!-- Hutool: Java工具库，提供了许多实用的工具方法 -->
+    <dependency>
+        <groupId>cn.hutool</groupId>
+        <artifactId>hutool-all</artifactId>
+        <version>${hutool.version}</version>
+    </dependency>
+</dependencies>
+```
+
+
+
