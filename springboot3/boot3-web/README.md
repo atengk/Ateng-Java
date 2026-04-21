@@ -6,7 +6,7 @@
 | ---------- | ------ |
 | JDK        | 21     |
 | Maven      | 3.9.12 |
-| SpringBoot | 3.5.10 |
+| SpringBoot | 3.5.13 |
 
 
 
@@ -34,11 +34,11 @@
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-boot.version>3.5.10</spring-boot.version>
+        <spring-boot.version>3.5.13</spring-boot.version>
         <maven-compiler.version>3.14.1</maven-compiler.version>
-        <lombok.version>1.18.42</lombok.version>
-        <hutool.version>5.8.43</hutool.version>
-        <fastjson2.version>2.0.53</fastjson2.version>
+        <lombok.version>1.18.44</lombok.version>
+        <hutool.version>5.8.44</hutool.version>
+        <fastjson2.version>2.0.61</fastjson2.version>
     </properties>
 
     <!-- 项目依赖 -->
