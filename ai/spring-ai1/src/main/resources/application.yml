@@ -27,3 +27,16 @@ spring:
       embedding:
         options:
           model: qwen3-embedding:0.6b
+---
+# Spring AI MCP Client 配置
+spring:
+  ai:
+    mcp:
+      client:
+        sse:
+          connections:
+            local-mcp:
+              url: http://localhost:19002
+              sse-endpoint: /sse
+        name: ateng-mcp-client
+        version: 1.0.0

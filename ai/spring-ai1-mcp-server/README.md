@@ -66,13 +66,17 @@ MCP Tool 用于向模型暴露 **可调用的方法能力**。
 ```java
 package io.github.atengk.mcp.tool;
 
-import org.springaicommunity.mcp.annotation.McpTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
 
 /**
- * MCP Tool 示例：数学计算
+ * MCP Tool：整数加法
+ *
+ * @author Ateng
+ * @since 2026-04-22
  */
 @Component
 public class MathTool {
@@ -82,14 +86,15 @@ public class MathTool {
     @McpTool(
             name = "add",
             title = "Addition Tool",
-            description = "计算两个整数的和，仅用于无副作用的基础数学运算"
+            description = "计算两个整数的和。仅支持整数输入，无副作用，不涉及外部系统调用"
     )
-    public int add(int a, int b) {
-        log.debug("MCP Tool [add] invoked, a={}, b={}", a, b);
+    public int add(
+            @McpToolParam(description = "第一个整数", required = true) int a,
+            @McpToolParam(description = "第二个整数", required = true) int b) {
 
         int result = safeAdd(a, b);
 
-        log.debug("MCP Tool [add] result={}", result);
+        log.debug("MCP工具[add]执行完成，参数 a={}，b={}，结果 result={}", a, b, result);
         return result;
     }
 
@@ -100,12 +105,11 @@ public class MathTool {
         try {
             return Math.addExact(a, b);
         } catch (ArithmeticException ex) {
-            log.warn("MCP Tool [add] overflow detected, a={}, b={}", a, b);
+            log.warn("MCP工具[add]发生整数溢出，参数 a={}，b={}", a, b);
             throw new IllegalArgumentException("整数相加发生溢出");
         }
     }
 }
-
 ```
 
 **说明**
@@ -121,26 +125,37 @@ public class MathTool {
 ```java
 package io.github.atengk.mcp.tool;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springaicommunity.mcp.annotation.McpTool;
 import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
 
+/**
+ * MCP Tool：获取城市气温
+ *
+ * @author Ateng
+ * @since 2026-04-22
+ */
 @Component
 public class WeatherTool {
+
+    private static final Logger log = LoggerFactory.getLogger(WeatherTool.class);
 
     @McpTool(
             name = "getTemperature",
             title = "Get Current Temperature",
-            description = "获取指定城市的当前气温"
+            description = "获取指定城市的当前气温。输入为城市名称，返回该城市当前温度信息（示例数据）"
     )
     public String getTemperature(
-            @McpToolParam(
-                    description = "城市名称",
-                    required = true
-            ) String city) {
+            @McpToolParam(description = "城市名称，例如：北京、上海", required = true)
+            String city) {
 
-        // 这里一般是真实的业务逻辑 / RPC / HTTP
-        return String.format("当前 %s 的气温是 22°C", city);
+        // 模拟数据（实际应为 RPC / HTTP 调用）
+        String result = String.format("当前 %s 的气温是 22°C", city);
+
+        log.debug("MCP工具[getTemperature]执行完成，参数 city={}，结果 result={}", city, result);
+        return result;
     }
 }
 ```
@@ -172,7 +187,10 @@ import java.time.Instant;
 /**
  * MCP Resource：系统运行信息
  * <p>
- * 提供 MCP Server 的基础运行状态，仅用于只读查询。
+ * 提供服务运行状态、启动时间、运行时长及 JVM 信息
+ *
+ * @author Ateng
+ * @since 2026-04-22
  */
 @Component
 public class SystemResource {
@@ -183,14 +201,14 @@ public class SystemResource {
             uri = "system://runtime/info",
             name = "systemRuntimeInfo",
             title = "System Runtime Information",
-            description = "提供 MCP Server 的运行状态、启动时间及 JVM 基础信息，仅用于只读查询"
+            description = "获取 MCP Server 的运行状态、启动时间、运行时长及 JVM 信息（只读）"
     )
     public String systemInfo() {
-        log.debug("MCP Resource accessed: uri=system://runtime/info");
+        log.debug("MCP资源[systemRuntimeInfo]被访问");
 
         String info = buildSystemInfo();
 
-        log.debug("MCP Resource response generated, length={}", info.length());
+        log.debug("MCP资源[systemRuntimeInfo]返回成功，内容长度={}", info.length());
         return info;
     }
 
@@ -199,16 +217,17 @@ public class SystemResource {
      */
     private String buildSystemInfo() {
         long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
+        Instant now = Instant.now();
 
         return """
                 MCP Server Runtime Status
                 -------------------------
                 Status      : RUNNING
-                Start Time  : %s
+                Current Time: %s
                 Uptime      : %d ms
                 JVM Name    : %s
                 """.formatted(
-                Instant.now(),
+                now,
                 uptime,
                 ManagementFactory.getRuntimeMXBean().getVmName()
         );
@@ -237,7 +256,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * MCP Prompt 示例：问候语生成
+ * MCP Prompt：问候语生成
+ *
+ * @author Ateng
+ * @since 2026-04-22
  */
 @Component
 public class GreetingPrompt {
@@ -247,18 +269,17 @@ public class GreetingPrompt {
     @McpPrompt(
             name = "greeting",
             title = "Greeting Prompt",
-            description = "根据用户名生成一段友好、自然的问候提示语，用于引导模型输出问候内容"
+            description = "根据用户名生成一段自然、友好的问候提示语，用于引导模型输出问候内容"
     )
     public String greeting(String name) {
-        log.debug("MCP Prompt [greeting] invoked, name={}", name);
+        log.debug("MCP提示[greeting]执行，参数 name={}", name);
 
-        String prompt = "请用友好、自然的语气向用户 " + name + " 打招呼，可以适当加入寒暄或祝福语。";
+        String prompt = "请用自然、友好的语气向用户“" + name + "”打招呼，可以适当加入寒暄或祝福语。";
 
-        log.debug("MCP Prompt [greeting] generated prompt={}", prompt);
+        log.debug("MCP提示[greeting]生成完成");
         return prompt;
     }
 }
-
 ```
 
 Prompt 会作为 **结构化 Prompt 能力** 暴露给 MCP Client。

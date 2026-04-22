@@ -867,6 +867,14 @@ GET /api/ai/tool/chat?message=我的年龄是25岁，请问是是否成年了？
 
 MCP Server 开发参考：[链接](/ai/spring-ai1-mcp-server/README.md)
 
+在 MCP Client 中，三种能力的使用方式完全不同：
+
+| 类型     | 用途        | 使用方式                            |
+| -------- | ----------- | ----------------------------------- |
+| Tool     | 可执行能力  | 自动注册到 ChatClient（模型可调用） |
+| Resource | 只读数据    | Client 主动读取 → 注入 Prompt       |
+| Prompt   | Prompt 模板 | Client 获取模板 → 组装对话          |
+
 ### 基础配置
 
 **添加依赖**
@@ -882,6 +890,8 @@ MCP Server 开发参考：[链接](/ai/spring-ai1-mcp-server/README.md)
 **添加配置**
 
 ```yaml
+---
+# Spring AI MCP Client 配置
 spring:
   ai:
     mcp:
@@ -895,34 +905,354 @@ spring:
         version: 1.0.0
 ```
 
-**注册 ToolCallbackProvider**
-
-让 Client 能发现 MCP Server + 拿到 Tool 元数据
+**MCP Client 配置**
 
 ```java
+package io.github.atengk.ai.config;
+
+import io.modelcontextprotocol.client.McpSyncClient;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
+
+/**
+ * MCP Client 配置
+ *
+ * @author Ateng
+ * @since 2026-04-22
+ */
 @Configuration
 @RequiredArgsConstructor
-public class ChatClientConfig {
+public class McpClientConfig {
 
+    /**
+     * 构建 ChatClient，并接入 MCP Tool（支持模型自动调用）
+     *
+     * @param builder              ChatClient 构建器
+     * @param toolCallbackProvider 工具提供者（包含 MCP Tool / 本地 Tool）
+     * @return ChatClient
+     */
     @Bean
-    public ChatClient mcpServerChatClient(
+    public ChatClient mcpChatClient(
             ChatClient.Builder builder,
-            ToolCallbackProvider mcpToolCallbackProvider) {
+            ToolCallbackProvider toolCallbackProvider) {
 
         return builder
-                .defaultToolCallbacks(mcpToolCallbackProvider)
+                .defaultToolCallbacks(toolCallbackProvider)
                 .build();
+    }
+
+    /**
+     * 提供默认 McpSyncClient（用于手动调用 Resource / Prompt / Tool）
+     *
+     * @param mcpSyncClients Spring 自动注入的 MCP Client 列表
+     * @return 默认 McpSyncClient
+     */
+    @Bean
+    public McpSyncClient defaultMcpSyncClient(List<McpSyncClient> mcpSyncClients) {
+        if (mcpSyncClients == null || mcpSyncClients.isEmpty()) {
+            throw new IllegalStateException("未找到可用的 MCP Sync Client");
+        }
+        return mcpSyncClients.get(0);
     }
 
 }
 ```
 
-### 创建接口
+---
+
+### MCP Tool 使用
+
+```java
+mcpServerChatClient
+    .prompt()
+    .system("""
+            你可以在必要时调用系统提供的工具，
+            工具的返回结果是可信的，
+            不要自行编造结果。
+            """)
+    .user(message)
+    .call()
+    .content()
+```
+
+---
+
+### MCP Client 路由器
+
+**创建 Client 路由层**
+
+```java
+package io.github.atengk.ai.service;
+
+import io.modelcontextprotocol.client.McpSyncClient;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * MCP Client 路由器
+ * <p>
+ * 用于管理 Spring AI 自动注入的多个 McpSyncClient，
+ * 提供默认获取、按索引选择、批量访问等能力。
+ * <p>
+ * 说明：
+ * - Spring AI 会为每个 MCP Server 连接创建一个 McpSyncClient
+ * - 当前未提供 connectionName -> client 的直接映射
+ *
+ * @author Ateng
+ * @since 2026-04-22
+ */
+@Component
+public class McpClientRouter {
+
+    private final List<McpSyncClient> clients;
+
+    public McpClientRouter(List<McpSyncClient> clients) {
+        this.clients = clients;
+    }
+
+    /**
+     * 获取默认 Client（适用于单 MCP Server 场景）
+     *
+     * @return 默认 McpSyncClient（列表第一个）
+     */
+    public McpSyncClient getDefaultClient() {
+        if (clients == null || clients.isEmpty()) {
+            throw new IllegalStateException("未获取到任何 MCP Client");
+        }
+        return clients.get(0);
+    }
+
+    /**
+     * 按索引获取指定 Client
+     * <p>
+     * 注意：
+     * - index 与 spring.ai.mcp.client.sse.connections 的配置顺序一致
+     * - 多 Server 场景建议避免硬编码 index
+     *
+     * @param index MCP Server 索引（从 0 开始）
+     * @return 对应的 McpSyncClient
+     */
+    public McpSyncClient getByIndex(int index) {
+        if (clients == null || clients.size() <= index) {
+            throw new IllegalArgumentException("MCP Client 不存在, index=" + index);
+        }
+        return clients.get(index);
+    }
+
+    /**
+     * 获取全部 Client（用于聚合调用或广播）
+     *
+     * @return MCP Client 列表
+     */
+    public List<McpSyncClient> getAll() {
+        return clients;
+    }
+}
+```
+
+---
+
+### MCP Resource 客户端服务
+
+**核心理解**
+
+> Resource 不是让模型调用的，而是：
+>
+> 👉 **Client 主动读取 → 注入到 Prompt 中**
+
+```java
+package io.github.atengk.ai.service;
+
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.spec.McpSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * MCP Resource 客户端服务
+ * <p>
+ * 提供 MCP Resource 的查询与读取能力：
+ * - 支持多 Server 资源聚合
+ * - 支持按指定 Client 精确读取
+ *
+ * @author Ateng
+ * @since 2026-04-22
+ */
+@Service
+public class McpResourceService {
+
+    private static final Logger log = LoggerFactory.getLogger(McpResourceService.class);
+
+    private final McpClientRouter router;
+
+    public McpResourceService(McpClientRouter router) {
+        this.router = router;
+    }
+
+    /**
+     * 获取所有 MCP Server 的资源（聚合）
+     *
+     * @return Resource 列表
+     */
+    public List<McpSchema.Resource> listAllResources() {
+        List<McpSchema.Resource> result = new ArrayList<>();
+
+        for (McpSyncClient client : router.getAll()) {
+            McpSchema.ListResourcesResult response = client.listResources();
+            if (response != null && response.resources() != null) {
+                result.addAll(response.resources());
+            }
+        }
+
+        log.info("聚合 Resource 数量: {}", result.size());
+        return result;
+    }
+
+    /**
+     * 读取指定 Resource（默认 Client）
+     *
+     * @param uri Resource 唯一标识（如：system://runtime/info）
+     * @return Resource 内容
+     */
+    public McpSchema.ReadResourceResult read(String uri) {
+        log.info("读取 Resource, uri={}", uri);
+        return router.getDefaultClient()
+                .readResource(new McpSchema.ReadResourceRequest(uri));
+    }
+
+    /**
+     * 读取指定 Resource（指定 Client）
+     *
+     * @param uri         Resource 唯一标识
+     * @param clientIndex MCP Client 索引（对应 connections 顺序）
+     * @return Resource 内容
+     */
+    public McpSchema.ReadResourceResult read(String uri, int clientIndex) {
+        log.info("读取 Resource, uri={}, clientIndex={}", uri, clientIndex);
+        return router.getByIndex(clientIndex)
+                .readResource(new McpSchema.ReadResourceRequest(uri));
+    }
+}
+```
+
+------
+
+### MCP Prompt 客户端服务
+
+**核心理解**
+
+> Prompt 是“远程模板”，不是直接执行的
+
+👉 你需要：
+
+1. 获取 Prompt
+2. 填充参数
+3. 再调用 ChatClient
+
+```java
+package io.github.atengk.ai.service;
+
+import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.spec.McpSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * MCP Prompt 客户端服务
+ * <p>
+ * 提供 MCP Prompt 的查询与获取能力：
+ * - 支持多 Server Prompt 聚合
+ * - 支持按指定 Client 获取 Prompt 模板
+ *
+ * @author Ateng
+ * @since 2026-04-22
+ */
+@Service
+public class McpPromptService {
+
+    private static final Logger log = LoggerFactory.getLogger(McpPromptService.class);
+
+    private final McpClientRouter router;
+
+    public McpPromptService(McpClientRouter router) {
+        this.router = router;
+    }
+
+    /**
+     * 获取所有 Prompt（聚合）
+     *
+     * @return Prompt 列表
+     */
+    public List<McpSchema.Prompt> listAllPrompts() {
+        List<McpSchema.Prompt> result = new ArrayList<>();
+
+        for (McpSyncClient client : router.getAll()) {
+            McpSchema.ListPromptsResult response = client.listPrompts();
+            if (response != null && response.prompts() != null) {
+                result.addAll(response.prompts());
+            }
+        }
+
+        log.info("聚合 Prompt 数量: {}", result.size());
+        return result;
+    }
+
+    /**
+     * 获取 Prompt 内容（默认 Client）
+     *
+     * @param name Prompt 名称（如：greeting）
+     * @param args Prompt 参数（与服务端定义一致）
+     * @return Prompt 内容结果
+     */
+    public McpSchema.GetPromptResult getPrompt(String name, Map<String, Object> args) {
+        log.info("获取 Prompt, name={}, args={}", name, args);
+
+        return router.getDefaultClient()
+                .getPrompt(new McpSchema.GetPromptRequest(name, args));
+    }
+
+    /**
+     * 获取 Prompt 内容（指定 Client）
+     *
+     * @param name        Prompt 名称
+     * @param args        Prompt 参数
+     * @param clientIndex MCP Client 索引（对应 connections 顺序）
+     * @return Prompt 内容结果
+     */
+    public McpSchema.GetPromptResult getPrompt(String name, Map<String, Object> args, int clientIndex) {
+        log.info("获取 Prompt, name={}, clientIndex={}", name, clientIndex);
+
+        return router.getByIndex(clientIndex)
+                .getPrompt(new McpSchema.GetPromptRequest(name, args));
+    }
+}
+```
+
+------
+
+### MCP Client 测试接口
 
 ```java
 package io.github.atengk.ai.controller;
 
-import io.github.atengk.ai.tool.CommonTools;
+import io.github.atengk.ai.service.McpPromptService;
+import io.github.atengk.ai.service.McpResourceService;
+import io.modelcontextprotocol.spec.McpSchema;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -930,15 +1260,35 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.Map;
+
+/**
+ * MCP Client 测试接口
+ * <p>
+ * 提供 MCP Tool / Resource / Prompt 的调用示例接口
+ *
+ * @author Ateng
+ * @since 2026-04-22
+ */
 @RestController
+@RequestMapping("/mcp")
 @RequiredArgsConstructor
-@RequestMapping("/api/ai/mcp-server")
-public class McpServerChatController {
+public class McpClientController {
 
     private final ChatClient mcpServerChatClient;
+    private final McpResourceService resourceService;
+    private final McpPromptService promptService;
 
     /**
-     * 最基础的同步对话
+     * 对话接口（支持 MCP Tool 自动调用）
+     * <p>
+     * 示例：
+     * curl "http://localhost:19001/mcp/chat?message=计算 1+2"
+     * curl "http://localhost:19001/mcp/chat?message=获取北京天气"
+     *
+     * @param message 用户输入
+     * @return 模型回复
      */
     @GetMapping("/chat")
     public String chat(@RequestParam String message) {
@@ -954,30 +1304,193 @@ public class McpServerChatController {
                 .content();
     }
 
+    /**
+     * 获取所有 Resource（聚合）
+     * <p>
+     * 示例：
+     * curl "http://localhost:19001/mcp/resources"
+     *
+     * @return Resource 列表
+     */
+    @GetMapping("/resources")
+    public List<McpSchema.Resource> resources() {
+        return resourceService.listAllResources();
+    }
+
+    /**
+     * 读取指定 Resource
+     * <p>
+     * 示例：
+     * curl "http://localhost:19001/mcp/resource?uri=system://runtime/info"
+     *
+     * @param uri Resource 唯一标识
+     * @return Resource 内容
+     */
+    @GetMapping("/resource")
+    public McpSchema.ReadResourceResult read(@RequestParam String uri) {
+        return resourceService.read(uri);
+    }
+
+    /**
+     * 获取所有 Prompt（聚合）
+     * <p>
+     * 示例：
+     * curl "http://localhost:19001/mcp/prompts"
+     *
+     * @return Prompt 列表
+     */
+    @GetMapping("/prompts")
+    public List<McpSchema.Prompt> prompts() {
+        return promptService.listAllPrompts();
+    }
+
+    /**
+     * 获取指定 Prompt
+     * <p>
+     * 示例：
+     * curl "http://localhost:19001/mcp/prompt?name=greeting&userName=Ateng"
+     *
+     * @param name     Prompt 名称
+     * @param userName Prompt 参数（对应服务端定义）
+     * @return Prompt 内容
+     */
+    @GetMapping("/prompt")
+    public McpSchema.GetPromptResult prompt(@RequestParam String name,
+                                            @RequestParam String userName) {
+        return promptService.getPrompt(name, Map.of("name", userName));
+    }
 }
 ```
 
+### 调用接口使用
+
+#### MCP Tool 整数加法
+
+调用接口
+
+![image-20260422174432135](./assets/image-20260422174432135.png)
+
+MCP Server 日志
+
+![image-20260422174517084](./assets/image-20260422174517084.png)
+
+
+
+#### MCP Tool 获取城市气温
+
+调用接口
+
+![image-20260422174613701](./assets/image-20260422174613701.png)
+
+MCP Server 日志
+
+![image-20260422174634378](./assets/image-20260422174634378.png)
+
+
+
+#### 获取所有 Resource（聚合）
+
+调用接口
+
+![image-20260422174729402](./assets/image-20260422174729402.png)
+
+响应内容
+
+```json
+[
+    {
+        "uri": "system://runtime/info",
+        "name": "systemRuntimeInfo",
+        "description": "获取 MCP Server 的运行状态、启动时间、运行时长及 JVM 信息（只读）",
+        "mimeType": "text/plain"
+    }
+]
 ```
-GET /api/ai/mcp-server/chat?message=计算1 和 99 的和是多少？ 
+
+
+
+#### 读取指定 Resource
+
+调用接口
+
+![image-20260422174854687](./assets/image-20260422174854687.png)
+
+响应内容
+
+```json
+{
+    "contents": [
+        {
+            "uri": "system://runtime/info",
+            "mimeType": "text/plain",
+            "text": "MCP Server Runtime Status\n-------------------------\nStatus      : RUNNING\nCurrent Time: 2026-04-22T09:48:41.201231300Z\nUptime      : 338103 ms\nJVM Name    : OpenJDK 64-Bit Server VM\n"
+        }
+    ]
+}
 ```
 
-![image-20260206205417322](./assets/image-20260206205417322.png)
+MCP Server 日志
 
-MCP Server 被调用 Tool 的日志
-
-![image-20260206205343992](./assets/image-20260206205343992.png)
+![image-20260422174917059](./assets/image-20260422174917059.png)
 
 
 
+#### 获取所有 Prompt（聚合）
+
+调用接口
+
+![image-20260422175001366](./assets/image-20260422175001366.png)
+
+响应内容
+
+```json
+[
+    {
+        "name": "greeting",
+        "title": "Greeting Prompt",
+        "description": "根据用户名生成一段自然、友好的问候提示语，用于引导模型输出问候内容",
+        "arguments": [
+            {
+                "name": "name",
+                "description": "Parameter of type String",
+                "required": false
+            }
+        ]
+    }
+]
 ```
-GET /api/ai/mcp-server/chat?message=请告诉我重庆的气温
+
+
+
+#### 获取指定 Prompt
+
+调用接口
+
+![image-20260422175040561](./assets/image-20260422175040561.png)
+
+响应内容
+
+```json
+{
+    "messages": [
+        {
+            "role": "assistant",
+            "content": {
+                "type": "text",
+                "text": "请用自然、友好的语气向用户“Ateng”打招呼，可以适当加入寒暄或祝福语。"
+            }
+        }
+    ]
+}
 ```
 
-![image-20260206211650987](./assets/image-20260206211650987.png)
+MCP Server 日志
+
+![image-20260422175100669](./assets/image-20260422175100669.png)
+
+
 
 ---
-
-
 
 ## 嵌入模型（Embedding）
 

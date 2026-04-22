@@ -3,10 +3,14 @@ package io.github.atengk.mcp.tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.mcp.annotation.McpTool;
+import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.stereotype.Component;
 
 /**
- * MCP Tool 示例：数学计算
+ * MCP Tool：整数加法
+ *
+ * @author Ateng
+ * @since 2026-04-22
  */
 @Component
 public class MathTool {
@@ -16,14 +20,15 @@ public class MathTool {
     @McpTool(
             name = "add",
             title = "Addition Tool",
-            description = "计算两个整数的和，仅用于无副作用的基础数学运算"
+            description = "计算两个整数的和。仅支持整数输入，无副作用，不涉及外部系统调用"
     )
-    public int add(int a, int b) {
-        log.debug("MCP Tool [add] invoked, a={}, b={}", a, b);
+    public int add(
+            @McpToolParam(description = "第一个整数", required = true) int a,
+            @McpToolParam(description = "第二个整数", required = true) int b) {
 
         int result = safeAdd(a, b);
 
-        log.debug("MCP Tool [add] result={}", result);
+        log.debug("MCP工具[add]执行完成，参数 a={}，b={}，结果 result={}", a, b, result);
         return result;
     }
 
@@ -34,7 +39,7 @@ public class MathTool {
         try {
             return Math.addExact(a, b);
         } catch (ArithmeticException ex) {
-            log.warn("MCP Tool [add] overflow detected, a={}, b={}", a, b);
+            log.warn("MCP工具[add]发生整数溢出，参数 a={}，b={}", a, b);
             throw new IllegalArgumentException("整数相加发生溢出");
         }
     }

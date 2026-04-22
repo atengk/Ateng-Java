@@ -11,7 +11,10 @@ import java.time.Instant;
 /**
  * MCP Resource：系统运行信息
  * <p>
- * 提供 MCP Server 的基础运行状态，仅用于只读查询。
+ * 提供服务运行状态、启动时间、运行时长及 JVM 信息
+ *
+ * @author Ateng
+ * @since 2026-04-22
  */
 @Component
 public class SystemResource {
@@ -22,14 +25,14 @@ public class SystemResource {
             uri = "system://runtime/info",
             name = "systemRuntimeInfo",
             title = "System Runtime Information",
-            description = "提供 MCP Server 的运行状态、启动时间及 JVM 基础信息，仅用于只读查询"
+            description = "获取 MCP Server 的运行状态、启动时间、运行时长及 JVM 信息（只读）"
     )
     public String systemInfo() {
-        log.debug("MCP Resource accessed: uri=system://runtime/info");
+        log.debug("MCP资源[systemRuntimeInfo]被访问");
 
         String info = buildSystemInfo();
 
-        log.debug("MCP Resource response generated, length={}", info.length());
+        log.debug("MCP资源[systemRuntimeInfo]返回成功，内容长度={}", info.length());
         return info;
     }
 
@@ -38,16 +41,17 @@ public class SystemResource {
      */
     private String buildSystemInfo() {
         long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
+        Instant now = Instant.now();
 
         return """
                 MCP Server Runtime Status
                 -------------------------
                 Status      : RUNNING
-                Start Time  : %s
+                Current Time: %s
                 Uptime      : %d ms
                 JVM Name    : %s
                 """.formatted(
-                Instant.now(),
+                now,
                 uptime,
                 ManagementFactory.getRuntimeMXBean().getVmName()
         );
