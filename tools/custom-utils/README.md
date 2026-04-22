@@ -396,3 +396,11 @@ CPU + 主网卡MAC + 磁盘序列号 + 主机名
 
 安全工具类
 
+
+
+## ResourceUtil
+
+Spring Resource 通用工具类，适用于项目中对 {@link Resource} 的加载、读取、转换、复制、扫描、落地等常见场景。
+
+
+
