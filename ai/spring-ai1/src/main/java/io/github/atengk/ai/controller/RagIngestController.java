@@ -1,48 +1,39 @@
 package io.github.atengk.ai.controller;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import io.github.atengk.ai.constant.RagIngestConstants;
 import io.github.atengk.ai.service.RagIngestService;
+import io.github.atengk.ai.util.ResourceUtil;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
 /**
- * RAG 文档摄取控制器（企业级 API 设计）
- * <p>
- * 提供基于 Spring AI 的 RAG 文档摄取、解析、预览与治理能力。
- * <p>
- * API 设计说明：
- * - 所有文件上传统一使用 multipart/form-data
- * - metadata 使用 application/x-www-form-urlencoded 或 query param 传递
- * - Resource 由 MultipartFile 自动转换
- * - 所有 delete 操作基于 path variable 或 filter expression
- * <p>
- * metadata 约定字段（推荐）：
- * - source.id        : 数据源唯一标识（必填）
- * - tenant.id        : 租户ID（多租户隔离）
- * - biz.tags         : 业务标签（逗号分隔或数组）
- * - security.acl     : 权限控制标识
- * - document.version : 文档版本号
+ * RAG 文档摄取控制器
  *
  * @author Ateng
  * @since 2026-04-21
  */
 @RestController
-@RequestMapping("/rag")
+@RequestMapping("/api/rag")
+@RequiredArgsConstructor
 public class RagIngestController {
 
     private static final Logger log = LoggerFactory.getLogger(RagIngestController.class);
 
-    @Autowired
-    private RagIngestService ragIngestService;
+    private final RagIngestService ragIngestService;
 
     // =========================
     // ingest
@@ -80,6 +71,43 @@ public class RagIngestController {
         Resource resource = file.getResource();
 
         log.info("RAG ingest start, file={}", file.getOriginalFilename());
+
+        return ragIngestService.ingest(resource, metadata);
+    }
+
+    /**
+     * 字符串内容摄取
+     */
+    @PostMapping("/ingest/text")
+    public int ingestText(@RequestParam String content,
+                          @RequestParam Map<String, Object> metadata) {
+
+        if (StrUtil.isBlank(content)) {
+            return 0;
+        }
+
+        // 构造 Resource
+        Resource resource = ResourceUtil.fromString(content, "default.txt", StandardCharsets.UTF_8);
+
+        log.info("RAG ingest start, textLength={}", content.length());
+
+        return ragIngestService.ingest(resource, metadata);
+    }
+
+    /**
+     * URL 摄取
+     */
+    @PostMapping("/ingest/url")
+    public int ingestUrl(@RequestParam String url,
+                         @RequestParam Map<String, Object> metadata) throws Exception {
+
+        if (StrUtil.isBlank(url)) {
+            return 0;
+        }
+
+        Resource resource = ResourceUtil.getResource(url);
+
+        log.info("RAG ingest start, url={}", url);
 
         return ragIngestService.ingest(resource, metadata);
     }
@@ -215,6 +243,129 @@ public class RagIngestController {
                                   @RequestParam Map<String, Object> metadata) throws Exception {
 
         return ragIngestService.preview(file.getResource(), metadata);
+    }
+
+    // =========================
+    // query
+    // =========================
+
+    /**
+     * 判断指定 sourceId + contentHash 是否存在（幂等校验）
+     */
+    @GetMapping("/exists/hash")
+    public boolean existsByHash(@RequestParam String sourceId,
+                                @RequestParam String contentHash) {
+
+        boolean exists = ragIngestService.exists(sourceId, contentHash);
+
+        log.info("RAG 存在性校验（hash），sourceId={}, contentHash={}, exists={}",
+                sourceId, contentHash, exists);
+
+        return exists;
+    }
+
+    /**
+     * 根据 sourceId 判断是否存在数据（通用 exists）
+     */
+    @GetMapping("/exists/source")
+    public boolean existsBySource(@RequestParam String sourceId) {
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
+        boolean exists = ragIngestService.exists(expression);
+
+        log.info("RAG 存在性校验（sourceId），sourceId={}, exists={}", sourceId, exists);
+
+        return exists;
+    }
+
+    /**
+     * 根据 sourceId 查询文档列表
+     */
+    @GetMapping("/list/source")
+    public List<Document> listBySource(@RequestParam String sourceId,
+                                       @RequestParam(defaultValue = "10") int topK) {
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
+        List<Document> documents = ragIngestService.list(expression, topK);
+
+        log.info("RAG 文档查询，sourceId={}, 返回数量={}",
+                sourceId, CollUtil.size(documents));
+
+        return documents;
+    }
+
+    /**
+     * 复杂条件查询（sourceId + tenantId + 时间范围）
+     */
+    @GetMapping("/list/complex")
+    public List<Document> listByComplex(@RequestParam String sourceId,
+                                        @RequestParam String tenantId,
+                                        @RequestParam(required = false) String startTime,
+                                        @RequestParam(required = false) String endTime,
+                                        @RequestParam(defaultValue = "10") int topK) {
+        FilterExpressionBuilder builder = new FilterExpressionBuilder();
+
+        // 基础条件
+        FilterExpressionBuilder.Op op = builder.and(
+                builder.eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId),
+                builder.eq(RagIngestConstants.METADATA_TENANT_ID, tenantId)
+        );
+
+        // 时间范围
+        if (StrUtil.isNotBlank(startTime)) {
+            op = builder.and(
+                    op,
+                    builder.gte(RagIngestConstants.METADATA_UPDATED_AT, startTime)
+            );
+        }
+
+        if (StrUtil.isNotBlank(endTime)) {
+            op = builder.and(
+                    op,
+                    builder.lte(RagIngestConstants.METADATA_UPDATED_AT, endTime)
+            );
+        }
+
+        // 最后 build
+        Filter.Expression expression = op.build();
+
+        List<Document> documents = ragIngestService.list(expression, topK);
+
+        log.info("RAG 复杂查询，sourceId={}, tenantId={}, startTime={}, endTime={}, 返回数量={}",
+                sourceId, tenantId, startTime, endTime, CollUtil.size(documents));
+
+        return documents;
+    }
+
+    /**
+     * 相似度查询（基础）
+     */
+    @GetMapping("/search")
+    public List<Document> search(@RequestParam String query,
+                                 @RequestParam(defaultValue = "5") int topK) {
+
+        return ragIngestService.similaritySearch(query, topK, null);
+    }
+
+    /**
+     * 相似度查询（带 sourceId 过滤）
+     */
+    @GetMapping("/search/bySource")
+    public List<Document> searchBySource(@RequestParam String query,
+                                         @RequestParam String sourceId,
+                                         @RequestParam(defaultValue = "5") int topK) {
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
+        return ragIngestService.similaritySearch(query, topK, expression);
     }
 
     // =========================

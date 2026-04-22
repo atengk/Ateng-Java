@@ -1445,199 +1445,2988 @@ public class VectorStoreController {
 }
 ```
 
+### 知识库管理
 
+#### ResourceUtil 工具类
 
-### 知识库初始化
-
-知识库初始化、手工知识录入
-
-#### 创建实体类
+用于处理文件使用
 
 ```java
-package io.github.atengk.ai.entity;
+package io.github.atengk.ai.util;
 
-import lombok.Data;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.*;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.util.ResourceUtils;
 
+import java.io.*;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Properties;
 
-@Data
-public class RagIngestRequest {
+/**
+ * Spring Resource 通用工具类。
+ * <p>
+ * 适用于项目中对 {@link Resource} 的加载、读取、转换、复制、扫描、落地等常见场景。
+ *
+ * @author Ateng
+ * @since 2026-04-22
+ */
+public final class ResourceUtil {
 
-    private List<String> texts;
+    private static final Logger log = LoggerFactory.getLogger(ResourceUtil.class);
 
-    private Map<String, Object> metadata;
+    private static final int DEFAULT_BUFFER_SIZE = 8 * 1024;
 
+    /**
+     * 单资源加载器：支持 classpath:、file:、http: 等常见协议。
+     */
+    private static final DefaultResourceLoader DEFAULT_RESOURCE_LOADER = new DefaultResourceLoader();
+
+    /**
+     * 通配符资源解析器：支持 classpath*:、classpath*:/xxx/*.xml 等扫描场景。
+     */
+    private static final PathMatchingResourcePatternResolver RESOURCE_PATTERN_RESOLVER =
+            new PathMatchingResourcePatternResolver(DEFAULT_RESOURCE_LOADER);
+
+    /**
+     * 禁止实例化工具类。
+     */
+    private ResourceUtil() {
+        throw new UnsupportedOperationException("工具类不可实例化");
+    }
+
+
+    /**
+     * 获取单个资源。
+     * <p>
+     * 适合加载非通配符资源，例如：
+     * classpath:application.yml
+     * file:/data/test.txt
+     * /opt/logs/a.log
+     * https://example.com/demo.txt
+     *
+     * @param location 资源位置
+     * @return Resource
+     */
+    public static Resource getResource(String location) {
+        assertText(location, "资源位置不能为空");
+
+        if (isPatternLocation(location)) {
+            Resource[] resources = getResources(location);
+            if (resources.length == 0) {
+                throw new ResourceUtilException("未找到匹配的资源：" + location);
+            }
+            if (resources.length > 1) {
+                log.warn("资源位置包含通配符且匹配到了多个资源，已返回第一个，location={}", location);
+            }
+            return resources[0];
+        }
+
+        return DEFAULT_RESOURCE_LOADER.getResource(location);
+    }
+
+    /**
+     * 扫描并获取多个资源。
+     * <p>
+     * 支持：
+     * classpath*:mapper/*&#47;.xml
+     * classpath*:com/example/**&#47;*.yml
+     * file:/opt/app/config/*&#47;.properties
+     *
+     * @param locationPattern 资源模式
+     * @return Resource 数组，未命中时返回空数组
+     */
+    public static Resource[] getResources(String locationPattern) {
+        if (!hasText(locationPattern)) {
+            return new Resource[0];
+        }
+        try {
+            Resource[] resources = RESOURCE_PATTERN_RESOLVER.getResources(locationPattern);
+            return resources == null ? new Resource[0] : resources;
+        } catch (IOException e) {
+            throw new ResourceUtilException("扫描资源失败，pattern=" + locationPattern, e);
+        }
+    }
+
+    /**
+     * 获取 ClassPath 资源。
+     *
+     * @param path classpath 路径
+     * @return Resource
+     */
+    public static Resource getClassPathResource(String path) {
+        assertText(path, "Classpath 路径不能为空");
+        return new ClassPathResource(normalizeClassPath(path));
+    }
+
+    /**
+     * 获取文件系统资源。
+     *
+     * @param path 文件路径
+     * @return Resource
+     */
+    public static Resource getFileSystemResource(String path) {
+        assertText(path, "文件路径不能为空");
+        return new FileSystemResource(path);
+    }
+
+    /**
+     * 获取 URL 资源。
+     *
+     * @param url URL
+     * @return Resource
+     */
+    public static Resource getUrlResource(String url) {
+        assertText(url, "URL 不能为空");
+        try {
+            return new UrlResource(url);
+        } catch (Exception e) {
+            throw new ResourceUtilException("创建 UrlResource 失败，url=" + url, e);
+        }
+    }
+
+    /**
+     * 获取 URL 资源。
+     *
+     * @param url URL
+     * @return Resource
+     */
+    public static Resource getUrlResource(URL url) {
+        if (url == null) {
+            throw new ResourceUtilException("URL 不能为空");
+        }
+        try {
+            return new UrlResource(url);
+        } catch (Exception e) {
+            throw new ResourceUtilException("创建 UrlResource 失败，url=" + url, e);
+        }
+    }
+
+    /**
+     * 获取 URI 资源。
+     *
+     * @param uri URI
+     * @return Resource
+     */
+    public static Resource getUrlResource(URI uri) {
+        if (uri == null) {
+            throw new ResourceUtilException("URI 不能为空");
+        }
+        try {
+            return new UrlResource(uri);
+        } catch (Exception e) {
+            throw new ResourceUtilException("创建 UrlResource 失败，uri=" + uri, e);
+        }
+    }
+
+    /**
+     * 获取字节数组资源。
+     *
+     * @param bytes 字节数组
+     * @return Resource
+     */
+    public static Resource getByteArrayResource(byte[] bytes) {
+        return getByteArrayResource(bytes, null);
+    }
+
+    /**
+     * 获取字节数组资源，并可指定文件名。
+     *
+     * @param bytes    字节数组
+     * @param filename 文件名
+     * @return Resource
+     */
+    public static Resource getByteArrayResource(byte[] bytes, String filename) {
+        if (bytes == null) {
+            throw new ResourceUtilException("字节数组不能为空");
+        }
+
+        final byte[] copy = bytes.clone();
+        if (!hasText(filename)) {
+            return new ByteArrayResource(copy);
+        }
+
+        return new ByteArrayResource(copy) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
+    }
+
+    /**
+     * 获取输入流资源。
+     * <p>
+     * 注意：InputStreamResource 通常只能读取一次。
+     *
+     * @param inputStream 输入流
+     * @return Resource
+     */
+    public static Resource getInputStreamResource(InputStream inputStream) {
+        return getInputStreamResource(inputStream, null);
+    }
+
+    /**
+     * 获取输入流资源，并可指定文件名。
+     * <p>
+     * 注意：InputStreamResource 通常只能读取一次。
+     *
+     * @param inputStream 输入流
+     * @param filename    文件名
+     * @return Resource
+     */
+    public static Resource getInputStreamResource(InputStream inputStream, String filename) {
+        if (inputStream == null) {
+            throw new ResourceUtilException("输入流不能为空");
+        }
+
+        InputStreamResource resource = new InputStreamResource(inputStream) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
+        return resource;
+    }
+
+    /**
+     * 将字符串内容转为资源，默认使用 UTF-8。
+     *
+     * @param content 字符串内容
+     * @return Resource
+     */
+    public static Resource fromString(String content) {
+        return fromString(content, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 将字符串内容转为资源。
+     *
+     * @param content 字符串内容
+     * @param charset 字符集
+     * @return Resource
+     */
+    public static Resource fromString(String content, Charset charset) {
+        if (content == null) {
+            throw new ResourceUtilException("字符串内容不能为空");
+        }
+        Charset useCharset = getCharset(charset);
+        return new ByteArrayResource(content.getBytes(useCharset));
+    }
+
+    /**
+     * 将字符串内容转为带文件名的资源。
+     *
+     * @param content  字符串内容
+     * @param filename 文件名
+     * @param charset  字符集
+     * @return Resource
+     */
+    public static Resource fromString(String content, String filename, Charset charset) {
+        if (content == null) {
+            throw new ResourceUtilException("字符串内容不能为空");
+        }
+        Charset useCharset = getCharset(charset);
+        byte[] bytes = content.getBytes(useCharset);
+        return getByteArrayResource(bytes, filename);
+    }
+
+    /**
+     * 读取资源为字节数组。
+     *
+     * @param resource 资源
+     * @return 字节数组
+     */
+    public static byte[] readBytes(Resource resource) {
+        assertResource(resource);
+        try (InputStream inputStream = resource.getInputStream()) {
+            return toByteArray(inputStream);
+        } catch (IOException e) {
+            throw new ResourceUtilException("读取资源字节失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 读取资源为字符串，默认使用 UTF-8。
+     *
+     * @param resource 资源
+     * @return 字符串内容
+     */
+    public static String readString(Resource resource) {
+        return readString(resource, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 读取资源为字符串。
+     *
+     * @param resource 资源
+     * @param charset  字符集
+     * @return 字符串内容
+     */
+    public static String readString(Resource resource, Charset charset) {
+        assertResource(resource);
+        Charset useCharset = getCharset(charset);
+        try (InputStream inputStream = resource.getInputStream()) {
+            return toString(inputStream, useCharset);
+        } catch (IOException e) {
+            throw new ResourceUtilException("读取资源文本失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 读取资源为字符串列表，默认使用 UTF-8。
+     *
+     * @param resource 资源
+     * @return 行列表
+     */
+    public static List<String> readLines(Resource resource) {
+        return readLines(resource, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 读取资源为字符串列表。
+     *
+     * @param resource 资源
+     * @param charset  字符集
+     * @return 行列表
+     */
+    public static List<String> readLines(Resource resource, Charset charset) {
+        assertResource(resource);
+        Charset useCharset = getCharset(charset);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), useCharset))) {
+            List<String> lines = new ArrayList<String>();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(line);
+            }
+            return lines;
+        } catch (IOException e) {
+            throw new ResourceUtilException("读取资源行失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 读取资源为 Properties，默认使用 ISO-8859-1 兼容原生 Properties 规范。
+     * <p>
+     * 如果项目中的 properties 文件明确是 UTF-8，可使用 {@link #loadProperties(Resource, Charset)}。
+     *
+     * @param resource 资源
+     * @return Properties
+     */
+    public static Properties loadProperties(Resource resource) {
+        assertResource(resource);
+        Properties properties = new Properties();
+        try (InputStream inputStream = resource.getInputStream()) {
+            properties.load(inputStream);
+            return properties;
+        } catch (IOException e) {
+            throw new ResourceUtilException("读取 Properties 失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 读取资源为 Properties，使用指定字符集。
+     *
+     * @param resource 资源
+     * @param charset  字符集
+     * @return Properties
+     */
+    public static Properties loadProperties(Resource resource, Charset charset) {
+        assertResource(resource);
+        Charset useCharset = getCharset(charset);
+        Properties properties = new Properties();
+        try (Reader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), useCharset))) {
+            properties.load(reader);
+            return properties;
+        } catch (IOException e) {
+            throw new ResourceUtilException("读取 Properties 失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 将资源复制到输出流。
+     *
+     * @param resource     资源
+     * @param outputStream 输出流
+     */
+    public static void copy(Resource resource, OutputStream outputStream) {
+        assertResource(resource);
+        if (outputStream == null) {
+            throw new ResourceUtilException("输出流不能为空");
+        }
+
+        try (InputStream inputStream = resource.getInputStream()) {
+            copy(inputStream, outputStream);
+        } catch (IOException e) {
+            throw new ResourceUtilException("复制资源到输出流失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 将资源复制到文件。
+     *
+     * @param resource 资源
+     * @param file     文件
+     * @return 目标文件
+     */
+    public static File copyToFile(Resource resource, File file) {
+        assertResource(resource);
+        if (file == null) {
+            throw new ResourceUtilException("目标文件不能为空");
+        }
+
+        ensureParentDir(file);
+        try (InputStream inputStream = resource.getInputStream();
+             OutputStream outputStream = new FileOutputStream(file)) {
+            copy(inputStream, outputStream);
+            return file;
+        } catch (IOException e) {
+            throw new ResourceUtilException("复制资源到文件失败，target=" + file.getAbsolutePath(), e);
+        }
+    }
+
+    /**
+     * 将资源复制到文件。
+     *
+     * @param resource 资源
+     * @param path     文件路径
+     * @return 目标 Path
+     */
+    public static Path copyToFile(Resource resource, Path path) {
+        assertResource(resource);
+        if (path == null) {
+            throw new ResourceUtilException("目标路径不能为空");
+        }
+        try {
+            Path parent = path.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            try (InputStream inputStream = resource.getInputStream()) {
+                Files.copy(inputStream, path, StandardCopyOption.REPLACE_EXISTING);
+            }
+            return path;
+        } catch (IOException e) {
+            throw new ResourceUtilException("复制资源到文件失败，target=" + path, e);
+        }
+    }
+
+    /**
+     * 将资源复制到临时文件。
+     *
+     * @param resource 资源
+     * @param prefix   文件前缀
+     * @param suffix   文件后缀
+     * @return 临时文件
+     */
+    public static File copyToTempFile(Resource resource, String prefix, String suffix) {
+        assertResource(resource);
+        String usePrefix = hasText(prefix) ? prefix : "resource-";
+        String useSuffix = hasText(suffix) ? suffix : ".tmp";
+        try {
+            File tempFile = File.createTempFile(usePrefix, useSuffix);
+            tempFile.deleteOnExit();
+            return copyToFile(resource, tempFile);
+        } catch (IOException e) {
+            throw new ResourceUtilException("复制资源到临时文件失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 将 Resource 尽量转换为 File。
+     * <p>
+     * 仅适用于真正的文件型资源，例如 FileSystemResource、ClassPathResource(文件模式) 等。
+     * 如果资源不在文件系统中，会抛出异常。
+     *
+     * @param resource 资源
+     * @return File
+     */
+    public static File toFile(Resource resource) {
+        assertResource(resource);
+        try {
+            return resource.getFile();
+        } catch (IOException e) {
+            throw new ResourceUtilException("当前资源不能直接转换为 File，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 将 Resource 尽量转换为 Path。
+     *
+     * @param resource 资源
+     * @return Path
+     */
+    public static Path toPath(Resource resource) {
+        assertResource(resource);
+        try {
+            return resource.getFile().toPath();
+        } catch (IOException e) {
+            throw new ResourceUtilException("资源无法转换为 Path，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 获取资源的 URL。
+     *
+     * @param resource 资源
+     * @return URL
+     */
+    public static URL toUrl(Resource resource) {
+        assertResource(resource);
+        try {
+            return resource.getURL();
+        } catch (IOException e) {
+            throw new ResourceUtilException("获取资源 URL 失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 获取资源的 URI。
+     *
+     * @param resource 资源
+     * @return URI
+     */
+    public static URI toUri(Resource resource) {
+        assertResource(resource);
+        try {
+            return resource.getURI();
+        } catch (IOException e) {
+            throw new ResourceUtilException("获取资源 URI 失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 获取资源描述信息。
+     *
+     * @param resource 资源
+     * @return 描述
+     */
+    public static String getDescription(Resource resource) {
+        if (resource == null) {
+            return "null";
+        }
+        try {
+            return resource.getDescription();
+        } catch (Exception e) {
+            return resource.getClass().getName();
+        }
+    }
+
+    /**
+     * 获取资源文件名。
+     *
+     * @param resource 资源
+     * @return 文件名
+     */
+    public static String getFilename(Resource resource) {
+        assertResource(resource);
+        return resource.getFilename();
+    }
+
+    /**
+     * 获取资源扩展名。
+     *
+     * @param resource 资源
+     * @return 扩展名，未获取到时返回空字符串
+     */
+    public static String getExtension(Resource resource) {
+        String filename = getFilename(resource);
+        return getExtension(filename);
+    }
+
+    /**
+     * 获取文件名的扩展名。
+     *
+     * @param filename 文件名
+     * @return 扩展名，未获取到时返回空字符串
+     */
+    public static String getExtension(String filename) {
+        if (!hasText(filename)) {
+            return "";
+        }
+        int index = filename.lastIndexOf('.');
+        if (index < 0 || index >= filename.length() - 1) {
+            return "";
+        }
+        return filename.substring(index + 1);
+    }
+
+    /**
+     * 获取不带扩展名的文件名。
+     *
+     * @param filename 文件名
+     * @return 不带扩展名的文件名
+     */
+    public static String getFilenameWithoutExtension(String filename) {
+        if (!hasText(filename)) {
+            return filename;
+        }
+        int index = filename.lastIndexOf('.');
+        if (index <= 0) {
+            return filename;
+        }
+        return filename.substring(0, index);
+    }
+
+    /**
+     * 判断资源是否存在。
+     *
+     * @param resource 资源
+     * @return 是否存在
+     */
+    public static boolean exists(Resource resource) {
+        return resource != null && resource.exists();
+    }
+
+    /**
+     * 判断资源是否可读。
+     *
+     * @param resource 资源
+     * @return 是否可读
+     */
+    public static boolean isReadable(Resource resource) {
+        return resource != null && resource.isReadable();
+    }
+
+    /**
+     * 判断资源是否打开状态。
+     *
+     * @param resource 资源
+     * @return 是否打开
+     */
+    public static boolean isOpen(Resource resource) {
+        return resource != null && resource.isOpen();
+    }
+
+    /**
+     * 判断资源是否是文件型资源。
+     *
+     * @param resource 资源
+     * @return 是否为文件
+     */
+    public static boolean isFile(Resource resource) {
+        if (resource == null) {
+            return false;
+        }
+        try {
+            return resource.isFile();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 判断资源是否为 ClassPath 资源。
+     *
+     * @param resource 资源
+     * @return 是否为 ClassPathResource
+     */
+    public static boolean isClassPathResource(Resource resource) {
+        return resource instanceof ClassPathResource;
+    }
+
+    /**
+     * 判断资源是否为 FileSystemResource。
+     *
+     * @param resource 资源
+     * @return 是否为 FileSystemResource
+     */
+    public static boolean isFileSystemResource(Resource resource) {
+        return resource instanceof FileSystemResource;
+    }
+
+    /**
+     * 判断资源是否为 UrlResource。
+     *
+     * @param resource 资源
+     * @return 是否为 UrlResource
+     */
+    public static boolean isUrlResource(Resource resource) {
+        return resource instanceof UrlResource;
+    }
+
+    /**
+     * 判断资源是否为空。
+     *
+     * @param resource 资源
+     * @return true：为空
+     */
+    public static boolean isEmpty(Resource resource) {
+        return resource == null || !resource.exists();
+    }
+
+    /**
+     * 获取资源内容长度。
+     *
+     * @param resource 资源
+     * @return 内容长度
+     */
+    public static long contentLength(Resource resource) {
+        assertResource(resource);
+        try {
+            return resource.contentLength();
+        } catch (IOException e) {
+            throw new ResourceUtilException("获取资源长度失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 获取资源最后修改时间。
+     *
+     * @param resource 资源
+     * @return 最后修改时间
+     */
+    public static long lastModified(Resource resource) {
+        assertResource(resource);
+        try {
+            return resource.lastModified();
+        } catch (IOException e) {
+            throw new ResourceUtilException("获取资源最后修改时间失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 通过相对路径解析资源。
+     *
+     * @param resource     基础资源
+     * @param relativePath 相对路径
+     * @return 解析后的资源
+     */
+    public static Resource createRelative(Resource resource, String relativePath) {
+        assertResource(resource);
+        assertText(relativePath, "相对路径不能为空");
+        try {
+            return resource.createRelative(relativePath);
+        } catch (IOException e) {
+            throw new ResourceUtilException("创建相对资源失败，base=" + getDescription(resource) + ", relativePath=" + relativePath, e);
+        }
+    }
+
+    /**
+     * 将资源转换为可重复读取的字节数组资源。
+     *
+     * @param resource 资源
+     * @return ByteArrayResource
+     */
+    public static Resource toRepeatableResource(Resource resource) {
+        return getByteArrayResource(readBytes(resource), getFilename(resource));
+    }
+
+    /**
+     * 将资源复制到字符串资源，默认 UTF-8。
+     *
+     * @param resource 资源
+     * @return String 内容
+     */
+    public static String readText(Resource resource) {
+        return readString(resource, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 将资源转换为临时文件并返回文件对象。
+     * <p>
+     * 适合在需要 File 的第三方 API 中临时使用。
+     *
+     * @param resource 资源
+     * @param prefix   临时文件前缀
+     * @param suffix   临时文件后缀
+     * @return 临时文件
+     */
+    public static File toTempFile(Resource resource, String prefix, String suffix) {
+        return copyToTempFile(resource, prefix, suffix);
+    }
+
+    /**
+     * 直接打开资源输入流。
+     *
+     * @param resource 资源
+     * @return 输入流
+     */
+    public static InputStream getInputStream(Resource resource) {
+        assertResource(resource);
+        try {
+            return resource.getInputStream();
+        } catch (IOException e) {
+            throw new ResourceUtilException("打开资源输入流失败，resource=" + getDescription(resource), e);
+        }
+    }
+
+    /**
+     * 计算资源是否可以安全转换为文件路径。
+     *
+     * @param resource 资源
+     * @return true：可转为文件
+     */
+    public static boolean canConvertToFile(Resource resource) {
+        if (resource == null) {
+            return false;
+        }
+        try {
+            resource.getFile();
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 资源是否包含通配符。
+     *
+     * @param location 资源位置
+     * @return true：包含通配符
+     */
+    public static boolean isPatternLocation(String location) {
+        if (!hasText(location)) {
+            return false;
+        }
+        return location.startsWith("classpath*:") || location.indexOf('*') >= 0 || location.indexOf('?') >= 0;
+    }
+
+    /**
+     * 将输入流转换为字节数组。
+     *
+     * @param inputStream 输入流
+     * @return 字节数组
+     */
+    public static byte[] toByteArray(InputStream inputStream) {
+        if (inputStream == null) {
+            throw new ResourceUtilException("输入流不能为空");
+        }
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        try {
+            copy(inputStream, outputStream);
+            return outputStream.toByteArray();
+        } catch (Exception e) {
+            throw new ResourceUtilException("输入流转字节数组失败", e);
+        } finally {
+            closeQuietly(outputStream);
+        }
+    }
+
+    /**
+     * 将字节数组转为字符串，默认 UTF-8。
+     *
+     * @param bytes 字节数组
+     * @return 字符串
+     */
+    public static String toString(byte[] bytes) {
+        return toString(bytes, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 将字节数组转为字符串。
+     *
+     * @param bytes   字节数组
+     * @param charset 字符集
+     * @return 字符串
+     */
+    public static String toString(byte[] bytes, Charset charset) {
+        if (bytes == null) {
+            return null;
+        }
+        Charset useCharset = getCharset(charset);
+        return new String(bytes, useCharset);
+    }
+
+    /**
+     * 将输入流转为字符串，默认 UTF-8。
+     *
+     * @param inputStream 输入流
+     * @return 字符串
+     */
+    public static String toString(InputStream inputStream) {
+        return toString(inputStream, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 将输入流转为字符串。
+     *
+     * @param inputStream 输入流
+     * @param charset     字符集
+     * @return 字符串
+     */
+    public static String toString(InputStream inputStream, Charset charset) {
+        if (inputStream == null) {
+            throw new ResourceUtilException("输入流不能为空");
+        }
+        Charset useCharset = getCharset(charset);
+        try (Reader reader = new InputStreamReader(new BufferedInputStream(inputStream), useCharset);
+             BufferedReader bufferedReader = new BufferedReader(reader);
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+
+            char[] buffer = new char[DEFAULT_BUFFER_SIZE];
+            int len;
+            StringBuilder sb = new StringBuilder();
+            while ((len = bufferedReader.read(buffer)) != -1) {
+                sb.append(buffer, 0, len);
+            }
+            return sb.toString();
+        } catch (IOException e) {
+            throw new ResourceUtilException("输入流转字符串失败", e);
+        }
+    }
+
+    /**
+     * 将输入流复制到输出流。
+     *
+     * @param inputStream  输入流
+     * @param outputStream 输出流
+     */
+    public static void copy(InputStream inputStream, OutputStream outputStream) {
+        if (inputStream == null) {
+            throw new ResourceUtilException("输入流不能为空");
+        }
+        if (outputStream == null) {
+            throw new ResourceUtilException("输出流不能为空");
+        }
+
+        byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
+        int len;
+        try {
+            while ((len = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, len);
+            }
+            outputStream.flush();
+        } catch (IOException e) {
+            throw new ResourceUtilException("流复制失败", e);
+        }
+    }
+
+    /**
+     * 将 Reader 复制到 Writer。
+     *
+     * @param reader Reader
+     * @param writer Writer
+     */
+    public static void copy(Reader reader, Writer writer) {
+        if (reader == null) {
+            throw new ResourceUtilException("Reader 不能为空");
+        }
+        if (writer == null) {
+            throw new ResourceUtilException("Writer 不能为空");
+        }
+
+        char[] buffer = new char[DEFAULT_BUFFER_SIZE];
+        int len;
+        try {
+            while ((len = reader.read(buffer)) != -1) {
+                writer.write(buffer, 0, len);
+            }
+            writer.flush();
+        } catch (IOException e) {
+            throw new ResourceUtilException("字符流复制失败", e);
+        }
+    }
+
+    /**
+     * 读取资源并猜测内容类型。
+     *
+     * @param resource 资源
+     * @return 内容类型，获取失败返回 null
+     */
+    public static String guessContentType(Resource resource) {
+        if (resource == null) {
+            return null;
+        }
+
+        String filename = resource.getFilename();
+        if (hasText(filename)) {
+            String contentType = URLConnection.guessContentTypeFromName(filename);
+            if (hasText(contentType)) {
+                return contentType;
+            }
+        }
+
+        try (InputStream inputStream = resource.getInputStream()) {
+            return URLConnection.guessContentTypeFromStream(inputStream);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 资源是否为可直接读取的普通文件。
+     *
+     * @param resource 资源
+     * @return true：可作为普通文件读取
+     */
+    public static boolean isRegularFile(Resource resource) {
+        if (resource == null) {
+            return false;
+        }
+        if (!exists(resource)) {
+            return false;
+        }
+        try {
+            File file = resource.getFile();
+            return file.exists() && file.isFile();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 资源转换为绝对文件路径字符串。
+     *
+     * @param resource 资源
+     * @return 文件绝对路径
+     */
+    public static String toAbsolutePath(Resource resource) {
+        return toFile(resource).getAbsolutePath();
+    }
+
+    /**
+     * 资源转换为绝对 URI 字符串。
+     *
+     * @param resource 资源
+     * @return URI 字符串
+     */
+    public static String toUriString(Resource resource) {
+        return toUri(resource).toString();
+    }
+
+    /**
+     * 将资源保存到指定目录，文件名默认取资源原始文件名。
+     *
+     * @param resource 资源
+     * @param dir      目标目录
+     * @return 保存后的文件
+     */
+    public static File saveToDirectory(Resource resource, File dir) {
+        assertResource(resource);
+        if (dir == null) {
+            throw new ResourceUtilException("目标目录不能为空");
+        }
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new ResourceUtilException("创建目标目录失败，dir=" + dir.getAbsolutePath());
+        }
+        if (!dir.isDirectory()) {
+            throw new ResourceUtilException("目标不是目录，dir=" + dir.getAbsolutePath());
+        }
+
+        String filename = getFilename(resource);
+        if (!hasText(filename)) {
+            filename = "resource-" + System.currentTimeMillis();
+        }
+
+        File target = new File(dir, filename);
+        return copyToFile(resource, target);
+    }
+
+    /**
+     * 将资源复制到指定目录，文件名默认取资源原始文件名。
+     *
+     * @param resource 资源
+     * @param dir      目标目录
+     * @return 保存后的 Path
+     */
+    public static Path saveToDirectory(Resource resource, Path dir) {
+        assertResource(resource);
+        if (dir == null) {
+            throw new ResourceUtilException("目标目录不能为空");
+        }
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException e) {
+            throw new ResourceUtilException("创建目标目录失败，dir=" + dir, e);
+        }
+
+        String filename = getFilename(resource);
+        if (!hasText(filename)) {
+            filename = "resource-" + System.currentTimeMillis();
+        }
+
+        return copyToFile(resource, dir.resolve(filename));
+    }
+
+    /**
+     * 安全获取资源内容长度，失败返回 -1。
+     *
+     * @param resource 资源
+     * @return 长度
+     */
+    public static long safeContentLength(Resource resource) {
+        try {
+            return contentLength(resource);
+        } catch (Exception e) {
+            return -1L;
+        }
+    }
+
+    /**
+     * 安全获取资源最后修改时间，失败返回 -1。
+     *
+     * @param resource 资源
+     * @return 最后修改时间
+     */
+    public static long safeLastModified(Resource resource) {
+        try {
+            return lastModified(resource);
+        } catch (Exception e) {
+            return -1L;
+        }
+    }
+
+    /**
+     * 关闭资源。
+     *
+     * @param closeable 关闭对象
+     */
+    public static void closeQuietly(Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (IOException e) {
+            log.debug("关闭资源失败，忽略，type={}", closeable.getClass().getName(), e);
+        }
+    }
+
+    /**
+     * 兼容性地将资源转为原始 Resource 类型。
+     *
+     * @param resource 资源
+     * @return 资源本身
+     */
+    public static Resource identity(Resource resource) {
+        return resource;
+    }
+
+    /**
+     * 校验资源不能为空且必须存在。
+     *
+     * @param resource 资源
+     */
+    public static void assertExists(Resource resource) {
+        assertResource(resource);
+        if (!resource.exists()) {
+            throw new ResourceUtilException("资源不存在，resource=" + getDescription(resource));
+        }
+    }
+
+    /**
+     * 获取资源内容类型，若无法判断则返回默认值。
+     *
+     * @param resource     资源
+     * @param defaultValue 默认值
+     * @return 内容类型
+     */
+    public static String getContentType(Resource resource, String defaultValue) {
+        String contentType = guessContentType(resource);
+        if (hasText(contentType)) {
+            return contentType;
+        }
+        return defaultValue;
+    }
+
+    /**
+     * 判断字符串是否有内容。
+     *
+     * @param text 文本
+     * @return true：有内容
+     */
+    private static boolean hasText(String text) {
+        return text != null && text.trim().length() > 0;
+    }
+
+    /**
+     * 校验字符串不能为空。
+     *
+     * @param text    文本
+     * @param message 异常信息
+     */
+    private static void assertText(String text, String message) {
+        if (!hasText(text)) {
+            throw new ResourceUtilException(message);
+        }
+    }
+
+    /**
+     * 校验资源对象不能为空。
+     *
+     * @param resource 资源
+     */
+    private static void assertResource(Resource resource) {
+        if (resource == null) {
+            throw new ResourceUtilException("资源不能为空");
+        }
+    }
+
+    /**
+     * 规范化字符集，避免外部传入 null。
+     *
+     * @param charset 字符集
+     * @return 可用字符集
+     */
+    private static Charset getCharset(Charset charset) {
+        return charset == null ? StandardCharsets.UTF_8 : charset;
+    }
+
+    /**
+     * 确保父目录存在。
+     *
+     * @param file 文件
+     */
+    private static void ensureParentDir(File file) {
+        File parent = file.getAbsoluteFile().getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new ResourceUtilException("创建父目录失败，parent=" + parent.getAbsolutePath());
+        }
+    }
+
+    /**
+     * 去除 classpath: 前缀并规范化路径。
+     *
+     * @param path 路径
+     * @return 规范化后的路径
+     */
+    private static String normalizeClassPath(String path) {
+        String result = path.trim();
+        if (result.startsWith(ResourceUtils.CLASSPATH_URL_PREFIX)) {
+            result = result.substring(ResourceUtils.CLASSPATH_URL_PREFIX.length());
+        }
+        while (result.startsWith("/")) {
+            result = result.substring(1);
+        }
+        return result;
+    }
+
+    /**
+     * 判断是否是通配符路径。
+     *
+     * @param location 资源位置
+     * @return true：包含通配符
+     */
+    private static boolean isPatternLocationInternal(String location) {
+        return location != null && (location.startsWith("classpath*:") || location.indexOf('*') >= 0 || location.indexOf('?') >= 0);
+    }
+
+    /**
+     * 自定义运行时异常，统一资源操作失败的异常包装。
+     */
+    public static class ResourceUtilException extends RuntimeException {
+
+        public ResourceUtilException(String message) {
+            super(message);
+        }
+
+        public ResourceUtilException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
 }
 ```
 
-#### 创建Service
+
+
+#### RAG 摄取与切分常量
+
+```java
+package io.github.atengk.ai.constant;
+
+import java.util.List;
+
+/**
+ * RAG 摄取相关常量
+ *
+ * <p>统一管理：
+ * 1. 文本切分配置
+ * 2. 元数据字段
+ * 3. 默认值与模式
+ * <p>
+ * 避免业务代码中出现魔法值
+ *
+ * @author Ateng
+ * @since 2026-04-21
+ */
+public final class RagIngestConstants {
+
+    // =========================
+    // 文本切分配置
+    // =========================
+
+    /**
+     * 默认分块大小（token 粒度）
+     */
+    public static final int DEFAULT_CHUNK_SIZE = 800;
+
+    /**
+     * 最小分块字符数（避免切太碎）
+     */
+    public static final int MIN_CHUNK_SIZE_CHARS = 350;
+
+    /**
+     * 最小可嵌入长度（太短的不参与向量化）
+     */
+    public static final int MIN_CHUNK_LENGTH_TO_EMBED = 5;
+
+    /**
+     * 最大分块数量（防止异常数据）
+     */
+    public static final int MAX_NUM_CHUNKS = 10000;
+
+    /**
+     * 是否保留分隔符
+     */
+    public static final boolean KEEP_SEPARATOR = true;
+
+    /**
+     * 默认切分标点（中英文 + 换行）
+     */
+    public static final List<Character> DEFAULT_PUNCTUATION_MARKS = List.of(
+            '.', '?', '!',
+            '。', '？', '！',
+            ';', '；',
+            '\n'
+    );
+
+
+    // =========================
+    // Metadata 字段定义
+    // =========================
+
+    /**
+     * 数据源信息
+     */
+    public static final String METADATA_SOURCE_ID = "source.id";
+    public static final String METADATA_SOURCE_TYPE = "source.type";
+    public static final String METADATA_SOURCE_URI = "source.uri";
+    public static final String METADATA_SOURCE_NAME = "source.name";
+
+    /**
+     * 租户信息（多租户场景）
+     */
+    public static final String METADATA_TENANT_ID = "tenant.id";
+
+    /**
+     * 文档信息（逻辑文档）
+     */
+    public static final String METADATA_DOC_ID = "document.id";
+    public static final String METADATA_DOCUMENT_VERSION = "document.version";
+
+    /**
+     * 内容信息
+     */
+    public static final String METADATA_CONTENT_HASH = "content.hash";
+    public static final String METADATA_CONTENT_LANGUAGE = "content.language";
+
+    /**
+     * 文件信息
+     */
+    public static final String METADATA_FILE_NAME = "file.name";
+    public static final String METADATA_FILE_SIZE = "file.size";
+    public static final String METADATA_FILE_TYPE = "file.type";
+    public static final String METADATA_FILE_EXTENSION = "file.extension";
+
+    /**
+     * 权限与业务标签
+     */
+    public static final String METADATA_SECURITY_ACL = "security.acl";
+    public static final String METADATA_BUSINESS_TAGS = "biz.tags";
+
+    /**
+     * 分块信息（chunk 级别）
+     */
+    public static final String METADATA_CHUNK_INDEX = "chunk.index";
+    public static final String METADATA_CHUNK_COUNT = "chunk.count";
+    public static final String METADATA_CHUNK_HASH = "chunk.hash";
+
+    /**
+     * 摄取信息
+     */
+    public static final String METADATA_INGEST_BATCH_ID = "ingest.batch.id";
+    public static final String METADATA_INGEST_MODE = "ingest.mode";
+
+    /**
+     * 元数据版本
+     */
+    public static final String METADATA_SCHEMA_VERSION = "schema.version";
+
+    /**
+     * 时间字段
+     */
+    public static final String METADATA_CREATED_AT = "createdAt";
+    public static final String METADATA_UPDATED_AT = "updatedAt";
+
+
+    // =========================
+    // 摄取模式
+    // =========================
+
+    /**
+     * 全量摄取（直接覆盖）
+     */
+    public static final String INGEST_MODE_FULL = "full";
+
+    /**
+     * 增量摄取（基于 hash 判断）
+     */
+    public static final String INGEST_MODE_INCREMENTAL = "incremental";
+
+    /**
+     * 重建（先删后写）
+     */
+    public static final String INGEST_MODE_REBUILD = "rebuild";
+
+    /**
+     * 预览（不入库）
+     */
+    public static final String INGEST_MODE_PREVIEW = "preview";
+
+
+    // =========================
+    // 默认值
+    // =========================
+
+    /**
+     * 默认数据源类型
+     */
+    public static final String DEFAULT_SOURCE_TYPE = "RESOURCE";
+
+    /**
+     * 默认 schema 版本
+     */
+    public static final String DEFAULT_SCHEMA_VERSION = "1";
+
+    /**
+     * 默认文档版本
+     */
+    public static final String DEFAULT_DOCUMENT_VERSION = "1";
+
+    /**
+     * sourceId 前缀
+     */
+    public static final String DEFAULT_SOURCE_ID_PREFIX = "src_";
+
+    /**
+     * 常见资源类型
+     */
+    public static final String DEFAULT_SOURCE_TYPE_CLASSPATH = "CLASSPATH";
+    public static final String DEFAULT_SOURCE_TYPE_FILE = "FILE";
+    public static final String DEFAULT_SOURCE_TYPE_URL = "URL";
+    public static final String DEFAULT_SOURCE_TYPE_STREAM = "STREAM";
+
+    /**
+     * 未知资源名称
+     */
+    public static final String DEFAULT_UNKNOWN_RESOURCE_NAME = "unknown-resource";
+
+
+    private RagIngestConstants() {
+    }
+}
+```
+
+
+
+#### RAG 文档摄取服务
 
 ```java
 package io.github.atengk.ai.service;
 
-import io.github.atengk.ai.entity.RagIngestRequest;
-import lombok.RequiredArgsConstructor;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
-import org.springframework.stereotype.Service;
+import org.springframework.core.io.Resource;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+/**
+ * RAG 文档摄取服务
+ *
+ * <p>负责将 Resource 解析为 Document，并完成资源元数据抽取、元数据标准化、内容清洗、切分、幂等控制与向量库写入。</p>
+ *
+ * @author Ateng
+ * @since 2026-04-21
+ */
+public interface RagIngestService {
+
+    /**
+     * 摄取单个资源，执行完整流程：读取、解析、清洗、切分、写入。
+     *
+     * @param resource 数据源
+     * @param metadata 资源元数据
+     * @return 写入的文档数量
+     */
+    int ingest(Resource resource, Map<String, Object> metadata);
+
+    /**
+     * 批量摄取资源。
+     *
+     * @param resources 资源列表
+     * @param metadata  统一元数据
+     * @return 写入的文档总数
+     */
+    int ingest(List<Resource> resources, Map<String, Object> metadata);
+
+    /**
+     * 解析资源为 Document，不执行写入。
+     *
+     * @param resource 数据源
+     * @param metadata 资源元数据
+     * @return 解析后的文档列表
+     */
+    List<Document> parse(Resource resource, Map<String, Object> metadata);
+
+    /**
+     * 预处理文档，例如清洗、去噪、规范化和元数据补全。
+     *
+     * @param documents 原始文档
+     * @param metadata  资源元数据
+     * @return 处理后的文档列表
+     */
+    List<Document> preprocess(List<Document> documents, Map<String, Object> metadata);
+
+    /**
+     * 对多个文档执行分块。
+     *
+     * @param documentList 原始文档列表
+     * @param chunkSize    分块大小
+     * @return 分块后的文档列表
+     */
+    List<Document> split(List<Document> documentList, int chunkSize);
+
+    /**
+     * 写入向量库。
+     *
+     * @param documents 已处理好的文档列表
+     */
+    void write(List<Document> documents);
+
+    /**
+     * 增量摄取，通常基于 source.id + content.hash 做幂等控制。
+     *
+     * @param resource 数据源
+     * @param metadata 资源元数据
+     * @return 写入的文档数量
+     */
+    int ingestIncremental(Resource resource, Map<String, Object> metadata);
+
+    /**
+     * 全量重建，通常用于版本变更、切分策略变更或内容整体失效。
+     *
+     * @param resource 数据源
+     * @param metadata 资源元数据
+     */
+    void rebuild(Resource resource, Map<String, Object> metadata);
+
+    /**
+     * 根据过滤表达式判断向量库中是否存在匹配的文档
+     *
+     * <p>通常用于幂等控制、数据存在性校验等场景。内部一般通过向量检索结合过滤条件实现，
+     * 仅判断是否存在至少一条满足条件的数据，不保证返回完整结果。</p>
+     *
+     * @param expression 过滤表达式
+     * @return true 表示存在，false 表示不存在
+     */
+    boolean exists(Filter.Expression expression);
+
+    /**
+     * 根据 sourceId 和 contentHash 判断文档是否已存在
+     *
+     * <p>用于 RAG 增量摄取场景的幂等控制。只有当 sourceId 与 contentHash 同时匹配时，
+     * 才认为当前数据已存在（即内容未发生变化）。</p>
+     *
+     * @param sourceId    数据源唯一标识
+     * @param contentHash 内容哈希值（通常为文档内容的摘要）
+     * @return true 表示已存在，false 表示不存在或内容已变化
+     */
+    boolean exists(String sourceId, String contentHash);
+
+    /**
+     * 根据过滤表达式查询文档列表
+     *
+     * <p>用于按条件获取向量库中的文档数据，支持结合元数据进行过滤。
+     * 返回结果数量由 topK 控制，不保证返回全部匹配数据。</p>
+     *
+     * @param expression 过滤表达式
+     * @param topK       最大返回数量
+     * @return 文档列表
+     */
+    List<Document> list(Filter.Expression expression, int topK);
+
+    /**
+     * 基于相似度查询文档
+     *
+     * @param query 查询文本
+     * @param topK  返回结果数量
+     * @return 相似文档列表
+     */
+    List<Document> search(String query, int topK);
+
+    /**
+     * 基于相似度查询文档
+     *
+     * <p>通过向量检索返回与 query 语义最相似的文档列表，
+     * 支持结合过滤条件进行元数据约束。</p>
+     *
+     * @param query      查询文本
+     * @param topK       返回结果数量
+     * @param expression 过滤表达式（可为空）
+     * @return 相似文档列表
+     */
+    List<Document> similaritySearch(String query, int topK, Filter.Expression expression);
+
+    /**
+     * 删除匹配过滤条件的文档。
+     *
+     * @param filterExpression 过滤表达式
+     */
+    void delete(Filter.Expression filterExpression);
+
+    /**
+     * 按文档 ID 删除。
+     *
+     * @param documentIds 文档 ID 列表
+     */
+    void deleteByDocumentIds(List<String> documentIds);
+
+    /**
+     * 按来源 ID 删除。
+     *
+     * @param sourceId 来源 ID
+     */
+    void deleteBySourceId(String sourceId);
+
+    /**
+     * 按租户 ID 删除。
+     *
+     * @param tenantId 租户 ID
+     */
+    void deleteByTenantId(String tenantId);
+
+    /**
+     * 标准化元数据，补齐默认字段并统一命名。
+     *
+     * @param metadata 原始元数据
+     * @return 标准化后的元数据
+     */
+    Map<String, Object> normalizeMetadata(Map<String, Object> metadata);
+
+    /**
+     * 校验元数据是否满足入库要求。
+     *
+     * @param metadata 元数据
+     */
+    void validateMetadata(Map<String, Object> metadata);
+
+    /**
+     * 合并基础元数据与附加元数据。
+     *
+     * @param baseMetadata  基础元数据
+     * @param extraMetadata 附加元数据
+     * @return 合并后的元数据
+     */
+    Map<String, Object> mergeMetadata(Map<String, Object> baseMetadata, Map<String, Object> extraMetadata);
+
+    /**
+     * 仅用于预览，不入库。
+     *
+     * @param resource 数据源
+     * @param metadata 资源元数据
+     * @return 预览文档列表
+     */
+    List<Document> preview(Resource resource, Map<String, Object> metadata);
+}
+```
+
+
+
+#### RAG 文档摄取服务实现
+
+```java
+package io.github.atengk.ai.service.impl;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.map.MapUtil;
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.crypto.digest.DigestUtil;
+import io.github.atengk.ai.constant.RagIngestConstants;
+import io.github.atengk.ai.service.RagIngestService;
+import org.apache.tika.Tika;
+import org.apache.tika.io.TikaInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.reader.tika.TikaDocumentReader;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
+import org.springframework.core.io.*;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.time.temporal.TemporalAccessor;
+import java.util.*;
+
+/**
+ * RAG 文档摄取服务实现
+ *
+ * <p>负责将 Resource 解析为 Document，并完成资源元数据抽取、元数据标准化、内容清洗、切分、幂等控制与向量库写入。</p>
+ *
+ * @author Ateng
+ * @since 2026-04-21
+ */
 @Service
-@RequiredArgsConstructor
-public class RagIngestService {
+public class RagIngestServiceImpl implements RagIngestService {
+
+    private static final Logger log = LoggerFactory.getLogger(RagIngestServiceImpl.class);
+
+    private static final Tika TIKA = new Tika();
 
     private final VectorStore vectorStore;
 
-    /**
-     * 批量写入知识
-     */
-    public int ingest(RagIngestRequest request) {
-        List<Document> documents = request.getTexts()
-                .stream()
-                .map(text -> new Document(text, buildMetadata(request.getMetadata())))
-                .collect(Collectors.toList());
-
-        vectorStore.add(documents);
-        return documents.size();
+    public RagIngestServiceImpl(VectorStore vectorStore) {
+        this.vectorStore = vectorStore;
     }
 
-    /**
-     * 单条写入，方便测试
-     */
-    public void ingestSingle(String text, Map<String, Object> metadata) {
-        vectorStore.add(List.of(new Document(text, buildMetadata(metadata))));
+    @Override
+    public int ingest(Resource resource, Map<String, Object> metadata) {
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_FULL);
+        List<Document> parsedDocuments = parse(resource, normalizedMetadata);
+        if (CollUtil.isEmpty(parsedDocuments)) {
+            return 0;
+        }
+
+        List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
+        List<Document> chunkDocuments = split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
+        write(chunkDocuments);
+        return chunkDocuments.size();
     }
 
-    /**
-     * 简单相似度查询，用于验证 RAG 是否生效
-     */
-    public List<Document> search(String query, int topK) {
-        SearchRequest request = SearchRequest.builder()
-                .query(query)
-                .topK(topK)
+    @Override
+    public int ingest(List<Resource> resources, Map<String, Object> metadata) {
+        if (CollUtil.isEmpty(resources)) {
+            return 0;
+        }
+
+        int total = 0;
+        for (Resource resource : resources) {
+            total += ingest(resource, metadata);
+        }
+        return total;
+    }
+
+    @Override
+    public List<Document> parse(Resource resource, Map<String, Object> metadata) {
+        if (resource == null) {
+            return Collections.emptyList();
+        }
+
+        validateMetadata(metadata);
+
+        TikaDocumentReader reader = new TikaDocumentReader(resource);
+        List<Document> rawDocuments = safeRead(reader);
+        if (CollUtil.isEmpty(rawDocuments)) {
+            log.warn("RAG 文档解析结果为空，resource={}", safeResourceName(resource));
+            return Collections.emptyList();
+        }
+
+        String contentHash = calculateContentHash(rawDocuments);
+        String now = now();
+
+        Map<String, Object> baseMetadata = new LinkedHashMap<>(normalizeMetadata(metadata));
+        baseMetadata.put(RagIngestConstants.METADATA_CONTENT_HASH, contentHash);
+        baseMetadata.put(RagIngestConstants.METADATA_DOCUMENT_VERSION, ObjectUtil.defaultIfNull(
+                baseMetadata.get(RagIngestConstants.METADATA_DOCUMENT_VERSION),
+                RagIngestConstants.DEFAULT_DOCUMENT_VERSION
+        ));
+        baseMetadata.put(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+        baseMetadata.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_CREATED_AT, now);
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_ID, deriveSourceId(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_TYPE, resolveSourceType(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_URI, resolveSourceUri(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_NAME, resolveSourceName(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_INGEST_MODE, RagIngestConstants.INGEST_MODE_FULL);
+
+        List<Document> parsedDocuments = new ArrayList<>(rawDocuments.size());
+        for (int i = 0; i < rawDocuments.size(); i++) {
+            Document rawDocument = rawDocuments.get(i);
+            String text = rawDocument == null ? null : rawDocument.getText();
+            String documentId = buildDocumentId(baseMetadata, i, contentHash);
+
+            Map<String, Object> currentMetadata = new LinkedHashMap<>();
+            if (rawDocument != null && MapUtil.isNotEmpty(rawDocument.getMetadata())) {
+                currentMetadata.putAll(rawDocument.getMetadata());
+            }
+
+            currentMetadata.putAll(baseMetadata);
+            currentMetadata.put(RagIngestConstants.METADATA_DOC_ID, documentId);
+            currentMetadata.put(RagIngestConstants.METADATA_CONTENT_HASH, contentHash);
+            currentMetadata.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+
+            parsedDocuments.add(new Document(documentId, StrUtil.nullToEmpty(text), normalizeMetadata(currentMetadata)));
+        }
+
+        return parsedDocuments;
+    }
+
+    @Override
+    public List<Document> preprocess(List<Document> documents, Map<String, Object> metadata) {
+        if (CollUtil.isEmpty(documents)) {
+            return Collections.emptyList();
+        }
+
+        Map<String, Object> normalizedMetadata = normalizeMetadata(metadata);
+        List<Document> processed = new ArrayList<>(documents.size());
+
+        for (Document document : documents) {
+            if (document == null) {
+                continue;
+            }
+
+            String cleanedText = normalizeContent(document.getText());
+            if (StrUtil.isBlank(cleanedText)) {
+                continue;
+            }
+
+            Map<String, Object> currentMetadata = new LinkedHashMap<>();
+            if (MapUtil.isNotEmpty(document.getMetadata())) {
+                currentMetadata.putAll(document.getMetadata());
+            }
+            currentMetadata.putAll(normalizedMetadata);
+            currentMetadata.put(RagIngestConstants.METADATA_UPDATED_AT, now());
+
+            processed.add(new Document(document.getId(), cleanedText, normalizeMetadata(currentMetadata)));
+        }
+
+        return processed;
+    }
+
+    @Override
+    public List<Document> split(List<Document> documentList, int chunkSize) {
+        if (CollUtil.isEmpty(documentList)) {
+            return Collections.emptyList();
+        }
+
+        if (chunkSize <= 0) {
+            chunkSize = RagIngestConstants.DEFAULT_CHUNK_SIZE;
+        }
+
+        TokenTextSplitter splitter = TokenTextSplitter.builder()
+                .withChunkSize(chunkSize)
+                .withMinChunkSizeChars(RagIngestConstants.MIN_CHUNK_SIZE_CHARS)
+                .withMinChunkLengthToEmbed(RagIngestConstants.MIN_CHUNK_LENGTH_TO_EMBED)
+                .withMaxNumChunks(RagIngestConstants.MAX_NUM_CHUNKS)
+                .withKeepSeparator(RagIngestConstants.KEEP_SEPARATOR)
+                .withPunctuationMarks(RagIngestConstants.DEFAULT_PUNCTUATION_MARKS)
                 .build();
 
+        List<Document> splitDocs = splitter.apply(documentList);
+        if (CollUtil.isEmpty(splitDocs)) {
+            return Collections.emptyList();
+        }
+
+        List<Document> validChunks = new ArrayList<>(splitDocs.size());
+        for (Document chunk : splitDocs) {
+            if (chunk == null || StrUtil.isBlank(chunk.getText())) {
+                continue;
+            }
+            validChunks.add(chunk);
+        }
+
+        if (CollUtil.isEmpty(validChunks)) {
+            return Collections.emptyList();
+        }
+
+        List<Document> result = new ArrayList<>(validChunks.size());
+        int totalCount = validChunks.size();
+
+        for (int i = 0; i < totalCount; i++) {
+            Document chunk = validChunks.get(i);
+
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            if (MapUtil.isNotEmpty(chunk.getMetadata())) {
+                metadata.putAll(chunk.getMetadata());
+            }
+
+            metadata.put(RagIngestConstants.METADATA_CHUNK_INDEX, i);
+            metadata.put(RagIngestConstants.METADATA_CHUNK_COUNT, totalCount);
+            metadata.put(RagIngestConstants.METADATA_CHUNK_HASH, DigestUtil.sha256Hex(chunk.getText()));
+            metadata.put(RagIngestConstants.METADATA_UPDATED_AT, now());
+
+            String chunkId = StrUtil.blankToDefault(chunk.getId(), IdUtil.fastSimpleUUID());
+            result.add(new Document(chunkId, chunk.getText(), normalizeMetadata(metadata)));
+        }
+
+        return result;
+    }
+
+    @Override
+    public void write(List<Document> documents) {
+        if (CollUtil.isEmpty(documents)) {
+            return;
+        }
+
+        List<Document> safeDocuments = deduplicateAndNormalize(documents);
+        if (CollUtil.isEmpty(safeDocuments)) {
+            return;
+        }
+
+        Map<String, Object> metadata = safeDocuments.get(0).getMetadata();
+        String sourceId = metadata == null ? null : String.valueOf(metadata.get(RagIngestConstants.METADATA_SOURCE_ID));
+        String sourceName = metadata == null ? null : String.valueOf(metadata.get(RagIngestConstants.METADATA_SOURCE_NAME));
+
+        try {
+            vectorStore.add(safeDocuments);
+            log.info("RAG 文档写入成功，数量={}，sourceId={}, sourceName={}", safeDocuments.size(), sourceId, sourceName);
+        } catch (Exception ex) {
+            log.error("RAG 文档写入失败，数量={}，sourceId={}, sourceName={}", safeDocuments.size(), sourceId, sourceName, ex);
+            throw ex;
+        }
+    }
+
+    @Override
+    public int ingestIncremental(Resource resource, Map<String, Object> metadata) {
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_INCREMENTAL);
+        List<Document> parsedDocuments = parse(resource, normalizedMetadata);
+        if (CollUtil.isEmpty(parsedDocuments)) {
+            return 0;
+        }
+
+        Map<String, Object> firstMetadata = parsedDocuments.get(0).getMetadata();
+        String sourceId = getMetadataString(firstMetadata, RagIngestConstants.METADATA_SOURCE_ID);
+        String contentHash = getMetadataString(firstMetadata, RagIngestConstants.METADATA_CONTENT_HASH);
+
+        if (exists(sourceId, contentHash)) {
+            log.info("RAG 增量摄取跳过（内容未变化），sourceId={}, contentHash={}", sourceId, contentHash);
+            return 0;
+        }
+
+        deleteBySourceId(sourceId);
+
+        List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
+        List<Document> chunkDocuments = split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
+        write(chunkDocuments);
+
+        return chunkDocuments.size();
+    }
+
+    @Override
+    public void rebuild(Resource resource, Map<String, Object> metadata) {
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_REBUILD);
+        List<Document> parsedDocuments = parse(resource, normalizedMetadata);
+        if (CollUtil.isEmpty(parsedDocuments)) {
+            return;
+        }
+
+        Map<String, Object> firstMetadata = parsedDocuments.get(0).getMetadata();
+        String sourceId = getMetadataString(firstMetadata, RagIngestConstants.METADATA_SOURCE_ID);
+
+        deleteBySourceId(sourceId);
+
+        List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
+        List<Document> chunkDocuments = split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
+        write(chunkDocuments);
+    }
+
+    @Override
+    public boolean exists(Filter.Expression expression) {
+        if (expression == null) {
+            return false;
+        }
+        SearchRequest request = SearchRequest.builder()
+                .query("exist-check")
+                .topK(1)
+                .filterExpression(expression)
+                .build();
+        return CollUtil.isNotEmpty(vectorStore.similaritySearch(request));
+    }
+
+    @Override
+    public boolean exists(String sourceId, String contentHash) {
+        if (StrUtil.isBlank(sourceId) || StrUtil.isBlank(contentHash)) {
+            return false;
+        }
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .and(
+                        new FilterExpressionBuilder().eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId),
+                        new FilterExpressionBuilder().eq(RagIngestConstants.METADATA_CONTENT_HASH, contentHash)
+                )
+                .build();
+
+        SearchRequest request = SearchRequest.builder()
+                .query("exist-check")
+                .topK(1)
+                .filterExpression(expression)
+                .build();
+
+        return CollUtil.isNotEmpty(vectorStore.similaritySearch(request));
+    }
+
+    @Override
+    public List<Document> list(Filter.Expression expression, int topK) {
+        if (expression == null) {
+            return Collections.emptyList();
+        }
+        SearchRequest request = SearchRequest.builder()
+                .query("list-check")
+                .topK(topK)
+                .filterExpression(expression)
+                .build();
         return vectorStore.similaritySearch(request);
     }
 
-    /**
-     * 清空知识库（危险操作，慎用）
-     */
-    public void clearAll() {
-        Filter.Expression expression =
-                new Filter.Expression(
-                        Filter.ExpressionType.EQ,
-                        new Filter.Key("category"),
-                        new Filter.Value("spring-ai")
-                );
-
-        vectorStore.delete(expression);
+    @Override
+    public List<Document> search(String query, int topK) {
+        return similaritySearch(query, topK, null);
     }
 
-    private Map<String, Object> buildMetadata(Map<String, Object> metadata) {
-        return metadata == null ? Map.of() : metadata;
+    @Override
+    public List<Document> similaritySearch(String query, int topK, Filter.Expression expression) {
+
+        if (StrUtil.isBlank(query)) {
+            return Collections.emptyList();
+        }
+
+        if (topK <= 0) {
+            topK = 5;
+        }
+
+        try {
+
+            SearchRequest.Builder builder = SearchRequest.builder()
+                    .query(query)
+                    .topK(topK);
+
+            if (expression != null) {
+                builder.filterExpression(expression);
+            }
+
+            List<Document> results = vectorStore.similaritySearch(builder.build());
+
+            log.info("RAG 相似度查询完成，query={}, topK={}, 返回数量={}",
+                    query, topK, CollUtil.size(results));
+
+            return CollUtil.isEmpty(results) ? Collections.emptyList() : results;
+
+        } catch (Exception ex) {
+            log.error("RAG 相似度查询失败，query={}", query, ex);
+            throw ex;
+        }
+    }
+
+    @Override
+    public void delete(Filter.Expression filterExpression) {
+        if (filterExpression == null) {
+            return;
+        }
+
+        vectorStore.delete(filterExpression);
+        log.info("RAG 文档已按过滤条件删除");
+    }
+
+    @Override
+    public void deleteByDocumentIds(List<String> documentIds) {
+        if (CollUtil.isEmpty(documentIds)) {
+            return;
+        }
+
+        vectorStore.delete(documentIds);
+        log.info("RAG 文档已按 documentIds 删除，数量={}", documentIds.size());
+    }
+
+    @Override
+    public void deleteBySourceId(String sourceId) {
+        if (StrUtil.isBlank(sourceId)) {
+            return;
+        }
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
+        vectorStore.delete(expression);
+        log.info("RAG 文档已按 sourceId 删除，sourceId={}", sourceId);
+    }
+
+    @Override
+    public void deleteByTenantId(String tenantId) {
+        if (StrUtil.isBlank(tenantId)) {
+            return;
+        }
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_TENANT_ID, tenantId)
+                .build();
+
+        vectorStore.delete(expression);
+        log.info("RAG 文档已按 tenantId 删除，tenantId={}", tenantId);
+    }
+
+    @Override
+    public Map<String, Object> normalizeMetadata(Map<String, Object> metadata) {
+        String now = now();
+
+        if (MapUtil.isEmpty(metadata)) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+            result.put(RagIngestConstants.METADATA_CREATED_AT, now);
+            result.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+            return result;
+        }
+
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        metadata.forEach((key, value) -> {
+            if (StrUtil.isBlank(key) || value == null) {
+                return;
+            }
+
+            String normalizedKey = StrUtil.trim(key);
+            Object normalizedValue = normalizeMetadataValue(value);
+            if (normalizedValue != null) {
+                normalized.put(normalizedKey, normalizedValue);
+            }
+        });
+
+        normalized.putIfAbsent(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+        normalized.putIfAbsent(RagIngestConstants.METADATA_CREATED_AT, now);
+        normalized.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+        return normalized;
+    }
+
+    @Override
+    public void validateMetadata(Map<String, Object> metadata) {
+        if (MapUtil.isEmpty(metadata)) {
+            return;
+        }
+
+        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+            if (StrUtil.isBlank(entry.getKey())) {
+                throw new IllegalArgumentException("元数据 key 不能为空");
+            }
+            if (entry.getValue() == null) {
+                continue;
+            }
+            if (!isSupportedMetadataValue(entry.getValue())) {
+                throw new IllegalArgumentException("不支持的元数据值类型，key=" + entry.getKey());
+            }
+        }
+    }
+
+    @Override
+    public Map<String, Object> mergeMetadata(Map<String, Object> baseMetadata, Map<String, Object> extraMetadata) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (MapUtil.isNotEmpty(baseMetadata)) {
+            merged.putAll(baseMetadata);
+        }
+        if (MapUtil.isNotEmpty(extraMetadata)) {
+            merged.putAll(extraMetadata);
+        }
+        return normalizeMetadata(merged);
+    }
+
+    @Override
+    public List<Document> preview(Resource resource, Map<String, Object> metadata) {
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_PREVIEW);
+        List<Document> parsedDocuments = parse(resource, normalizedMetadata);
+        List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
+        return split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
+    }
+
+    private Map<String, Object> buildResourceMetadata(Resource resource, Map<String, Object> metadata, String ingestMode) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (MapUtil.isNotEmpty(metadata)) {
+            merged.putAll(metadata);
+        }
+
+        String now = now();
+
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_ID, deriveSourceId(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_TYPE, resolveSourceType(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_NAME, resolveSourceName(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_URI, resolveSourceUri(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_DOCUMENT_VERSION, RagIngestConstants.DEFAULT_DOCUMENT_VERSION);
+        merged.put(RagIngestConstants.METADATA_INGEST_MODE, ingestMode);
+        merged.put(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+        merged.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+        merged.putIfAbsent(RagIngestConstants.METADATA_CREATED_AT, now);
+
+        addFileMetadata(resource, merged);
+
+        validateMetadata(merged);
+        return normalizeMetadata(merged);
+    }
+
+    private void addFileMetadata(Resource resource, Map<String, Object> merged) {
+        if (resource == null || !resource.exists()) {
+            return;
+        }
+
+        String fileName = safeResourceName(resource);
+        if (StrUtil.isNotBlank(fileName)) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_NAME, fileName);
+        }
+
+        Long fileSize = safeContentLength(resource);
+        if (fileSize != null && fileSize > 0) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_SIZE, fileSize);
+        }
+
+        String fileExtension = safeFileExtension(resource);
+        if (StrUtil.isNotBlank(fileExtension)) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_EXTENSION, fileExtension);
+        }
+
+        String fileType = safeMimeType(resource);
+        if (StrUtil.isNotBlank(fileType)) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_TYPE, fileType);
+        }
+    }
+
+    private Long safeContentLength(Resource resource) {
+        if (resource == null || resource instanceof InputStreamResource) {
+            return null;
+        }
+
+        try {
+            long contentLength = resource.contentLength();
+            return contentLength > 0 ? contentLength : null;
+        } catch (Exception ex) {
+            log.debug("获取文件大小失败，resource={}", safeResourceName(resource), ex);
+            return null;
+        }
+    }
+
+    private String safeFileExtension(Resource resource) {
+        if (resource == null) {
+            return null;
+        }
+
+        String filename = resource.getFilename();
+        if (StrUtil.isBlank(filename)) {
+            return null;
+        }
+
+        String extName = FileUtil.extName(filename);
+        return StrUtil.isBlank(extName) ? null : extName.toLowerCase(Locale.ROOT);
+    }
+
+    private String safeMimeType(Resource resource) {
+        if (resource == null || resource instanceof InputStreamResource) {
+            return null;
+        }
+
+        try (InputStream inputStream = resource.getInputStream();
+             TikaInputStream tikaInputStream = TikaInputStream.get(inputStream)) {
+
+            return TIKA.detect(tikaInputStream);
+
+        } catch (Exception ex) {
+            log.debug("检测文件类型失败，resource={}", safeResourceName(resource), ex);
+            return null;
+        }
+    }
+
+    private List<Document> safeRead(TikaDocumentReader reader) {
+        try {
+            return reader.get();
+        } catch (Exception ex) {
+            throw new IllegalStateException("使用 TikaDocumentReader 读取资源失败", ex);
+        }
+    }
+
+    private String calculateContentHash(List<Document> documents) {
+        if (CollUtil.isEmpty(documents)) {
+            return DigestUtil.sha256Hex("");
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (Document document : documents) {
+            if (document == null || StrUtil.isBlank(document.getText())) {
+                continue;
+            }
+            builder.append(document.getText()).append('\n');
+        }
+        return DigestUtil.sha256Hex(builder.toString());
+    }
+
+    private String buildDocumentId(Map<String, Object> metadata, int index, String contentHash) {
+        String sourceId = getMetadataString(metadata, RagIngestConstants.METADATA_SOURCE_ID);
+        if (StrUtil.isBlank(sourceId)) {
+            sourceId = IdUtil.fastSimpleUUID();
+        }
+        return DigestUtil.sha256Hex(sourceId + ':' + contentHash + ':' + index);
+    }
+
+    private String deriveSourceId(Resource resource) {
+        String sourceKey = resolveSourceUri(resource);
+        if (StrUtil.isBlank(sourceKey)) {
+            sourceKey = safeResourceName(resource);
+        }
+        if (StrUtil.isBlank(sourceKey)) {
+            sourceKey = IdUtil.fastSimpleUUID();
+        }
+        return RagIngestConstants.DEFAULT_SOURCE_ID_PREFIX + DigestUtil.sha256Hex(sourceKey);
+    }
+
+    private String resolveSourceType(Resource resource) {
+        if (resource == null) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE;
+        }
+        if (resource instanceof ClassPathResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_CLASSPATH;
+        }
+        if (resource instanceof FileSystemResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_FILE;
+        }
+        if (resource instanceof UrlResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_URL;
+        }
+        if (resource instanceof InputStreamResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_STREAM;
+        }
+        return RagIngestConstants.DEFAULT_SOURCE_TYPE;
+    }
+
+    private String resolveSourceUri(Resource resource) {
+        if (resource == null) {
+            return null;
+        }
+
+        try {
+            URI uri = resource.getURI();
+            return uri == null ? null : uri.toString();
+        } catch (IOException ex) {
+            return resource.getDescription();
+        }
+    }
+
+    private String resolveSourceName(Resource resource) {
+        if (resource == null) {
+            return null;
+        }
+
+        String fileName = resource.getFilename();
+        if (StrUtil.isNotBlank(fileName)) {
+            return fileName;
+        }
+
+        String description = resource.getDescription();
+        if (StrUtil.isNotBlank(description)) {
+            return description;
+        }
+
+        return RagIngestConstants.DEFAULT_UNKNOWN_RESOURCE_NAME;
+    }
+
+    private String safeResourceName(Resource resource) {
+        if (resource == null) {
+            return RagIngestConstants.DEFAULT_UNKNOWN_RESOURCE_NAME;
+        }
+
+        String name = resource.getFilename();
+        if (StrUtil.isBlank(name)) {
+            name = resource.getDescription();
+        }
+
+        return StrUtil.blankToDefault(name, RagIngestConstants.DEFAULT_UNKNOWN_RESOURCE_NAME);
+    }
+
+    private String normalizeContent(String content) {
+        if (StrUtil.isBlank(content)) {
+            return null;
+        }
+
+        String normalized = content
+                .replace("\u0000", "")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replace('\t', ' ');
+
+        normalized = normalized.replaceAll("[ ]{2,}", " ");
+        normalized = normalized.replaceAll("\\n{3,}", "\n\n");
+        normalized = normalized.trim();
+
+        return StrUtil.isBlank(normalized) ? null : normalized;
+    }
+
+    private Object normalizeMetadataValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof String
+                || value instanceof Integer
+                || value instanceof Long
+                || value instanceof Double
+                || value instanceof Float
+                || value instanceof Boolean) {
+            return value;
+        }
+
+        if (value instanceof Enum<?>) {
+            return ((Enum<?>) value).name();
+        }
+
+        if (value instanceof Number) {
+            return String.valueOf(value);
+        }
+
+        if (value instanceof Collection<?>) {
+            return value.toString();
+        }
+
+        if (value instanceof Map<?, ?>) {
+            return value.toString();
+        }
+
+        if (value.getClass().isArray()) {
+            if (value instanceof Object[]) {
+                return java.util.Arrays.deepToString((Object[]) value);
+            }
+            if (value instanceof int[]) {
+                return java.util.Arrays.toString((int[]) value);
+            }
+            if (value instanceof long[]) {
+                return java.util.Arrays.toString((long[]) value);
+            }
+            if (value instanceof double[]) {
+                return java.util.Arrays.toString((double[]) value);
+            }
+            if (value instanceof float[]) {
+                return java.util.Arrays.toString((float[]) value);
+            }
+            if (value instanceof boolean[]) {
+                return java.util.Arrays.toString((boolean[]) value);
+            }
+            if (value instanceof byte[]) {
+                return java.util.Arrays.toString((byte[]) value);
+            }
+            if (value instanceof short[]) {
+                return java.util.Arrays.toString((short[]) value);
+            }
+            if (value instanceof char[]) {
+                return java.util.Arrays.toString((char[]) value);
+            }
+        }
+
+        if (value instanceof Date) {
+            return DateUtil.format((Date) value, "yyyy-MM-dd HH:mm:ss");
+        }
+
+        if (value instanceof TemporalAccessor) {
+            return value.toString();
+        }
+
+        return value.toString();
+    }
+
+    private boolean isSupportedMetadataValue(Object value) {
+        return value instanceof String
+                || value instanceof Integer
+                || value instanceof Long
+                || value instanceof Double
+                || value instanceof Float
+                || value instanceof Boolean
+                || value instanceof Enum<?>
+                || value instanceof Number
+                || value instanceof Collection<?>
+                || value instanceof Map<?, ?>
+                || value.getClass().isArray()
+                || value instanceof Date
+                || value instanceof TemporalAccessor;
+    }
+
+    private List<Document> deduplicateAndNormalize(List<Document> documents) {
+        if (CollUtil.isEmpty(documents)) {
+            return Collections.emptyList();
+        }
+
+        Map<String, Document> ordered = new LinkedHashMap<>();
+        for (Document document : documents) {
+            if (document == null || StrUtil.isBlank(document.getText())) {
+                continue;
+            }
+
+            Map<String, Object> mergedMetadata = normalizeMetadata(document.getMetadata());
+            String id = StrUtil.blankToDefault(document.getId(), IdUtil.fastSimpleUUID());
+            ordered.put(id, new Document(id, document.getText(), mergedMetadata));
+        }
+
+        return new ArrayList<>(ordered.values());
+    }
+
+    private String getMetadataString(Map<String, Object> metadata, String key) {
+        if (MapUtil.isEmpty(metadata) || StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        Object value = metadata.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String now() {
+        return DateUtil.now();
     }
 }
 ```
 
-#### 创建Controller
+
+
+#### RAG 文档摄取控制器
 
 ```java
 package io.github.atengk.ai.controller;
 
-import io.github.atengk.ai.entity.RagIngestRequest;
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.ai.constant.RagIngestConstants;
 import io.github.atengk.ai.service.RagIngestService;
+import io.github.atengk.ai.util.ResourceUtil;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * RAG 文档摄取控制器
+ *
+ * @author Ateng
+ * @since 2026-04-21
+ */
 @RestController
-@RequestMapping("/rag")
+@RequestMapping("/api/rag")
 @RequiredArgsConstructor
 public class RagIngestController {
 
+    private static final Logger log = LoggerFactory.getLogger(RagIngestController.class);
+
     private final RagIngestService ragIngestService;
 
+    // =========================
+    // ingest
+    // =========================
+
     /**
-     * 批量写入
+     * 单文件摄取（全流程 RAG ingest）
+     * <p>
+     * HTTP Method: POST
+     * URL: /rag/ingest
+     * Content-Type: multipart/form-data
+     * <p>
+     * Request:
+     * - file: MultipartFile（待解析文件，如 pdf/docx/txt/html）
+     * - metadata: form-data key-value（RAG 元数据）
+     * <p>
+     * metadata 示例：
+     * {
+     * "source.id": "file-001",
+     * "tenant.id": "t1",
+     * "biz.tags": "ai,rag,test",
+     * "security.acl": "public"
+     * }
+     * <p>
+     * Processing:
+     * file -> Resource -> Tika解析 -> Document -> chunk -> VectorStore(Milvus)
+     * <p>
+     * Response:
+     * - int：写入向量库的 chunk 数量
      */
-    @PostMapping("/ingest")
-    public Map<String, Object> ingest(@RequestBody RagIngestRequest request) {
-        int count = ragIngestService.ingest(request);
-        return Map.of(
-                "status", "OK",
-                "count", count
+    @PostMapping(value = "/ingest", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public int ingest(@RequestPart("file") MultipartFile file,
+                      @RequestParam Map<String, Object> metadata) throws Exception {
+
+        Resource resource = file.getResource();
+
+        log.info("RAG ingest start, file={}", file.getOriginalFilename());
+
+        return ragIngestService.ingest(resource, metadata);
+    }
+
+    /**
+     * 字符串内容摄取
+     */
+    @PostMapping("/ingest/text")
+    public int ingestText(@RequestParam String content,
+                          @RequestParam Map<String, Object> metadata) {
+
+        if (StrUtil.isBlank(content)) {
+            return 0;
+        }
+
+        // 构造 Resource
+        Resource resource = ResourceUtil.fromString(content, "default.txt", StandardCharsets.UTF_8);
+
+        log.info("RAG ingest start, textLength={}", content.length());
+
+        return ragIngestService.ingest(resource, metadata);
+    }
+
+    /**
+     * URL 摄取
+     */
+    @PostMapping("/ingest/url")
+    public int ingestUrl(@RequestParam String url,
+                         @RequestParam Map<String, Object> metadata) throws Exception {
+
+        if (StrUtil.isBlank(url)) {
+            return 0;
+        }
+
+        Resource resource = ResourceUtil.getResource(url);
+
+        log.info("RAG ingest start, url={}", url);
+
+        return ragIngestService.ingest(resource, metadata);
+    }
+
+    /**
+     * 批量文件摄取（多文件 RAG ingest）
+     * <p>
+     * HTTP Method: POST
+     * URL: /rag/ingest/batch
+     * Content-Type: multipart/form-data
+     * <p>
+     * Request:
+     * - files: MultipartFile[]（多个文件）
+     * - metadata: 全局元数据（会应用到所有文件）
+     * <p>
+     * Processing:
+     * files -> Resource List -> parse -> preprocess -> split -> vector store
+     * <p>
+     * Response:
+     * - int：总写入 chunk 数
+     */
+    @PostMapping(value = "/ingest/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public int ingestBatch(@RequestPart("files") List<MultipartFile> files,
+                           @RequestParam Map<String, Object> metadata) {
+
+        List<Resource> resources = files.stream()
+                .map(MultipartFile::getResource)
+                .toList();
+
+        return ragIngestService.ingest(resources, metadata);
+    }
+
+    // =========================
+    // incremental / rebuild
+    // =========================
+
+    /**
+     * 增量摄取（幂等写入）
+     * <p>
+     * HTTP Method: POST
+     * URL: /rag/ingest/incremental
+     * Content-Type: multipart/form-data
+     * <p>
+     * 特性：
+     * - 基于 source.id + content.hash 去重
+     * - 内容未变化则跳过写入
+     * <p>
+     * Request:
+     * - file: 文件资源
+     * - metadata: RAG 元数据（必须包含 source.id）
+     * <p>
+     * Response:
+     * - int：新增 chunk 数
+     */
+    @PostMapping(value = "/ingest/incremental", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public int ingestIncremental(@RequestPart("file") MultipartFile file,
+                                 @RequestParam Map<String, Object> metadata) throws Exception {
+
+        return ragIngestService.ingestIncremental(file.getResource(), metadata);
+    }
+
+    /**
+     * 重建索引（全量删除 + 重建）
+     * <p>
+     * HTTP Method: POST
+     * URL: /rag/rebuild
+     * Content-Type: multipart/form-data
+     * <p>
+     * 使用场景：
+     * - chunk策略变更
+     * - embedding模型变更
+     * - 数据结构变更
+     * <p>
+     * Request:
+     * - file: 数据源
+     * - metadata: RAG上下文（tenant/source等）
+     * <p>
+     * Response:
+     * - String: 执行结果
+     */
+    @PostMapping(value = "/rebuild", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public String rebuild(@RequestPart("file") MultipartFile file,
+                          @RequestParam Map<String, Object> metadata) throws Exception {
+
+        ragIngestService.rebuild(file.getResource(), metadata);
+
+        return "rebuild success";
+    }
+
+    // =========================
+    // parse / preview
+    // =========================
+
+    /**
+     * 文档解析（不写入向量库）
+     * <p>
+     * HTTP Method: POST
+     * URL: /rag/parse
+     * <p>
+     * Request:
+     * - file: 文件资源
+     * - metadata: 元数据（用于解析上下文）
+     * <p>
+     * Response:
+     * - List<Document>: 原始解析结果（未chunk）
+     * <p>
+     * 用途：
+     * - 调试 Tika 解析结果
+     * - 验证文本抽取效果
+     */
+    @PostMapping(value = "/parse", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<Document> parse(@RequestPart("file") MultipartFile file,
+                                @RequestParam Map<String, Object> metadata) throws Exception {
+
+        return ragIngestService.parse(file.getResource(), metadata);
+    }
+
+    /**
+     * RAG chunk预览（调试用）
+     * <p>
+     * HTTP Method: POST
+     * URL: /rag/preview
+     * <p>
+     * 返回：
+     * - chunk后的 Document 列表（但不入库）
+     * <p>
+     * 用途：
+     * - chunk效果评估
+     * - embedding前内容验证
+     */
+    @PostMapping(value = "/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public List<Document> preview(@RequestPart("file") MultipartFile file,
+                                  @RequestParam Map<String, Object> metadata) throws Exception {
+
+        return ragIngestService.preview(file.getResource(), metadata);
+    }
+
+    // =========================
+    // query
+    // =========================
+
+    /**
+     * 判断指定 sourceId + contentHash 是否存在（幂等校验）
+     */
+    @GetMapping("/exists/hash")
+    public boolean existsByHash(@RequestParam String sourceId,
+                                @RequestParam String contentHash) {
+
+        boolean exists = ragIngestService.exists(sourceId, contentHash);
+
+        log.info("RAG 存在性校验（hash），sourceId={}, contentHash={}, exists={}",
+                sourceId, contentHash, exists);
+
+        return exists;
+    }
+
+    /**
+     * 根据 sourceId 判断是否存在数据（通用 exists）
+     */
+    @GetMapping("/exists/source")
+    public boolean existsBySource(@RequestParam String sourceId) {
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
+        boolean exists = ragIngestService.exists(expression);
+
+        log.info("RAG 存在性校验（sourceId），sourceId={}, exists={}", sourceId, exists);
+
+        return exists;
+    }
+
+    /**
+     * 根据 sourceId 查询文档列表
+     */
+    @GetMapping("/list/source")
+    public List<Document> listBySource(@RequestParam String sourceId,
+                                       @RequestParam(defaultValue = "10") int topK) {
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
+        List<Document> documents = ragIngestService.list(expression, topK);
+
+        log.info("RAG 文档查询，sourceId={}, 返回数量={}",
+                sourceId, CollUtil.size(documents));
+
+        return documents;
+    }
+
+    /**
+     * 复杂条件查询（sourceId + tenantId + 时间范围）
+     */
+    @GetMapping("/list/complex")
+    public List<Document> listByComplex(@RequestParam String sourceId,
+                                        @RequestParam String tenantId,
+                                        @RequestParam(required = false) String startTime,
+                                        @RequestParam(required = false) String endTime,
+                                        @RequestParam(defaultValue = "10") int topK) {
+        FilterExpressionBuilder builder = new FilterExpressionBuilder();
+
+        // 基础条件
+        FilterExpressionBuilder.Op op = builder.and(
+                builder.eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId),
+                builder.eq(RagIngestConstants.METADATA_TENANT_ID, tenantId)
         );
+
+        // 时间范围
+        if (StrUtil.isNotBlank(startTime)) {
+            op = builder.and(
+                    op,
+                    builder.gte(RagIngestConstants.METADATA_UPDATED_AT, startTime)
+            );
+        }
+
+        if (StrUtil.isNotBlank(endTime)) {
+            op = builder.and(
+                    op,
+                    builder.lte(RagIngestConstants.METADATA_UPDATED_AT, endTime)
+            );
+        }
+
+        // 最后 build
+        Filter.Expression expression = op.build();
+
+        List<Document> documents = ragIngestService.list(expression, topK);
+
+        log.info("RAG 复杂查询，sourceId={}, tenantId={}, startTime={}, endTime={}, 返回数量={}",
+                sourceId, tenantId, startTime, endTime, CollUtil.size(documents));
+
+        return documents;
     }
 
     /**
-     * 单条写入
-     */
-    @PostMapping("/ingest/single")
-    public String ingestSingle(@RequestParam String text) {
-        ragIngestService.ingestSingle(text, null);
-        return "OK";
-    }
-
-    /**
-     * 简单查询，验证 RAG
+     * 相似度查询（基础）
      */
     @GetMapping("/search")
-    public List<Document> search(
-            @RequestParam String query,
-            @RequestParam(defaultValue = "3") int topK
-    ) {
-        return ragIngestService.search(query, topK);
+    public List<Document> search(@RequestParam String query,
+                                 @RequestParam(defaultValue = "5") int topK) {
+
+        return ragIngestService.similaritySearch(query, topK, null);
     }
 
     /**
-     * 清空知识库
+     * 相似度查询（带 sourceId 过滤）
      */
-    @DeleteMapping("/clear")
-    public String clear() {
-        ragIngestService.clearAll();
-        return "CLEARED";
+    @GetMapping("/search/bySource")
+    public List<Document> searchBySource(@RequestParam String query,
+                                         @RequestParam String sourceId,
+                                         @RequestParam(defaultValue = "5") int topK) {
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
+        return ragIngestService.similaritySearch(query, topK, expression);
+    }
+
+    // =========================
+    // delete
+    // =========================
+
+    /**
+     * 按 sourceId 删除向量数据
+     * <p>
+     * HTTP Method: DELETE
+     * URL: /rag/source/{sourceId}
+     * <p>
+     * Path Param:
+     * - sourceId: 数据源唯一标识
+     * <p>
+     * Effect:
+     * - 删除 Milvus 中对应 metadata.source.id 的所有 chunk
+     */
+    @DeleteMapping("/source/{sourceId}")
+    public String deleteBySource(@PathVariable String sourceId) {
+
+        if (StrUtil.isBlank(sourceId)) {
+            return "sourceId is blank";
+        }
+
+        ragIngestService.deleteBySourceId(sourceId);
+
+        return "delete success";
+    }
+
+    /**
+     * 按 tenantId 删除向量数据（多租户隔离）
+     * <p>
+     * HTTP Method: DELETE
+     * URL: /rag/tenant/{tenantId}
+     * <p>
+     * Path Param:
+     * - tenantId: 租户标识
+     * <p>
+     * Effect:
+     * - 删除该租户下所有 RAG 数据
+     */
+    @DeleteMapping("/tenant/{tenantId}")
+    public String deleteByTenant(@PathVariable String tenantId) {
+
+        if (StrUtil.isBlank(tenantId)) {
+            return "tenantId is blank";
+        }
+
+        ragIngestService.deleteByTenantId(tenantId);
+
+        return "delete success";
+    }
+
+    /**
+     * 全量删除（谨慎使用）
+     * <p>
+     * HTTP Method: DELETE
+     * URL: /rag/all
+     * <p>
+     * Effect:
+     * - 删除所有 RAG 向量数据（通常用于测试环境）
+     */
+    @DeleteMapping("/all")
+    public String deleteAll() {
+
+        ragIngestService.delete(null);
+
+        return "delete all success";
     }
 }
-```
-
-#### 录入知识
-
-```
-POST /rag/ingest
-Content-Type: application/json
-
-{
-  "texts": [
-    "Spring AI 是 Spring 官方推出的 AI 应用开发框架",
-    "Spring AI 支持 RAG、Tool Calling、Chat Memory"
-  ],
-  "metadata": {
-    "source": "manual",
-    "category": "spring-ai"
-  }
-}
-```
-
-#### 查询验证
-
-```
-GET /rag/search?query=Spring AI 支持什么能力
-```
-
-#### 清空数据
-
-```
-DELETE /rag/clear
 ```
 
 

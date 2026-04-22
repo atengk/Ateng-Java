@@ -2,39 +2,38 @@ package io.github.atengk.ai.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
+import io.github.atengk.ai.constant.RagIngestConstants;
 import io.github.atengk.ai.service.RagIngestService;
+import org.apache.tika.Tika;
+import org.apache.tika.io.TikaInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.*;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.time.temporal.TemporalAccessor;
+import java.util.*;
 
 /**
- * RAG 文档摄取服务实现（Spring AI 企业级版本）
+ * RAG 文档摄取服务实现
  *
- * 负责将 Resource 解析为 Document，并完成元数据标准化、清洗、切分、幂等控制与向量库写入。
+ * <p>负责将 Resource 解析为 Document，并完成资源元数据抽取、元数据标准化、内容清洗、切分、幂等控制与向量库写入。</p>
  *
  * @author Ateng
  * @since 2026-04-21
@@ -44,34 +43,24 @@ public class RagIngestServiceImpl implements RagIngestService {
 
     private static final Logger log = LoggerFactory.getLogger(RagIngestServiceImpl.class);
 
-    private static final String DEFAULT_SOURCE_TYPE = "RESOURCE";
-    private static final String INGEST_MODE_FULL = "full";
-    private static final String INGEST_MODE_INCREMENTAL = "incremental";
-    private static final String INGEST_MODE_REBUILD = "rebuild";
-    private static final String INGEST_MODE_PREVIEW = "preview";
-    private static final String SCHEMA_VERSION = "1";
-    private static final String DOCUMENT_VERSION_DEFAULT = "1";
+    private static final Tika TIKA = new Tika();
 
     private final VectorStore vectorStore;
-    private final int defaultChunkSize;
-    private final int defaultChunkOverlap;
 
-    private final ConcurrentMap<String, String> sourceHashCache = new ConcurrentHashMap<>();
-
-    public RagIngestServiceImpl(VectorStore vectorStore,
-                                @Value("${app.rag.chunk-size:1000}") int defaultChunkSize,
-                                @Value("${app.rag.chunk-overlap:200}") int defaultChunkOverlap) {
-        this.vectorStore = Objects.requireNonNull(vectorStore, "vectorStore must not be null");
-        this.defaultChunkSize = defaultChunkSize > 0 ? defaultChunkSize : 1000;
-        this.defaultChunkOverlap = Math.max(0, defaultChunkOverlap);
+    public RagIngestServiceImpl(VectorStore vectorStore) {
+        this.vectorStore = vectorStore;
     }
 
     @Override
     public int ingest(Resource resource, Map<String, Object> metadata) {
-        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, INGEST_MODE_FULL);
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_FULL);
         List<Document> parsedDocuments = parse(resource, normalizedMetadata);
+        if (CollUtil.isEmpty(parsedDocuments)) {
+            return 0;
+        }
+
         List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
-        List<Document> chunkDocuments = splitDocuments(processedDocuments, defaultChunkSize, defaultChunkOverlap);
+        List<Document> chunkDocuments = split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
         write(chunkDocuments);
         return chunkDocuments.size();
     }
@@ -100,39 +89,45 @@ public class RagIngestServiceImpl implements RagIngestService {
         TikaDocumentReader reader = new TikaDocumentReader(resource);
         List<Document> rawDocuments = safeRead(reader);
         if (CollUtil.isEmpty(rawDocuments)) {
-            log.warn("RAG ingest parse returned empty documents, resource={}", safeResourceName(resource));
+            log.warn("RAG 文档解析结果为空，resource={}", safeResourceName(resource));
             return Collections.emptyList();
         }
 
         String contentHash = calculateContentHash(rawDocuments);
+        String now = now();
+
         Map<String, Object> baseMetadata = new LinkedHashMap<>(normalizeMetadata(metadata));
-        baseMetadata.put(METADATA_CONTENT_HASH, contentHash);
-        baseMetadata.put(METADATA_DOCUMENT_VERSION, ObjectUtil.defaultIfNull(baseMetadata.get(METADATA_DOCUMENT_VERSION), DOCUMENT_VERSION_DEFAULT));
-        baseMetadata.put(METADATA_SCHEMA_VERSION, SCHEMA_VERSION);
-        baseMetadata.put(METADATA_UPDATED_AT, DateUtil.now());
-        baseMetadata.putIfAbsent(METADATA_CREATED_AT, DateUtil.now());
-        baseMetadata.putIfAbsent(METADATA_SOURCE_ID, deriveSourceId(resource));
-        baseMetadata.putIfAbsent(METADATA_SOURCE_TYPE, resolveSourceType(resource));
-        baseMetadata.putIfAbsent(METADATA_SOURCE_URI, resolveSourceUri(resource));
-        baseMetadata.putIfAbsent(METADATA_SOURCE_NAME, resolveSourceName(resource));
-        baseMetadata.putIfAbsent(METADATA_INGEST_MODE, INGEST_MODE_FULL);
+        baseMetadata.put(RagIngestConstants.METADATA_CONTENT_HASH, contentHash);
+        baseMetadata.put(RagIngestConstants.METADATA_DOCUMENT_VERSION, ObjectUtil.defaultIfNull(
+                baseMetadata.get(RagIngestConstants.METADATA_DOCUMENT_VERSION),
+                RagIngestConstants.DEFAULT_DOCUMENT_VERSION
+        ));
+        baseMetadata.put(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+        baseMetadata.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_CREATED_AT, now);
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_ID, deriveSourceId(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_TYPE, resolveSourceType(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_URI, resolveSourceUri(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_SOURCE_NAME, resolveSourceName(resource));
+        baseMetadata.putIfAbsent(RagIngestConstants.METADATA_INGEST_MODE, RagIngestConstants.INGEST_MODE_FULL);
 
         List<Document> parsedDocuments = new ArrayList<>(rawDocuments.size());
         for (int i = 0; i < rawDocuments.size(); i++) {
             Document rawDocument = rawDocuments.get(i);
             String text = rawDocument == null ? null : rawDocument.getText();
             String documentId = buildDocumentId(baseMetadata, i, contentHash);
+
             Map<String, Object> currentMetadata = new LinkedHashMap<>();
             if (rawDocument != null && MapUtil.isNotEmpty(rawDocument.getMetadata())) {
                 currentMetadata.putAll(rawDocument.getMetadata());
             }
-            currentMetadata.putAll(baseMetadata);
-            currentMetadata.put(METADATA_DOC_ID, documentId);
-            currentMetadata.put(METADATA_CONTENT_HASH, contentHash);
-            currentMetadata.put(METADATA_UPDATED_AT, DateUtil.now());
 
-            Map<String, Object> mergedMetadata = normalizeMetadata(currentMetadata);
-            parsedDocuments.add(new Document(documentId, StrUtil.nullToEmpty(text), mergedMetadata));
+            currentMetadata.putAll(baseMetadata);
+            currentMetadata.put(RagIngestConstants.METADATA_DOC_ID, documentId);
+            currentMetadata.put(RagIngestConstants.METADATA_CONTENT_HASH, contentHash);
+            currentMetadata.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+
+            parsedDocuments.add(new Document(documentId, StrUtil.nullToEmpty(text), normalizeMetadata(currentMetadata)));
         }
 
         return parsedDocuments;
@@ -162,61 +157,71 @@ public class RagIngestServiceImpl implements RagIngestService {
                 currentMetadata.putAll(document.getMetadata());
             }
             currentMetadata.putAll(normalizedMetadata);
-            currentMetadata.put(METADATA_UPDATED_AT, DateUtil.now());
+            currentMetadata.put(RagIngestConstants.METADATA_UPDATED_AT, now());
 
-            Map<String, Object> mergedMetadata = normalizeMetadata(currentMetadata);
-            processed.add(new Document(document.getId(), cleanedText, mergedMetadata));
+            processed.add(new Document(document.getId(), cleanedText, normalizeMetadata(currentMetadata)));
         }
 
         return processed;
     }
 
     @Override
-    public List<Document> split(Document document, int chunkSize, int overlap) {
-        if (document == null || StrUtil.isBlank(document.getText())) {
+    public List<Document> split(List<Document> documentList, int chunkSize) {
+        if (CollUtil.isEmpty(documentList)) {
             return Collections.emptyList();
         }
 
         if (chunkSize <= 0) {
-            chunkSize = defaultChunkSize;
+            chunkSize = RagIngestConstants.DEFAULT_CHUNK_SIZE;
         }
 
-        if (overlap < 0) {
-            overlap = 0;
-        }
+        TokenTextSplitter splitter = TokenTextSplitter.builder()
+                .withChunkSize(chunkSize)
+                .withMinChunkSizeChars(RagIngestConstants.MIN_CHUNK_SIZE_CHARS)
+                .withMinChunkLengthToEmbed(RagIngestConstants.MIN_CHUNK_LENGTH_TO_EMBED)
+                .withMaxNumChunks(RagIngestConstants.MAX_NUM_CHUNKS)
+                .withKeepSeparator(RagIngestConstants.KEEP_SEPARATOR)
+                .withPunctuationMarks(RagIngestConstants.DEFAULT_PUNCTUATION_MARKS)
+                .build();
 
-        if (overlap >= chunkSize) {
-            overlap = Math.max(0, chunkSize / 5);
-        }
-
-        List<String> chunks = splitContent(document.getText(), chunkSize, overlap);
-        if (CollUtil.isEmpty(chunks)) {
+        List<Document> splitDocs = splitter.apply(documentList);
+        if (CollUtil.isEmpty(splitDocs)) {
             return Collections.emptyList();
         }
 
-        List<Document> chunkDocuments = new ArrayList<>(chunks.size());
-        String sourceId = String.valueOf(document.getMetadata().getOrDefault(METADATA_SOURCE_ID, IdUtil.fastSimpleUUID()));
-        String parentDocumentId = document.getId();
-
-        for (int i = 0; i < chunks.size(); i++) {
-            String chunkText = chunks.get(i);
-            String chunkId = buildChunkId(parentDocumentId, i);
-            Map<String, Object> chunkMetadata = new LinkedHashMap<>();
-            if (MapUtil.isNotEmpty(document.getMetadata())) {
-                chunkMetadata.putAll(document.getMetadata());
+        List<Document> validChunks = new ArrayList<>(splitDocs.size());
+        for (Document chunk : splitDocs) {
+            if (chunk == null || StrUtil.isBlank(chunk.getText())) {
+                continue;
             }
-            chunkMetadata.put(METADATA_SOURCE_ID, sourceId);
-            chunkMetadata.put(METADATA_DOC_ID, chunkId);
-            chunkMetadata.put(METADATA_CHUNK_INDEX, i);
-            chunkMetadata.put(METADATA_CHUNK_COUNT, chunks.size());
-            chunkMetadata.put(METADATA_CHUNK_HASH, DigestUtil.sha256Hex(chunkText));
-            chunkMetadata.put(METADATA_UPDATED_AT, DateUtil.now());
-
-            Map<String, Object> mergedMetadata = normalizeMetadata(chunkMetadata);
-            chunkDocuments.add(new Document(chunkId, chunkText, mergedMetadata));
+            validChunks.add(chunk);
         }
 
-        return chunkDocuments;
+        if (CollUtil.isEmpty(validChunks)) {
+            return Collections.emptyList();
+        }
+
+        List<Document> result = new ArrayList<>(validChunks.size());
+        int totalCount = validChunks.size();
+
+        for (int i = 0; i < totalCount; i++) {
+            Document chunk = validChunks.get(i);
+
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            if (MapUtil.isNotEmpty(chunk.getMetadata())) {
+                metadata.putAll(chunk.getMetadata());
+            }
+
+            metadata.put(RagIngestConstants.METADATA_CHUNK_INDEX, i);
+            metadata.put(RagIngestConstants.METADATA_CHUNK_COUNT, totalCount);
+            metadata.put(RagIngestConstants.METADATA_CHUNK_HASH, DigestUtil.sha256Hex(chunk.getText()));
+            metadata.put(RagIngestConstants.METADATA_UPDATED_AT, now());
+
+            String chunkId = StrUtil.blankToDefault(chunk.getId(), IdUtil.fastSimpleUUID());
+            result.add(new Document(chunkId, chunk.getText(), normalizeMetadata(metadata)));
+        }
+
+        return result;
     }
 
     @Override
@@ -230,54 +235,148 @@ public class RagIngestServiceImpl implements RagIngestService {
             return;
         }
 
-        vectorStore.add(safeDocuments);
-        log.info("RAG ingest write success, count={}", safeDocuments.size());
+        Map<String, Object> metadata = safeDocuments.get(0).getMetadata();
+        String sourceId = metadata == null ? null : String.valueOf(metadata.get(RagIngestConstants.METADATA_SOURCE_ID));
+        String sourceName = metadata == null ? null : String.valueOf(metadata.get(RagIngestConstants.METADATA_SOURCE_NAME));
+
+        try {
+            vectorStore.add(safeDocuments);
+            log.info("RAG 文档写入成功，数量={}，sourceId={}, sourceName={}", safeDocuments.size(), sourceId, sourceName);
+        } catch (Exception ex) {
+            log.error("RAG 文档写入失败，数量={}，sourceId={}, sourceName={}", safeDocuments.size(), sourceId, sourceName, ex);
+            throw ex;
+        }
     }
 
     @Override
     public int ingestIncremental(Resource resource, Map<String, Object> metadata) {
-        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, INGEST_MODE_INCREMENTAL);
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_INCREMENTAL);
         List<Document> parsedDocuments = parse(resource, normalizedMetadata);
         if (CollUtil.isEmpty(parsedDocuments)) {
             return 0;
         }
 
-        String sourceId = String.valueOf(parsedDocuments.get(0).getMetadata().get(METADATA_SOURCE_ID));
-        String contentHash = String.valueOf(parsedDocuments.get(0).getMetadata().get(METADATA_CONTENT_HASH));
+        Map<String, Object> firstMetadata = parsedDocuments.get(0).getMetadata();
+        String sourceId = getMetadataString(firstMetadata, RagIngestConstants.METADATA_SOURCE_ID);
+        String contentHash = getMetadataString(firstMetadata, RagIngestConstants.METADATA_CONTENT_HASH);
 
-        String cachedHash = sourceHashCache.get(sourceId);
-        if (StrUtil.isNotBlank(cachedHash) && StrUtil.equals(cachedHash, contentHash)) {
-            log.info("RAG incremental ingest skipped, sourceId={}, contentHash={}", sourceId, contentHash);
+        if (exists(sourceId, contentHash)) {
+            log.info("RAG 增量摄取跳过（内容未变化），sourceId={}, contentHash={}", sourceId, contentHash);
             return 0;
         }
 
         deleteBySourceId(sourceId);
 
         List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
-        List<Document> chunkDocuments = splitDocuments(processedDocuments, defaultChunkSize, defaultChunkOverlap);
+        List<Document> chunkDocuments = split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
         write(chunkDocuments);
 
-        sourceHashCache.put(sourceId, contentHash);
         return chunkDocuments.size();
     }
 
     @Override
     public void rebuild(Resource resource, Map<String, Object> metadata) {
-        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, INGEST_MODE_REBUILD);
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_REBUILD);
         List<Document> parsedDocuments = parse(resource, normalizedMetadata);
         if (CollUtil.isEmpty(parsedDocuments)) {
             return;
         }
 
-        String sourceId = String.valueOf(parsedDocuments.get(0).getMetadata().get(METADATA_SOURCE_ID));
+        Map<String, Object> firstMetadata = parsedDocuments.get(0).getMetadata();
+        String sourceId = getMetadataString(firstMetadata, RagIngestConstants.METADATA_SOURCE_ID);
+
         deleteBySourceId(sourceId);
 
         List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
-        List<Document> chunkDocuments = splitDocuments(processedDocuments, defaultChunkSize, defaultChunkOverlap);
+        List<Document> chunkDocuments = split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
         write(chunkDocuments);
+    }
 
-        String contentHash = String.valueOf(parsedDocuments.get(0).getMetadata().get(METADATA_CONTENT_HASH));
-        sourceHashCache.put(sourceId, contentHash);
+    @Override
+    public boolean exists(Filter.Expression expression) {
+        if (expression == null) {
+            return false;
+        }
+        SearchRequest request = SearchRequest.builder()
+                .query("exist-check")
+                .topK(1)
+                .filterExpression(expression)
+                .build();
+        return CollUtil.isNotEmpty(vectorStore.similaritySearch(request));
+    }
+
+    @Override
+    public boolean exists(String sourceId, String contentHash) {
+        if (StrUtil.isBlank(sourceId) || StrUtil.isBlank(contentHash)) {
+            return false;
+        }
+
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .and(
+                        new FilterExpressionBuilder().eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId),
+                        new FilterExpressionBuilder().eq(RagIngestConstants.METADATA_CONTENT_HASH, contentHash)
+                )
+                .build();
+
+        SearchRequest request = SearchRequest.builder()
+                .query("exist-check")
+                .topK(1)
+                .filterExpression(expression)
+                .build();
+
+        return CollUtil.isNotEmpty(vectorStore.similaritySearch(request));
+    }
+
+    @Override
+    public List<Document> list(Filter.Expression expression, int topK) {
+        if (expression == null) {
+            return Collections.emptyList();
+        }
+        SearchRequest request = SearchRequest.builder()
+                .query("list-check")
+                .topK(topK)
+                .filterExpression(expression)
+                .build();
+        return vectorStore.similaritySearch(request);
+    }
+
+    @Override
+    public List<Document> search(String query, int topK) {
+        return similaritySearch(query, topK, null);
+    }
+
+    @Override
+    public List<Document> similaritySearch(String query, int topK, Filter.Expression expression) {
+
+        if (StrUtil.isBlank(query)) {
+            return Collections.emptyList();
+        }
+
+        if (topK <= 0) {
+            topK = 5;
+        }
+
+        try {
+
+            SearchRequest.Builder builder = SearchRequest.builder()
+                    .query(query)
+                    .topK(topK);
+
+            if (expression != null) {
+                builder.filterExpression(expression);
+            }
+
+            List<Document> results = vectorStore.similaritySearch(builder.build());
+
+            log.info("RAG 相似度查询完成，query={}, topK={}, 返回数量={}",
+                    query, topK, CollUtil.size(results));
+
+            return CollUtil.isEmpty(results) ? Collections.emptyList() : results;
+
+        } catch (Exception ex) {
+            log.error("RAG 相似度查询失败，query={}", query, ex);
+            throw ex;
+        }
     }
 
     @Override
@@ -287,8 +386,7 @@ public class RagIngestServiceImpl implements RagIngestService {
         }
 
         vectorStore.delete(filterExpression);
-        sourceHashCache.clear();
-        log.info("RAG documents deleted by filter expression");
+        log.info("RAG 文档已按过滤条件删除");
     }
 
     @Override
@@ -298,8 +396,7 @@ public class RagIngestServiceImpl implements RagIngestService {
         }
 
         vectorStore.delete(documentIds);
-        sourceHashCache.clear();
-        log.info("RAG documents deleted by documentIds, count={}", documentIds.size());
+        log.info("RAG 文档已按 documentIds 删除，数量={}", documentIds.size());
     }
 
     @Override
@@ -308,10 +405,12 @@ public class RagIngestServiceImpl implements RagIngestService {
             return;
         }
 
-        Filter.Expression expression = new FilterExpressionBuilder().eq(METADATA_SOURCE_ID, sourceId).build();
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_SOURCE_ID, sourceId)
+                .build();
+
         vectorStore.delete(expression);
-        sourceHashCache.remove(sourceId);
-        log.info("RAG documents deleted by sourceId={}", sourceId);
+        log.info("RAG 文档已按 sourceId 删除，sourceId={}", sourceId);
     }
 
     @Override
@@ -320,19 +419,23 @@ public class RagIngestServiceImpl implements RagIngestService {
             return;
         }
 
-        Filter.Expression expression = new FilterExpressionBuilder().eq(METADATA_TENANT_ID, tenantId).build();
+        Filter.Expression expression = new FilterExpressionBuilder()
+                .eq(RagIngestConstants.METADATA_TENANT_ID, tenantId)
+                .build();
+
         vectorStore.delete(expression);
-        sourceHashCache.clear();
-        log.info("RAG documents deleted by tenantId={}", tenantId);
+        log.info("RAG 文档已按 tenantId 删除，tenantId={}", tenantId);
     }
 
     @Override
     public Map<String, Object> normalizeMetadata(Map<String, Object> metadata) {
+        String now = now();
+
         if (MapUtil.isEmpty(metadata)) {
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put(METADATA_SCHEMA_VERSION, SCHEMA_VERSION);
-            result.put(METADATA_CREATED_AT, DateUtil.now());
-            result.put(METADATA_UPDATED_AT, DateUtil.now());
+            result.put(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+            result.put(RagIngestConstants.METADATA_CREATED_AT, now);
+            result.put(RagIngestConstants.METADATA_UPDATED_AT, now);
             return result;
         }
 
@@ -341,6 +444,7 @@ public class RagIngestServiceImpl implements RagIngestService {
             if (StrUtil.isBlank(key) || value == null) {
                 return;
             }
+
             String normalizedKey = StrUtil.trim(key);
             Object normalizedValue = normalizeMetadataValue(value);
             if (normalizedValue != null) {
@@ -348,9 +452,9 @@ public class RagIngestServiceImpl implements RagIngestService {
             }
         });
 
-        normalized.putIfAbsent(METADATA_SCHEMA_VERSION, SCHEMA_VERSION);
-        normalized.putIfAbsent(METADATA_CREATED_AT, DateUtil.now());
-        normalized.put(METADATA_UPDATED_AT, DateUtil.now());
+        normalized.putIfAbsent(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+        normalized.putIfAbsent(RagIngestConstants.METADATA_CREATED_AT, now);
+        normalized.put(RagIngestConstants.METADATA_UPDATED_AT, now);
         return normalized;
     }
 
@@ -362,13 +466,13 @@ public class RagIngestServiceImpl implements RagIngestService {
 
         for (Map.Entry<String, Object> entry : metadata.entrySet()) {
             if (StrUtil.isBlank(entry.getKey())) {
-                throw new IllegalArgumentException("metadata key must not be blank");
+                throw new IllegalArgumentException("元数据 key 不能为空");
             }
             if (entry.getValue() == null) {
                 continue;
             }
             if (!isSupportedMetadataValue(entry.getValue())) {
-                throw new IllegalArgumentException("unsupported metadata value type for key: " + entry.getKey());
+                throw new IllegalArgumentException("不支持的元数据值类型，key=" + entry.getKey());
             }
         }
     }
@@ -387,22 +491,10 @@ public class RagIngestServiceImpl implements RagIngestService {
 
     @Override
     public List<Document> preview(Resource resource, Map<String, Object> metadata) {
-        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, INGEST_MODE_PREVIEW);
+        Map<String, Object> normalizedMetadata = buildResourceMetadata(resource, metadata, RagIngestConstants.INGEST_MODE_PREVIEW);
         List<Document> parsedDocuments = parse(resource, normalizedMetadata);
         List<Document> processedDocuments = preprocess(parsedDocuments, normalizedMetadata);
-        return splitDocuments(processedDocuments, defaultChunkSize, defaultChunkOverlap);
-    }
-
-    private List<Document> splitDocuments(List<Document> documents, int chunkSize, int overlap) {
-        if (CollUtil.isEmpty(documents)) {
-            return Collections.emptyList();
-        }
-
-        List<Document> result = new ArrayList<>();
-        for (Document document : documents) {
-            result.addAll(split(document, chunkSize, overlap));
-        }
-        return result;
+        return split(processedDocuments, RagIngestConstants.DEFAULT_CHUNK_SIZE);
     }
 
     private Map<String, Object> buildResourceMetadata(Resource resource, Map<String, Object> metadata, String ingestMode) {
@@ -411,25 +503,99 @@ public class RagIngestServiceImpl implements RagIngestService {
             merged.putAll(metadata);
         }
 
-        merged.putIfAbsent(METADATA_SOURCE_ID, deriveSourceId(resource));
-        merged.putIfAbsent(METADATA_SOURCE_TYPE, resolveSourceType(resource));
-        merged.putIfAbsent(METADATA_SOURCE_NAME, resolveSourceName(resource));
-        merged.putIfAbsent(METADATA_SOURCE_URI, resolveSourceUri(resource));
-        merged.putIfAbsent(METADATA_DOCUMENT_VERSION, DOCUMENT_VERSION_DEFAULT);
-        merged.put(METADATA_INGEST_MODE, ingestMode);
-        merged.put(METADATA_SCHEMA_VERSION, SCHEMA_VERSION);
-        merged.put(METADATA_UPDATED_AT, DateUtil.now());
-        merged.putIfAbsent(METADATA_CREATED_AT, DateUtil.now());
+        String now = now();
+
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_ID, deriveSourceId(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_TYPE, resolveSourceType(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_NAME, resolveSourceName(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_SOURCE_URI, resolveSourceUri(resource));
+        merged.putIfAbsent(RagIngestConstants.METADATA_DOCUMENT_VERSION, RagIngestConstants.DEFAULT_DOCUMENT_VERSION);
+        merged.put(RagIngestConstants.METADATA_INGEST_MODE, ingestMode);
+        merged.put(RagIngestConstants.METADATA_SCHEMA_VERSION, RagIngestConstants.DEFAULT_SCHEMA_VERSION);
+        merged.put(RagIngestConstants.METADATA_UPDATED_AT, now);
+        merged.putIfAbsent(RagIngestConstants.METADATA_CREATED_AT, now);
+
+        addFileMetadata(resource, merged);
 
         validateMetadata(merged);
         return normalizeMetadata(merged);
+    }
+
+    private void addFileMetadata(Resource resource, Map<String, Object> merged) {
+        if (resource == null || !resource.exists()) {
+            return;
+        }
+
+        String fileName = safeResourceName(resource);
+        if (StrUtil.isNotBlank(fileName)) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_NAME, fileName);
+        }
+
+        Long fileSize = safeContentLength(resource);
+        if (fileSize != null && fileSize > 0) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_SIZE, fileSize);
+        }
+
+        String fileExtension = safeFileExtension(resource);
+        if (StrUtil.isNotBlank(fileExtension)) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_EXTENSION, fileExtension);
+        }
+
+        String fileType = safeMimeType(resource);
+        if (StrUtil.isNotBlank(fileType)) {
+            merged.putIfAbsent(RagIngestConstants.METADATA_FILE_TYPE, fileType);
+        }
+    }
+
+    private Long safeContentLength(Resource resource) {
+        if (resource == null || resource instanceof InputStreamResource) {
+            return null;
+        }
+
+        try {
+            long contentLength = resource.contentLength();
+            return contentLength > 0 ? contentLength : null;
+        } catch (Exception ex) {
+            log.debug("获取文件大小失败，resource={}", safeResourceName(resource), ex);
+            return null;
+        }
+    }
+
+    private String safeFileExtension(Resource resource) {
+        if (resource == null) {
+            return null;
+        }
+
+        String filename = resource.getFilename();
+        if (StrUtil.isBlank(filename)) {
+            return null;
+        }
+
+        String extName = FileUtil.extName(filename);
+        return StrUtil.isBlank(extName) ? null : extName.toLowerCase(Locale.ROOT);
+    }
+
+    private String safeMimeType(Resource resource) {
+        if (resource == null || resource instanceof InputStreamResource) {
+            return null;
+        }
+
+        try (InputStream inputStream = resource.getInputStream();
+             TikaInputStream tikaInputStream = TikaInputStream.get(inputStream)) {
+
+            return TIKA.detect(tikaInputStream);
+
+        } catch (Exception ex) {
+            log.debug("检测文件类型失败，resource={}", safeResourceName(resource), ex);
+            return null;
+        }
     }
 
     private List<Document> safeRead(TikaDocumentReader reader) {
         try {
             return reader.get();
         } catch (Exception ex) {
-            throw new IllegalStateException("failed to read resource by TikaDocumentReader", ex);
+            throw new IllegalStateException("使用 TikaDocumentReader 读取资源失败", ex);
         }
     }
 
@@ -443,19 +609,17 @@ public class RagIngestServiceImpl implements RagIngestService {
             if (document == null || StrUtil.isBlank(document.getText())) {
                 continue;
             }
-            builder.append(document.getText());
-            builder.append('\n');
+            builder.append(document.getText()).append('\n');
         }
         return DigestUtil.sha256Hex(builder.toString());
     }
 
     private String buildDocumentId(Map<String, Object> metadata, int index, String contentHash) {
-        String sourceId = String.valueOf(metadata.getOrDefault(METADATA_SOURCE_ID, IdUtil.fastSimpleUUID()));
-        return DigestUtil.sha256Hex(sourceId + ":" + contentHash + ":" + index);
-    }
-
-    private String buildChunkId(String parentDocumentId, int index) {
-        return DigestUtil.sha256Hex(parentDocumentId + ":" + index);
+        String sourceId = getMetadataString(metadata, RagIngestConstants.METADATA_SOURCE_ID);
+        if (StrUtil.isBlank(sourceId)) {
+            sourceId = IdUtil.fastSimpleUUID();
+        }
+        return DigestUtil.sha256Hex(sourceId + ':' + contentHash + ':' + index);
     }
 
     private String deriveSourceId(Resource resource) {
@@ -466,31 +630,33 @@ public class RagIngestServiceImpl implements RagIngestService {
         if (StrUtil.isBlank(sourceKey)) {
             sourceKey = IdUtil.fastSimpleUUID();
         }
-        return "src_" + DigestUtil.sha256Hex(sourceKey);
+        return RagIngestConstants.DEFAULT_SOURCE_ID_PREFIX + DigestUtil.sha256Hex(sourceKey);
     }
 
     private String resolveSourceType(Resource resource) {
         if (resource == null) {
-            return DEFAULT_SOURCE_TYPE;
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE;
         }
-
-        String typeName = resource.getClass().getSimpleName().toLowerCase();
-        if (typeName.contains("classpath")) {
-            return "CLASSPATH";
+        if (resource instanceof ClassPathResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_CLASSPATH;
         }
-        if (typeName.contains("file")) {
-            return "FILE";
+        if (resource instanceof FileSystemResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_FILE;
         }
-        if (typeName.contains("url") || typeName.contains("http")) {
-            return "URL";
+        if (resource instanceof UrlResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_URL;
         }
-        return DEFAULT_SOURCE_TYPE;
+        if (resource instanceof InputStreamResource) {
+            return RagIngestConstants.DEFAULT_SOURCE_TYPE_STREAM;
+        }
+        return RagIngestConstants.DEFAULT_SOURCE_TYPE;
     }
 
     private String resolveSourceUri(Resource resource) {
         if (resource == null) {
             return null;
         }
+
         try {
             URI uri = resource.getURI();
             return uri == null ? null : uri.toString();
@@ -503,26 +669,31 @@ public class RagIngestServiceImpl implements RagIngestService {
         if (resource == null) {
             return null;
         }
+
         String fileName = resource.getFilename();
         if (StrUtil.isNotBlank(fileName)) {
             return fileName;
         }
+
         String description = resource.getDescription();
         if (StrUtil.isNotBlank(description)) {
             return description;
         }
-        return "unknown-resource";
+
+        return RagIngestConstants.DEFAULT_UNKNOWN_RESOURCE_NAME;
     }
 
     private String safeResourceName(Resource resource) {
         if (resource == null) {
-            return "unknown-resource";
+            return RagIngestConstants.DEFAULT_UNKNOWN_RESOURCE_NAME;
         }
+
         String name = resource.getFilename();
         if (StrUtil.isBlank(name)) {
             name = resource.getDescription();
         }
-        return StrUtil.blankToDefault(name, "unknown-resource");
+
+        return StrUtil.blankToDefault(name, RagIngestConstants.DEFAULT_UNKNOWN_RESOURCE_NAME);
     }
 
     private String normalizeContent(String content) {
@@ -541,70 +712,6 @@ public class RagIngestServiceImpl implements RagIngestService {
         normalized = normalized.trim();
 
         return StrUtil.isBlank(normalized) ? null : normalized;
-    }
-
-    private List<String> splitContent(String content, int chunkSize, int overlap) {
-        if (StrUtil.isBlank(content)) {
-            return Collections.emptyList();
-        }
-
-        int length = content.length();
-        if (length <= chunkSize) {
-            return Collections.singletonList(content.trim());
-        }
-
-        List<String> chunks = new ArrayList<>();
-        int start = 0;
-        while (start < length) {
-            int end = Math.min(start + chunkSize, length);
-            if (end < length) {
-                end = findBestBoundary(content, start, end, chunkSize);
-            }
-
-            if (end <= start) {
-                end = Math.min(start + chunkSize, length);
-            }
-
-            String chunk = content.substring(start, end).trim();
-            if (StrUtil.isNotBlank(chunk)) {
-                chunks.add(chunk);
-            }
-
-            if (end >= length) {
-                break;
-            }
-
-            int nextStart = end - overlap;
-            if (nextStart <= start) {
-                nextStart = end;
-            }
-            start = nextStart;
-        }
-
-        return chunks;
-    }
-
-    private int findBestBoundary(String content, int start, int end, int chunkSize) {
-        int minBoundary = start + Math.max(1, chunkSize / 2);
-        int boundary = end;
-
-        for (int i = end - 1; i >= minBoundary; i--) {
-            char c = content.charAt(i);
-            if (Character.isWhitespace(c) || isSentenceBoundary(c)) {
-                boundary = i + 1;
-                break;
-            }
-        }
-
-        return boundary;
-    }
-
-    private boolean isSentenceBoundary(char c) {
-        return c == '.' || c == '!' || c == '?' || c == ';' || c == '。' || c == '！' || c == '？' || c == '；';
-    }
-
-    private Map<String, Object> normalizeDocumentMetadata(Map<String, Object> metadata) {
-        return normalizeMetadata(metadata);
     }
 
     private Object normalizeMetadataValue(Object value) {
@@ -667,11 +774,11 @@ public class RagIngestServiceImpl implements RagIngestService {
             }
         }
 
-        if (value instanceof java.util.Date) {
-            return DateUtil.format((java.util.Date) value, "yyyy-MM-dd HH:mm:ss");
+        if (value instanceof Date) {
+            return DateUtil.format((Date) value, "yyyy-MM-dd HH:mm:ss");
         }
 
-        if (value instanceof java.time.temporal.TemporalAccessor) {
+        if (value instanceof TemporalAccessor) {
             return value.toString();
         }
 
@@ -690,8 +797,8 @@ public class RagIngestServiceImpl implements RagIngestService {
                 || value instanceof Collection<?>
                 || value instanceof Map<?, ?>
                 || value.getClass().isArray()
-                || value instanceof java.util.Date
-                || value instanceof java.time.temporal.TemporalAccessor;
+                || value instanceof Date
+                || value instanceof TemporalAccessor;
     }
 
     private List<Document> deduplicateAndNormalize(List<Document> documents) {
@@ -704,12 +811,25 @@ public class RagIngestServiceImpl implements RagIngestService {
             if (document == null || StrUtil.isBlank(document.getText())) {
                 continue;
             }
-            Map<String, Object> mergedMetadata = normalizeDocumentMetadata(document.getMetadata());
+
+            Map<String, Object> mergedMetadata = normalizeMetadata(document.getMetadata());
             String id = StrUtil.blankToDefault(document.getId(), IdUtil.fastSimpleUUID());
-            Document normalizedDocument = new Document(id, document.getText(), mergedMetadata);
-            ordered.put(id, normalizedDocument);
+            ordered.put(id, new Document(id, document.getText(), mergedMetadata));
         }
 
         return new ArrayList<>(ordered.values());
+    }
+
+    private String getMetadataString(Map<String, Object> metadata, String key) {
+        if (MapUtil.isEmpty(metadata) || StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        Object value = metadata.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String now() {
+        return DateUtil.now();
     }
 }
