@@ -100,13 +100,17 @@ spring:
 
 ### DeepSeek
 
+> DeepSeek 的 API 在协议层“兼容 OpenAI”，因此这里选择使用 spring-ai-starter-model-openai 依赖
+>
+> DeepSeek 没有 embedding 模型，这里配置的是 Ollama 开源 embedding 
+
 添加依赖
 
 ```xml
-<!-- Spring AI - DeepSeek 依赖 -->
+<!-- Spring AI - OpenAI 依赖 -->
 <dependency>
     <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-starter-model-deepseek</artifactId>
+    <artifactId>spring-ai-starter-model-openai</artifactId>
 </dependency>
 ```
 
@@ -128,10 +132,50 @@ spring:
           top-p: 0.9
       embedding:
         base-url: http://localhost:11434
-        api-key: 
-        embeddings-path: /api/embeddings
+        api-key:
+        embeddings-path: /v1/embeddings
         options:
           model: qwen3-embedding:4b
+```
+
+
+
+### Qwen
+
+> Qwen 的 API 在协议层“兼容 OpenAI”（DashScope 提供兼容层），因此这里选择使用 spring-ai-starter-model-openai 依赖
+>
+
+添加依赖
+
+```xml
+<!-- Spring AI - OpenAI 依赖 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-openai</artifactId>
+</dependency>
+```
+
+编辑 `application.yml`
+
+> 注意这里 base-url 不是 https://dashscope.aliyuncs.com/compatible-mode/v1
+
+```yaml
+---
+# Spring AI 配置
+spring:
+  ai:
+    openai:
+      api-key: ${DASHSCOPE_API_KEY}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      chat:
+        options:
+          model: qwen3.6-plus
+          temperature: 0.7
+          max-tokens: 4096
+          top-p: 0.9
+      embedding:
+        options:
+          model: text-embedding-v4
 ```
 
 
@@ -159,13 +203,13 @@ spring:
       base-url: http://localhost:11434
       chat:
         options:
-          model: qwen3.5:2b
+          model: qwen2.5:0.5b
           temperature: 0.7
           max-tokens: 2048
           top-p: 1.0
       embedding:
         options:
-          model: qwen3-embedding:4b
+          model: qwen3-embedding:0.6b
 ```
 
 

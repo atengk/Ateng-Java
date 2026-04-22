@@ -20,37 +20,10 @@ spring:
       base-url: http://localhost:11434
       chat:
         options:
-          model: qwen2.5:3b
+          model: qwen2.5:0.5b
           temperature: 0.7
           max-tokens: 2048
           top-p: 1.0
       embedding:
         options:
           model: qwen3-embedding:0.6b
----
-# Spring AI RAG 配置
-spring:
-  ai:
-    vectorstore:
-      milvus:
-        initialize-schema: true
-        database-name: default
-        collection-name: spring_ai_knowledge_ateng
-        embedding-dimension: 1024
-        metric-type: COSINE
-        index-type: IVF_FLAT
-        index-parameters: '{"nlist":1024}'
-
-        id-field-name: id
-        content-field-name: content
-        metadata-field-name: metadata
-        embedding-field-name: embedding
-
-        auto-id: false
-
-        client:
-          host: 192.168.1.12
-          port: 40140
-          username: root
-          password: Milvus
-          secure: false
