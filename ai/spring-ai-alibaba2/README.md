@@ -2,16 +2,14 @@
 
 ## 版本信息
 
-| 组件               | 版本                                  |
-|------------------|-------------------------------------|
-| JDK              | 25                                  |
-| Maven            | 3.9.12                              |
-| SpringBoot       | 4.0.2                               |
-| SpringAI         | 2.0.0                               |
-| SpringAI Alibaba | 2.0.0                               |
+| 组件             | 版本                                     |
+| ---------------- | ---------------------------------------- |
+| JDK              | 25                                       |
+| Maven            | 3.9.12                                   |
+| SpringBoot       | 4.0.5                                    |
+| SpringAI         | 2.0.0-M4 （等后续GA）                    |
+| SpringAI Alibaba | 2.0.0（等待发布）                        |
 | Model            | OpenAI（DeepSeek、Qwen 兼容 OpenAI API） |
-
-
 
 ------
 

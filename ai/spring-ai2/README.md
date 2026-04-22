@@ -6,8 +6,8 @@
 | ---------- | --------------------- |
 | JDK        | 25                    |
 | Maven      | 3.9.12                |
-| SpringBoot | 4.0.2                 |
-| SpringAI   | 2.0.0-M2 （等后续GA） |
+| SpringBoot | 4.0.5                 |
+| SpringAI   | 2.0.0-M4 （等后续GA） |
 
 
 
@@ -207,7 +207,7 @@ Spring AI 2.0 不是一个 Prompt 工具库，而是：
 
 ```xml
     <properties>
-        <spring-ai.version>2.0.0-M2</spring-ai.version>
+        <spring-ai.version>2.0.0-M4</spring-ai.version>
     </properties>
     <dependencies>
         <!-- Spring AI - DeepSeek 依赖 -->

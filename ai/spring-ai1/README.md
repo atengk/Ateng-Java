@@ -20,7 +20,7 @@
 
 ```xml
 <properties>
-    <spring-ai.version>1.1.2</spring-ai.version>
+    <spring-ai.version>1.1.4</spring-ai.version>
 </properties>
 <dependencies>
     <!-- Spring AI - OpenAI 依赖 -->

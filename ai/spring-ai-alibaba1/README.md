@@ -6,12 +6,10 @@
 | ---------------- | ------------------------------------------------------------ |
 | JDK              | 21                                                           |
 | Maven            | 3.9.12                                                       |
-| SpringBoot       | 3.5.10                                                       |
-| SpringAI         | 1.1.2                                                        |
-| SpringAI Alibaba | 1.1.2.1                                                      |
+| SpringBoot       | 3.5.13                                                       |
+| SpringAI         | 1.1.4                                                        |
+| SpringAI Alibaba | 1.1.2.2                                                      |
 | Model            | [阿里云百炼](https://bailian.console.aliyun.com/cn-beijing/?tab=home#/home) |
-
-
 
 ------
 
@@ -21,8 +19,8 @@
 
 ```xml
 <properties>
-    <spring-ai.version>1.1.2</spring-ai.version>
-    <spring-ai-alibaba.version>1.1.2.0</spring-ai-alibaba.version>
+    <spring-ai.version>1.1.4</spring-ai.version>
+    <spring-ai-alibaba.version>1.1.2.2</spring-ai-alibaba.version>
 </properties>
 <dependencies>
     <!-- Spring AI Alibaba 依赖 -->
