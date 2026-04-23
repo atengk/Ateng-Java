@@ -1,10 +1,20 @@
+---
+# 服务配置
 server:
+  # 服务端口
   port: 14000
+
+# Spring 配置
 spring:
   application:
+    # 应用名称
     name: ${project.artifactId}
+
+# 日志配置
 logging:
   level:
-    root: info
-    io.github.atengk: debug
+    # 默认日志级别
+    root: INFO
+    # 项目包日志级别
+    io.github.atengk: DEBUG
 ---
