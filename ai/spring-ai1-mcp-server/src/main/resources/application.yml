@@ -8,12 +8,75 @@ logging:
     root: info
     io.github.atengk: debug
 ---
+# Spring Boot Actuator 配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+---
 # MCP Server 配置
 spring:
   ai:
     mcp:
       server:
+        # 是否启用 MCP Server
         enabled: true
-        protocol: sse
+
+        # MCP 传输协议：
+        # STREAMABLE：推荐的 HTTP MCP 协议，支持 POST/GET 和可选 SSE 流式消息
+        # STATELESS：无状态 HTTP 模式，适合云原生，但不支持 sampling、ping 等双向消息能力
+        protocol: STREAMABLE
+
+        # Server 类型：
+        # SYNC 只注册同步方法
+        # ASYNC 只注册响应式 / 异步方法（如 Mono / Flux）
+        type: SYNC
+
+        # MCP Server 的标识名称，建议使用你的服务名或项目名
         name: ateng-mcp-server
+
+        # MCP Server 自身版本，建议写你的项目版本，而不是 Spring AI 版本
         version: 1.0.0
+
+        # 提供给 MCP Client 的服务说明，建议写清楚核心能力边界
+        instructions: 提供数学计算、天气查询、系统运行信息、问候语模板和自动补全能力。
+
+        # 单次 MCP 请求处理超时时间
+        # 一般 15s~60s 都可以，开发阶段建议先给宽一点
+        request-timeout: 30s
+
+        # MCP 能力开关
+        # 当前项目已经实现了 Tool / Resource / Prompt / Completion，建议都显式打开
+        capabilities:
+          tool: true
+          resource: true
+          prompt: true
+          completion: true
+
+        # 资源、工具、提示词变更通知开关
+        # 如果服务能力基本固定，保留 true 也没问题；如果想尽量简化，也可以省略，默认就是 true
+        resource-change-notification: true
+        tool-change-notification: true
+        prompt-change-notification: true
+
+        # 注解扫描配置
+        annotation-scanner:
+          # 自动扫描 @McpTool / @McpResource / @McpPrompt / @McpComplete
+          enabled: true
+
+        # Streamable-HTTP 传输层配置
+        streamable-http:
+          # MCP 对外暴露的 HTTP 端点
+          # 默认就是 /mcp，这里显式写出，方便客户端对接
+          mcp-endpoint: /mcp
+
+          # 服务端保活间隔
+          # 为空表示关闭；开启后会定期向客户端发送 ping 检查连接状态
+          # 对于 Streamable-HTTP，这个保活目前只对 SSE 监听连接生效
+          keep-alive-interval: 30s
+
+          # 是否禁止 DELETE 操作
+          # 开发调试阶段通常保留 false
+          # 如果你希望接口行为更保守，可以改成 true
+          disallow-delete: false
