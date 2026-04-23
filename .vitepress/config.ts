@@ -262,6 +262,7 @@ export default defineConfig({
                         text: 'MCP Server',
                         items: [
                             { text: 'Spring AI 1 MCP Server', link: '/ai/spring-ai1-mcp-server/README' },
+                            { text: 'Spring AI 2 MCP Server', link: '/ai/spring-ai2-mcp-server/README' },
                         ]
                     },
                     {
