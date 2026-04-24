@@ -16,27 +16,15 @@ logging:
 # Spring AI 配置
 spring:
   ai:
-    ollama:
-      base-url: http://localhost:11434
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: https://api.chatanywhere.tech
       chat:
         options:
-          model: qwen2.5:0.5b
+          model: gpt-4o
           temperature: 0.7
           max-tokens: 2048
           top-p: 1.0
       embedding:
         options:
-          model: qwen3-embedding:0.6b
----
-# Spring AI MCP Client 配置
-spring:
-  ai:
-    mcp:
-      client:
-        streamable-http:
-          connections:
-            local-mcp:
-              url: http://localhost:19002
-              endpoint: /mcp
-        name: ateng-mcp-client
-        version: 1.0.0
+          model: text-embedding-3-small

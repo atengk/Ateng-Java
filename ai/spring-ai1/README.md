@@ -337,6 +337,574 @@ GET /api/ai/chat/template?topic=SpringAI是什么？
 
 
 
+## 多模态对话
+
+非文字输入通常指图片、音频、视频、文件等媒体内容参与对话。Spring AI 1.1.x 中，`ChatClient` 可以通过 `.user(u -> u.text(...).media(...))` 同时传入文本提示词和媒体资源。需要注意，是否真正支持图片、音频或视频，最终取决于底层模型能力，例如 OpenAI GPT-4o、Azure OpenAI GPT-4o、Anthropic Claude 3、Vertex AI Gemini、Ollama LLaVA 等模型支持多模态输入。([Spring 框架](https://docs.springframework.org.cn/spring-ai/reference/api/multimodality.html))
+
+**controller创建**
+
+```java
+package io.github.atengk.ai.controller;
+
+import cn.hutool.core.util.StrUtil;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.MediaType;
+import org.springframework.util.MimeType;
+import org.springframework.util.MimeTypeUtils;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+/**
+ * 多模态对话控制器
+ *
+ * @author Ateng
+ * @since 2026-04-24
+ */
+@RestController
+@RequestMapping("/api/ai")
+public class MultimodalChatController {
+
+    private final ChatClient chatClient;
+
+    public MultimodalChatController(ChatClient.Builder chatClientBuilder) {
+        this.chatClient = chatClientBuilder.build();
+    }
+
+}
+```
+
+### 图片理解对话
+
+该接口用于上传一张图片，并让多模态模型根据图片内容返回文本说明。适合图片描述、截图分析、票据识别、界面理解等场景。
+
+```java
+@PostMapping(value = "/chat/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public String chatWithImage(
+        @RequestParam MultipartFile file,
+        @RequestParam(defaultValue = "请描述这张图片的内容") String message) throws Exception {
+
+    String contentType = StrUtil.blankToDefault(file.getContentType(), MediaType.IMAGE_PNG_VALUE);
+    MimeType mimeType = MimeTypeUtils.parseMimeType(contentType);
+
+    ByteArrayResource imageResource = new ByteArrayResource(file.getBytes()) {
+        @Override
+        public String getFilename() {
+            return file.getOriginalFilename();
+        }
+    };
+
+    return chatClient
+            .prompt()
+            .user(u -> u
+                    .text(message)
+                    .media(mimeType, imageResource)
+            )
+            .call()
+            .content();
+}
+```
+
+POST /api/ai/chat/image
+
+form-data 参数：
+
+| 参数    | 类型   | 示例                   | 说明       |
+| ------- | ------ | ---------------------- | ---------- |
+| file    | File   | test.png               | 上传的图片 |
+| message | String | 请分析图片中有什么内容 | 提示词     |
+
+### 图片识别并按要求输出
+
+该接口用于上传图片后，让模型按指定格式返回结果。例如让模型识别图片中的文字、物品、表格、页面布局等。
+
+```java
+@PostMapping(value = "/chat/image/analysis", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public String analysisImage(
+        @RequestParam MultipartFile file,
+        @RequestParam(defaultValue = "请识别图片内容，并使用Markdown格式输出") String message) throws Exception {
+
+    String contentType = StrUtil.blankToDefault(file.getContentType(), MediaType.IMAGE_PNG_VALUE);
+    MimeType mimeType = MimeTypeUtils.parseMimeType(contentType);
+
+    ByteArrayResource imageResource = new ByteArrayResource(file.getBytes()) {
+        @Override
+        public String getFilename() {
+            return file.getOriginalFilename();
+        }
+    };
+
+    return chatClient
+            .prompt()
+            .user(u -> u
+                    .text("""
+                            你是一个专业的图片分析助手。
+                            请根据用户上传的图片完成分析任务。
+
+                            用户要求：
+                            {message}
+                            """)
+                    .param("message", message)
+                    .media(mimeType, imageResource)
+            )
+            .call()
+            .content();
+}
+```
+
+POST /api/ai/chat/image/analysis
+
+form-data 参数：
+
+| 参数    | 类型   | 示例                             | 说明         |
+| ------- | ------ | -------------------------------- | ------------ |
+| file    | File   | page.png                         | 上传的图片   |
+| message | String | 请提取图片中的文字，并整理成表格 | 图片分析要求 |
+
+
+
+### 多图片对比分析
+
+该接口用于同时上传多张图片，让模型进行对比分析。适合截图差异对比、商品图片对比、设计稿对比等场景。
+
+```java
+@PostMapping(value = "/chat/images/compare", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public String compareImages(
+        @RequestParam MultipartFile firstFile,
+        @RequestParam MultipartFile secondFile,
+        @RequestParam(defaultValue = "请对比两张图片的主要差异") String message) throws Exception {
+
+    String firstContentType = StrUtil.blankToDefault(firstFile.getContentType(), MediaType.IMAGE_PNG_VALUE);
+    String secondContentType = StrUtil.blankToDefault(secondFile.getContentType(), MediaType.IMAGE_PNG_VALUE);
+
+    ByteArrayResource firstResource = new ByteArrayResource(firstFile.getBytes()) {
+        @Override
+        public String getFilename() {
+            return firstFile.getOriginalFilename();
+        }
+    };
+
+    ByteArrayResource secondResource = new ByteArrayResource(secondFile.getBytes()) {
+        @Override
+        public String getFilename() {
+            return secondFile.getOriginalFilename();
+        }
+    };
+
+    return chatClient
+            .prompt()
+            .user(u -> u
+                    .text(message)
+                    .media(MimeTypeUtils.parseMimeType(firstContentType), firstResource)
+                    .media(MimeTypeUtils.parseMimeType(secondContentType), secondResource)
+            )
+            .call()
+            .content();
+}
+```
+
+POST /api/ai/chat/images/compare
+
+form-data 参数：
+
+| 参数       | 类型   | 示例                     | 说明       |
+| ---------- | ------ | ------------------------ | ---------- |
+| firstFile  | File   | old.png                  | 第一张图片 |
+| secondFile | File   | new.png                  | 第二张图片 |
+| message    | String | 请对比两张图片的页面差异 | 对比要求   |
+
+
+
+### 音频输入对话
+
+该接口用于上传音频文件，并让支持音频输入的多模态模型根据音频内容返回文本结果。需要注意，不是所有聊天模型都支持音频作为 `media` 输入；如果你的目标是稳定的语音转文字，建议优先使用 Spring AI 的音频转录模型 API，而不是 ChatClient 多模态对话。Spring AI 文档也将音频转录和文本转语音归在专用音频模型下。([Spring 框架](https://docs.springframework.org.cn/spring-ai/reference/api/chatclient.html))
+
+```java
+@PostMapping(value = "/chat/audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public String chatWithAudio(
+        @RequestParam MultipartFile file,
+        @RequestParam(defaultValue = "请总结这段音频的主要内容") String message) throws Exception {
+
+    String contentType = StrUtil.blankToDefault(file.getContentType(), "audio/mpeg");
+    MimeType mimeType = MimeTypeUtils.parseMimeType(contentType);
+
+    ByteArrayResource audioResource = new ByteArrayResource(file.getBytes()) {
+        @Override
+        public String getFilename() {
+            return file.getOriginalFilename();
+        }
+    };
+
+    return chatClient
+            .prompt()
+            .user(u -> u
+                    .text(message)
+                    .media(mimeType, audioResource)
+            )
+            .call()
+            .content();
+}
+```
+
+POST /api/ai/chat/audio
+
+form-data 参数：
+
+| 参数    | 类型   | 示例               | 说明       |
+| ------- | ------ | ------------------ | ---------- |
+| file    | File   | test.mp3           | 上传的音频 |
+| message | String | 请总结这段音频内容 | 分析要求   |
+
+
+
+### 文件输入对话
+
+该接口用于上传文档类文件，让模型根据文件内容进行总结或问答。实际是否支持 PDF、Word、文本文件等输入，取决于底层模型和对应 Spring AI 模型适配器的多模态能力。
+
+```java
+@PostMapping(value = "/chat/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public String chatWithFile(
+        @RequestParam MultipartFile file,
+        @RequestParam(defaultValue = "请总结这个文件的核心内容") String message) throws Exception {
+
+    String contentType = StrUtil.blankToDefault(file.getContentType(), MediaType.APPLICATION_OCTET_STREAM_VALUE);
+    MimeType mimeType = MimeTypeUtils.parseMimeType(contentType);
+
+    ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+        @Override
+        public String getFilename() {
+            return file.getOriginalFilename();
+        }
+    };
+
+    return chatClient
+            .prompt()
+            .user(u -> u
+                    .text(message)
+                    .media(mimeType, fileResource)
+            )
+            .call()
+            .content();
+}
+```
+
+POST /api/ai/chat/file
+
+form-data 参数：
+
+| 参数    | 类型   | 示例           | 说明         |
+| ------- | ------ | -------------- | ------------ |
+| file    | File   | document.pdf   | 上传的文件   |
+| message | String | 请总结文件内容 | 文件处理要求 |
+
+
+
+### 使用本地资源图片
+
+如果图片在项目资源目录下，也可以直接使用 `ClassPathResource` 作为媒体输入。官方示例中也是通过 `ClassPathResource` 加载图片，并通过 `.media(MimeTypeUtils.IMAGE_PNG, resource)` 传入 ChatClient。([Spring 框架](https://docs.springframework.org.cn/spring-ai/reference/api/multimodality.html))
+
+```java
+@GetMapping("/chat/image/local")
+public String chatWithLocalImage(
+        @RequestParam(defaultValue = "请描述这张图片的内容") String message) {
+
+    return chatClient
+            .prompt()
+            .user(u -> u
+                    .text(message)
+                    .media(MimeTypeUtils.IMAGE_PNG, new org.springframework.core.io.ClassPathResource("/images/test.png"))
+            )
+            .call()
+            .content();
+}
+```
+
+GET /api/ai/chat/image/local?message=请分析这张图片
+
+
+
+## 多模态输出
+
+Spring AI 1.1.x 中，如果要生成图片，使用的是 `ImageModel`；如果要做语音转文字，使用的是 `TranscriptionModel`；如果要做文本转语音，使用的是 `TextToSpeechModel`。其中图片生成通过 `ImagePrompt` / `ImageResponse` 进行调用，语音转写和文本转语音则通过 Spring AI 的统一音频模型接口完成。
+
+**controller创建**
+
+```java
+package io.github.atengk.ai.controller;
+
+import org.springframework.ai.audio.transcription.TranscriptionModel;
+import org.springframework.ai.audio.tts.TextToSpeechModel;
+import org.springframework.ai.image.ImageModel;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 多模态输出控制器
+ *
+ * @author Ateng
+ * @since 2026-04-24
+ */
+@RestController
+@RequestMapping("/api/ai")
+public class MultimodalOutputController {
+
+    private final ImageModel imageModel;
+    private final TranscriptionModel transcriptionModel;
+    private final TextToSpeechModel textToSpeechModel;
+
+    public MultimodalOutputController(
+            ImageModel imageModel,
+            TranscriptionModel transcriptionModel,
+            TextToSpeechModel textToSpeechModel) {
+        this.imageModel = imageModel;
+        this.transcriptionModel = transcriptionModel;
+        this.textToSpeechModel = textToSpeechModel;
+    }
+
+}
+```
+
+### 最基础的图片生成
+
+该接口用于根据文本提示词生成图片，适合最基础的文生图场景。
+
+```java
+import org.springframework.ai.image.ImagePrompt;
+import org.springframework.ai.image.ImageResponse;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+/**
+ * 最基础的图片生成
+ */
+@GetMapping("/image/generate")
+public String generateImage(@RequestParam String message) {
+    ImageResponse response = imageModel.call(new ImagePrompt(message));
+    return response.getResult().getOutput().getUrl();
+}
+```
+
+GET /api/ai/image/generate?message=一只正在写代码的橘猫，科技感办公室背景
+
+### 指定参数生成图片
+
+该接口用于在生成图片时指定模型参数，例如分辨率、质量、风格等，适合对图片效果有更明确要求的场景。
+
+```java
+import org.springframework.ai.image.ImagePrompt;
+import org.springframework.ai.image.ImageResponse;
+import org.springframework.ai.openai.OpenAiImageOptions;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+/**
+ * 指定参数生成图片
+ */
+@GetMapping("/image/generate/options")
+public String generateImageWithOptions(@RequestParam String message) {
+    ImageResponse response = imageModel.call(
+            new ImagePrompt(
+                    message,
+                    OpenAiImageOptions.builder()
+                            .model("dall-e-3")
+                            .width(1024)
+                            .height(1024)
+                            .quality("hd")
+                            .style("vivid")
+                            .build()
+            )
+    );
+    return response.getResult().getOutput().getUrl();
+}
+```
+
+GET /api/ai/image/generate/options?message=一个未来风格的Java开发者工作台，霓虹灯效果
+
+### 返回 Base64 图片内容
+
+该接口用于返回 Base64 格式的图片数据，适合前端自行渲染图片或自行落库保存的场景。
+
+```java
+import org.springframework.ai.image.ImagePrompt;
+import org.springframework.ai.image.ImageResponse;
+import org.springframework.ai.openai.OpenAiImageOptions;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+/**
+ * 返回 Base64 图片内容
+ */
+@GetMapping("/image/generate/base64")
+public String generateImageBase64(@RequestParam String message) {
+    ImageResponse response = imageModel.call(
+            new ImagePrompt(
+                    message,
+                    OpenAiImageOptions.builder()
+                            .model("dall-e-3")
+                            .responseFormat("b64_json")
+                            .build()
+            )
+    );
+    return response.getResult().getOutput().getB64Json();
+}
+```
+
+GET /api/ai/image/generate/base64?message=一张Spring AI技术分享海报，蓝色科技风
+
+### 最基础的语音转文字
+
+该接口用于上传音频文件，并将音频内容转换为文字，适合会议录音转写、语音笔记整理等场景。
+
+```java
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
+/**
+ * 最基础的语音转文字
+ */
+@PostMapping(value = "/audio/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public String transcribe(@RequestParam MultipartFile file) throws Exception {
+    ByteArrayResource audioResource = new ByteArrayResource(file.getBytes()) {
+        @Override
+        public String getFilename() {
+            return file.getOriginalFilename();
+        }
+    };
+
+    return transcriptionModel.transcribe(audioResource);
+}
+```
+
+POST /api/ai/audio/transcribe
+
+form-data 参数：
+
+| 参数 | 类型 | 示例     | 说明           |
+| ---- | ---- | -------- | -------------- |
+| file | File | test.mp3 | 上传的音频文件 |
+
+### 带参数的语音转文字
+
+该接口用于在转写时附带语言、提示词、温度等参数，适合希望提高特定领域识别准确率的场景。
+
+```java
+import org.springframework.ai.openai.OpenAiAudioTranscriptionOptions;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
+/**
+ * 带参数的语音转文字
+ */
+@PostMapping(value = "/audio/transcribe/options", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+public String transcribeWithOptions(
+        @RequestParam MultipartFile file,
+        @RequestParam(defaultValue = "以下内容主要是Java和Spring AI相关技术分享") String prompt) throws Exception {
+
+    ByteArrayResource audioResource = new ByteArrayResource(file.getBytes()) {
+        @Override
+        public String getFilename() {
+            return file.getOriginalFilename();
+        }
+    };
+
+    OpenAiAudioTranscriptionOptions options = OpenAiAudioTranscriptionOptions.builder()
+            .language("zh")
+            .prompt(prompt)
+            .temperature(0f)
+            .build();
+
+    return transcriptionModel.transcribe(audioResource, options);
+}
+```
+
+POST /api/ai/audio/transcribe/options
+
+form-data 参数：
+
+| 参数   | 类型   | 示例                            | 说明           |
+| ------ | ------ | ------------------------------- | -------------- |
+| file   | File   | demo.mp3                        | 上传的音频文件 |
+| prompt | String | 以下内容主要是Spring AI技术交流 | 转写提示词     |
+
+### 最基础的文本转语音
+
+该接口用于将文本转换为音频文件，适合朗读文章、语音播报、语音通知等场景。
+
+```java
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+/**
+ * 最基础的文本转语音
+ */
+@GetMapping("/audio/speech")
+public ResponseEntity<byte[]> textToSpeech(@RequestParam String message) {
+    byte[] audio = textToSpeechModel.call(message);
+
+    return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=speech.mp3")
+            .contentType(MediaType.parseMediaType("audio/mpeg"))
+            .body(audio);
+}
+```
+
+GET /api/ai/audio/speech?message=大家好，欢迎学习Spring AI文本转语音功能
+
+### 自定义语音参数的文本转语音
+
+该接口用于指定声音、模型、输出格式、语速等参数，适合对语音效果有更高要求的场景。
+
+```java
+import org.springframework.ai.audio.tts.TextToSpeechPrompt;
+import org.springframework.ai.openai.OpenAiAudioSpeechOptions;
+import org.springframework.ai.openai.api.OpenAiAudioApi;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+/**
+ * 自定义语音参数的文本转语音
+ */
+@GetMapping("/audio/speech/options")
+public ResponseEntity<byte[]> textToSpeechWithOptions(@RequestParam String message) {
+    OpenAiAudioSpeechOptions options = OpenAiAudioSpeechOptions.builder()
+            .model("gpt-4o-mini-tts")
+            .voice(OpenAiAudioApi.SpeechRequest.Voice.ALLOY)
+            .responseFormat(OpenAiAudioApi.SpeechRequest.AudioResponseFormat.MP3)
+            .speed(1.0)
+            .build();
+
+    byte[] audio = textToSpeechModel
+            .call(new TextToSpeechPrompt(message, options))
+            .getResult()
+            .getOutput();
+
+    return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=speech-custom.mp3")
+            .contentType(MediaType.parseMediaType("audio/mpeg"))
+            .body(audio);
+}
+```
+
+GET /api/ai/audio/speech/options?message=这是一个自定义声音参数的文本转语音示例
+
+
+
 ## Prompt 与模型参数管理
 
 在实际项目中，Prompt 和模型参数如果缺乏统一管理，往往会出现**难以维护、行为不可控、无法复用**等问题。本章节从工程实践角度，介绍如何对 Prompt 与模型参数进行系统化管理。
