@@ -3,13 +3,48 @@ server:
 spring:
   application:
     name: ${project.artifactId}
+logging:
+  level:
+    root: info
+    io.github.atengk: debug
 ---
-# Spring AI 配置
+# Spring AI Alibaba 配置
 spring:
   ai:
+    model:
+      # 聊天模型使用 DashScope
+      chat: dashscope
+      # 嵌入模型使用 DashScope
+      embedding: dashscope
+
     dashscope:
+      # DashScope 服务地址
       base-url: https://dashscope.aliyuncs.com
+
+      # 建议通过环境变量注入
       api-key: ${DASHSCOPE_API_KEY}
+
       chat:
         options:
-          model: deepseek-v3.2
+          # DashScope Chat 模型名称
+          # 通用对话 / Agent：qwen3.6-plus、qwen-plus、qwen-max
+          # 视觉理解：qwen3-vl-plus、qwen-vl-plus、qwen-vl-max
+          model: qwen-plus
+
+          # 是否使用多模态调用链
+          # 传入图片、视频等 Media 时设为 true；普通文本对话设为 false
+          multi-model: false
+
+          # 输出随机性，越低越稳定
+          temperature: 0.7
+
+          # 最大输出 token 数，按需开启
+          # max-tokens: 2048
+
+          # 核采样参数，按需开启
+          # top-p: 0.8
+
+      embedding:
+        options:
+          # 嵌入模型，RAG / 向量检索常用
+          model: text-embedding-v4
