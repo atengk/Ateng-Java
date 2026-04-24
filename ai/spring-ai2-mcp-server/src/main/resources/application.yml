@@ -24,8 +24,9 @@ spring:
         enabled: true
 
         # MCP 传输协议：
-        # STREAMABLE：推荐的 HTTP MCP 协议，支持 POST/GET 和可选 SSE 流式消息
-        # STATELESS：无状态 HTTP 模式，适合云原生，但不支持 sampling、ping 等双向消息能力
+        # STREAMABLE：推荐的新一代 HTTP MCP 协议，支持 POST/GET 和可选 SSE 流式消息，适合大多数新项目。
+        # STATELESS：无状态 HTTP 模式，适合云原生和水平扩容，但不支持 sampling、ping 等双向消息能力。
+        # SSE：传统 SSE 流式协议，主要用于兼容旧版 MCP Client，新项目优先使用 STREAMABLE。
         protocol: STREAMABLE
 
         # Server 类型：
