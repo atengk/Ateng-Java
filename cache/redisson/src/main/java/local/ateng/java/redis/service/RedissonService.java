@@ -2,59 +2,242 @@ package local.ateng.java.redis.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.redisson.api.*;
+import org.redisson.api.geo.GeoSearchArgs;
+import org.redisson.api.stream.StreamAddArgs;
+import org.redisson.api.stream.StreamReadArgs;
+import org.redisson.api.stream.StreamReadGroupArgs;
+import org.redisson.client.protocol.ScoredEntry;
 
+import java.time.Duration;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Redis 服务接口
- * 封装常用的 key 操作方法，统一基于 Redisson 实现
+ * 基于 Spring Boot 3 + Redisson 封装 Redis 常用能力。
  *
  * @author Ateng
- * @since 2025-08-01
+ * @since 2026-04-26
  */
 public interface RedissonService {
+
+    // -------------------------------------------------------------------------
+    // Redisson 原生对象访问
+    // -------------------------------------------------------------------------
 
     /**
      * 获取 RedissonClient 实例。
      *
-     * @return RedissonClient
+     * @return RedissonClient 实例
      */
     RedissonClient getClient();
 
-    // -------------------------- 通用 Key 管理 --------------------------
+    /**
+     * 获取对象桶。
+     *
+     * @param key Redis 键
+     * @param <T> 值类型
+     * @return RBucket
+     */
+    <T> RBucket<T> getBucket(String key);
 
     /**
-     * 判断指定 key 是否存在
+     * 获取哈希 Map。
      *
-     * @param key redis 键
-     * @return 存在返回 true，否则 false
+     * @param key Redis 键
+     * @param <K> 字段类型
+     * @param <V> 值类型
+     * @return RMap
+     */
+    <K, V> RMap<K, V> getMap(String key);
+
+    /**
+     * 获取带 TTL 能力的 MapCache。
+     *
+     * @param key Redis 键
+     * @param <K> 字段类型
+     * @param <V> 值类型
+     * @return RMapCache
+     */
+    <K, V> RMapCache<K, V> getMapCache(String key);
+
+    /**
+     * 获取列表。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RList
+     */
+    <T> RList<T> getList(String key);
+
+    /**
+     * 获取双端队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RDeque
+     */
+    <T> RDeque<T> getDeque(String key);
+
+    /**
+     * 获取集合。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RSet
+     */
+    <T> RSet<T> getSet(String key);
+
+    /**
+     * 获取带元素 TTL 能力的 SetCache。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RSetCache
+     */
+    <T> RSetCache<T> getSetCache(String key);
+
+    /**
+     * 获取有序集合。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RScoredSortedSet
+     */
+    <T> RScoredSortedSet<T> getScoredSortedSet(String key);
+
+    /**
+     * 获取 BitSet。
+     *
+     * @param key Redis 键
+     * @return RBitSet
+     */
+    RBitSet getBitSet(String key);
+
+    /**
+     * 获取 HyperLogLog。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RHyperLogLog
+     */
+    <T> RHyperLogLog<T> getHyperLogLog(String key);
+
+    /**
+     * 获取 Geo。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RGeo
+     */
+    <T> RGeo<T> getGeo(String key);
+
+    /**
+     * 获取普通队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RQueue
+     */
+    <T> RQueue<T> getQueue(String key);
+
+    /**
+     * 获取阻塞队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RBlockingQueue
+     */
+    <T> RBlockingQueue<T> getBlockingQueue(String key);
+
+    /**
+     * 获取可靠队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RReliableQueue
+     */
+    <T> RReliableQueue<T> getReliableQueue(String key);
+
+    /**
+     * 获取消息主题。
+     *
+     * @param topic 主题名称
+     * @return RTopic
+     */
+    RTopic getTopic(String topic);
+
+    /**
+     * 获取 Stream。
+     *
+     * @param key Redis 键
+     * @param <K> 字段类型
+     * @param <V> 值类型
+     * @return RStream
+     */
+    <K, V> RStream<K, V> getStream(String key);
+
+    /**
+     * 获取脚本执行对象。
+     *
+     * @return RScript
+     */
+    RScript getScript();
+
+    // -------------------------------------------------------------------------
+    // 通用 Key 管理
+    // -------------------------------------------------------------------------
+
+    /**
+     * 判断指定 key 是否存在。
+     *
+     * @param key Redis 键
+     * @return 存在返回 true
      */
     boolean hasKey(String key);
 
     /**
-     * 删除指定 key
+     * 统计多个 key 中实际存在的数量。
      *
-     * @param key redis 键
-     * @return 是否成功删除
+     * @param keys Redis 键集合
+     * @return 存在数量
+     */
+    long countExists(String... keys);
+
+    /**
+     * 删除指定 key。
+     *
+     * @param key Redis 键
+     * @return 是否删除成功
      */
     boolean deleteKey(String key);
 
     /**
-     * 批量删除指定 key 集合
+     * 批量删除 key。
      *
-     * @param keys redis 键集合
-     * @return 成功删除的数量
+     * @param keys Redis 键集合
+     * @return 删除数量
      */
-    long deleteKeys(Set<String> keys);
+    long deleteKeys(Collection<String> keys);
 
     /**
-     * 设置 key 的过期时间
+     * 根据通配符删除 key。
      *
-     * @param key     redis 键
+     * @param pattern 通配符表达式
+     * @return 删除数量
+     */
+    long deleteByPattern(String pattern);
+
+    /**
+     * 设置 key 过期时间。
+     *
+     * @param key     Redis 键
      * @param timeout 超时时间
      * @param unit    时间单位
      * @return 是否设置成功
@@ -62,33 +245,42 @@ public interface RedissonService {
     boolean expire(String key, long timeout, TimeUnit unit);
 
     /**
-     * 获取 key 的剩余过期时间
+     * 设置 key 过期时间。
      *
-     * @param key  redis 键
+     * @param key Redis 键
+     * @param ttl 过期时间
+     * @return 是否设置成功
+     */
+    boolean expire(String key, Duration ttl);
+
+    /**
+     * 获取 key 剩余过期时间。
+     *
+     * @param key  Redis 键
      * @param unit 时间单位
-     * @return 剩余时间（-1 表示永久；-2 表示不存在）
+     * @return 剩余时间，-1 表示永久，-2 表示不存在
      */
     long getTtl(String key, TimeUnit unit);
 
     /**
-     * 让 key 永久不过期（移除过期时间）
+     * 移除 key 过期时间。
      *
-     * @param key redis 键
-     * @return 是否成功移除
+     * @param key Redis 键
+     * @return 是否成功
      */
     boolean persist(String key);
 
     /**
-     * 修改 key 名称（key 必须存在，且新 key 不存在）
+     * 修改 key 名称。
      *
-     * @param oldKey 旧的 redis 键
-     * @param newKey 新的 redis 键
+     * @param oldKey 旧 key
+     * @param newKey 新 key
      * @return 是否成功
      */
     boolean renameKey(String oldKey, String newKey);
 
     /**
-     * 如果新 key 不存在则重命名
+     * 新 key 不存在时修改 key 名称。
      *
      * @param oldKey 旧 key
      * @param newKey 新 key
@@ -97,964 +289,1111 @@ public interface RedissonService {
     boolean renameKeyIfAbsent(String oldKey, String newKey);
 
     /**
-     * 获取所有匹配 pattern 的 key（慎用，生产环境建议加前缀限制）
+     * 查询匹配通配符的 key。
      *
-     * @param pattern 通配符表达式，如 user:*、session_*
-     * @return 匹配的 key 集合
+     * @param pattern 通配符表达式
+     * @return key 集合
      */
     Set<String> keys(String pattern);
 
     /**
-     * 判断 key 是否已经过期（不存在或 ttl <= 0 视为过期）
+     * 查询匹配通配符的 key，并限制返回数量。
      *
-     * @param key redis 键
-     * @return true 表示已经过期或不存在
+     * @param pattern 通配符表达式
+     * @param count   最大数量
+     * @return key 集合
+     */
+    Set<String> scanKeys(String pattern, int count);
+
+    /**
+     * 判断 key 是否已过期或不存在。
+     *
+     * @param key Redis 键
+     * @return 已过期或不存在返回 true
      */
     boolean isExpired(String key);
 
     /**
-     * 获取 key 的 value 类型名称
-     * （string、list、set、zset、hash 等）
+     * 获取 key 类型。
      *
-     * @param key redis 键
-     * @return 类型名称，若不存在返回 null
+     * @param key Redis 键
+     * @return 类型名称
      */
     String getKeyType(String key);
 
+    // -------------------------------------------------------------------------
+    // 类型转换
+    // -------------------------------------------------------------------------
+
     /**
-     * 对指定 key 执行原子整数加法操作（适用于计数器）
+     * 将对象转换为指定类型。
      *
-     * @param key   redis 键
-     * @param delta 要增加的整数值（正负均可）
-     * @return 操作后的最新值
+     * @param value 原始值
+     * @param clazz 目标类型
+     * @param <T>   泛型类型
+     * @return 转换后的值
      */
-    long increment(String key, long delta);
+    <T> T convertValue(Object value, Class<T> clazz);
 
     /**
-     * 对指定 key 执行原子整数减法操作（适用于计数器）
+     * 将对象转换为指定泛型类型。
      *
-     * @param key   redis 键
-     * @param delta 要减少的整数值（正数）
-     * @return 操作后的最新值
+     * @param value         原始值
+     * @param typeReference 目标类型引用
+     * @param <T>           泛型类型
+     * @return 转换后的值
      */
-    long decrement(String key, long delta);
+    <T> T convertValue(Object value, TypeReference<T> typeReference);
+
+    // -------------------------------------------------------------------------
+    // 字符串 / Bucket 操作
+    // -------------------------------------------------------------------------
 
     /**
-     * 对指定 key 执行原子浮点数加法操作（支持 double，适用于余额、分数等）
+     * 设置缓存值。
      *
-     * @param key   redis 键
-     * @param delta 要增加的浮点数值（正负均可）
-     * @return 操作后的最新值
-     */
-    double incrementDouble(String key, double delta);
-
-    /**
-     * 对指定 key 执行原子浮点数减法操作（支持 double）
-     *
-     * @param key   redis 键
-     * @param delta 要减少的浮点数值（正数）
-     * @return 操作后的最新值
-     */
-    double decrementDouble(String key, double delta);
-
-    // -------------------------- 字符串操作 --------------------------
-
-    /**
-     * 设置任意对象缓存（无过期时间）
-     *
-     * @param key   redis 键
-     * @param value 要缓存的对象（可以是任意 JavaBean、集合、基本类型等）
+     * @param key   Redis 键
+     * @param value 缓存值
      */
     void set(String key, Object value);
 
     /**
-     * 设置任意对象缓存（带过期时间）
+     * 设置缓存值并指定过期时间。
      *
-     * @param key     redis 键
-     * @param value   要缓存的对象
-     * @param timeout 过期时间
+     * @param key     Redis 键
+     * @param value   缓存值
+     * @param timeout 超时时间
      * @param unit    时间单位
      */
     void set(String key, Object value, long timeout, TimeUnit unit);
 
     /**
-     * 类型转换工具方法：将 Object 转换为指定类型
-     *
-     * @param value 原始对象
-     * @param clazz 目标类型
-     * @param <T>   目标类型泛型
-     * @return 转换后的对象，或 null（若原始对象为 null）
-     */
-    <T> T convertValue(Object value, Class<T> clazz);
-
-    /**
-     * 类型转换工具方法：将 Object 转换为指定类型
-     *
-     * @param value         原始对象
-     * @param typeReference 目标类型引用（支持泛型）
-     * @param <T>           目标类型泛型
-     * @return 转换后的对象，失败返回 null
-     */
-    <T> T convertValue(Object value, TypeReference<T> typeReference);
-
-    /**
-     * 获取指定类型的缓存对象
-     *
-     * @param key   redis 键
-     * @param clazz 目标类型（如 User.class）
-     * @param <T>   返回值的泛型
-     * @return 反序列化后的对象；若 key 不存在返回 null
-     */
-    <T> T get(String key, Class<T> clazz);
-
-    /**
-     * 获取指定类型的缓存对象（支持泛型）
-     *
-     * @param key           redis 键
-     * @param typeReference 目标类型引用（支持泛型）
-     * @param <T>           返回值泛型
-     * @return 反序列化后的对象；若 key 不存在返回 null
-     */
-    <T> T get(String key, TypeReference<T> typeReference);
-
-    /**
-     * 设置对象值，如果 key 不存在才设置（原子操作）
-     *
-     * @param key     redis 键
-     * @param value   对象值
-     * @param timeout 过期时间
-     * @param unit    时间单位
-     * @return true 表示成功设置，false 表示 key 已存在
-     */
-    boolean setIfAbsent(String key, Object value, long timeout, TimeUnit unit);
-
-    /**
-     * 原子替换对象值并返回旧值
-     *
-     * @param key   redis 键
-     * @param value 新值对象
-     * @param clazz 目标类型（如 User.class）
-     * @param <T>   旧值的返回类型
-     * @return 原先存在的旧值对象；若 key 不存在返回 null
-     */
-    <T> T getAndSet(String key, Object value, Class<T> clazz);
-
-    /**
-     * 原子替换对象值并返回旧值（支持泛型）
-     *
-     * @param key           redis 键
-     * @param value         新值对象
-     * @param typeReference 旧值类型引用
-     * @param <T>           旧值泛型
-     * @return 原先存在的旧值对象；若 key 不存在返回 null
-     */
-    <T> T getAndSet(String key, Object value, TypeReference<T> typeReference);
-
-    /**
-     * 获取对象值的序列化字节大小（不是业务字段长度）
-     *
-     * @param key redis 键
-     * @return 序列化后的大小（单位：字节），不存在时返回 0
-     */
-    long size(String key);
-
-    /**
-     * 批量获取多个字符串 key 对应的值
-     *
-     * @param keys Redis 键列表
-     * @return 包含 key 和对应 value 的 Map，不存在的 key 不会出现在结果中
-     */
-    Map<String, Object> entries(Collection<String> keys);
-
-    /**
-     * 批量获取多个字符串 key 对应的值
-     *
-     * @param keys  Redis 键列表
-     * @param clazz 目标类型（如 User.class）
-     * @param <T>   旧值的返回类型
-     * @return 包含 key 和对应 value 的 Map，不存在的 key 不会出现在结果中
-     */
-    <T> Map<String, T> entries(Collection<String> keys, Class<T> clazz);
-
-    /**
-     * 批量获取多个字符串 key 对应的值
-     *
-     * @param keys          Redis 键列表
-     * @param typeReference 旧值类型引用
-     * @param <T>           旧值的返回类型
-     * @return 包含 key 和对应 value 的 Map，不存在的 key 不会出现在结果中
-     */
-    <T> Map<String, T> entries(Collection<String> keys, TypeReference<T> typeReference);
-
-    // -------------------------- 哈希（Hash）操作 --------------------------
-
-    /**
-     * 设置哈希字段值
+     * 设置缓存值并指定过期时间。
      *
      * @param key   Redis 键
-     * @param field 哈希字段名
-     * @param value 要存储的对象（会自动序列化）
+     * @param value 缓存值
+     * @param ttl   过期时间
      */
-    void hPut(String key, String field, Object value);
+    void set(String key, Object value, Duration ttl);
 
     /**
-     * 获取哈希字段值
-     *
-     * @param key   Redis 键
-     * @param field 哈希字段名
-     * @param clazz 返回类型
-     * @param <T>   类型泛型
-     * @return 字段对应的值，若不存在返回 null
-     */
-    <T> T hGet(String key, String field, Class<T> clazz);
-
-    /**
-     * 获取哈希字段值（支持复杂泛型类型）
-     *
-     * @param key           Redis 键
-     * @param field         哈希字段名
-     * @param typeReference 返回类型引用（支持泛型）
-     * @param <T>           类型泛型
-     * @return 字段对应的值，若不存在返回 null
-     */
-    <T> T hGet(String key, String field, TypeReference<T> typeReference);
-
-    /**
-     * 删除一个或多个哈希字段
-     *
-     * @param key    Redis 键
-     * @param fields 要删除的字段名，可多个
-     */
-    void hDelete(String key, String... fields);
-
-    /**
-     * 判断哈希中是否存在指定字段
-     *
-     * @param key   Redis 键
-     * @param field 字段名
-     * @return 若存在返回 true，否则返回 false
-     */
-    boolean hHasKey(String key, String field);
-
-    /**
-     * 获取哈希表中所有字段与值
-     *
-     * @param key Redis 键
-     * @return 包含所有字段及其值的 Map
-     */
-    Map<String, Object> hEntries(String key);
-
-    /**
-     * 获取哈希表中所有字段与值，并转换为指定类型的 Map
-     *
-     * @param key   Redis 键
-     * @param clazz 目标类型
-     * @param <T>   目标类型泛型
-     * @return 包含所有字段及其值的 Map，值均转换为指定类型，若 key 不存在返回空 Map
-     */
-    <T> Map<String, T> hEntries(String key, Class<T> clazz);
-
-    /**
-     * 获取哈希表中所有字段与值，并转换为指定泛型类型的 Map
-     *
-     * @param key           Redis 键
-     * @param typeReference 目标类型引用（支持泛型）
-     * @param <T>           目标类型泛型
-     * @return 包含所有字段及其值的 Map，值均转换为指定类型，若 key 不存在返回空 Map
-     */
-    <T> Map<String, T> hEntries(String key, TypeReference<T> typeReference);
-
-    /**
-     * 获取哈希表中所有字段名
-     *
-     * @param key Redis 键
-     * @return 所有字段名组成的 Set
-     */
-    Set<String> hKeys(String key);
-
-    /**
-     * 获取哈希表中所有字段值
-     *
-     * @param key Redis 键
-     * @return 所有字段值组成的集合
-     */
-    Collection<Object> hValues(String key);
-
-    /**
-     * 获取哈希表中所有字段值，并转换为指定类型集合
+     * 获取缓存值。
      *
      * @param key   Redis 键
      * @param clazz 目标类型
      * @param <T>   泛型类型
-     * @return 所有字段值组成的指定类型集合，若转换失败则对应元素为 null
+     * @return 缓存值
      */
-    <T> Collection<T> hValues(String key, Class<T> clazz);
+    <T> T get(String key, Class<T> clazz);
 
     /**
-     * 获取哈希表中所有字段值，并转换为指定泛型集合
+     * 获取缓存值。
      *
      * @param key           Redis 键
-     * @param typeReference 目标类型引用（支持泛型）
+     * @param typeReference 目标泛型类型
      * @param <T>           泛型类型
-     * @return 所有字段值组成的指定类型集合，若转换失败则对应元素为 null
+     * @return 缓存值
      */
-    <T> Collection<T> hValues(String key, TypeReference<T> typeReference);
+    <T> T get(String key, TypeReference<T> typeReference);
 
     /**
-     * 获取哈希字段数量
+     * key 不存在时设置缓存值。
+     *
+     * @param key     Redis 键
+     * @param value   缓存值
+     * @param timeout 超时时间
+     * @param unit    时间单位
+     * @return 是否设置成功
+     */
+    boolean setIfAbsent(String key, Object value, long timeout, TimeUnit unit);
+
+    /**
+     * key 不存在时设置缓存值。
+     *
+     * @param key   Redis 键
+     * @param value 缓存值
+     * @param ttl   过期时间
+     * @return 是否设置成功
+     */
+    boolean setIfAbsent(String key, Object value, Duration ttl);
+
+    /**
+     * key 存在时设置缓存值。
+     *
+     * @param key   Redis 键
+     * @param value 缓存值
+     * @return 是否设置成功
+     */
+    boolean setIfExists(String key, Object value);
+
+    /**
+     * key 存在时设置缓存值并指定过期时间。
+     *
+     * @param key   Redis 键
+     * @param value 缓存值
+     * @param ttl   过期时间
+     * @return 是否设置成功
+     */
+    boolean setIfExists(String key, Object value, Duration ttl);
+
+    /**
+     * 原子替换并返回旧值。
+     *
+     * @param key   Redis 键
+     * @param value 新值
+     * @param clazz 旧值类型
+     * @param <T>   泛型类型
+     * @return 旧值
+     */
+    <T> T getAndSet(String key, Object value, Class<T> clazz);
+
+    /**
+     * 原子替换并返回旧值。
+     *
+     * @param key           Redis 键
+     * @param value         新值
+     * @param typeReference 旧值类型
+     * @param <T>           泛型类型
+     * @return 旧值
+     */
+    <T> T getAndSet(String key, Object value, TypeReference<T> typeReference);
+
+    /**
+     * 获取并删除缓存值。
+     *
+     * @param key   Redis 键
+     * @param clazz 目标类型
+     * @param <T>   泛型类型
+     * @return 删除前的值
+     */
+    <T> T getAndDelete(String key, Class<T> clazz);
+
+    /**
+     * 批量获取缓存值。
+     *
+     * @param keys Redis 键集合
+     * @return 键值 Map
+     */
+    Map<String, Object> entries(Collection<String> keys);
+
+    /**
+     * 批量获取缓存值并转换类型。
+     *
+     * @param keys  Redis 键集合
+     * @param clazz 目标类型
+     * @param <T>   泛型类型
+     * @return 键值 Map
+     */
+    <T> Map<String, T> entries(Collection<String> keys, Class<T> clazz);
+
+    /**
+     * 批量获取缓存值并转换泛型类型。
+     *
+     * @param keys          Redis 键集合
+     * @param typeReference 目标类型
+     * @param <T>           泛型类型
+     * @return 键值 Map
+     */
+    <T> Map<String, T> entries(Collection<String> keys, TypeReference<T> typeReference);
+
+    /**
+     * 获取序列化后的字节大小。
      *
      * @param key Redis 键
-     * @return 字段个数
+     * @return 字节大小
+     */
+    long size(String key);
+
+    // -------------------------------------------------------------------------
+    // 原子数值 / 计数器 / ID
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取长整型原子对象。
+     *
+     * @param key Redis 键
+     * @return RAtomicLong
+     */
+    RAtomicLong getAtomicLong(String key);
+
+    /**
+     * 获取浮点型原子对象。
+     *
+     * @param key Redis 键
+     * @return RAtomicDouble
+     */
+    RAtomicDouble getAtomicDouble(String key);
+
+    /**
+     * 整数自增。
+     *
+     * @param key   Redis 键
+     * @param delta 增量
+     * @return 最新值
+     */
+    long increment(String key, long delta);
+
+    /**
+     * 整数自减。
+     *
+     * @param key   Redis 键
+     * @param delta 减量
+     * @return 最新值
+     */
+    long decrement(String key, long delta);
+
+    /**
+     * 浮点数自增。
+     *
+     * @param key   Redis 键
+     * @param delta 增量
+     * @return 最新值
+     */
+    double incrementDouble(String key, double delta);
+
+    /**
+     * 浮点数自减。
+     *
+     * @param key   Redis 键
+     * @param delta 减量
+     * @return 最新值
+     */
+    double decrementDouble(String key, double delta);
+
+    /**
+     * 设置整数计数器值。
+     *
+     * @param key   Redis 键
+     * @param value 值
+     */
+    void setAtomicLong(String key, long value);
+
+    /**
+     * 获取整数计数器值。
+     *
+     * @param key Redis 键
+     * @return 当前值
+     */
+    long getAtomicLongValue(String key);
+
+    /**
+     * 重置整数计数器。
+     *
+     * @param key Redis 键
+     */
+    void resetAtomicLong(String key);
+
+    /**
+     * 获取分布式 ID 生成器。
+     *
+     * @param key Redis 键
+     * @return RIdGenerator
+     */
+    RIdGenerator getIdGenerator(String key);
+
+    /**
+     * 初始化分布式 ID 生成器。
+     *
+     * @param key            Redis 键
+     * @param initialValue   初始值
+     * @param allocationSize 每次分配步长
+     * @return 是否初始化成功
+     */
+    boolean idGeneratorInit(String key, long initialValue, long allocationSize);
+
+    /**
+     * 获取下一个分布式 ID。
+     *
+     * @param key Redis 键
+     * @return ID
+     */
+    long nextId(String key);
+
+    // -------------------------------------------------------------------------
+    // Hash / Map 操作
+    // -------------------------------------------------------------------------
+
+    /**
+     * 设置哈希字段值。
+     *
+     * @param key   Redis 键
+     * @param field 字段名
+     * @param value 字段值
+     */
+    void hPut(String key, String field, Object value);
+
+    /**
+     * 批量设置哈希字段值。
+     *
+     * @param key Redis 键
+     * @param map 字段 Map
+     */
+    void hPutAll(String key, Map<String, ?> map);
+
+    /**
+     * 字段不存在时设置哈希字段值。
+     *
+     * @param key   Redis 键
+     * @param field 字段名
+     * @param value 字段值
+     * @return 是否设置成功
+     */
+    boolean hPutIfAbsent(String key, String field, Object value);
+
+    /**
+     * 获取哈希字段值。
+     *
+     * @param key   Redis 键
+     * @param field 字段名
+     * @param clazz 目标类型
+     * @param <T>   泛型类型
+     * @return 字段值
+     */
+    <T> T hGet(String key, String field, Class<T> clazz);
+
+    /**
+     * 获取哈希字段值。
+     *
+     * @param key           Redis 键
+     * @param field         字段名
+     * @param typeReference 目标类型
+     * @param <T>           泛型类型
+     * @return 字段值
+     */
+    <T> T hGet(String key, String field, TypeReference<T> typeReference);
+
+    /**
+     * 批量获取哈希字段值。
+     *
+     * @param key    Redis 键
+     * @param fields 字段集合
+     * @return 字段值 Map
+     */
+    Map<String, Object> hMultiGet(String key, Collection<String> fields);
+
+    /**
+     * 删除哈希字段。
+     *
+     * @param key    Redis 键
+     * @param fields 字段名
+     * @return 删除数量
+     */
+    long hDelete(String key, String... fields);
+
+    /**
+     * 判断哈希字段是否存在。
+     *
+     * @param key   Redis 键
+     * @param field 字段名
+     * @return 存在返回 true
+     */
+    boolean hHasKey(String key, String field);
+
+    /**
+     * 获取哈希全部字段和值。
+     *
+     * @param key Redis 键
+     * @return 字段值 Map
+     */
+    Map<String, Object> hEntries(String key);
+
+    /**
+     * 获取哈希全部字段和值并转换类型。
+     *
+     * @param key   Redis 键
+     * @param clazz 目标类型
+     * @param <T>   泛型类型
+     * @return 字段值 Map
+     */
+    <T> Map<String, T> hEntries(String key, Class<T> clazz);
+
+    /**
+     * 获取哈希全部字段和值并转换泛型类型。
+     *
+     * @param key           Redis 键
+     * @param typeReference 目标类型
+     * @param <T>           泛型类型
+     * @return 字段值 Map
+     */
+    <T> Map<String, T> hEntries(String key, TypeReference<T> typeReference);
+
+    /**
+     * 获取哈希字段名集合。
+     *
+     * @param key Redis 键
+     * @return 字段集合
+     */
+    Set<String> hKeys(String key);
+
+    /**
+     * 获取哈希字段值集合。
+     *
+     * @param key Redis 键
+     * @return 字段值集合
+     */
+    Collection<Object> hValues(String key);
+
+    /**
+     * 获取哈希字段数量。
+     *
+     * @param key Redis 键
+     * @return 字段数量
      */
     int hSize(String key);
 
     /**
-     * 清空哈希表（删除所有字段）
+     * 哈希字段整数自增。
+     *
+     * @param key   Redis 键
+     * @param field 字段名
+     * @param delta 增量
+     * @return 最新值
+     */
+    long hIncrement(String key, String field, long delta);
+
+    /**
+     * 哈希字段浮点数自增。
+     *
+     * @param key   Redis 键
+     * @param field 字段名
+     * @param delta 增量
+     * @return 最新值
+     */
+    double hIncrementDouble(String key, String field, double delta);
+
+    /**
+     * 清空哈希。
      *
      * @param key Redis 键
      */
     void hClear(String key);
 
-    // -------------------------- 列表（List）操作 --------------------------
-
     /**
-     * 将元素添加到列表右端（尾部）
+     * 设置 MapCache 字段值并指定字段级 TTL。
      *
      * @param key   Redis 键
-     * @param value 要添加的元素
+     * @param field 字段名
+     * @param value 字段值
+     * @param ttl   字段 TTL
+     */
+    void hcPut(String key, String field, Object value, Duration ttl);
+
+    /**
+     * 设置 MapCache 字段值并指定字段级 TTL 与最大空闲时间。
+     *
+     * @param key      Redis 键
+     * @param field    字段名
+     * @param value    字段值
+     * @param ttl      字段 TTL
+     * @param maxIdle  最大空闲时间
+     */
+    void hcPut(String key, String field, Object value, Duration ttl, Duration maxIdle);
+
+    /**
+     * 获取 MapCache 字段值。
+     *
+     * @param key   Redis 键
+     * @param field 字段名
+     * @param clazz 目标类型
+     * @param <T>   泛型类型
+     * @return 字段值
+     */
+    <T> T hcGet(String key, String field, Class<T> clazz);
+
+    /**
+     * 删除 MapCache 字段。
+     *
+     * @param key    Redis 键
+     * @param fields 字段名
+     * @return 删除数量
+     */
+    long hcDelete(String key, String... fields);
+
+    // -------------------------------------------------------------------------
+    // List / Deque 操作
+    // -------------------------------------------------------------------------
+
+    /**
+     * 左侧压入列表。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     */
+    void lLeftPush(String key, Object value);
+
+    /**
+     * 右侧压入列表。
+     *
+     * @param key   Redis 键
+     * @param value 元素
      */
     void lRightPush(String key, Object value);
 
     /**
-     * 将多个元素添加到列表右端（尾部）
+     * 批量右侧压入列表。
      *
      * @param key    Redis 键
-     * @param values 要添加的多个元素
+     * @param values 元素集合
      */
     void lRightPushAll(String key, Collection<?> values);
 
     /**
-     * 从列表左端弹出元素
+     * 左侧弹出列表元素。
      *
      * @param key Redis 键
-     * @return 弹出的元素，若列表为空或不存在返回 null
+     * @return 元素
      */
     Object lLeftPop(String key);
 
     /**
-     * 从列表左端弹出元素，并转换为指定类型
+     * 左侧弹出列表元素并转换类型。
      *
      * @param key   Redis 键
      * @param clazz 目标类型
      * @param <T>   泛型类型
-     * @return 弹出的元素，若列表为空或不存在返回 null
+     * @return 元素
      */
     <T> T lLeftPop(String key, Class<T> clazz);
 
     /**
-     * 获取列表指定范围内的元素（包含 start 和 end）
+     * 右侧弹出列表元素。
+     *
+     * @param key Redis 键
+     * @return 元素
+     */
+    Object lRightPop(String key);
+
+    /**
+     * 阻塞式左侧弹出列表元素。
+     *
+     * @param key     Redis 键
+     * @param timeout 超时时间
+     * @param unit    时间单位
+     * @param clazz   目标类型
+     * @param <T>     泛型类型
+     * @return 元素
+     * @throws InterruptedException 线程中断时抛出
+     */
+    <T> T lLeftPop(String key, long timeout, TimeUnit unit, Class<T> clazz) throws InterruptedException;
+
+    /**
+     * 获取列表范围。
      *
      * @param key   Redis 键
-     * @param start 起始索引（0-based）
-     * @param end   结束索引（-1 表示最后一个元素）
-     * @return 元素集合，若列表不存在返回空集合
+     * @param start 开始索引
+     * @param end   结束索引
+     * @return 元素集合
      */
     List<Object> lRange(String key, long start, long end);
 
     /**
-     * 获取列表指定范围内的元素，并转换为指定类型集合
+     * 获取列表范围并转换类型。
      *
      * @param key   Redis 键
-     * @param start 起始索引
+     * @param start 开始索引
      * @param end   结束索引
      * @param clazz 目标类型
      * @param <T>   泛型类型
-     * @return 元素集合，若列表不存在返回空集合
+     * @return 元素集合
      */
     <T> List<T> lRange(String key, long start, long end, Class<T> clazz);
 
     /**
-     * 获取列表指定范围内的元素，并转换为指定泛型类型集合
-     *
-     * @param key           Redis 键
-     * @param start         起始索引
-     * @param end           结束索引
-     * @param typeReference 目标类型引用（支持泛型）
-     * @param <T>           泛型类型
-     * @return 元素集合，若列表不存在返回空集合
-     */
-    <T> List<T> lRange(String key, long start, long end, TypeReference<T> typeReference);
-
-    /**
-     * 获取列表长度
+     * 获取列表长度。
      *
      * @param key Redis 键
-     * @return 列表长度，若不存在返回 0
+     * @return 长度
      */
     long lSize(String key);
 
     /**
-     * 删除列表中等于 value 的元素，count 指定删除数量
+     * 删除列表元素。
      *
      * @param key   Redis 键
-     * @param count 删除数量（>0 从头开始删除，<0 从尾开始删除，=0 删除所有）
-     * @param value 要删除的元素
-     * @return 删除的元素数量
+     * @param count 删除数量规则
+     * @param value 元素
+     * @return 删除数量
      */
     long lRemove(String key, long count, Object value);
 
     /**
-     * 获取列表中指定索引的元素
+     * 获取列表指定索引元素。
      *
      * @param key   Redis 键
-     * @param index 索引位置（0-based，负数从尾部计数）
-     * @return 元素，若索引不存在返回 null
+     * @param index 索引
+     * @return 元素
      */
     Object lIndex(String key, long index);
 
     /**
-     * 获取列表中指定索引的元素，并转换为指定类型
+     * 获取列表指定索引元素并转换类型。
      *
      * @param key   Redis 键
-     * @param index 索引位置
+     * @param index 索引
      * @param clazz 目标类型
      * @param <T>   泛型类型
-     * @return 元素，若索引不存在返回 null
+     * @return 元素
      */
     <T> T lIndex(String key, long index, Class<T> clazz);
 
     /**
-     * 根据索引修改列表元素的值
+     * 设置列表指定索引元素。
      *
      * @param key   Redis 键
-     * @param index 索引位置
-     * @param value 新值
+     * @param index 索引
+     * @param value 元素
      */
     void lSet(String key, long index, Object value);
 
     /**
-     * 清空整个列表
+     * 裁剪列表范围。
+     *
+     * @param key   Redis 键
+     * @param start 开始索引
+     * @param end   结束索引
+     */
+    void lTrim(String key, int start, int end);
+
+    /**
+     * 清空列表。
      *
      * @param key Redis 键
      */
     void lClear(String key);
 
-    // -------------------------- 集合（Set）操作 --------------------------
+    // -------------------------------------------------------------------------
+    // Set / SetCache 操作
+    // -------------------------------------------------------------------------
 
     /**
-     * 添加一个或多个元素到集合中（去重）
+     * 添加集合元素。
      *
-     * @param key   Redis 键
-     * @param value 元素，可传多个
-     * @return true 表示集合有新增元素，false 表示无新增元素
+     * @param key    Redis 键
+     * @param values 元素
+     * @return 是否有新增
      */
-    boolean sAdd(String key, Object... value);
+    boolean sAdd(String key, Object... values);
 
     /**
-     * 添加多个元素到集合中（去重）
+     * 添加集合元素。
      *
-     * @param key   Redis 键
-     * @param value 元素，多个
-     * @return true 表示集合有新增元素，false 表示无新增元素
+     * @param key    Redis 键
+     * @param values 元素集合
+     * @return 是否有新增
      */
-    boolean sAdd(String key, List<Object> value);
+    boolean sAdd(String key, Collection<?> values);
 
     /**
-     * 判断集合中是否存在指定元素
+     * 添加 SetCache 元素并指定元素 TTL。
      *
      * @param key   Redis 键
-     * @param value 要判断的元素
-     * @return true 存在，false 不存在
+     * @param value 元素
+     * @param ttl   TTL
+     * @return 是否添加成功
+     */
+    boolean scAdd(String key, Object value, Duration ttl);
+
+    /**
+     * 判断集合中是否存在元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 存在返回 true
      */
     boolean sIsMember(String key, Object value);
 
     /**
-     * 获取集合中的所有元素
+     * 获取集合所有元素。
      *
      * @param key Redis 键
-     * @return 元素集合（无序去重）
+     * @return 元素集合
      */
     Set<Object> sMembers(String key);
 
     /**
-     * 获取集合中的所有元素并转换为指定类型
+     * 获取集合所有元素并转换类型。
      *
      * @param key   Redis 键
-     * @param clazz 目标类型 Class
+     * @param clazz 目标类型
      * @param <T>   泛型类型
-     * @return 元素集合（无序去重）
+     * @return 元素集合
      */
     <T> Set<T> sMembers(String key, Class<T> clazz);
 
     /**
-     * 获取集合中的所有元素并转换为指定类型（支持复杂泛型结构）
-     *
-     * @param key           Redis 键
-     * @param typeReference 类型引用
-     * @param <T>           泛型类型
-     * @return 元素集合（无序去重）
-     */
-    <T> Set<T> sMembers(String key, TypeReference<T> typeReference);
-
-    /**
-     * 获取集合中元素的数量
+     * 获取集合大小。
      *
      * @param key Redis 键
-     * @return 集合大小（元素个数）
+     * @return 大小
      */
     long sSize(String key);
 
     /**
-     * 从集合中随机弹出一个元素
+     * 随机弹出集合元素。
      *
      * @param key Redis 键
-     * @return 被移除的元素，若集合为空则返回 null
+     * @return 元素
      */
     Object sPop(String key);
 
     /**
-     * 从集合中随机弹出一个元素并转换为指定类型
-     *
-     * @param key   Redis 键
-     * @param clazz 目标类型 Class
-     * @param <T>   泛型类型
-     * @return 被移除并转换后的元素，若集合为空则返回 null
-     */
-    <T> T sPop(String key, Class<T> clazz);
-
-    /**
-     * 从集合中随机弹出一个元素并转换为指定类型（支持复杂泛型结构）
-     *
-     * @param key           Redis 键
-     * @param typeReference 类型引用
-     * @param <T>           泛型类型
-     * @return 被移除并转换后的元素，若集合为空则返回 null
-     */
-    <T> T sPop(String key, TypeReference<T> typeReference);
-
-    /**
-     * 从集合中移除一个或多个元素
+     * 删除集合元素。
      *
      * @param key    Redis 键
-     * @param values 要移除的元素
-     * @return 实际移除的元素数量
+     * @param values 元素
+     * @return 是否删除成功
      */
     boolean sRemove(String key, Object... values);
 
     /**
-     * 从集合中移除多个元素
-     *
-     * @param key    Redis 键
-     * @param values 要移除的元素
-     * @return 实际移除的元素数量
-     */
-    boolean sRemove(String key, List<Object> values);
-
-    /**
-     * 随机获取集合中的一个元素（不移除）
+     * 随机获取集合元素但不删除。
      *
      * @param key Redis 键
-     * @return 随机元素，若集合为空则返回 null
+     * @return 元素
      */
     Object sRandomMember(String key);
 
     /**
-     * 随机获取集合中的一个元素并转换为指定类型（不移除）
+     * 随机获取多个集合元素。
      *
      * @param key   Redis 键
-     * @param clazz 目标类型 Class
-     * @param <T>   泛型类型
-     * @return 转换后的随机元素，若集合为空则返回 null
-     */
-    <T> T sRandomMember(String key, Class<T> clazz);
-
-    /**
-     * 随机获取集合中的一个元素并转换为指定类型（不移除，支持复杂泛型结构）
-     *
-     * @param key           Redis 键
-     * @param typeReference 类型引用
-     * @param <T>           泛型类型
-     * @return 转换后的随机元素，若集合为空则返回 null
-     */
-    <T> T sRandomMember(String key, TypeReference<T> typeReference);
-
-    /**
-     * 获取集合中的多个随机元素
-     *
-     * @param key   Redis 键
-     * @param count 获取的元素数量
-     * @return 随机元素集合（数量可能小于 count）
+     * @param count 数量
+     * @return 元素集合
      */
     Set<Object> sRandomMembers(String key, int count);
 
     /**
-     * 获取集合中的多个随机元素并转换为指定类型
+     * 获取并集。
      *
-     * @param key   Redis 键
-     * @param count 获取的元素数量
-     * @param clazz 目标类型 Class
-     * @param <T>   泛型类型
-     * @return 转换后的随机元素集合（数量可能小于 count）
-     */
-    <T> Set<T> sRandomMembers(String key, int count, Class<T> clazz);
-
-    /**
-     * 获取集合中的多个随机元素并转换为指定类型（支持复杂泛型结构）
-     *
-     * @param key           Redis 键
-     * @param count         获取的元素数量
-     * @param typeReference 类型引用
-     * @param <T>           泛型类型
-     * @return 转换后的随机元素集合（数量可能小于 count）
-     */
-    <T> Set<T> sRandomMembers(String key, int count, TypeReference<T> typeReference);
-
-    /**
-     * 获取两个集合的并集（不改变原集合）
-     *
-     * @param key1 第一个 Redis 键
-     * @param key2 第二个 Redis 键
-     * @return 两个集合的并集（去重）
+     * @param key1 第一个 key
+     * @param key2 第二个 key
+     * @return 并集
      */
     Set<Object> sUnion(String key1, String key2);
 
     /**
-     * 获取两个集合的并集（不改变原集合），并转换为指定类型
+     * 获取交集。
      *
-     * @param key1  第一个 Redis 键
-     * @param key2  第二个 Redis 键
-     * @param clazz 返回元素的类型 Class
-     * @param <T>   元素泛型类型
-     * @return 并集结果集合（去重）并转换为指定类型
-     */
-    <T> Set<T> sUnion(String key1, String key2, Class<T> clazz);
-
-    /**
-     * 获取两个集合的并集（不改变原集合），并转换为指定复杂类型
-     *
-     * @param key1          第一个 Redis 键
-     * @param key2          第二个 Redis 键
-     * @param typeReference 返回元素的类型 TypeReference（支持复杂类型）
-     * @param <T>           元素泛型类型
-     * @return 并集结果集合（去重）并转换为指定类型
-     */
-    <T> Set<T> sUnion(String key1, String key2, TypeReference<T> typeReference);
-
-    /**
-     * 获取两个集合的交集（不改变原集合）
-     *
-     * @param key1 第一个 Redis 键
-     * @param key2 第二个 Redis 键
-     * @return 两个集合的交集
+     * @param key1 第一个 key
+     * @param key2 第二个 key
+     * @return 交集
      */
     Set<Object> sIntersect(String key1, String key2);
 
     /**
-     * 获取两个集合的交集（不改变原集合），并转换为指定类型
+     * 获取差集。
      *
-     * @param key1  第一个 Redis 键
-     * @param key2  第二个 Redis 键
-     * @param clazz 返回元素的类型 Class
-     * @param <T>   元素泛型类型
-     * @return 交集结果集合并转换为指定类型
-     */
-    <T> Set<T> sIntersect(String key1, String key2, Class<T> clazz);
-
-    /**
-     * 获取两个集合的交集（不改变原集合），并转换为指定复杂类型
-     *
-     * @param key1          第一个 Redis 键
-     * @param key2          第二个 Redis 键
-     * @param typeReference 返回元素的类型 TypeReference（支持复杂类型）
-     * @param <T>           元素泛型类型
-     * @return 交集结果集合并转换为指定类型
-     */
-    <T> Set<T> sIntersect(String key1, String key2, TypeReference<T> typeReference);
-
-    /**
-     * 获取两个集合的差集（key1 相对于 key2 的差）
-     *
-     * @param key1 第一个 Redis 键（原始集合）
-     * @param key2 第二个 Redis 键（要排除的集合）
-     * @return 差集结果（存在于 key1 而不存在于 key2 的元素）
+     * @param key1 第一个 key
+     * @param key2 第二个 key
+     * @return 差集
      */
     Set<Object> sDifference(String key1, String key2);
 
     /**
-     * 获取两个集合的差集（key1 相对于 key2 的差），并转换为指定类型
+     * 将集合并集存储到目标 key。
      *
-     * @param key1  第一个 Redis 键（原始集合）
-     * @param key2  第二个 Redis 键（要排除的集合）
-     * @param clazz 返回元素的类型 Class
-     * @param <T>   元素泛型类型
-     * @return 差集结果集合并转换为指定类型
+     * @param destKey 目标 key
+     * @param keys    源 key 集合
+     * @return 存储数量
      */
-    <T> Set<T> sDifference(String key1, String key2, Class<T> clazz);
+    long sUnionStore(String destKey, String... keys);
 
     /**
-     * 获取两个集合的差集（key1 相对于 key2 的差），并转换为指定复杂类型
+     * 将集合交集存储到目标 key。
      *
-     * @param key1          第一个 Redis 键（原始集合）
-     * @param key2          第二个 Redis 键（要排除的集合）
-     * @param typeReference 返回元素的类型 TypeReference（支持复杂类型）
-     * @param <T>           元素泛型类型
-     * @return 差集结果集合并转换为指定类型
+     * @param destKey 目标 key
+     * @param keys    源 key 集合
+     * @return 存储数量
      */
-    <T> Set<T> sDifference(String key1, String key2, TypeReference<T> typeReference);
-
-    // -------------------------- 有序集合（ZSet / SortedSet）操作 --------------------------
+    long sIntersectStore(String destKey, String... keys);
 
     /**
-     * 添加一个元素及其分数到有序集合中。
+     * 将集合差集存储到目标 key。
      *
-     * @param key   有序集合的 key
-     * @param value 要添加的元素
-     * @param score 元素的分数（用于排序）
-     * @return 是否添加成功，若元素已存在则更新分数
+     * @param destKey 目标 key
+     * @param keys    源 key 集合
+     * @return 存储数量
+     */
+    long sDifferenceStore(String destKey, String... keys);
+
+    // -------------------------------------------------------------------------
+    // ZSet / 排行榜操作
+    // -------------------------------------------------------------------------
+
+    /**
+     * 添加有序集合元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @param score 分数
+     * @return 是否新增
      */
     boolean zAdd(String key, Object value, double score);
 
     /**
-     * 批量添加元素及其分数到有序集合中。
+     * 批量添加有序集合元素。
      *
-     * @param key      有序集合的 key
-     * @param scoreMap 元素与对应分数的映射
-     * @return 成功添加的元素数量（不包括更新）
+     * @param key      Redis 键
+     * @param scoreMap 元素分数 Map
+     * @return 新增数量
      */
     int zAddAll(String key, Map<Object, Double> scoreMap);
 
     /**
-     * 从有序集合中移除指定元素。
+     * 删除有序集合元素。
      *
-     * @param key    有序集合的 key
-     * @param values 要移除的元素列表
-     * @return 实际移除的元素数量
+     * @param key    Redis 键
+     * @param values 元素
+     * @return 是否删除成功
      */
     boolean zRemove(String key, Object... values);
 
     /**
-     * 从有序集合中移除指定元素。
+     * 获取元素分数。
      *
-     * @param key    有序集合的 key
-     * @param values 要移除的元素列表
-     * @return 实际移除的元素数量
-     */
-    boolean zRemove(String key, List<Object> values);
-
-    /**
-     * 获取有序集合中某个元素的分数。
-     *
-     * @param key   有序集合的 key
-     * @param value 指定的元素
-     * @return 元素的分数，若元素不存在则返回 null
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 分数
      */
     Double zScore(String key, Object value);
 
     /**
-     * 获取有序集合中指定元素的排名（按分数升序）。
+     * 获取升序排名，从 0 开始。
      *
-     * @param key   有序集合的 key
-     * @param value 指定的元素
-     * @return 元素的排名（0 基础），若不存在返回 null
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 排名
      */
     Integer zRank(String key, Object value);
 
     /**
-     * 获取有序集合中指定元素的排名（按分数降序）。
+     * 获取降序排名，从 0 开始。
      *
-     * @param key   有序集合的 key
-     * @param value 指定的元素
-     * @return 元素的排名（0 基础），若不存在返回 null
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 排名
      */
     Integer zRevRank(String key, Object value);
 
     /**
-     * 获取有序集合中指定分数区间内的元素（按升序）。
+     * 获取分数区间元素。
      *
-     * @param key 有序集合的 key
-     * @param min 最小分数（包含）
-     * @param max 最大分数（包含）
-     * @return 区间内的所有元素，按分数升序排列，元素为原始对象
+     * @param key Redis 键
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 元素集合
      */
     Set<Object> zRangeByScore(String key, double min, double max);
 
     /**
-     * 获取有序集合中指定分数区间内的元素（按升序），并转换为指定类型。
+     * 获取分数区间元素并分页。
      *
-     * @param key   有序集合的 key
-     * @param min   最小分数（包含）
-     * @param max   最大分数（包含）
-     * @param clazz 目标类型的 Class
-     * @param <T>   返回集合中元素的目标类型
-     * @return 区间内的所有元素，按分数升序排列，并转换为目标类型
+     * @param key    Redis 键
+     * @param min    最小分数
+     * @param max    最大分数
+     * @param offset 偏移量
+     * @param count  数量
+     * @return 元素集合
      */
-    <T> Set<T> zRangeByScore(String key, double min, double max, Class<T> clazz);
+    Collection<Object> zRangeByScore(String key, double min, double max, int offset, int count);
 
     /**
-     * 获取有序集合中指定分数区间内的元素（按升序），并转换为复杂泛型类型。
+     * 获取分数区间元素及分数。
      *
-     * @param key           有序集合的 key
-     * @param min           最小分数（包含）
-     * @param max           最大分数（包含）
-     * @param typeReference Jackson 的 TypeReference，用于描述复杂泛型类型
-     * @param <T>           返回集合中元素的目标类型
-     * @return 区间内的所有元素，按分数升序排列，并转换为目标类型
-     */
-    <T> Set<T> zRangeByScore(String key, double min, double max, TypeReference<T> typeReference);
-
-    /**
-     * 获取有序集合中指定分数区间内的元素及其分数（按升序）。
-     *
-     * @param key 有序集合的 key
-     * @param min 最小分数（包含）
-     * @param max 最大分数（包含）
-     * @return 区间内元素及其分数的 Map，按分数升序排列
+     * @param key Redis 键
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 元素分数 Map
      */
     Map<Object, Double> zRangeByScoreWithScores(String key, double min, double max);
 
     /**
-     * 获取有序集合中指定分数区间内的元素及其分数（按降序）。
+     * 获取降序分数区间元素及分数。
      *
-     * @param key 有序集合的 key
-     * @param min 最小分数（包含）
-     * @param max 最大分数（包含）
-     * @return 区间内元素及其分数的 Map，按分数降序排列
+     * @param key Redis 键
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 元素分数 Map
      */
     Map<Object, Double> zRevRangeByScoreWithScores(String key, double min, double max);
 
     /**
-     * 获取有序集合中指定排名区间内的元素（按升序）。
+     * 获取排名区间元素。
      *
-     * @param key   有序集合的 key
-     * @param start 起始排名（0 基础）
-     * @param end   结束排名（包含）
-     * @return 指定区间内的元素集合，按分数升序排列
+     * @param key   Redis 键
+     * @param start 开始排名
+     * @param end   结束排名
+     * @return 元素集合
      */
     Set<Object> zRange(String key, int start, int end);
 
     /**
-     * 获取有序集合中指定排名区间内的元素及其分数（按升序）。
+     * 获取排名区间元素及分数。
      *
-     * @param key   有序集合的 key
-     * @param start 起始排名（0 基础）
-     * @param end   结束排名（包含）
-     * @return 区间内元素及其分数的 Map，按分数升序排列
+     * @param key   Redis 键
+     * @param start 开始排名
+     * @param end   结束排名
+     * @return 元素分数 Map
      */
     Map<Object, Double> zRangeWithScores(String key, int start, int end);
 
     /**
-     * 获取有序集合中指定排名区间内的元素（按降序）。
+     * 获取降序排名区间元素。
      *
-     * @param key   有序集合的 key
-     * @param start 起始排名（0 基础）
-     * @param end   结束排名（包含）
-     * @return 区间内元素集合，按分数降序排列
+     * @param key   Redis 键
+     * @param start 开始排名
+     * @param end   结束排名
+     * @return 元素集合
      */
     Set<Object> zRevRange(String key, int start, int end);
 
     /**
-     * 获取有序集合中指定排名区间内的元素及其分数（按降序）。
+     * 获取降序排名区间元素及分数。
      *
-     * @param key   有序集合的 key
-     * @param start 起始排名（0 基础）
-     * @param end   结束排名（包含）
-     * @return 区间内元素及其分数的 Map，按分数降序排列
+     * @param key   Redis 键
+     * @param start 开始排名
+     * @param end   结束排名
+     * @return 元素分数 Map
      */
     Map<Object, Double> zRevRangeWithScores(String key, int start, int end);
 
     /**
-     * 为有序集合中指定元素的分数增加指定值。
+     * 增加元素分数。
      *
-     * @param key   有序集合的 key
-     * @param value 指定元素
-     * @param delta 要增加的分数（可为负）
-     * @return 增加后的新分数
+     * @param key   Redis 键
+     * @param value 元素
+     * @param delta 分数增量
+     * @return 最新分数
      */
     Double zIncrBy(String key, Object value, double delta);
 
     /**
-     * 获取有序集合的元素数量。
+     * 获取有序集合元素数量。
      *
-     * @param key 有序集合的 key
-     * @return 元素总数
+     * @param key Redis 键
+     * @return 数量
      */
     int zCard(String key);
 
     /**
-     * 获取有序集合中分数在指定区间内的元素数量。
+     * 获取分数区间元素数量。
      *
-     * @param key 有序集合的 key
-     * @param min 最小分数（包含）
-     * @param max 最大分数（包含）
-     * @return 指定分数范围内的元素个数
+     * @param key Redis 键
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 数量
      */
     long zCount(String key, double min, double max);
 
     /**
-     * 移除指定分数区间内的所有元素。
+     * 删除分数区间元素。
      *
-     * @param key 有序集合的 key
-     * @param min 最小分数（包含）
-     * @param max 最大分数（包含）
-     * @return 实际移除的元素个数
+     * @param key Redis 键
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 删除数量
      */
     long zRemoveRangeByScore(String key, double min, double max);
 
     /**
-     * 移除指定排名区间内的所有元素。
+     * 删除排名区间元素。
      *
-     * @param key   有序集合的 key
-     * @param start 起始排名（0 基础）
-     * @param end   结束排名（包含）
-     * @return 实际移除的元素个数
+     * @param key   Redis 键
+     * @param start 开始排名
+     * @param end   结束排名
+     * @return 删除数量
      */
     long zRemoveRangeByRank(String key, int start, int end);
 
-    // -------------------------- 分布式锁与同步器 --------------------------
+    /**
+     * 弹出分数最小的元素。
+     *
+     * @param key Redis 键
+     * @return 元素及分数
+     */
+    ScoredEntry<Object> zPopFirst(String key);
 
     /**
-     * 获取可重入分布式锁（默认锁名）。
+     * 弹出分数最大的元素。
      *
-     * @param lockKey 锁的 key
-     * @return RLock 实例
+     * @param key Redis 键
+     * @return 元素及分数
+     */
+    ScoredEntry<Object> zPopLast(String key);
+
+    // -------------------------------------------------------------------------
+    // 分布式锁与同步器
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取可重入锁。
+     *
+     * @param lockKey 锁 key
+     * @return RLock
      */
     RLock getLock(String lockKey);
 
     /**
-     * 阻塞式获取锁，直到成功。
+     * 获取公平锁。
      *
-     * @param lockKey 锁的 key
+     * @param lockKey 锁 key
+     * @return RLock
+     */
+    RLock getFairLock(String lockKey);
+
+    /**
+     * 获取自旋锁。
+     *
+     * @param lockKey 锁 key
+     * @return RLock
+     */
+    RLock getSpinLock(String lockKey);
+
+    /**
+     * 获取联锁。
+     *
+     * @param locks 多个锁
+     * @return RLock
+     */
+    RLock getMultiLock(RLock... locks);
+
+    /**
+     * 阻塞加锁。
+     *
+     * @param lockKey 锁 key
      */
     void lock(String lockKey);
 
     /**
-     * 阻塞式获取锁，设置自动释放时间。
+     * 阻塞加锁并指定自动释放时间。
      *
-     * @param lockKey   锁的 key
-     * @param leaseTime 自动释放时间，单位：秒
+     * @param lockKey   锁 key
+     * @param leaseTime 持有时间
+     * @param unit      时间单位
      */
-    void lock(String lockKey, long leaseTime);
+    void lock(String lockKey, long leaseTime, TimeUnit unit);
 
     /**
-     * 尝试获取锁，如果获取到则在指定时间后自动释放。
+     * 尝试获取锁。
      *
-     * @param lockKey   锁的 key
+     * @param lockKey   锁 key
      * @param waitTime  等待时间
-     * @param leaseTime 自动释放时间
+     * @param leaseTime 持有时间
      * @param unit      时间单位
-     * @return 是否成功获取锁
+     * @return 是否获取成功
+     * @throws InterruptedException 线程中断时抛出
      */
-    boolean tryLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit);
+    boolean tryLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit) throws InterruptedException;
 
     /**
      * 释放锁。
      *
-     * @param lockKey 锁的 key
+     * @param lockKey 锁 key
      */
     void unlock(String lockKey);
 
     /**
-     * 在分布式锁内执行任务（阻塞模式）。
+     * 执行带锁任务。
      *
      * @param lockKey 锁 key
      * @param task    任务
@@ -1062,489 +1401,994 @@ public interface RedissonService {
     void executeWithLock(String lockKey, Runnable task);
 
     /**
-     * 在分布式锁内执行任务（带自动释放时间）。
+     * 执行带锁任务并返回结果。
      *
-     * @param lockKey   锁 key
-     * @param leaseTime 自动释放时间（秒）
-     * @param task      任务
+     * @param lockKey  锁 key
+     * @param supplier 任务
+     * @param <T>      返回类型
+     * @return 任务结果
      */
-    void executeWithLock(String lockKey, long leaseTime, Runnable task);
+    <T> T executeWithLock(String lockKey, Supplier<T> supplier);
 
     /**
-     * 尝试获取锁并执行任务。
+     * 尝试执行带锁任务。
      *
      * @param lockKey   锁 key
      * @param waitTime  等待时间
+     * @param leaseTime 持有时间，-1 表示使用 watchdog
      * @param unit      时间单位
      * @param task      任务
-     * @return 是否执行成功（获取到锁才会执行）
-     */
-    boolean tryExecuteWithLock(String lockKey, long waitTime, TimeUnit unit, Runnable task);
-
-    /**
-     * 尝试获取锁并执行任务。
-     *
-     * @param lockKey   锁 key
-     * @param waitTime  等待时间
-     * @param leaseTime 自动释放时间
-     * @param unit      时间单位
-     * @param task      任务
-     * @return 是否执行成功（获取到锁才会执行）
+     * @return 是否执行成功
      */
     boolean tryExecuteWithLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit, Runnable task);
 
     /**
-     * 判断当前线程是否持有指定的锁。
+     * 判断当前线程是否持有锁。
      *
-     * @param key 锁的名称
-     * @return 如果当前线程持有该锁，返回 true；否则返回 false
+     * @param lockKey 锁 key
+     * @return 当前线程持有返回 true
      */
-    boolean isHeldByCurrentThread(String key);
+    boolean isHeldByCurrentThread(String lockKey);
 
     /**
-     * 判断指定的锁当前是否被任意线程持有。
+     * 判断锁是否被任意线程持有。
      *
-     * @param key 锁的名称
-     * @return 如果该锁已被任意线程持有，返回 true；否则返回 false
+     * @param lockKey 锁 key
+     * @return 已加锁返回 true
      */
-    boolean isLocked(String key);
+    boolean isLocked(String lockKey);
+
+    /**
+     * 获取读写锁。
+     *
+     * @param lockKey 锁 key
+     * @return RReadWriteLock
+     */
+    RReadWriteLock getReadWriteLock(String lockKey);
 
     /**
      * 获取读锁。
      *
-     * @param lockKey 锁的 key
+     * @param lockKey 锁 key
      */
     void readLock(String lockKey);
 
     /**
      * 获取写锁。
      *
-     * @param lockKey 锁的 key
+     * @param lockKey 锁 key
      */
     void writeLock(String lockKey);
 
     /**
      * 尝试获取读锁。
      *
-     * @param lockKey   锁的 key
+     * @param lockKey   锁 key
      * @param waitTime  等待时间
-     * @param leaseTime 自动释放时间
+     * @param leaseTime 持有时间
      * @param unit      时间单位
-     * @return 是否成功获取读锁
+     * @return 是否成功
+     * @throws InterruptedException 线程中断时抛出
      */
-    boolean tryReadLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit);
+    boolean tryReadLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit) throws InterruptedException;
 
     /**
      * 尝试获取写锁。
      *
-     * @param lockKey   锁的 key
+     * @param lockKey   锁 key
      * @param waitTime  等待时间
-     * @param leaseTime 自动释放时间
+     * @param leaseTime 持有时间
      * @param unit      时间单位
-     * @return 是否成功获取写锁
+     * @return 是否成功
+     * @throws InterruptedException 线程中断时抛出
      */
-    boolean tryWriteLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit);
+    boolean tryWriteLock(String lockKey, long waitTime, long leaseTime, TimeUnit unit) throws InterruptedException;
 
     /**
      * 释放读锁。
      *
-     * @param lockKey 锁的 key
+     * @param lockKey 锁 key
      */
     void unlockRead(String lockKey);
 
     /**
      * 释放写锁。
      *
-     * @param lockKey 锁的 key
+     * @param lockKey 锁 key
      */
     void unlockWrite(String lockKey);
 
     /**
-     * 设置闭锁的计数。
+     * 获取闭锁。
      *
      * @param latchKey 闭锁 key
-     * @param count    计数器初始值
+     * @return RCountDownLatch
+     */
+    RCountDownLatch getCountDownLatch(String latchKey);
+
+    /**
+     * 设置闭锁计数。
+     *
+     * @param latchKey 闭锁 key
+     * @param count    计数
      */
     void setCount(String latchKey, int count);
 
     /**
-     * 递减计数器，释放等待线程。
+     * 闭锁计数减一。
      *
      * @param latchKey 闭锁 key
      */
     void countDown(String latchKey);
 
     /**
-     * 阻塞等待直到计数器归零。
+     * 等待闭锁完成。
      *
      * @param latchKey 闭锁 key
-     * @throws InterruptedException 中断异常
+     * @throws InterruptedException 线程中断时抛出
      */
     void await(String latchKey) throws InterruptedException;
 
     /**
-     * 在指定时间内等待计数器归零。
+     * 等待闭锁完成。
      *
      * @param latchKey 闭锁 key
-     * @param timeout  最大等待时长
+     * @param timeout  超时时间
      * @param unit     时间单位
-     * @return 是否成功等待完成
-     * @throws InterruptedException 中断异常
+     * @return 是否完成
+     * @throws InterruptedException 线程中断时抛出
      */
     boolean await(String latchKey, long timeout, TimeUnit unit) throws InterruptedException;
 
     /**
-     * 初始化信号量许可数。
+     * 获取信号量。
      *
      * @param semaphoreKey 信号量 key
-     * @param permits      初始许可数量
+     * @return RSemaphore
+     */
+    RSemaphore getSemaphore(String semaphoreKey);
+
+    /**
+     * 初始化信号量许可数量。
+     *
+     * @param semaphoreKey 信号量 key
+     * @param permits      许可数量
      */
     void trySetPermits(String semaphoreKey, int permits);
 
     /**
-     * 获取一个信号量许可（阻塞直到成功）。
+     * 获取一个信号量许可。
      *
      * @param semaphoreKey 信号量 key
-     * @throws InterruptedException 中断异常
+     * @throws InterruptedException 线程中断时抛出
      */
     void acquire(String semaphoreKey) throws InterruptedException;
 
     /**
-     * 尝试获取一个信号量许可，限时等待。
+     * 尝试获取信号量许可。
      *
      * @param semaphoreKey 信号量 key
-     * @param timeout      最大等待时长
+     * @param permits      许可数量
+     * @param waitTime     等待时间
      * @param unit         时间单位
-     * @return 是否成功获取许可
-     * @throws InterruptedException 中断异常
+     * @return 是否获取成功
+     * @throws InterruptedException 线程中断时抛出
      */
-    boolean tryAcquire(String semaphoreKey, long timeout, TimeUnit unit) throws InterruptedException;
+    boolean tryAcquire(String semaphoreKey, int permits, long waitTime, TimeUnit unit) throws InterruptedException;
 
     /**
-     * 释放一个许可。
+     * 释放信号量许可。
      *
      * @param semaphoreKey 信号量 key
      */
     void release(String semaphoreKey);
 
     /**
-     * 获取当前可用许可数。
+     * 获取可用许可数量。
      *
      * @param semaphoreKey 信号量 key
-     * @return 可用许可数
+     * @return 可用许可数量
      */
     int availablePermits(String semaphoreKey);
 
-    // -------------------------- 布隆过滤器 --------------------------
-
     /**
-     * 初始化布隆过滤器，设置预期插入元素数量和误判率。
+     * 获取可过期信号量。
      *
-     * @param key                布隆过滤器对应的 Redis 键
-     * @param expectedInsertions 预期插入的元素数量（用于计算位数组大小）
-     * @param falseProbability   期望的误判率（一般建议0.03或更小）
+     * @param semaphoreKey 信号量 key
+     * @return RPermitExpirableSemaphore
      */
-    void bloomInit(String key, long expectedInsertions, double falseProbability);
+    RPermitExpirableSemaphore getPermitExpirableSemaphore(String semaphoreKey);
+
+    // -------------------------------------------------------------------------
+    // 限流器
+    // -------------------------------------------------------------------------
 
     /**
-     * 判断元素是否可能存在布隆过滤器中。
+     * 初始化限流器。
      *
-     * @param key   布隆过滤器对应的 Redis 键
-     * @param value 要检测的元素
-     * @return true 表示元素可能存在（误判存在）；false 表示一定不存在
-     */
-    boolean bloomContains(String key, Object value);
-
-    /**
-     * 添加元素到布隆过滤器中。
-     *
-     * @param key   布隆过滤器对应的 Redis 键
-     * @param value 要添加的元素
-     * @return true 如果元素之前不存在且已成功添加，false 如果元素可能已存在
-     */
-    boolean bloomAdd(String key, Object value);
-
-    /**
-     * 批量添加元素到布隆过滤器中。
-     *
-     * @param key    布隆过滤器对应的 Redis 键
-     * @param values 批量元素集合
-     * @return 添加成功的元素数量
-     */
-    long bloomAddAll(String key, Collection<?> values);
-
-    /**
-     * 删除布隆过滤器（删除对应的 Redis 键）。
-     *
-     * @param key 布隆过滤器对应的 Redis 键
-     * @return 是否成功删除
-     */
-    boolean bloomDelete(String key);
-
-    /**
-     * 判断布隆过滤器是否已经初始化（是否存在）。
-     *
-     * @param key 布隆过滤器对应的 Redis 键
-     * @return true 表示已初始化，false 表示未初始化
-     */
-    boolean bloomExists(String key);
-
-    /**
-     * 获取布隆过滤器的预计插入容量。
-     *
-     * @param key 布隆过滤器对应的 Redis 键
-     * @return 预计插入元素数量，若未初始化则返回 0
-     */
-    long bloomGetExpectedInsertions(String key);
-
-    /**
-     * 获取布隆过滤器的误判率。
-     *
-     * @param key 布隆过滤器对应的 Redis 键
-     * @return 当前设置的误判率，若未初始化则返回 0.0
-     */
-    double bloomGetFalseProbability(String key);
-
-    // --------------------- 分布式队列操作 ---------------------
-
-    /**
-     * 将元素添加到指定队列尾部（阻塞方式，队列满时无限等待）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param value    要入队的元素
-     * @param <T>      元素类型
-     * @throws InterruptedException 阻塞等待时被中断异常
-     */
-    <T> void enqueueBlocking(String queueKey, T value) throws InterruptedException;
-
-    /**
-     * 将元素添加到指定队列尾部（阻塞方式，队列满时等待超时）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param value    要入队的元素
-     * @param timeout  最大等待时间
-     * @param timeUnit 时间单位
-     * @param <T>      元素类型
-     * @return 是否成功入队，超时返回 false
-     * @throws InterruptedException 阻塞等待时被中断异常
-     */
-    <T> boolean enqueueBlocking(String queueKey, T value, long timeout, TimeUnit timeUnit) throws InterruptedException;
-
-    /**
-     * 将元素添加到指定队列尾部（非阻塞方式）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param value    要入队的元素
-     * @param <T>      元素类型
-     * @return 是否成功入队，失败可能是队列已满
-     */
-    <T> boolean enqueue(String queueKey, T value);
-
-    /**
-     * 从指定队列头部获取并移除元素（阻塞方式，队列为空时等待）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param timeout  最大等待时间，单位秒
-     * @param <T>      元素类型
-     * @return 队头元素，超时返回 null
-     * @throws InterruptedException 阻塞等待时被中断异常
-     */
-    <T> T dequeueBlocking(String queueKey, long timeout) throws InterruptedException;
-
-    /**
-     * 从指定队列头部获取并移除元素（非阻塞方式）。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param <T>      元素类型
-     * @return 队头元素，若队列为空返回 null
-     */
-    <T> T dequeue(String queueKey);
-
-    /**
-     * 获取队列长度。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @return 当前队列长度
-     */
-    long queueSize(String queueKey);
-
-    // --------------------- 延迟队列操作 ---------------------
-
-    /**
-     * 将元素添加到延迟队列，延迟指定时间后才能被消费。
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param value    要入队的元素
-     * @param delay    延迟时间
-     * @param timeUnit 时间单位
-     * @param <T>      元素类型
-     */
-    <T> void enqueueDelayed(String queueKey, T value, long delay, TimeUnit timeUnit);
-
-    // --------------------- 队列辅助操作 ---------------------
-
-    /**
-     * 清空队列中的所有元素
-     *
-     * @param queueKey 队列对应的 Redis 键
-     */
-    void clearQueue(String queueKey);
-
-    /**
-     * 判断队列是否为空
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @return true 如果队列为空
-     */
-    boolean isQueueEmpty(String queueKey);
-
-    /**
-     * 移除队列中指定元素
-     *
-     * @param queueKey 队列对应的 Redis 键
-     * @param value    要移除的元素
-     * @return true 如果移除成功
-     */
-    boolean removeFromQueue(String queueKey, Object value);
-
-    // --------------------- 限流操作 ---------------------
-
-    /**
-     * 初始化分布式限流器（令牌桶算法）
-     *
-     * @param key      限流器的 Redis Key（唯一标识）
-     * @param rateType 限流模式：OVERALL（全局限流）或 PER_CLIENT（每客户端限流）
-     * @param rate     每个时间间隔允许的最大请求数
-     * @param interval 时间间隔值
-     * @param unit     时间单位（秒、分钟等）
-     * @return true 表示设置成功；false 表示限流器已存在
+     * @param key      限流器 key
+     * @param rateType 限流类型
+     * @param rate     令牌数
+     * @param interval 间隔
+     * @param unit     间隔单位
+     * @return 是否初始化成功
      */
     boolean rateLimiterInit(String key, RateType rateType, long rate, long interval, RateIntervalUnit unit);
 
     /**
-     * 尝试获取一个令牌（非阻塞式）
+     * 更新限流器速率。
      *
-     * @param key 限流器的 Redis Key
-     * @return true 表示获取成功，false 表示被限流
+     * @param key      限流器 key
+     * @param rateType 限流类型
+     * @param rate     令牌数
+     * @param interval 间隔
+     * @param unit     间隔单位
+     */
+    void rateLimiterSetRate(String key, RateType rateType, long rate, long interval, RateIntervalUnit unit);
+
+    /**
+     * 尝试获取一个令牌。
+     *
+     * @param key 限流器 key
+     * @return 是否获取成功
      */
     boolean rateLimiterTryAcquire(String key);
 
     /**
-     * 尝试在指定时间内获取一个令牌（阻塞等待，超时返回）
+     * 尝试获取指定数量令牌。
      *
-     * @param key     限流器的 Redis Key
-     * @param timeout 最大等待时间
+     * @param key     限流器 key
+     * @param permits 令牌数量
+     * @return 是否获取成功
+     */
+    boolean rateLimiterTryAcquire(String key, long permits);
+
+    /**
+     * 阻塞获取指定数量令牌。
+     *
+     * @param key     限流器 key
+     * @param permits 令牌数量
+     */
+    void rateLimiterAcquire(String key, long permits);
+
+    /**
+     * 尝试等待获取令牌。
+     *
+     * @param key     限流器 key
+     * @param timeout 等待时间
      * @param unit    时间单位
-     * @return true 表示获取成功，false 表示超时未获取
+     * @return 是否获取成功
      */
     boolean rateLimiterTryAcquire(String key, long timeout, TimeUnit unit);
 
     /**
-     * 获取限流器对象（可用于自定义高级操作）
+     * 获取限流器对象。
      *
-     * @param key 限流器 Redis Key
-     * @return RRateLimiter 实例
+     * @param key 限流器 key
+     * @return RRateLimiter
      */
     RRateLimiter rateLimiterGet(String key);
 
     /**
-     * 删除限流器配置（从 Redis 清除）
+     * 删除限流器。
      *
-     * @param key 限流器 Redis Key
-     * @return true 表示删除成功；false 表示不存在
+     * @param key 限流器 key
+     * @return 是否删除成功
      */
     boolean rateLimiterDelete(String key);
 
-    // --------------------- 发布订阅操作 ---------------------
+    // -------------------------------------------------------------------------
+    // 布隆过滤器
+    // -------------------------------------------------------------------------
 
     /**
-     * 向指定频道发布消息。
+     * 获取布隆过滤器。
      *
-     * @param channel 频道名称
-     * @param message 要发布的消息内容
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RBloomFilter
      */
-    void publish(String channel, Object message);
+    <T> RBloomFilter<T> getBloomFilter(String key);
 
     /**
-     * 订阅指定频道，异步接收消息。
+     * 初始化布隆过滤器。
      *
-     * @param channel         频道名称
-     * @param messageConsumer 消息回调函数，接收到消息时执行
+     * @param key                Redis 键
+     * @param expectedInsertions 预计插入量
+     * @param falseProbability   误判率
      */
-    void subscribe(String channel, java.util.function.Consumer<Object> messageConsumer);
+    void bloomInit(String key, long expectedInsertions, double falseProbability);
 
     /**
-     * 取消订阅指定频道。
+     * 判断布隆过滤器是否可能包含元素。
      *
-     * @param channel 频道名称
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 可能包含返回 true
+     */
+    boolean bloomContains(String key, Object value);
+
+    /**
+     * 添加布隆过滤器元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 是否新增
+     */
+    boolean bloomAdd(String key, Object value);
+
+    /**
+     * 批量添加布隆过滤器元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素集合
+     * @return 新增数量
+     */
+    long bloomAddAll(String key, Collection<?> values);
+
+    /**
+     * 删除布隆过滤器。
+     *
+     * @param key Redis 键
+     * @return 是否删除成功
+     */
+    boolean bloomDelete(String key);
+
+    /**
+     * 判断布隆过滤器是否存在。
+     *
+     * @param key Redis 键
+     * @return 存在返回 true
+     */
+    boolean bloomExists(String key);
+
+    /**
+     * 获取预计插入量。
+     *
+     * @param key Redis 键
+     * @return 预计插入量
+     */
+    long bloomGetExpectedInsertions(String key);
+
+    /**
+     * 获取误判率。
+     *
+     * @param key Redis 键
+     * @return 误判率
+     */
+    double bloomGetFalseProbability(String key);
+
+    // -------------------------------------------------------------------------
+    // BitSet / 签到 / 位图统计
+    // -------------------------------------------------------------------------
+
+    /**
+     * 设置位图指定位置。
+     *
+     * @param key   Redis 键
+     * @param index 位索引
+     * @param value 位值
+     */
+    void bitSet(String key, long index, boolean value);
+
+    /**
+     * 获取位图指定位置。
+     *
+     * @param key   Redis 键
+     * @param index 位索引
+     * @return 位值
+     */
+    boolean bitGet(String key, long index);
+
+    /**
+     * 获取位图中 true 的数量。
+     *
+     * @param key Redis 键
+     * @return 数量
+     */
+    long bitCount(String key);
+
+    /**
+     * 清空位图。
+     *
+     * @param key Redis 键
+     */
+    void bitClear(String key);
+
+    /**
+     * 用户指定日期签到。
+     *
+     * @param keyPrefix 业务 key 前缀
+     * @param userId    用户 ID
+     * @param date      日期
+     */
+    void sign(String keyPrefix, Object userId, LocalDate date);
+
+    /**
+     * 判断用户指定日期是否签到。
+     *
+     * @param keyPrefix 业务 key 前缀
+     * @param userId    用户 ID
+     * @param date      日期
+     * @return 已签到返回 true
+     */
+    boolean isSigned(String keyPrefix, Object userId, LocalDate date);
+
+    /**
+     * 获取用户指定年份签到天数。
+     *
+     * @param keyPrefix 业务 key 前缀
+     * @param userId    用户 ID
+     * @param year      年份
+     * @return 签到天数
+     */
+    long getSignCount(String keyPrefix, Object userId, int year);
+
+    /**
+     * 获取从指定日期向前连续签到天数。
+     *
+     * @param keyPrefix 业务 key 前缀
+     * @param userId    用户 ID
+     * @param date      日期
+     * @return 连续签到天数
+     */
+    int getContinuousSignCount(String keyPrefix, Object userId, LocalDate date);
+
+    // -------------------------------------------------------------------------
+    // HyperLogLog / UV 统计
+    // -------------------------------------------------------------------------
+
+    /**
+     * 添加 HyperLogLog 元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 是否改变基数估算
+     */
+    boolean hllAdd(String key, Object value);
+
+    /**
+     * 批量添加 HyperLogLog 元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素集合
+     * @return 是否改变基数估算
+     */
+    boolean hllAddAll(String key, Collection<?> values);
+
+    /**
+     * 获取 HyperLogLog 基数估算。
+     *
+     * @param key Redis 键
+     * @return 基数估算
+     */
+    long hllCount(String key);
+
+    /**
+     * 合并 HyperLogLog。
+     *
+     * @param destKey 目标 key
+     * @param keys    源 key
+     * @return 合并后基数估算
+     */
+    long hllMerge(String destKey, String... keys);
+
+    /**
+     * 按日期记录 UV。
+     *
+     * @param keyPrefix 业务 key 前缀
+     * @param bizKey    业务标识
+     * @param userFlag  用户唯一标识
+     * @param date      日期
+     * @return 是否改变基数估算
+     */
+    boolean uvRecord(String keyPrefix, String bizKey, Object userFlag, LocalDate date);
+
+    /**
+     * 获取指定日期 UV。
+     *
+     * @param keyPrefix 业务 key 前缀
+     * @param bizKey    业务标识
+     * @param date      日期
+     * @return UV 数量
+     */
+    long uvCount(String keyPrefix, String bizKey, LocalDate date);
+
+    // -------------------------------------------------------------------------
+    // Geo / LBS 地理位置
+    // -------------------------------------------------------------------------
+
+    /**
+     * 添加地理位置。
+     *
+     * @param key       Redis 键
+     * @param longitude 经度
+     * @param latitude  纬度
+     * @param member    成员
+     * @return 添加数量
+     */
+    long geoAdd(String key, double longitude, double latitude, Object member);
+
+    /**
+     * 批量添加地理位置。
+     *
+     * @param key     Redis 键
+     * @param entries 坐标集合
+     * @return 添加数量
+     */
+    long geoAdd(String key, GeoEntry... entries);
+
+    /**
+     * 仅成员不存在时添加地理位置。
+     *
+     * @param key       Redis 键
+     * @param longitude 经度
+     * @param latitude  纬度
+     * @param member    成员
+     * @return 是否添加成功
+     */
+    boolean geoTryAdd(String key, double longitude, double latitude, Object member);
+
+    /**
+     * 计算两个成员距离。
+     *
+     * @param key     Redis 键
+     * @param member1 成员 1
+     * @param member2 成员 2
+     * @param unit    单位
+     * @return 距离
+     */
+    Double geoDistance(String key, Object member1, Object member2, GeoUnit unit);
+
+    /**
+     * 查询成员 GeoHash。
+     *
+     * @param key     Redis 键
+     * @param members 成员
+     * @return GeoHash Map
+     */
+    Map<Object, String> geoHash(String key, Object... members);
+
+    /**
+     * 查询成员坐标。
+     *
+     * @param key     Redis 键
+     * @param members 成员
+     * @return 坐标 Map
+     */
+    Map<Object, GeoPosition> geoPosition(String key, Object... members);
+
+    /**
+     * 根据条件搜索地理位置成员。
+     *
+     * @param key  Redis 键
+     * @param args 搜索参数
+     * @return 成员列表
+     */
+    List<Object> geoSearch(String key, GeoSearchArgs args);
+
+    /**
+     * 根据条件搜索地理位置成员和距离。
+     *
+     * @param key  Redis 键
+     * @param args 搜索参数
+     * @return 成员距离 Map
+     */
+    Map<Object, Double> geoSearchWithDistance(String key, GeoSearchArgs args);
+
+    /**
+     * 根据条件搜索地理位置成员和坐标。
+     *
+     * @param key  Redis 键
+     * @param args 搜索参数
+     * @return 成员坐标 Map
+     */
+    Map<Object, GeoPosition> geoSearchWithPosition(String key, GeoSearchArgs args);
+
+    /**
+     * 删除地理位置成员。
+     *
+     * @param key     Redis 键
+     * @param members 成员
+     * @return 删除数量
+     */
+    long geoRemove(String key, Object... members);
+
+    // -------------------------------------------------------------------------
+    // Queue / Deque / DelayedQueue / MQ
+    // -------------------------------------------------------------------------
+
+    /**
+     * 入普通队列。
+     *
+     * @param queueKey 队列 key
+     * @param value    元素
+     * @param <T>      元素类型
+     * @return 是否入队成功
+     */
+    <T> boolean enqueue(String queueKey, T value);
+
+    /**
+     * 出普通队列。
+     *
+     * @param queueKey 队列 key
+     * @param <T>      元素类型
+     * @return 元素
+     */
+    <T> T dequeue(String queueKey);
+
+    /**
+     * 阻塞入队。
+     *
+     * @param queueKey 队列 key
+     * @param value    元素
+     * @param <T>      元素类型
+     * @throws InterruptedException 线程中断时抛出
+     */
+    <T> void enqueueBlocking(String queueKey, T value) throws InterruptedException;
+
+    /**
+     * 超时阻塞入队。
+     *
+     * @param queueKey 队列 key
+     * @param value    元素
+     * @param timeout  超时时间
+     * @param unit     时间单位
+     * @param <T>      元素类型
+     * @return 是否入队成功
+     * @throws InterruptedException 线程中断时抛出
+     */
+    <T> boolean enqueueBlocking(String queueKey, T value, long timeout, TimeUnit unit) throws InterruptedException;
+
+    /**
+     * 超时阻塞出队。
+     *
+     * @param queueKey 队列 key
+     * @param timeout  超时时间
+     * @param unit     时间单位
+     * @param <T>      元素类型
+     * @return 元素
+     * @throws InterruptedException 线程中断时抛出
+     */
+    <T> T dequeueBlocking(String queueKey, long timeout, TimeUnit unit) throws InterruptedException;
+
+    /**
+     * 获取队列长度。
+     *
+     * @param queueKey 队列 key
+     * @return 长度
+     */
+    long queueSize(String queueKey);
+
+    /**
+     * 添加延迟队列任务。
+     *
+     * @param queueKey 队列 key
+     * @param value    元素
+     * @param delay    延迟时间
+     * @param unit     时间单位
+     * @param <T>      元素类型
+     */
+    <T> void enqueueDelayed(String queueKey, T value, long delay, TimeUnit unit);
+
+    /**
+     * 获取延迟队列对象。
+     *
+     * @param queueKey 队列 key
+     * @param <T>      元素类型
+     * @return RDelayedQueue
+     */
+    <T> RDelayedQueue<T> getDelayedQueue(String queueKey);
+
+    /**
+     * 清空队列。
+     *
+     * @param queueKey 队列 key
+     */
+    void clearQueue(String queueKey);
+
+    /**
+     * 判断队列是否为空。
+     *
+     * @param queueKey 队列 key
+     * @return 为空返回 true
+     */
+    boolean isQueueEmpty(String queueKey);
+
+    /**
+     * 删除队列元素。
+     *
+     * @param queueKey 队列 key
+     * @param value    元素
+     * @return 是否删除成功
+     */
+    boolean removeFromQueue(String queueKey, Object value);
+
+    /**
+     * 获取环形缓冲队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RRingBuffer
+     */
+    <T> RRingBuffer<T> getRingBuffer(String key);
+
+    /**
+     * 获取优先级队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RPriorityQueue
+     */
+    <T> RPriorityQueue<T> getPriorityQueue(String key);
+
+    /**
+     * 获取阻塞双端队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RBlockingDeque
+     */
+    <T> RBlockingDeque<T> getBlockingDeque(String key);
+
+    // -------------------------------------------------------------------------
+    // 发布订阅 / Topic
+    // -------------------------------------------------------------------------
+
+    /**
+     * 发布消息。
+     *
+     * @param channel 频道
+     * @param message 消息
+     * @return 接收客户端数量
+     */
+    long publish(String channel, Object message);
+
+    /**
+     * 订阅频道。
+     *
+     * @param channel         频道
+     * @param messageConsumer 消费回调
+     * @return 监听器 ID
+     */
+    int subscribe(String channel, Consumer<Object> messageConsumer);
+
+    /**
+     * 取消订阅频道。
+     *
+     * @param channel    频道
+     * @param listenerId 监听器 ID
+     */
+    void unsubscribe(String channel, int listenerId);
+
+    /**
+     * 取消订阅频道全部监听器。
+     *
+     * @param channel 频道
      */
     void unsubscribe(String channel);
 
-    // --------------------- Lua 脚本操作 ---------------------
+    /**
+     * 获取模式主题。
+     *
+     * @param pattern 频道通配符
+     * @return RPatternTopic
+     */
+    RPatternTopic getPatternTopic(String pattern);
 
     /**
-     * 在 Redis 中执行 Lua 脚本（返回单一结果）。
+     * 获取可靠主题。
      *
-     * @param script     Lua 脚本内容（例如 "return redis.call('set', KEYS[1], ARGV[1])"）
-     * @param keys       脚本中需要用到的 KEYS 参数（如 KEYS[1]、KEYS[2]）
-     * @param args       脚本中需要用到的 ARGV 参数（如 ARGV[1]、ARGV[2]）
-     * @param returnType 返回值类型（用于指定 Redis 返回的数据类型，如 Boolean、Long、String、List 等）
-     * @param <T>        返回值类型（根据 Redis 返回的类型自动转换，例如 String、Long、Boolean 等）
+     * @param topic 主题名
+     * @return RReliableTopic
+     */
+    RReliableTopic getReliableTopic(String topic);
+
+    // -------------------------------------------------------------------------
+    // Stream 消息流
+    // -------------------------------------------------------------------------
+
+    /**
+     * 添加 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param entries   消息字段
+     * @return 消息 ID
+     */
+    StreamMessageId streamAdd(String streamKey, Map<Object, Object> entries);
+
+    /**
+     * 添加 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param args      添加参数
+     * @param <K>       字段类型
+     * @param <V>       值类型
+     * @return 消息 ID
+     */
+    <K, V> StreamMessageId streamAdd(String streamKey, StreamAddArgs<K, V> args);
+
+    /**
+     * 读取 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param args      读取参数
+     * @return 消息 Map
+     */
+    Map<StreamMessageId, Map<Object, Object>> streamRead(String streamKey, StreamReadArgs args);
+
+    /**
+     * 创建消费组。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @param id        起始消息 ID
+     */
+    void streamCreateGroup(String streamKey, String groupName, StreamMessageId id);
+
+    /**
+     * 读取消费组消息。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     * @param args         读取参数
+     * @return 消息 Map
+     */
+    Map<StreamMessageId, Map<Object, Object>> streamReadGroup(String streamKey, String groupName, String consumerName, StreamReadGroupArgs args);
+
+    /**
+     * 确认 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @param ids       消息 ID
+     * @return 确认数量
+     */
+    long streamAck(String streamKey, String groupName, StreamMessageId... ids);
+
+    /**
+     * 删除 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param ids       消息 ID
+     * @return 删除数量
+     */
+    long streamRemove(String streamKey, StreamMessageId... ids);
+
+    /**
+     * 获取 Stream 长度。
+     *
+     * @param streamKey Stream key
+     * @return 长度
+     */
+    long streamSize(String streamKey);
+
+    // -------------------------------------------------------------------------
+    // 分布式会话
+    // -------------------------------------------------------------------------
+
+    /**
+     * 创建或覆盖会话。
+     *
+     * @param keyPrefix 会话 key 前缀
+     * @param token     Token
+     * @param session   会话对象
+     * @param ttl       过期时间
+     */
+    void sessionSet(String keyPrefix, String token, Object session, Duration ttl);
+
+    /**
+     * 获取会话。
+     *
+     * @param keyPrefix 会话 key 前缀
+     * @param token     Token
+     * @param clazz     目标类型
+     * @param <T>       泛型类型
+     * @return 会话对象
+     */
+    <T> T sessionGet(String keyPrefix, String token, Class<T> clazz);
+
+    /**
+     * 获取会话。
+     *
+     * @param keyPrefix     会话 key 前缀
+     * @param token         Token
+     * @param typeReference 目标类型
+     * @param <T>           泛型类型
+     * @return 会话对象
+     */
+    <T> T sessionGet(String keyPrefix, String token, TypeReference<T> typeReference);
+
+    /**
+     * 刷新会话过期时间。
+     *
+     * @param keyPrefix 会话 key 前缀
+     * @param token     Token
+     * @param ttl       过期时间
+     * @return 是否刷新成功
+     */
+    boolean sessionRefresh(String keyPrefix, String token, Duration ttl);
+
+    /**
+     * 删除会话。
+     *
+     * @param keyPrefix 会话 key 前缀
+     * @param token     Token
+     * @return 是否删除成功
+     */
+    boolean sessionDelete(String keyPrefix, String token);
+
+    // -------------------------------------------------------------------------
+    // Lua / 脚本 / 批处理 / 事务
+    // -------------------------------------------------------------------------
+
+    /**
+     * 执行 Lua 脚本。
+     *
+     * @param script     Lua 脚本
+     * @param mode       执行模式
+     * @param returnType 返回类型
+     * @param keys       KEYS
+     * @param values     ARGV
+     * @param <T>        返回泛型
      * @return 执行结果
-     * <p>
-     * 核心逻辑：
-     * 1. 使用 RScript 对象执行 Lua 脚本
-     * 2. RScript.Mode.READ_WRITE 表示既能读也能写（一般 Lua 脚本会修改数据）
-     * 3. StringCodec 用于将 Redis 数据以字符串方式编码/解码
-     * 4. RScript.ReturnType.VALUE 表示返回单一值（也可以改为 MULTI、BOOLEAN 等）
-     * 5. keys 是脚本的 KEYS 数组，args 是 ARGV 数组
+     */
+    <T> T eval(String script, RScript.Mode mode, RScript.ReturnType returnType, List<Object> keys, Object... values);
+
+    /**
+     * 执行 Lua 脚本并返回指定类型。
+     *
+     * @param script     Lua 脚本
+     * @param returnType 目标类型
+     * @param keys       KEYS
+     * @param args       ARGV
+     * @param <T>        返回泛型
+     * @return 执行结果
      */
     <T> T eval(String script, Class<T> returnType, List<Object> keys, Object... args);
 
     /**
-     * 执行 Lua 脚本但不返回结果。
+     * 执行 Lua 脚本但不关心结果。
      *
-     * @param script Lua 脚本内容
-     * @param keys   脚本中的 KEYS
-     * @param args   脚本中的 ARGV
-     *               <p>
-     *               核心逻辑：
-     *               1. 使用 RScript.eval 执行 Lua 脚本
-     *               2. RScript.ReturnType.VALUE 用于兼容调用，但结果不保存
-     *               3. 常用于只修改 Redis 数据但不关心返回值的场景
+     * @param script Lua 脚本
+     * @param keys   KEYS
+     * @param args   ARGV
      */
     void evalNoResult(String script, List<Object> keys, Object... args);
 
     /**
-     * 通过 SHA1 执行已加载的 Lua 脚本，并返回指定类型结果。
+     * 根据 SHA1 执行 Lua 脚本。
      *
-     * @param sha1       Lua 脚本的 SHA1
-     * @param returnType 返回类型 Class
-     * @param keys       脚本中的 KEYS
-     * @param values     脚本中的 ARGV
-     * @param <T>        返回值泛型
-     * @return 脚本执行结果
-     * <p>
-     * 核心逻辑：
-     * 1. 使用 RScript.evalSha 执行 Redis 缓存的 Lua 脚本
-     * 2. 避免重复传输脚本内容，提高性能
+     * @param sha1       脚本 SHA1
+     * @param returnType 目标类型
+     * @param keys       KEYS
+     * @param values     ARGV
+     * @param <T>        返回泛型
+     * @return 执行结果
      */
     <T> T evalBySha(String sha1, Class<T> returnType, List<Object> keys, Object... values);
 
     /**
-     * 将 Lua 脚本加载到 Redis，并返回脚本的 SHA1 值。
+     * 加载 Lua 脚本。
      *
-     * <p>适用于需要多次执行同一脚本的场景，结合 {@link #evalBySha(String, Class, List, Object...)} 可减少传输和解析开销。</p>
-     *
-     * @param script Lua 脚本内容
-     * @return 脚本在 Redis 中的 SHA1 摘要
-     *
-     * <p>关键代码说明：</p>
-     * <ul>
-     *     <li>底层执行 {@code SCRIPT LOAD} 命令，将脚本缓存到 Redis 端</li>
-     *     <li>返回 SHA1 值可直接用于后续的 {@code EVALSHA} 调用</li>
-     * </ul>
+     * @param script Lua 脚本
+     * @return SHA1
      */
     String loadScript(String script);
+
+    /**
+     * 创建批处理对象。
+     *
+     * @return RBatch
+     */
+    RBatch createBatch();
+
+    /**
+     * 创建事务对象。
+     *
+     * @return RTransaction
+     */
+    RTransaction createTransaction();
 
 }
