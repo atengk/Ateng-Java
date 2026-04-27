@@ -8,50 +8,48 @@ spring:
   application:
     name: ${project.artifactId}
 ---
-# Redisson 的相关配置
+# Redisson 配置
 redisson:
   config: |
     singleServerConfig:
-      address: redis://192.168.1.12:40003
-      password: Admin@123
+      # Redis 节点地址，必须包含 redis:// 或 rediss:// 协议
+      address: "redis://192.168.1.12:40003"
+
+      # Redis 密码；如果 Redis 未设置密码，可以删除该配置项
+      password: "Admin@123"
+
+      # Redis 数据库编号，单机模式支持 database 配置
       database: 0
-      clientName: redisson-client
-      connectionPoolSize: 64      # 最大连接数
-      connectionMinimumIdleSize: 24 # 最小空闲连接
-      idleConnectionTimeout: 10000 # 空闲连接超时时间（ms）
-      connectTimeout: 5000        # 连接超时时间
-      timeout: 3000               # 命令等待超时
-      retryAttempts: 3            # 命令重试次数
-      retryInterval: 1500         # 命令重试间隔（ms）
-    threads: 16                   # 处理Redis事件的线程数
-    nettyThreads: 32              # Netty线程数
-    codec: !<org.redisson.codec.JsonJacksonCodec> {} # 推荐JSON序列化
-#redisson:
-#  config: |
-#    clusterServersConfig:
-#      nodeAddresses:
-#        - "redis://192.168.1.41:6379"
-#        - "redis://192.168.1.42:6379"
-#        - "redis://192.168.1.43:6379"
-#        - "redis://192.168.1.44:6379"
-#        - "redis://192.168.1.45:6379"
-#        - "redis://192.168.1.46:6379"
-#      password: "Admin@123"       # 集群密码（如果集群有密码）
-#      scanInterval: 2000          # 集群状态扫描间隔（ms）
-#      readMode: "SLAVE"           # 读取模式（MASTER/SLAVE/MASTER_SLAVE）
-#      subscriptionMode: "SLAVE"  # 订阅模式（MASTER/SLAVE/MASTER_SLAVE）
-#      loadBalancer: !<org.redisson.connection.balancer.RoundRobinLoadBalancer> {} # 负载均衡策略
-#      masterConnectionPoolSize: 64      # 主节点连接池大小
-#      slaveConnectionPoolSize: 64       # 从节点连接池大小
-#      masterConnectionMinimumIdleSize: 24 # 主节点最小空闲连接
-#      slaveConnectionMinimumIdleSize: 24  # 从节点最小空闲连接
-#      idleConnectionTimeout: 10000      # 空闲连接超时时间（ms）
-#      connectTimeout: 5000              # 连接超时时间
-#      timeout: 3000                     # 命令等待超时
-#      retryAttempts: 3                  # 命令重试次数
-#      retryInterval: 1500               # 命令重试间隔（ms）
-#      failedSlaveReconnectionInterval: 3000 # 从节点重连间隔（ms）
-#      failedSlaveCheckInterval: 60000   # 从节点健康检查间隔（ms）
-#    threads: 16                         # 处理Redis事件的线程数
-#    nettyThreads: 32                    # Netty线程数
-#    codec: !<org.redisson.codec.JsonJacksonCodec> {} # 推荐JSON序列化
+
+      # 客户端名称，便于在 Redis CLIENT LIST 中识别连接来源
+      clientName: "redisson-client"
+
+      # 连接池最大连接数
+      connectionPoolSize: 64
+
+      # 连接池最小空闲连接数
+      connectionMinimumIdleSize: 24
+
+      # 空闲连接超时时间，单位：毫秒
+      idleConnectionTimeout: 10000
+
+      # 建立连接超时时间，单位：毫秒
+      connectTimeout: 5000
+
+      # Redis 命令等待超时时间，单位：毫秒
+      timeout: 3000
+
+      # Redis 命令重试次数
+      retryAttempts: 3
+
+      # Redis 命令重试间隔，单位：毫秒
+      retryInterval: 1500
+
+    # Redisson 业务线程数，主要用于监听器、异步回调等任务
+    threads: 16
+
+    # Netty IO 线程数，负责 Redis 网络通信
+    nettyThreads: 32
+
+    # 对象序列化方式，推荐使用 JSON，便于排查和跨语言读取
+    codec: !<org.redisson.codec.JsonJacksonCodec> {}

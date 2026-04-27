@@ -8,7 +8,11 @@ Redisson 是一个基于 Redis 的 Java 客户端，提供了丰富的分布式�
 
 ## 基础配置
 
+本节用于完成 Redisson 在 Spring Boot 项目中的基础接入，包括 Maven 依赖、`application.yml` 配置、配置属性类以及 `RedissonClient` Bean 的创建。配置方式采用 Redisson 原生 YAML 内容，便于在单机、集群、哨兵等不同 Redis 部署模式之间切换。
+
 ### 添加依赖
+
+在 `pom.xml` 中添加 Redisson Spring Boot Starter 依赖。版本号建议统一放在 `properties` 中，便于后续升级维护。
 
 ```xml
 <!-- 项目属性 -->
@@ -25,38 +29,80 @@ Redisson 是一个基于 Redis 的 Java 客户端，提供了丰富的分布式�
 
 ### 编辑配置文件
 
-#### 单机配置
+Redisson 支持通过 YAML 字符串加载原生配置。这里将配置统一放在 `application.yml` 的 `redisson.config` 字段中，再通过 `Config.fromYAML(...)` 解析成 Redisson 配置对象。
+
+这种方式的优点是配置结构和 Redisson 官方配置保持一致，后续从单机模式切换到集群模式时，只需要调整配置文件，不需要修改 Java 代码。
+
+文件位置：`src/main/resources/application.yml`
+
+#### 单机模式
+
+单机模式适用于开发环境、测试环境，或者 Redis 本身没有部署为集群的简单业务场景。需要注意的是，`address` 必须带上协议前缀，普通 Redis 使用 `redis://`，启用 TLS 的 Redis 使用 `rediss://`。
 
 ```yaml
 ---
-# Redisson 的相关配置
+# Redisson 配置
 redisson:
   config: |
     singleServerConfig:
-      address: redis://192.168.1.12:40003
-      password: Admin@123
+      # Redis 节点地址，必须包含 redis:// 或 rediss:// 协议
+      address: "redis://192.168.1.12:40003"
+
+      # Redis 密码；如果 Redis 未设置密码，可以删除该配置项
+      password: "Admin@123"
+
+      # Redis 数据库编号，单机模式支持 database 配置
       database: 0
-      clientName: redisson-client
-      connectionPoolSize: 64      # 最大连接数
-      connectionMinimumIdleSize: 24 # 最小空闲连接
-      idleConnectionTimeout: 10000 # 空闲连接超时时间（ms）
-      connectTimeout: 5000        # 连接超时时间
-      timeout: 3000               # 命令等待超时
-      retryAttempts: 3            # 命令重试次数
-      retryInterval: 1500         # 命令重试间隔（ms）
-    threads: 16                   # 处理Redis事件的线程数
-    nettyThreads: 32              # Netty线程数
-    codec: !<org.redisson.codec.JsonJacksonCodec> {} # 推荐JSON序列化
+
+      # 客户端名称，便于在 Redis CLIENT LIST 中识别连接来源
+      clientName: "redisson-client"
+
+      # 连接池最大连接数
+      connectionPoolSize: 64
+
+      # 连接池最小空闲连接数
+      connectionMinimumIdleSize: 24
+
+      # 空闲连接超时时间，单位：毫秒
+      idleConnectionTimeout: 10000
+
+      # 建立连接超时时间，单位：毫秒
+      connectTimeout: 5000
+
+      # Redis 命令等待超时时间，单位：毫秒
+      timeout: 3000
+
+      # Redis 命令重试次数
+      retryAttempts: 3
+
+      # Redis 命令重试间隔，单位：毫秒
+      retryInterval: 1500
+
+    # Redisson 业务线程数，主要用于监听器、异步回调等任务
+    threads: 16
+
+    # Netty IO 线程数，负责 Redis 网络通信
+    nettyThreads: 32
+
+    # 对象序列化方式，推荐使用 JSON，便于排查和跨语言读取
+    codec: !<org.redisson.codec.JsonJacksonCodec> {}
 ```
 
-#### 集群配置
+#### 集群模式
+
+集群模式适用于生产环境中 Redis Cluster 部署场景。`nodeAddresses` 建议填写所有主从节点地址，Redisson 会根据集群拓扑自动发现主从关系并刷新节点状态。
+
+Redis Cluster 不支持按客户端选择普通 `database`，因此集群配置中不要配置 `database`。
+
+文件位置：`src/main/resources/application.yml`
 
 ```yaml
 ---
-# Redisson 的相关配置
+# Redisson 配置
 redisson:
   config: |
     clusterServersConfig:
+      # Redis Cluster 节点地址，建议填写全部主从节点
       nodeAddresses:
         - "redis://192.168.1.41:6379"
         - "redis://192.168.1.42:6379"
@@ -64,28 +110,99 @@ redisson:
         - "redis://192.168.1.44:6379"
         - "redis://192.168.1.45:6379"
         - "redis://192.168.1.46:6379"
-      password: "Admin@123"       # 集群密码（如果集群有密码）
-      scanInterval: 2000          # 集群状态扫描间隔（ms）
-      readMode: "SLAVE"           # 读取模式（MASTER/SLAVE/MASTER_SLAVE）
-      subscriptionMode: "SLAVE"  # 订阅模式（MASTER/SLAVE/MASTER_SLAVE）
-      loadBalancer: !<org.redisson.connection.balancer.RoundRobinLoadBalancer> {} # 负载均衡策略
-      masterConnectionPoolSize: 64      # 主节点连接池大小
-      slaveConnectionPoolSize: 64       # 从节点连接池大小
-      masterConnectionMinimumIdleSize: 24 # 主节点最小空闲连接
-      slaveConnectionMinimumIdleSize: 24  # 从节点最小空闲连接
-      idleConnectionTimeout: 10000      # 空闲连接超时时间（ms）
-      connectTimeout: 5000              # 连接超时时间
-      timeout: 3000                     # 命令等待超时
-      retryAttempts: 3                  # 命令重试次数
-      retryInterval: 1500               # 命令重试间隔（ms）
-      failedSlaveReconnectionInterval: 3000 # 从节点重连间隔（ms）
-      failedSlaveCheckInterval: 60000   # 从节点健康检查间隔（ms）
-    threads: 16                         # 处理Redis事件的线程数
-    nettyThreads: 32                    # Netty线程数
-    codec: !<org.redisson.codec.JsonJacksonCodec> {} # 推荐JSON序列化
+
+      # Redis 集群密码；如果集群未设置密码，可以删除该配置项
+      password: "Admin@123"
+
+      # 集群拓扑扫描间隔，单位：毫秒
+      scanInterval: 2000
+
+      # 读取模式：
+      # MASTER：只从主节点读取
+      # SLAVE：优先从从节点读取
+      # MASTER_SLAVE：主从节点都可读取
+      readMode: "SLAVE"
+
+      # 订阅模式：
+      # MASTER：只使用主节点订阅
+      # SLAVE：使用从节点订阅
+      # MASTER_SLAVE：主从节点都可订阅
+      subscriptionMode: "SLAVE"
+
+      # 负载均衡策略
+      loadBalancer: !<org.redisson.connection.balancer.RoundRobinLoadBalancer> {}
+
+      # 主节点连接池最大连接数
+      masterConnectionPoolSize: 64
+
+      # 从节点连接池最大连接数
+      slaveConnectionPoolSize: 64
+
+      # 主节点连接池最小空闲连接数
+      masterConnectionMinimumIdleSize: 24
+
+      # 从节点连接池最小空闲连接数
+      slaveConnectionMinimumIdleSize: 24
+
+      # 空闲连接超时时间，单位：毫秒
+      idleConnectionTimeout: 10000
+
+      # 建立连接超时时间，单位：毫秒
+      connectTimeout: 5000
+
+      # Redis 命令等待超时时间，单位：毫秒
+      timeout: 3000
+
+      # Redis 命令重试次数
+      retryAttempts: 3
+
+      # Redis 命令重试间隔，单位：毫秒
+      retryInterval: 1500
+
+      # 从节点重连间隔，单位：毫秒
+      failedSlaveReconnectionInterval: 3000
+
+      # 从节点健康检查间隔，单位：毫秒
+      failedSlaveCheckInterval: 60000
+
+    # Redisson 业务线程数，主要用于监听器、异步回调等任务
+    threads: 16
+
+    # Netty IO 线程数，负责 Redis 网络通信
+    nettyThreads: 32
+
+    # 对象序列化方式，推荐使用 JSON，便于排查和跨语言读取
+    codec: !<org.redisson.codec.JsonJacksonCodec> {}
 ```
 
+#### 配置说明
+
+| 配置项                            | 说明                       | 建议                                             |
+| --------------------------------- | -------------------------- | ------------------------------------------------ |
+| `address`                         | 单机 Redis 地址            | 必须包含 `redis://` 或 `rediss://`               |
+| `nodeAddresses`                   | Redis Cluster 节点地址列表 | 生产环境建议填写全部主从节点                     |
+| `password`                        | Redis 密码                 | 无密码时删除该配置项                             |
+| `database`                        | Redis 数据库编号           | 仅单机模式使用，集群模式不要配置                 |
+| `clientName`                      | Redis 客户端名称           | 建议配置，便于定位连接来源                       |
+| `connectionPoolSize`              | 单机连接池最大连接数       | 根据并发量和 Redis 承载能力调整                  |
+| `masterConnectionPoolSize`        | 主节点连接池最大连接数     | 集群模式使用                                     |
+| `slaveConnectionPoolSize`         | 从节点连接池最大连接数     | 集群模式使用                                     |
+| `connectionMinimumIdleSize`       | 单机最小空闲连接数         | 不宜过大，避免空闲连接浪费                       |
+| `masterConnectionMinimumIdleSize` | 主节点最小空闲连接数       | 集群模式使用                                     |
+| `slaveConnectionMinimumIdleSize`  | 从节点最小空闲连接数       | 集群模式使用                                     |
+| `connectTimeout`                  | 建立连接超时时间           | 网络较差时可适当增大                             |
+| `timeout`                         | 命令等待超时时间           | 过小容易误判超时，过大影响失败响应速度           |
+| `retryAttempts`                   | 命令重试次数               | 常用值为 `3`                                     |
+| `retryInterval`                   | 命令重试间隔               | 常用值为 `1000` 到 `1500` 毫秒                   |
+| `threads`                         | Redisson 业务线程数        | 默认可满足多数场景，高并发可适当增加             |
+| `nettyThreads`                    | Netty IO 线程数            | 一般按 CPU 核心数和连接规模调整                  |
+| `codec`                           | 序列化方式                 | 推荐 `JsonJacksonCodec`，便于查看 Redis 中的数据 |
+
 ### 创建配置属性
+
+创建配置属性类，用于读取 `application.yml` 中 `redisson` 前缀下的配置内容。
+
+文件位置：`src/main/java/local/ateng/java/redis/config/RedissonProperties.java`
 
 ```java
 package local.ateng.java.redis.config;
@@ -119,6 +236,10 @@ public class RedissonProperties {
 ```
 
 ### 创建客户端Bean
+
+创建 Redisson 自动配置类，用于解析配置文件中的 YAML 内容，并注册 `RedissonClient` 到 Spring 容器中。
+
+文件位置：`src/main/java/local/ateng/java/redis/config/RedissonConfig.java`
 
 ```java
 package local.ateng.java.redis.config;
