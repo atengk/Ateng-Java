@@ -6,7 +6,7 @@
 | ---------- | ------ |
 | JDK        | 21     |
 | Maven      | 3.9.12 |
-| SpringBoot | 3.5.13 |
+| SpringBoot | 3.5.14 |
 
 
 
@@ -64,7 +64,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- 核心依赖版本 -->
-        <spring-boot.version>3.5.13</spring-boot.version>
+        <spring-boot.version>3.5.14</spring-boot.version>
         <maven-compiler.version>3.14.1</maven-compiler.version>
         <lombok.version>1.18.44</lombok.version>
         <hutool.version>5.8.44</hutool.version>
