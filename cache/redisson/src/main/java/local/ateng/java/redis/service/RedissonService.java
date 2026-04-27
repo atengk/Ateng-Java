@@ -3,17 +3,26 @@ package local.ateng.java.redis.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.redisson.api.*;
 import org.redisson.api.geo.GeoSearchArgs;
+import org.redisson.api.queue.*;
+import org.redisson.api.queue.event.QueueEventListener;
 import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.api.stream.StreamReadArgs;
 import org.redisson.api.stream.StreamReadGroupArgs;
+import org.redisson.api.stream.StreamTrimArgs;
 import org.redisson.client.protocol.ScoredEntry;
+import org.redisson.codec.JsonCodec;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -781,11 +790,11 @@ public interface RedissonService {
     /**
      * 设置 MapCache 字段值并指定字段级 TTL 与最大空闲时间。
      *
-     * @param key      Redis 键
-     * @param field    字段名
-     * @param value    字段值
-     * @param ttl      字段 TTL
-     * @param maxIdle  最大空闲时间
+     * @param key     Redis 键
+     * @param field   字段名
+     * @param value   字段值
+     * @param ttl     字段 TTL
+     * @param maxIdle 最大空闲时间
      */
     void hcPut(String key, String field, Object value, Duration ttl, Duration maxIdle);
 
@@ -2391,4 +2400,1605 @@ public interface RedissonService {
      */
     RTransaction createTransaction();
 
+    // -------------------------------------------------------------------------
+    // LocalCachedMap / 本地缓存 Map
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取本地缓存 Map。
+     * 注意：同一个 RedissonClient 内，相同 name 建议复用相同 LocalCachedMapOptions。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     * @param <K>     字段类型
+     * @param <V>     值类型
+     * @return RLocalCachedMap
+     */
+    <K, V> RLocalCachedMap<K, V> getLocalCachedMap(String key, LocalCachedMapOptions<K, V> options);
+
+    /**
+     * 设置本地缓存 Map 字段值。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param value   字段值
+     * @param options 本地缓存配置
+     */
+    void lcPut(String key, Object field, Object value, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 字段不存在时设置本地缓存 Map 字段值。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param value   字段值
+     * @param options 本地缓存配置
+     * @return 是否设置成功
+     */
+    boolean lcPutIfAbsent(String key, Object field, Object value, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 获取本地缓存 Map 字段值。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param clazz   目标类型
+     * @param options 本地缓存配置
+     * @param <T>     泛型类型
+     * @return 字段值
+     */
+    <T> T lcGet(String key, Object field, Class<T> clazz, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 获取本地缓存 Map 字段值。
+     *
+     * @param key           Redis 键
+     * @param field         字段
+     * @param typeReference 目标类型
+     * @param options       本地缓存配置
+     * @param <T>           泛型类型
+     * @return 字段值
+     */
+    <T> T lcGet(String key, Object field, TypeReference<T> typeReference, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 删除本地缓存 Map 字段。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param options 本地缓存配置
+     * @return 删除前的值
+     */
+    Object lcRemove(String key, Object field, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 判断本地缓存 Map 字段是否存在。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param options 本地缓存配置
+     * @return 存在返回 true
+     */
+    boolean lcContainsKey(String key, Object field, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 获取本地缓存 Map 大小。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     * @return 大小
+     */
+    int lcSize(String key, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 清空本地缓存 Map。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     */
+    void lcClear(String key, LocalCachedMapOptions<Object, Object> options);
+
+    /**
+     * 仅清空当前 JVM 内的本地缓存，不清空 Redis 远端数据。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     */
+    void lcClearLocalCache(String key, LocalCachedMapOptions<Object, Object> options);
+
+    // -------------------------------------------------------------------------
+    // JsonBucket / RedisJSON
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取 JSON Bucket。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     * @return RJsonBucket
+     */
+    <T> RJsonBucket<T> getJsonBucket(String key, JsonCodec codec);
+
+    /**
+     * 设置 JSON 文档。
+     *
+     * @param key   Redis 键
+     * @param value JSON 对象
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     */
+    <T> void jsonSet(String key, T value, JsonCodec codec);
+
+    /**
+     * 设置 JSON 文档并指定过期时间。
+     *
+     * @param key   Redis 键
+     * @param value JSON 对象
+     * @param ttl   过期时间
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     */
+    <T> void jsonSet(String key, T value, Duration ttl, JsonCodec codec);
+
+    /**
+     * 获取完整 JSON 文档。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     * @return JSON 对象
+     */
+    <T> T jsonGet(String key, JsonCodec codec);
+
+    /**
+     * 根据 JSONPath 获取 JSON 局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param codec JSON 编解码器
+     * @param <T>   返回类型
+     * @return JSONPath 对应的值
+     */
+    <T> T jsonGet(String key, String path, JsonCodec codec);
+
+    /**
+     * 根据 JSONPath 设置 JSON 局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param value 值
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     */
+    <T> void jsonSet(String key, String path, Object value, JsonCodec codec);
+
+    /**
+     * JSONPath 不存在时设置局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param value 值
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 是否设置成功
+     */
+    <T> boolean jsonSetIfAbsent(String key, String path, Object value, JsonCodec codec);
+
+    /**
+     * JSONPath 存在时设置局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param value 值
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 是否设置成功
+     */
+    <T> boolean jsonSetIfExists(String key, String path, Object value, JsonCodec codec);
+
+    /**
+     * 删除 JSONPath 对应内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 删除数量
+     */
+    <T> long jsonDelete(String key, String path, JsonCodec codec);
+
+    /**
+     * 向 JSON 数组追加元素。
+     *
+     * @param key    Redis 键
+     * @param path   JSONPath
+     * @param codec  JSON 编解码器
+     * @param values 追加值
+     * @param <T>    JSON 文档类型
+     * @return 追加后的数组长度
+     */
+    <T> long jsonArrayAppend(String key, String path, JsonCodec codec, Object... values);
+
+    /**
+     * 获取 JSON 对象字段名。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 字段名集合
+     */
+    <T> List<String> jsonKeys(String key, JsonCodec codec);
+
+    /**
+     * 清空 JSON 文档。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     */
+    <T> void jsonClear(String key, JsonCodec codec);
+
+    // -------------------------------------------------------------------------
+    // BinaryStream / 二进制流
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取二进制流对象。
+     *
+     * @param key Redis 键
+     * @return RBinaryStream
+     */
+    RBinaryStream getBinaryStream(String key);
+
+    /**
+     * 获取二进制输入流。
+     *
+     * @param key Redis 键
+     * @return InputStream
+     */
+    InputStream binaryInputStream(String key);
+
+    /**
+     * 获取二进制输出流。
+     *
+     * @param key Redis 键
+     * @return OutputStream
+     */
+    OutputStream binaryOutputStream(String key);
+
+    /**
+     * 写入二进制数据。
+     *
+     * @param key  Redis 键
+     * @param data 字节数组
+     */
+    void binaryWrite(String key, byte[] data);
+
+    /**
+     * 读取全部二进制数据。
+     *
+     * @param key Redis 键
+     * @return 字节数组
+     */
+    byte[] binaryReadAll(String key);
+
+    /**
+     * 获取二进制数据大小。
+     *
+     * @param key Redis 键
+     * @return 字节大小
+     */
+    long binarySize(String key);
+
+    /**
+     * 删除二进制数据。
+     *
+     * @param key Redis 键
+     * @return 是否删除成功
+     */
+    boolean binaryDelete(String key);
+
+    // -------------------------------------------------------------------------
+    // Multimap / 一键多值
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取 SetMultimap。
+     *
+     * @param key Redis 键
+     * @param <K> 字段类型
+     * @param <V> 值类型
+     * @return RSetMultimap
+     */
+    <K, V> RSetMultimap<K, V> getSetMultimap(String key);
+
+    /**
+     * 获取 ListMultimap。
+     *
+     * @param key Redis 键
+     * @param <K> 字段类型
+     * @param <V> 值类型
+     * @return RListMultimap
+     */
+    <K, V> RListMultimap<K, V> getListMultimap(String key);
+
+    /**
+     * 向 SetMultimap 添加值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否新增
+     */
+    boolean smmPut(String key, Object mapKey, Object mapValue);
+
+    /**
+     * 获取 SetMultimap 指定字段的值集合。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 值集合
+     */
+    Set<Object> smmGet(String key, Object mapKey);
+
+    /**
+     * 删除 SetMultimap 指定字段的指定值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否删除成功
+     */
+    boolean smmRemove(String key, Object mapKey, Object mapValue);
+
+    /**
+     * 删除 SetMultimap 指定字段的全部值。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 删除的值集合
+     */
+    Set<Object> smmRemoveAll(String key, Object mapKey);
+
+    /**
+     * 判断 SetMultimap 是否包含指定字段。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 存在返回 true
+     */
+    boolean smmContainsKey(String key, Object mapKey);
+
+    /**
+     * 判断 SetMultimap 是否包含指定字段和值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 存在返回 true
+     */
+    boolean smmContainsEntry(String key, Object mapKey, Object mapValue);
+
+    /**
+     * 获取 SetMultimap 总值数量。
+     *
+     * @param key Redis 键
+     * @return 总值数量
+     */
+    int smmSize(String key);
+
+    /**
+     * 清空 SetMultimap。
+     *
+     * @param key Redis 键
+     */
+    void smmClear(String key);
+
+    /**
+     * 向 ListMultimap 添加值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否新增
+     */
+    boolean lmmPut(String key, Object mapKey, Object mapValue);
+
+    /**
+     * 获取 ListMultimap 指定字段的值列表。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 值列表
+     */
+    List<Object> lmmGet(String key, Object mapKey);
+
+    /**
+     * 删除 ListMultimap 指定字段的指定值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否删除成功
+     */
+    boolean lmmRemove(String key, Object mapKey, Object mapValue);
+
+    /**
+     * 删除 ListMultimap 指定字段的全部值。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 删除的值列表
+     */
+    List<Object> lmmRemoveAll(String key, Object mapKey);
+
+    /**
+     * 判断 ListMultimap 是否包含指定字段。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 存在返回 true
+     */
+    boolean lmmContainsKey(String key, Object mapKey);
+
+    /**
+     * 判断 ListMultimap 是否包含指定字段和值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 存在返回 true
+     */
+    boolean lmmContainsEntry(String key, Object mapKey, Object mapValue);
+
+    /**
+     * 获取 ListMultimap 总值数量。
+     *
+     * @param key Redis 键
+     * @return 总值数量
+     */
+    int lmmSize(String key);
+
+    /**
+     * 清空 ListMultimap。
+     *
+     * @param key Redis 键
+     */
+    void lmmClear(String key);
+
+    // -------------------------------------------------------------------------
+    // SortedSet / LexSortedSet
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取自然排序集合。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RSortedSet
+     */
+    <T> RSortedSet<T> getSortedSet(String key);
+
+    /**
+     * 获取字典序排序集合。
+     *
+     * @param key Redis 键
+     * @return RLexSortedSet
+     */
+    RLexSortedSet getLexSortedSet(String key);
+
+    /**
+     * 添加自然排序集合元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 是否新增
+     */
+    boolean sortedSetAdd(String key, Object value);
+
+    /**
+     * 批量添加自然排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素集合
+     * @return 是否有新增
+     */
+    boolean sortedSetAddAll(String key, Collection<?> values);
+
+    /**
+     * 获取自然排序集合全部元素。
+     *
+     * @param key Redis 键
+     * @return 元素集合
+     */
+    Collection<Object> sortedSetReadAll(String key);
+
+    /**
+     * 删除自然排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素
+     * @return 是否删除成功
+     */
+    boolean sortedSetRemove(String key, Object... values);
+
+    /**
+     * 获取自然排序集合大小。
+     *
+     * @param key Redis 键
+     * @return 大小
+     */
+    int sortedSetSize(String key);
+
+    /**
+     * 清空自然排序集合。
+     *
+     * @param key Redis 键
+     */
+    void sortedSetClear(String key);
+
+    /**
+     * 添加字典序排序集合元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 是否新增
+     */
+    boolean lexAdd(String key, String value);
+
+    /**
+     * 批量添加字典序排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素集合
+     * @return 是否有新增
+     */
+    boolean lexAddAll(String key, Collection<String> values);
+
+    /**
+     * 获取字典序排序集合全部元素。
+     *
+     * @param key Redis 键
+     * @return 元素集合
+     */
+    Collection<String> lexReadAll(String key);
+
+    /**
+     * 获取大于等于指定元素的字典序集合。
+     *
+     * @param key  Redis 键
+     * @param from 开始元素
+     * @return 元素集合
+     */
+    Collection<String> lexRangeTail(String key, String from);
+
+    /**
+     * 获取小于等于指定元素的字典序集合。
+     *
+     * @param key Redis 键
+     * @param to  结束元素
+     * @return 元素集合
+     */
+    Collection<String> lexRangeHead(String key, String to);
+
+    /**
+     * 删除字典序排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素
+     * @return 是否删除成功
+     */
+    boolean lexRemove(String key, String... values);
+
+    /**
+     * 获取字典序排序集合大小。
+     *
+     * @param key Redis 键
+     * @return 大小
+     */
+    int lexSize(String key);
+
+    /**
+     * 清空字典序排序集合。
+     *
+     * @param key Redis 键
+     */
+    void lexClear(String key);
+
+    // -------------------------------------------------------------------------
+    // LongAdder / DoubleAdder
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取分布式 LongAdder。
+     *
+     * @param key Redis 键
+     * @return RLongAdder
+     */
+    RLongAdder getLongAdder(String key);
+
+    /**
+     * 获取分布式 DoubleAdder。
+     *
+     * @param key Redis 键
+     * @return RDoubleAdder
+     */
+    RDoubleAdder getDoubleAdder(String key);
+
+    /**
+     * LongAdder 增加。
+     *
+     * @param key   Redis 键
+     * @param delta 增量
+     */
+    void longAdderAdd(String key, long delta);
+
+    /**
+     * LongAdder 求和。
+     *
+     * @param key Redis 键
+     * @return 当前总和
+     */
+    long longAdderSum(String key);
+
+    /**
+     * LongAdder 重置。
+     *
+     * @param key Redis 键
+     */
+    void longAdderReset(String key);
+
+    /**
+     * LongAdder 求和后重置。
+     *
+     * @param key Redis 键
+     * @return 重置前总和
+     */
+    long longAdderSumThenReset(String key);
+
+    /**
+     * DoubleAdder 增加。
+     *
+     * @param key   Redis 键
+     * @param delta 增量
+     */
+    void doubleAdderAdd(String key, double delta);
+
+    /**
+     * DoubleAdder 求和。
+     *
+     * @param key Redis 键
+     * @return 当前总和
+     */
+    double doubleAdderSum(String key);
+
+    /**
+     * DoubleAdder 重置。
+     *
+     * @param key Redis 键
+     */
+    void doubleAdderReset(String key);
+
+    /**
+     * DoubleAdder 求和后重置。
+     *
+     * @param key Redis 键
+     * @return 重置前总和
+     */
+    double doubleAdderSumThenReset(String key);
+
+    // -------------------------------------------------------------------------
+    // Bounded / Priority 队列增强
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取有界阻塞队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RBoundedBlockingQueue
+     */
+    <T> RBoundedBlockingQueue<T> getBoundedBlockingQueue(String key);
+
+    /**
+     * 初始化有界阻塞队列容量。
+     *
+     * @param key      Redis 键
+     * @param capacity 容量
+     * @return 是否初始化成功
+     */
+    boolean boundedQueueTrySetCapacity(String key, int capacity);
+
+    /**
+     * 有界阻塞队列入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    <T> boolean boundedQueueOffer(String key, T value);
+
+    /**
+     * 有界阻塞队列超时入队。
+     *
+     * @param key     Redis 键
+     * @param value   元素
+     * @param timeout 等待时间
+     * @param unit    时间单位
+     * @param <T>     元素类型
+     * @return 是否入队成功
+     * @throws InterruptedException 线程中断时抛出
+     */
+    <T> boolean boundedQueueOffer(String key, T value, long timeout, TimeUnit unit) throws InterruptedException;
+
+    /**
+     * 有界阻塞队列出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    <T> T boundedQueuePoll(String key);
+
+    /**
+     * 有界阻塞队列超时出队。
+     *
+     * @param key     Redis 键
+     * @param timeout 等待时间
+     * @param unit    时间单位
+     * @param <T>     元素类型
+     * @return 元素
+     * @throws InterruptedException 线程中断时抛出
+     */
+    <T> T boundedQueuePoll(String key, long timeout, TimeUnit unit) throws InterruptedException;
+
+    /**
+     * 获取有界阻塞队列大小。
+     *
+     * @param key Redis 键
+     * @return 队列大小
+     */
+    int boundedQueueSize(String key);
+
+    /**
+     * 获取有界阻塞队列剩余容量。
+     *
+     * @param key Redis 键
+     * @return 剩余容量
+     */
+    int boundedQueueRemainingCapacity(String key);
+
+    /**
+     * 获取优先级双端队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RPriorityDeque
+     */
+    <T> RPriorityDeque<T> getPriorityDeque(String key);
+
+    /**
+     * 获取优先级阻塞队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RPriorityBlockingQueue
+     */
+    <T> RPriorityBlockingQueue<T> getPriorityBlockingQueue(String key);
+
+    /**
+     * 获取优先级阻塞双端队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RPriorityBlockingDeque
+     */
+    <T> RPriorityBlockingDeque<T> getPriorityBlockingDeque(String key);
+
+    /**
+     * 优先级队列入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素，建议实现 Comparable
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    <T> boolean priorityQueueOffer(String key, T value);
+
+    /**
+     * 优先级队列出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    <T> T priorityQueuePoll(String key);
+
+    /**
+     * 优先级双端队列从头部入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素，建议实现 Comparable
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    <T> boolean priorityDequeOfferFirst(String key, T value);
+
+    /**
+     * 优先级双端队列从尾部入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素，建议实现 Comparable
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    <T> boolean priorityDequeOfferLast(String key, T value);
+
+    /**
+     * 优先级双端队列从头部出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    <T> T priorityDequePollFirst(String key);
+
+    /**
+     * 优先级双端队列从尾部出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    <T> T priorityDequePollLast(String key);
+
+    // -------------------------------------------------------------------------
+    // ReliableQueue / 可靠队列
+    // -------------------------------------------------------------------------
+
+    /**
+     * 设置可靠队列配置。
+     *
+     * @param key    队列 key
+     * @param config 队列配置
+     */
+    void reliableQueueSetConfig(String key, QueueConfig config);
+
+    /**
+     * 队列配置不存在时设置可靠队列配置。
+     *
+     * @param key    队列 key
+     * @param config 队列配置
+     * @return 是否设置成功
+     */
+    boolean reliableQueueSetConfigIfAbsent(String key, QueueConfig config);
+
+    /**
+     * 可靠队列添加消息。
+     *
+     * @param key  队列 key
+     * @param args 添加参数
+     * @param <T>  消息类型
+     * @return 添加后的消息
+     */
+    <T> Message<T> reliableQueueAdd(String key, QueueAddArgs<T> args);
+
+    /**
+     * 可靠队列批量添加消息。
+     *
+     * @param key  队列 key
+     * @param args 添加参数
+     * @param <T>  消息类型
+     * @return 添加后的消息集合
+     */
+    <T> List<Message<T>> reliableQueueAddMany(String key, QueueAddArgs<T> args);
+
+    /**
+     * 可靠队列拉取一条消息。
+     *
+     * @param key 队列 key
+     * @param <T> 消息类型
+     * @return 消息
+     */
+    <T> Message<T> reliableQueuePoll(String key);
+
+    /**
+     * 可靠队列按参数拉取一条消息。
+     *
+     * @param key  队列 key
+     * @param args 拉取参数
+     * @param <T>  消息类型
+     * @return 消息
+     */
+    <T> Message<T> reliableQueuePoll(String key, QueuePollArgs args);
+
+    /**
+     * 可靠队列批量拉取消息。
+     *
+     * @param key  队列 key
+     * @param args 拉取参数
+     * @param <T>  消息类型
+     * @return 消息集合
+     */
+    <T> List<Message<T>> reliableQueuePollMany(String key, QueuePollArgs args);
+
+    /**
+     * 确认可靠队列消息处理成功。
+     *
+     * @param key  队列 key
+     * @param args ACK 参数
+     */
+    void reliableQueueAck(String key, QueueAckArgs args);
+
+    /**
+     * 标记可靠队列消息处理失败。
+     *
+     * @param key  队列 key
+     * @param args NACK 参数
+     */
+    void reliableQueueNack(String key, QueueNegativeAckArgs args);
+
+    /**
+     * 根据消息 ID 获取可靠队列消息。
+     *
+     * @param key 队列 key
+     * @param id  消息 ID
+     * @param <T> 消息类型
+     * @return 消息
+     */
+    <T> Message<T> reliableQueueGet(String key, String id);
+
+    /**
+     * 根据消息 ID 批量获取可靠队列消息。
+     *
+     * @param key 队列 key
+     * @param ids 消息 ID
+     * @param <T> 消息类型
+     * @return 消息集合
+     */
+    <T> List<Message<T>> reliableQueueGetAll(String key, String... ids);
+
+    /**
+     * 获取可靠队列所有可拉取消息。
+     *
+     * @param key 队列 key
+     * @param <T> 消息类型
+     * @return 消息集合
+     */
+    <T> List<Message<T>> reliableQueueListAll(String key);
+
+    /**
+     * 判断可靠队列是否包含指定消息 ID。
+     *
+     * @param key 队列 key
+     * @param id  消息 ID
+     * @return 包含返回 true
+     */
+    boolean reliableQueueContains(String key, String id);
+
+    /**
+     * 判断可靠队列包含的消息 ID 数量。
+     *
+     * @param key 队列 key
+     * @param ids 消息 ID
+     * @return 匹配数量
+     */
+    int reliableQueueContainsMany(String key, String... ids);
+
+    /**
+     * 删除可靠队列消息。
+     *
+     * @param key  队列 key
+     * @param args 删除参数
+     * @return 是否删除成功
+     */
+    boolean reliableQueueRemove(String key, QueueRemoveArgs args);
+
+    /**
+     * 批量删除可靠队列消息。
+     *
+     * @param key  队列 key
+     * @param args 删除参数
+     * @return 删除数量
+     */
+    int reliableQueueRemoveMany(String key, QueueRemoveArgs args);
+
+    /**
+     * 移动可靠队列消息。
+     *
+     * @param key  队列 key
+     * @param args 移动参数
+     * @return 移动数量
+     */
+    int reliableQueueMove(String key, QueueMoveArgs args);
+
+    /**
+     * 获取可靠队列消息数量。
+     *
+     * @param key 队列 key
+     * @return 消息数量
+     */
+    int reliableQueueSize(String key);
+
+    /**
+     * 获取可靠队列延迟消息数量。
+     *
+     * @param key 队列 key
+     * @return 延迟消息数量
+     */
+    int reliableQueueDelayedSize(String key);
+
+    /**
+     * 获取可靠队列未确认消息数量。
+     *
+     * @param key 队列 key
+     * @return 未确认消息数量
+     */
+    int reliableQueueUnacknowledgedSize(String key);
+
+    /**
+     * 清空可靠队列全部状态消息。
+     *
+     * @param key 队列 key
+     * @return 是否清空成功
+     */
+    boolean reliableQueueClear(String key);
+
+    /**
+     * 获取将当前队列作为死信队列的源队列名称。
+     *
+     * @param key 队列 key
+     * @return 源队列名称集合
+     */
+    Set<String> reliableQueueDeadLetterSources(String key);
+
+    /**
+     * 添加可靠队列事件监听器。
+     *
+     * @param key      队列 key
+     * @param listener 监听器
+     * @return 监听器 ID
+     */
+    String reliableQueueAddListener(String key, QueueEventListener listener);
+
+    /**
+     * 移除可靠队列事件监听器。
+     *
+     * @param key        队列 key
+     * @param listenerId 监听器 ID
+     */
+    void reliableQueueRemoveListener(String key, String listenerId);
+
+    /**
+     * 启用可靠队列指定操作。
+     *
+     * @param key       队列 key
+     * @param operation 队列操作
+     */
+    void reliableQueueEnableOperation(String key, QueueOperation operation);
+
+    /**
+     * 禁用可靠队列指定操作。
+     *
+     * @param key       队列 key
+     * @param operation 队列操作
+     */
+    void reliableQueueDisableOperation(String key, QueueOperation operation);
+
+    // -------------------------------------------------------------------------
+    // Stream / 高级消费治理
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取 Stream 详细信息。
+     *
+     * @param streamKey Stream key
+     * @return Stream 信息
+     */
+    StreamInfo<Object, Object> streamInfo(String streamKey);
+
+    /**
+     * 获取 Stream 消费组列表。
+     *
+     * @param streamKey Stream key
+     * @return 消费组列表
+     */
+    List<StreamGroup> streamListGroups(String streamKey);
+
+    /**
+     * 获取 Stream 指定消费组的消费者列表。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @return 消费者列表
+     */
+    List<StreamConsumer> streamListConsumers(String streamKey, String groupName);
+
+    /**
+     * 创建 Stream 消费者。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     */
+    void streamCreateConsumer(String streamKey, String groupName, String consumerName);
+
+    /**
+     * 删除 Stream 消费者。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     * @return 该消费者名下的待处理消息数量
+     */
+    long streamRemoveConsumer(String streamKey, String groupName, String consumerName);
+
+    /**
+     * 删除 Stream 消费组。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     */
+    void streamRemoveGroup(String streamKey, String groupName);
+
+    /**
+     * 更新 Stream 消费组读取起始 ID。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @param id        消息 ID
+     */
+    void streamUpdateGroupMessageId(String streamKey, String groupName, StreamMessageId id);
+
+    /**
+     * 获取 Stream 消费组待处理消息概要。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @return 待处理概要
+     */
+    PendingResult streamPendingInfo(String streamKey, String groupName);
+
+    /**
+     * 获取 Stream 消费组待处理消息列表。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @param count     数量
+     * @return 待处理消息列表
+     */
+    List<PendingEntry> streamListPending(String streamKey, String groupName, StreamMessageId startId, StreamMessageId endId, int count);
+
+    /**
+     * 获取 Stream 指定消费者的待处理消息列表。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     * @param startId      开始 ID
+     * @param endId        结束 ID
+     * @param count        数量
+     * @return 待处理消息列表
+     */
+    List<PendingEntry> streamListPending(String streamKey, String groupName, String consumerName, StreamMessageId startId, StreamMessageId endId, int count);
+
+    /**
+     * 获取 Stream 指定消费者满足最小空闲时间的待处理消息列表。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     * @param startId      开始 ID
+     * @param endId        结束 ID
+     * @param idleTime     最小空闲时间
+     * @param unit         时间单位
+     * @param count        数量
+     * @return 待处理消息列表
+     */
+    List<PendingEntry> streamListPending(String streamKey, String groupName, String consumerName,
+                                         StreamMessageId startId, StreamMessageId endId,
+                                         long idleTime, TimeUnit unit, int count);
+
+    /**
+     * 按 ID 范围读取 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @return 消息 Map
+     */
+    Map<StreamMessageId, Map<Object, Object>> streamRange(String streamKey, StreamMessageId startId, StreamMessageId endId);
+
+    /**
+     * 按 ID 范围读取 Stream 消息并限制数量。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @param count     数量
+     * @return 消息 Map
+     */
+    Map<StreamMessageId, Map<Object, Object>> streamRange(String streamKey, StreamMessageId startId, StreamMessageId endId, int count);
+
+    /**
+     * 按 ID 范围倒序读取 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @return 消息 Map
+     */
+    Map<StreamMessageId, Map<Object, Object>> streamRangeReversed(String streamKey, StreamMessageId startId, StreamMessageId endId);
+
+    /**
+     * 按 ID 范围倒序读取 Stream 消息并限制数量。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @param count     数量
+     * @return 消息 Map
+     */
+    Map<StreamMessageId, Map<Object, Object>> streamRangeReversed(String streamKey, StreamMessageId startId, StreamMessageId endId, int count);
+
+    /**
+     * 转移待处理 Stream 消息所有权。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 新消费者
+     * @param idleTime     最小空闲时间
+     * @param unit         时间单位
+     * @param ids          消息 ID
+     * @return 转移后的消息 Map
+     */
+    Map<StreamMessageId, Map<Object, Object>> streamClaim(String streamKey, String groupName, String consumerName,
+                                                          long idleTime, TimeUnit unit, StreamMessageId... ids);
+
+    /**
+     * 自动转移待处理 Stream 消息所有权。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 新消费者
+     * @param idleTime     最小空闲时间
+     * @param unit         时间单位
+     * @param startId      起始 ID
+     * @param count        数量
+     * @return 自动转移结果
+     */
+    AutoClaimResult<Object, Object> streamAutoClaim(String streamKey, String groupName, String consumerName,
+                                                    long idleTime, TimeUnit unit, StreamMessageId startId, int count);
+
+    /**
+     * 裁剪 Stream。
+     *
+     * @param streamKey Stream key
+     * @param args      裁剪参数
+     * @return 裁剪数量
+     */
+    long streamTrim(String streamKey, StreamTrimArgs args);
+
+    /**
+     * 添加 Stream 对象监听器。
+     *
+     * @param streamKey Stream key
+     * @param listener  对象监听器
+     * @return 监听器 ID
+     */
+    int streamAddListener(String streamKey, ObjectListener listener);
+
+    /**
+     * 移除 Stream 对象监听器。
+     *
+     * @param streamKey  Stream key
+     * @param listenerId 监听器 ID
+     */
+    void streamRemoveListener(String streamKey, int listenerId);
+
+    // -------------------------------------------------------------------------
+    // Executor / Scheduler 分布式任务
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取分布式执行器。
+     *
+     * @param name 执行器名称
+     * @return RExecutorService
+     */
+    RExecutorService getExecutorService(String name);
+
+    /**
+     * 获取分布式定时执行器。
+     *
+     * @param name 执行器名称
+     * @return RScheduledExecutorService
+     */
+    RScheduledExecutorService getScheduledExecutorService(String name);
+
+    /**
+     * 执行 Runnable 分布式任务。
+     *
+     * @param name 执行器名称
+     * @param task 任务
+     */
+    void executorExecute(String name, Runnable task);
+
+    /**
+     * 提交 Runnable 分布式任务。
+     *
+     * @param name 执行器名称
+     * @param task 任务
+     * @return Future
+     */
+    Future<?> executorSubmit(String name, Runnable task);
+
+    /**
+     * 提交 Callable 分布式任务。
+     *
+     * @param name 执行器名称
+     * @param task 任务
+     * @param <T>  返回类型
+     * @return Future
+     */
+    <T> Future<T> executorSubmit(String name, Callable<T> task);
+
+    /**
+     * 关闭分布式执行器。
+     *
+     * @param name 执行器名称
+     */
+    void executorShutdown(String name);
+
+    /**
+     * 立即关闭分布式执行器。
+     *
+     * @param name 执行器名称
+     * @return 未执行任务集合
+     */
+    List<Runnable> executorShutdownNow(String name);
+
+    /**
+     * 调度 Runnable 分布式任务。
+     *
+     * @param name  执行器名称
+     * @param task  任务
+     * @param delay 延迟时间
+     * @param unit  时间单位
+     * @return ScheduledFuture
+     */
+    ScheduledFuture<?> schedule(String name, Runnable task, long delay, TimeUnit unit);
+
+    /**
+     * 调度 Callable 分布式任务。
+     *
+     * @param name  执行器名称
+     * @param task  任务
+     * @param delay 延迟时间
+     * @param unit  时间单位
+     * @param <T>   返回类型
+     * @return ScheduledFuture
+     */
+    <T> ScheduledFuture<T> schedule(String name, Callable<T> task, long delay, TimeUnit unit);
+
+    /**
+     * 固定频率调度 Runnable 分布式任务。
+     *
+     * @param name         执行器名称
+     * @param task         任务
+     * @param initialDelay 初始延迟
+     * @param period       执行周期
+     * @param unit         时间单位
+     * @return ScheduledFuture
+     */
+    ScheduledFuture<?> scheduleAtFixedRate(String name, Runnable task, long initialDelay, long period, TimeUnit unit);
+
+    /**
+     * 固定延迟调度 Runnable 分布式任务。
+     *
+     * @param name         执行器名称
+     * @param task         任务
+     * @param initialDelay 初始延迟
+     * @param delay        执行间隔
+     * @param unit         时间单位
+     * @return ScheduledFuture
+     */
+    ScheduledFuture<?> scheduleWithFixedDelay(String name, Runnable task, long initialDelay, long delay, TimeUnit unit);
+
+    // -------------------------------------------------------------------------
+    // RemoteService / LiveObject
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取远程服务。
+     *
+     * @return RRemoteService
+     */
+    RRemoteService getRemoteService();
+
+    /**
+     * 获取指定名称的远程服务。
+     *
+     * @param name 服务名称
+     * @return RRemoteService
+     */
+    RRemoteService getRemoteService(String name);
+
+    /**
+     * 注册远程服务实现。
+     *
+     * @param remoteInterface 远程服务接口
+     * @param implementation  远程服务实现
+     * @param <T>             服务类型
+     */
+    <T> void remoteRegister(Class<T> remoteInterface, T implementation);
+
+    /**
+     * 注册远程服务实现并指定工作线程数量。
+     *
+     * @param remoteInterface 远程服务接口
+     * @param implementation  远程服务实现
+     * @param workers         工作线程数量
+     * @param <T>             服务类型
+     */
+    <T> void remoteRegister(Class<T> remoteInterface, T implementation, int workers);
+
+    /**
+     * 获取远程服务代理。
+     *
+     * @param remoteInterface 远程服务接口
+     * @param <T>             服务类型
+     * @return 服务代理
+     */
+    <T> T remoteGet(Class<T> remoteInterface);
+
+    /**
+     * 获取 LiveObject 服务。
+     *
+     * @return RLiveObjectService
+     */
+    RLiveObjectService getLiveObjectService();
+
+    /**
+     * 附加 LiveObject。
+     *
+     * @param detachedObject 游离对象
+     * @param <T>            对象类型
+     * @return LiveObject
+     */
+    <T> T liveObjectAttach(T detachedObject);
+
+    /**
+     * 合并 LiveObject。
+     *
+     * @param detachedObject 游离对象
+     * @param <T>            对象类型
+     * @return LiveObject
+     */
+    <T> T liveObjectMerge(T detachedObject);
+
+    /**
+     * 获取 LiveObject。
+     *
+     * @param entityClass 实体类型
+     * @param id          实体 ID
+     * @param <T>         对象类型
+     * @return LiveObject
+     */
+    <T> T liveObjectGet(Class<T> entityClass, Object id);
+
+    /**
+     * 删除 LiveObject。
+     *
+     * @param attachedObject 已附加对象
+     */
+    void liveObjectDelete(Object attachedObject);
+
+    /**
+     * 根据类型和 ID 删除 LiveObject。
+     *
+     * @param entityClass 实体类型
+     * @param id          实体 ID
+     */
+    void liveObjectDelete(Class<?> entityClass, Object id);
+
+    // -------------------------------------------------------------------------
+    // Object Listener / 对象监听
+    // -------------------------------------------------------------------------
+
+    /**
+     * 添加全局对象监听器。
+     *
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    int addGlobalObjectListener(ObjectListener listener);
+
+    /**
+     * 移除全局对象监听器。
+     *
+     * @param listenerId 监听器 ID
+     */
+    void removeGlobalObjectListener(int listenerId);
+
+    /**
+     * 添加 Bucket 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    int addBucketListener(String key, ObjectListener listener);
+
+    /**
+     * 移除 Bucket 对象监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    void removeBucketListener(String key, int listenerId);
+
+    /**
+     * 添加 Map 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    int addMapListener(String key, ObjectListener listener);
+
+    /**
+     * 添加 Map Entry 监听器。
+     *
+     * @param key      Redis 键
+     * @param listener Entry 监听器
+     * @return 监听器 ID
+     */
+    int addMapEntryListener(String key, ObjectListener listener);
+
+    /**
+     * 移除 Map 监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    void removeMapListener(String key, int listenerId);
+
+    /**
+     * 添加 Queue 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    int addQueueListener(String key, ObjectListener listener);
+
+    /**
+     * 移除 Queue 对象监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    void removeQueueListener(String key, int listenerId);
+
+    /**
+     * 添加 Set 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    int addSetListener(String key, ObjectListener listener);
+
+    /**
+     * 移除 Set 对象监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    void removeSetListener(String key, int listenerId);
 }

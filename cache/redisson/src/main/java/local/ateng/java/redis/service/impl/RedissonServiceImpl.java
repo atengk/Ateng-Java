@@ -12,19 +12,24 @@ import local.ateng.java.redis.service.RedissonService;
 import org.redisson.api.*;
 import org.redisson.api.geo.GeoSearchArgs;
 import org.redisson.api.listener.MessageListener;
-import org.redisson.api.stream.StreamAddArgs;
-import org.redisson.api.stream.StreamCreateGroupArgs;
-import org.redisson.api.stream.StreamReadArgs;
-import org.redisson.api.stream.StreamReadGroupArgs;
+import org.redisson.api.queue.*;
+import org.redisson.api.queue.event.QueueEventListener;
+import org.redisson.api.stream.*;
 import org.redisson.client.protocol.ScoredEntry;
+import org.redisson.codec.JsonCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -4549,6 +4554,2754 @@ public class RedissonServiceImpl implements RedissonService {
         return redissonClient.createTransaction(TransactionOptions.defaults());
     }
 
+
+    // -------------------------------------------------------------------------
+    // LocalCachedMap / 本地缓存 Map
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取本地缓存 Map。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     * @param <K>     字段类型
+     * @param <V>     值类型
+     * @return RLocalCachedMap
+     */
+    @Override
+    public <K, V> RLocalCachedMap<K, V> getLocalCachedMap(String key, LocalCachedMapOptions<K, V> options) {
+        checkKey(key);
+        Assert.notNull(options, "本地缓存配置不能为空");
+        return redissonClient.getLocalCachedMap(key, options);
+    }
+
+    /**
+     * 设置本地缓存 Map 字段值。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param value   字段值
+     * @param options 本地缓存配置
+     */
+    @Override
+    public void lcPut(String key, Object field, Object value, LocalCachedMapOptions<Object, Object> options) {
+        checkKey(key);
+        Assert.notNull(field, "本地缓存 Map 字段不能为空");
+
+        getLocalCachedMap(key, options).fastPut(field, value);
+    }
+
+    /**
+     * 字段不存在时设置本地缓存 Map 字段值。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param value   字段值
+     * @param options 本地缓存配置
+     * @return 是否设置成功
+     */
+    @Override
+    public boolean lcPutIfAbsent(String key, Object field, Object value, LocalCachedMapOptions<Object, Object> options) {
+        checkKey(key);
+        Assert.notNull(field, "本地缓存 Map 字段不能为空");
+
+        return getLocalCachedMap(key, options).fastPutIfAbsent(field, value);
+    }
+
+    /**
+     * 获取本地缓存 Map 字段值。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param clazz   目标类型
+     * @param options 本地缓存配置
+     * @param <T>     泛型类型
+     * @return 字段值
+     */
+    @Override
+    public <T> T lcGet(String key, Object field, Class<T> clazz, LocalCachedMapOptions<Object, Object> options) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(field) || ObjectUtil.isNull(clazz) || ObjectUtil.isNull(options)) {
+            return null;
+        }
+
+        Object value = getLocalCachedMap(key, options).get(field);
+        return convertValue(value, clazz);
+    }
+
+    /**
+     * 获取本地缓存 Map 字段值。
+     *
+     * @param key           Redis 键
+     * @param field         字段
+     * @param typeReference 目标类型
+     * @param options       本地缓存配置
+     * @param <T>           泛型类型
+     * @return 字段值
+     */
+    @Override
+    public <T> T lcGet(String key, Object field, TypeReference<T> typeReference, LocalCachedMapOptions<Object, Object> options) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(field) || ObjectUtil.isNull(typeReference) || ObjectUtil.isNull(options)) {
+            return null;
+        }
+
+        Object value = getLocalCachedMap(key, options).get(field);
+        return convertValue(value, typeReference);
+    }
+
+    /**
+     * 删除本地缓存 Map 字段。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param options 本地缓存配置
+     * @return 删除前的值
+     */
+    @Override
+    public Object lcRemove(String key, Object field, LocalCachedMapOptions<Object, Object> options) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(field) || ObjectUtil.isNull(options)) {
+            return null;
+        }
+
+        return getLocalCachedMap(key, options).remove(field);
+    }
+
+    /**
+     * 判断本地缓存 Map 字段是否存在。
+     *
+     * @param key     Redis 键
+     * @param field   字段
+     * @param options 本地缓存配置
+     * @return 存在返回 true
+     */
+    @Override
+    public boolean lcContainsKey(String key, Object field, LocalCachedMapOptions<Object, Object> options) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(field) || ObjectUtil.isNull(options)) {
+            return false;
+        }
+
+        return getLocalCachedMap(key, options).containsKey(field);
+    }
+
+    /**
+     * 获取本地缓存 Map 大小。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     * @return 大小
+     */
+    @Override
+    public int lcSize(String key, LocalCachedMapOptions<Object, Object> options) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(options)) {
+            return 0;
+        }
+
+        return getLocalCachedMap(key, options).size();
+    }
+
+    /**
+     * 清空本地缓存 Map。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     */
+    @Override
+    public void lcClear(String key, LocalCachedMapOptions<Object, Object> options) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(options)) {
+            return;
+        }
+
+        getLocalCachedMap(key, options).clear();
+    }
+
+    /**
+     * 仅清空当前 JVM 内的本地缓存，不清空 Redis 远端数据。
+     *
+     * @param key     Redis 键
+     * @param options 本地缓存配置
+     */
+    @Override
+    public void lcClearLocalCache(String key, LocalCachedMapOptions<Object, Object> options) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(options)) {
+            return;
+        }
+
+        getLocalCachedMap(key, options).clearLocalCache();
+    }
+
+    // -------------------------------------------------------------------------
+    // JsonBucket / RedisJSON
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取 JSON Bucket。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     * @return RJsonBucket
+     */
+    @Override
+    public <T> RJsonBucket<T> getJsonBucket(String key, JsonCodec codec) {
+        checkKey(key);
+        Assert.notNull(codec, "JSON编解码器不能为空");
+        return redissonClient.getJsonBucket(key, codec);
+    }
+
+    /**
+     * 设置 JSON 文档。
+     *
+     * @param key   Redis 键
+     * @param value JSON 对象
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     */
+    @Override
+    public <T> void jsonSet(String key, T value, JsonCodec codec) {
+        checkKey(key);
+        Assert.notNull(codec, "JSON编解码器不能为空");
+
+        getJsonBucket(key, codec).set(value);
+    }
+
+    /**
+     * 设置 JSON 文档并指定过期时间。
+     *
+     * @param key   Redis 键
+     * @param value JSON 对象
+     * @param ttl   过期时间
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     */
+    @Override
+    public <T> void jsonSet(String key, T value, Duration ttl, JsonCodec codec) {
+        checkKey(key);
+        checkPositiveDuration(ttl, "JSON过期时间不能为空且必须大于0");
+        Assert.notNull(codec, "JSON编解码器不能为空");
+
+        getJsonBucket(key, codec).set(value, ttl.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 获取完整 JSON 文档。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   值类型
+     * @return JSON 对象
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T jsonGet(String key, JsonCodec codec) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(codec)) {
+            return null;
+        }
+
+        return (T) getJsonBucket(key, codec).get();
+    }
+
+    /**
+     * 根据 JSONPath 获取 JSON 局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param codec JSON 编解码器
+     * @param <T>   返回类型
+     * @return JSONPath 对应的值
+     */
+    @Override
+    public <T> T jsonGet(String key, String path, JsonCodec codec) {
+        if (StrUtil.hasBlank(key, path) || ObjectUtil.isNull(codec)) {
+            return null;
+        }
+
+        return getJsonBucket(key, codec).get(codec, path);
+    }
+
+    /**
+     * 根据 JSONPath 设置 JSON 局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param value 值
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     */
+    @Override
+    public <T> void jsonSet(String key, String path, Object value, JsonCodec codec) {
+        checkKey(key);
+        Assert.isTrue(StrUtil.isNotBlank(path), "JSONPath不能为空");
+        Assert.notNull(codec, "JSON编解码器不能为空");
+
+        getJsonBucket(key, codec).set(path, value);
+    }
+
+    /**
+     * JSONPath 不存在时设置局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param value 值
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 是否设置成功
+     */
+    @Override
+    public <T> boolean jsonSetIfAbsent(String key, String path, Object value, JsonCodec codec) {
+        checkKey(key);
+        Assert.isTrue(StrUtil.isNotBlank(path), "JSONPath不能为空");
+        Assert.notNull(codec, "JSON编解码器不能为空");
+
+        return getJsonBucket(key, codec).setIfAbsent(path, value);
+    }
+
+    /**
+     * JSONPath 存在时设置局部内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param value 值
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 是否设置成功
+     */
+    @Override
+    public <T> boolean jsonSetIfExists(String key, String path, Object value, JsonCodec codec) {
+        checkKey(key);
+        Assert.isTrue(StrUtil.isNotBlank(path), "JSONPath不能为空");
+        Assert.notNull(codec, "JSON编解码器不能为空");
+
+        return getJsonBucket(key, codec).setIfExists(path, value);
+    }
+
+    /**
+     * 删除 JSONPath 对应内容。
+     *
+     * @param key   Redis 键
+     * @param path  JSONPath
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 删除数量
+     */
+    @Override
+    public <T> long jsonDelete(String key, String path, JsonCodec codec) {
+        if (StrUtil.hasBlank(key, path) || ObjectUtil.isNull(codec)) {
+            return 0L;
+        }
+
+        return getJsonBucket(key, codec).delete(path);
+    }
+
+    /**
+     * 向 JSON 数组追加元素。
+     *
+     * @param key    Redis 键
+     * @param path   JSONPath
+     * @param codec  JSON 编解码器
+     * @param values 追加值
+     * @param <T>    JSON 文档类型
+     * @return 追加后的数组长度
+     */
+    @Override
+    public <T> long jsonArrayAppend(String key, String path, JsonCodec codec, Object... values) {
+        checkKey(key);
+        Assert.isTrue(StrUtil.isNotBlank(path), "JSONPath不能为空");
+        Assert.notNull(codec, "JSON编解码器不能为空");
+
+        if (ArrayUtil.isEmpty(values)) {
+            return 0L;
+        }
+
+        return getJsonBucket(key, codec).arrayAppend(path, values);
+    }
+
+    /**
+     * 获取 JSON 对象字段名。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     * @return 字段名集合
+     */
+    @Override
+    public <T> List<String> jsonKeys(String key, JsonCodec codec) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(codec)) {
+            return Collections.emptyList();
+        }
+
+        return getJsonBucket(key, codec).getKeys();
+    }
+
+    /**
+     * 清空 JSON 文档。
+     *
+     * @param key   Redis 键
+     * @param codec JSON 编解码器
+     * @param <T>   JSON 文档类型
+     */
+    @Override
+    public <T> void jsonClear(String key, JsonCodec codec) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(codec)) {
+            return;
+        }
+
+        getJsonBucket(key, codec).clear();
+    }
+
+    // -------------------------------------------------------------------------
+    // BinaryStream / 二进制流
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取二进制流对象。
+     *
+     * @param key Redis 键
+     * @return RBinaryStream
+     */
+    @Override
+    public RBinaryStream getBinaryStream(String key) {
+        checkKey(key);
+        return redissonClient.getBinaryStream(key);
+    }
+
+    /**
+     * 获取二进制输入流。
+     *
+     * @param key Redis 键
+     * @return InputStream
+     */
+    @Override
+    public InputStream binaryInputStream(String key) {
+        return getBinaryStream(key).getInputStream();
+    }
+
+    /**
+     * 获取二进制输出流。
+     *
+     * @param key Redis 键
+     * @return OutputStream
+     */
+    @Override
+    public OutputStream binaryOutputStream(String key) {
+        return getBinaryStream(key).getOutputStream();
+    }
+
+    /**
+     * 写入二进制数据。
+     *
+     * @param key  Redis 键
+     * @param data 字节数组
+     */
+    @Override
+    public void binaryWrite(String key, byte[] data) {
+        checkKey(key);
+        Assert.notNull(data, "二进制数据不能为空");
+
+        getBinaryStream(key).set(data);
+    }
+
+    /**
+     * 读取全部二进制数据。
+     *
+     * @param key Redis 键
+     * @return 字节数组
+     */
+    @Override
+    public byte[] binaryReadAll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return new byte[0];
+        }
+
+        byte[] data = getBinaryStream(key).get();
+        return ObjectUtil.defaultIfNull(data, new byte[0]);
+    }
+
+    /**
+     * 获取二进制数据大小。
+     *
+     * @param key Redis 键
+     * @return 字节大小
+     */
+    @Override
+    public long binarySize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        return getBinaryStream(key).size();
+    }
+
+    /**
+     * 删除二进制数据。
+     *
+     * @param key Redis 键
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean binaryDelete(String key) {
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+
+        return getBinaryStream(key).delete();
+    }
+
+    // -------------------------------------------------------------------------
+    // Multimap / 一键多值
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取 SetMultimap。
+     *
+     * @param key Redis 键
+     * @param <K> 字段类型
+     * @param <V> 值类型
+     * @return RSetMultimap
+     */
+    @Override
+    public <K, V> RSetMultimap<K, V> getSetMultimap(String key) {
+        checkKey(key);
+        return redissonClient.getSetMultimap(key);
+    }
+
+    /**
+     * 获取 ListMultimap。
+     *
+     * @param key Redis 键
+     * @param <K> 字段类型
+     * @param <V> 值类型
+     * @return RListMultimap
+     */
+    @Override
+    public <K, V> RListMultimap<K, V> getListMultimap(String key) {
+        checkKey(key);
+        return redissonClient.getListMultimap(key);
+    }
+
+    /**
+     * 向 SetMultimap 添加值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否新增
+     */
+    @Override
+    public boolean smmPut(String key, Object mapKey, Object mapValue) {
+        checkKey(key);
+        Assert.notNull(mapKey, "Multimap字段不能为空");
+
+        return redissonClient.<Object, Object>getSetMultimap(key).put(mapKey, mapValue);
+    }
+
+    /**
+     * 获取 SetMultimap 指定字段的值集合。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 值集合
+     */
+    @Override
+    public Set<Object> smmGet(String key, Object mapKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return Collections.emptySet();
+        }
+
+        return redissonClient.<Object, Object>getSetMultimap(key).getAll(mapKey);
+    }
+
+    /**
+     * 删除 SetMultimap 指定字段的指定值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean smmRemove(String key, Object mapKey, Object mapValue) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return false;
+        }
+
+        return redissonClient.<Object, Object>getSetMultimap(key).remove(mapKey, mapValue);
+    }
+
+    /**
+     * 删除 SetMultimap 指定字段的全部值。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 删除的值集合
+     */
+    @Override
+    public Set<Object> smmRemoveAll(String key, Object mapKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return Collections.emptySet();
+        }
+
+        return redissonClient.<Object, Object>getSetMultimap(key).removeAll(mapKey);
+    }
+
+    /**
+     * 判断 SetMultimap 是否包含指定字段。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 存在返回 true
+     */
+    @Override
+    public boolean smmContainsKey(String key, Object mapKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return false;
+        }
+
+        return redissonClient.<Object, Object>getSetMultimap(key).containsKey(mapKey);
+    }
+
+    /**
+     * 判断 SetMultimap 是否包含指定字段和值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 存在返回 true
+     */
+    @Override
+    public boolean smmContainsEntry(String key, Object mapKey, Object mapValue) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return false;
+        }
+
+        return redissonClient.<Object, Object>getSetMultimap(key).containsEntry(mapKey, mapValue);
+    }
+
+    /**
+     * 获取 SetMultimap 总值数量。
+     *
+     * @param key Redis 键
+     * @return 总值数量
+     */
+    @Override
+    public int smmSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.<Object, Object>getSetMultimap(key).size();
+    }
+
+    /**
+     * 清空 SetMultimap。
+     *
+     * @param key Redis 键
+     */
+    @Override
+    public void smmClear(String key) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.<Object, Object>getSetMultimap(key).clear();
+    }
+
+    /**
+     * 向 ListMultimap 添加值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否新增
+     */
+    @Override
+    public boolean lmmPut(String key, Object mapKey, Object mapValue) {
+        checkKey(key);
+        Assert.notNull(mapKey, "Multimap字段不能为空");
+
+        return redissonClient.<Object, Object>getListMultimap(key).put(mapKey, mapValue);
+    }
+
+    /**
+     * 获取 ListMultimap 指定字段的值列表。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 值列表
+     */
+    @Override
+    public List<Object> lmmGet(String key, Object mapKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.<Object, Object>getListMultimap(key).getAll(mapKey);
+    }
+
+    /**
+     * 删除 ListMultimap 指定字段的指定值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean lmmRemove(String key, Object mapKey, Object mapValue) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return false;
+        }
+
+        return redissonClient.<Object, Object>getListMultimap(key).remove(mapKey, mapValue);
+    }
+
+    /**
+     * 删除 ListMultimap 指定字段的全部值。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 删除的值列表
+     */
+    @Override
+    public List<Object> lmmRemoveAll(String key, Object mapKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.<Object, Object>getListMultimap(key).removeAll(mapKey);
+    }
+
+    /**
+     * 判断 ListMultimap 是否包含指定字段。
+     *
+     * @param key    Redis 键
+     * @param mapKey Multimap 字段
+     * @return 存在返回 true
+     */
+    @Override
+    public boolean lmmContainsKey(String key, Object mapKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return false;
+        }
+
+        return redissonClient.<Object, Object>getListMultimap(key).containsKey(mapKey);
+    }
+
+    /**
+     * 判断 ListMultimap 是否包含指定字段和值。
+     *
+     * @param key      Redis 键
+     * @param mapKey   Multimap 字段
+     * @param mapValue Multimap 值
+     * @return 存在返回 true
+     */
+    @Override
+    public boolean lmmContainsEntry(String key, Object mapKey, Object mapValue) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(mapKey)) {
+            return false;
+        }
+
+        return redissonClient.<Object, Object>getListMultimap(key).containsEntry(mapKey, mapValue);
+    }
+
+    /**
+     * 获取 ListMultimap 总值数量。
+     *
+     * @param key Redis 键
+     * @return 总值数量
+     */
+    @Override
+    public int lmmSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.<Object, Object>getListMultimap(key).size();
+    }
+
+    /**
+     * 清空 ListMultimap。
+     *
+     * @param key Redis 键
+     */
+    @Override
+    public void lmmClear(String key) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.<Object, Object>getListMultimap(key).clear();
+    }
+
+    // -------------------------------------------------------------------------
+    // SortedSet / LexSortedSet
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取自然排序集合。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RSortedSet
+     */
+    @Override
+    public <T> RSortedSet<T> getSortedSet(String key) {
+        checkKey(key);
+        return redissonClient.getSortedSet(key);
+    }
+
+    /**
+     * 获取字典序排序集合。
+     *
+     * @param key Redis 键
+     * @return RLexSortedSet
+     */
+    @Override
+    public RLexSortedSet getLexSortedSet(String key) {
+        checkKey(key);
+        return redissonClient.getLexSortedSet(key);
+    }
+
+    /**
+     * 添加自然排序集合元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 是否新增
+     */
+    @Override
+    public boolean sortedSetAdd(String key, Object value) {
+        checkKey(key);
+        Assert.notNull(value, "自然排序集合元素不能为空");
+
+        return redissonClient.<Object>getSortedSet(key).add(value);
+    }
+
+    /**
+     * 批量添加自然排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素集合
+     * @return 是否有新增
+     */
+    @Override
+    public boolean sortedSetAddAll(String key, Collection<?> values) {
+        checkKey(key);
+        if (CollUtil.isEmpty(values)) {
+            return false;
+        }
+
+        Collection<Object> valueList = new ArrayList<>(values.size());
+        for (Object value : values) {
+            if (ObjectUtil.isNotNull(value)) {
+                valueList.add(value);
+            }
+        }
+
+        if (CollUtil.isEmpty(valueList)) {
+            return false;
+        }
+
+        return redissonClient.<Object>getSortedSet(key).addAll(valueList);
+    }
+
+    /**
+     * 获取自然排序集合全部元素。
+     *
+     * @param key Redis 键
+     * @return 元素集合
+     */
+    @Override
+    public Collection<Object> sortedSetReadAll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Collections.emptyList();
+        }
+
+        return new ArrayList<>(redissonClient.<Object>getSortedSet(key));
+    }
+
+    /**
+     * 删除自然排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean sortedSetRemove(String key, Object... values) {
+        if (StrUtil.isBlank(key) || ArrayUtil.isEmpty(values)) {
+            return false;
+        }
+
+        return redissonClient.<Object>getSortedSet(key).removeAll(Arrays.asList(values));
+    }
+
+    /**
+     * 获取自然排序集合大小。
+     *
+     * @param key Redis 键
+     * @return 大小
+     */
+    @Override
+    public int sortedSetSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.<Object>getSortedSet(key).size();
+    }
+
+    /**
+     * 清空自然排序集合。
+     *
+     * @param key Redis 键
+     */
+    @Override
+    public void sortedSetClear(String key) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.<Object>getSortedSet(key).clear();
+    }
+
+    /**
+     * 添加字典序排序集合元素。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @return 是否新增
+     */
+    @Override
+    public boolean lexAdd(String key, String value) {
+        checkKey(key);
+        Assert.isTrue(StrUtil.isNotBlank(value), "字典序集合元素不能为空");
+
+        return redissonClient.getLexSortedSet(key).add(value);
+    }
+
+    /**
+     * 批量添加字典序排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素集合
+     * @return 是否有新增
+     */
+    @Override
+    public boolean lexAddAll(String key, Collection<String> values) {
+        checkKey(key);
+        if (CollUtil.isEmpty(values)) {
+            return false;
+        }
+
+        List<String> valueList = values.stream()
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .toList();
+
+        if (CollUtil.isEmpty(valueList)) {
+            return false;
+        }
+
+        return redissonClient.getLexSortedSet(key).addAll(valueList);
+    }
+
+    /**
+     * 获取字典序排序集合全部元素。
+     *
+     * @param key Redis 键
+     * @return 元素集合
+     */
+    @Override
+    public Collection<String> lexReadAll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Collections.emptyList();
+        }
+
+        return new ArrayList<>(redissonClient.getLexSortedSet(key));
+    }
+
+    /**
+     * 获取大于等于指定元素的字典序集合。
+     *
+     * @param key  Redis 键
+     * @param from 开始元素
+     * @return 元素集合
+     */
+    @Override
+    public Collection<String> lexRangeTail(String key, String from) {
+        if (StrUtil.hasBlank(key, from)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.getLexSortedSet(key)
+                .rangeTail(from, true, 0, Integer.MAX_VALUE);
+    }
+
+    /**
+     * 获取小于等于指定元素的字典序集合。
+     *
+     * @param key Redis 键
+     * @param to  结束元素
+     * @return 元素集合
+     */
+    @Override
+    public Collection<String> lexRangeHead(String key, String to) {
+        if (StrUtil.hasBlank(key, to)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.getLexSortedSet(key)
+                .rangeHead(to, true, 0, Integer.MAX_VALUE);
+    }
+
+    /**
+     * 删除字典序排序集合元素。
+     *
+     * @param key    Redis 键
+     * @param values 元素
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean lexRemove(String key, String... values) {
+        if (StrUtil.isBlank(key) || ArrayUtil.isEmpty(values)) {
+            return false;
+        }
+
+        List<String> valueList = Arrays.stream(values)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .toList();
+
+        if (CollUtil.isEmpty(valueList)) {
+            return false;
+        }
+
+        return redissonClient.getLexSortedSet(key).removeAll(valueList);
+    }
+
+    /**
+     * 获取字典序排序集合大小。
+     *
+     * @param key Redis 键
+     * @return 大小
+     */
+    @Override
+    public int lexSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.getLexSortedSet(key).size();
+    }
+
+    /**
+     * 清空字典序排序集合。
+     *
+     * @param key Redis 键
+     */
+    @Override
+    public void lexClear(String key) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.getLexSortedSet(key).clear();
+    }
+
+    // -------------------------------------------------------------------------
+    // LongAdder / DoubleAdder
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取分布式 LongAdder。
+     *
+     * @param key Redis 键
+     * @return RLongAdder
+     */
+    @Override
+    public RLongAdder getLongAdder(String key) {
+        checkKey(key);
+        return redissonClient.getLongAdder(key);
+    }
+
+    /**
+     * 获取分布式 DoubleAdder。
+     *
+     * @param key Redis 键
+     * @return RDoubleAdder
+     */
+    @Override
+    public RDoubleAdder getDoubleAdder(String key) {
+        checkKey(key);
+        return redissonClient.getDoubleAdder(key);
+    }
+
+    /**
+     * LongAdder 增加。
+     *
+     * @param key   Redis 键
+     * @param delta 增量
+     */
+    @Override
+    public void longAdderAdd(String key, long delta) {
+        checkKey(key);
+        redissonClient.getLongAdder(key).add(delta);
+    }
+
+    /**
+     * LongAdder 求和。
+     *
+     * @param key Redis 键
+     * @return 当前总和
+     */
+    @Override
+    public long longAdderSum(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        return redissonClient.getLongAdder(key).sum();
+    }
+
+    /**
+     * LongAdder 重置。
+     *
+     * @param key Redis 键
+     */
+    @Override
+    public void longAdderReset(String key) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.getLongAdder(key).reset();
+    }
+
+    /**
+     * LongAdder 求和后重置。
+     * 注意：Redisson RLongAdder 无原生 sumThenReset，同步语义为先 sum 再 reset。
+     *
+     * @param key Redis 键
+     * @return 重置前总和
+     */
+    @Override
+    public long longAdderSumThenReset(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        RLongAdder adder = redissonClient.getLongAdder(key);
+        long value = adder.sum();
+        adder.reset();
+        return value;
+    }
+
+    /**
+     * DoubleAdder 增加。
+     *
+     * @param key   Redis 键
+     * @param delta 增量
+     */
+    @Override
+    public void doubleAdderAdd(String key, double delta) {
+        checkKey(key);
+        redissonClient.getDoubleAdder(key).add(delta);
+    }
+
+    /**
+     * DoubleAdder 求和。
+     *
+     * @param key Redis 键
+     * @return 当前总和
+     */
+    @Override
+    public double doubleAdderSum(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0D;
+        }
+
+        return redissonClient.getDoubleAdder(key).sum();
+    }
+
+    /**
+     * DoubleAdder 重置。
+     *
+     * @param key Redis 键
+     */
+    @Override
+    public void doubleAdderReset(String key) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.getDoubleAdder(key).reset();
+    }
+
+    /**
+     * DoubleAdder 求和后重置。
+     * 注意：Redisson RDoubleAdder 无原生 sumThenReset，同步语义为先 sum 再 reset。
+     *
+     * @param key Redis 键
+     * @return 重置前总和
+     */
+    @Override
+    public double doubleAdderSumThenReset(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0D;
+        }
+
+        RDoubleAdder adder = redissonClient.getDoubleAdder(key);
+        double value = adder.sum();
+        adder.reset();
+        return value;
+    }
+
+    // -------------------------------------------------------------------------
+    // Bounded / Priority 队列增强
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取有界阻塞队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RBoundedBlockingQueue
+     */
+    @Override
+    public <T> RBoundedBlockingQueue<T> getBoundedBlockingQueue(String key) {
+        checkKey(key);
+        return redissonClient.getBoundedBlockingQueue(key);
+    }
+
+    /**
+     * 初始化有界阻塞队列容量。
+     *
+     * @param key      Redis 键
+     * @param capacity 容量
+     * @return 是否初始化成功
+     */
+    @Override
+    public boolean boundedQueueTrySetCapacity(String key, int capacity) {
+        checkKey(key);
+        Assert.isTrue(capacity > 0, "有界阻塞队列容量必须大于0");
+
+        return redissonClient.getBoundedBlockingQueue(key).trySetCapacity(capacity);
+    }
+
+    /**
+     * 有界阻塞队列入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    @Override
+    public <T> boolean boundedQueueOffer(String key, T value) {
+        checkKey(key);
+
+        return redissonClient.<T>getBoundedBlockingQueue(key).offer(value);
+    }
+
+    /**
+     * 有界阻塞队列超时入队。
+     *
+     * @param key     Redis 键
+     * @param value   元素
+     * @param timeout 等待时间
+     * @param unit    时间单位
+     * @param <T>     元素类型
+     * @return 是否入队成功
+     * @throws InterruptedException 线程中断时抛出
+     */
+    @Override
+    public <T> boolean boundedQueueOffer(String key, T value, long timeout, TimeUnit unit) throws InterruptedException {
+        checkKey(key);
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(timeout >= 0, "等待时间不能小于0");
+
+        return redissonClient.<T>getBoundedBlockingQueue(key).offer(value, timeout, unit);
+    }
+
+    /**
+     * 有界阻塞队列出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    @Override
+    public <T> T boundedQueuePoll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        return redissonClient.<T>getBoundedBlockingQueue(key).poll();
+    }
+
+    /**
+     * 有界阻塞队列超时出队。
+     *
+     * @param key     Redis 键
+     * @param timeout 等待时间
+     * @param unit    时间单位
+     * @param <T>     元素类型
+     * @return 元素
+     * @throws InterruptedException 线程中断时抛出
+     */
+    @Override
+    public <T> T boundedQueuePoll(String key, long timeout, TimeUnit unit) throws InterruptedException {
+        checkKey(key);
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(timeout >= 0, "等待时间不能小于0");
+
+        return redissonClient.<T>getBoundedBlockingQueue(key).poll(timeout, unit);
+    }
+
+    /**
+     * 获取有界阻塞队列大小。
+     *
+     * @param key Redis 键
+     * @return 队列大小
+     */
+    @Override
+    public int boundedQueueSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.getBoundedBlockingQueue(key).size();
+    }
+
+    /**
+     * 获取有界阻塞队列剩余容量。
+     *
+     * @param key Redis 键
+     * @return 剩余容量
+     */
+    @Override
+    public int boundedQueueRemainingCapacity(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.getBoundedBlockingQueue(key).remainingCapacity();
+    }
+
+    /**
+     * 获取优先级双端队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RPriorityDeque
+     */
+    @Override
+    public <T> RPriorityDeque<T> getPriorityDeque(String key) {
+        checkKey(key);
+        return redissonClient.getPriorityDeque(key);
+    }
+
+    /**
+     * 获取优先级阻塞队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RPriorityBlockingQueue
+     */
+    @Override
+    public <T> RPriorityBlockingQueue<T> getPriorityBlockingQueue(String key) {
+        checkKey(key);
+        return redissonClient.getPriorityBlockingQueue(key);
+    }
+
+    /**
+     * 获取优先级阻塞双端队列。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return RPriorityBlockingDeque
+     */
+    @Override
+    public <T> RPriorityBlockingDeque<T> getPriorityBlockingDeque(String key) {
+        checkKey(key);
+        return redissonClient.getPriorityBlockingDeque(key);
+    }
+
+    /**
+     * 优先级队列入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素，建议实现 Comparable
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    @Override
+    public <T> boolean priorityQueueOffer(String key, T value) {
+        checkKey(key);
+
+        return redissonClient.<T>getPriorityQueue(key).offer(value);
+    }
+
+    /**
+     * 优先级队列出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    @Override
+    public <T> T priorityQueuePoll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        return redissonClient.<T>getPriorityQueue(key).poll();
+    }
+
+    /**
+     * 优先级双端队列从头部入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素，建议实现 Comparable
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    @Override
+    public <T> boolean priorityDequeOfferFirst(String key, T value) {
+        checkKey(key);
+
+        return redissonClient.<T>getPriorityDeque(key).offerFirst(value);
+    }
+
+    /**
+     * 优先级双端队列从尾部入队。
+     *
+     * @param key   Redis 键
+     * @param value 元素，建议实现 Comparable
+     * @param <T>   元素类型
+     * @return 是否入队成功
+     */
+    @Override
+    public <T> boolean priorityDequeOfferLast(String key, T value) {
+        checkKey(key);
+
+        return redissonClient.<T>getPriorityDeque(key).offerLast(value);
+    }
+
+    /**
+     * 优先级双端队列从头部出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    @Override
+    public <T> T priorityDequePollFirst(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        return redissonClient.<T>getPriorityDeque(key).pollFirst();
+    }
+
+    /**
+     * 优先级双端队列从尾部出队。
+     *
+     * @param key Redis 键
+     * @param <T> 元素类型
+     * @return 元素
+     */
+    @Override
+    public <T> T priorityDequePollLast(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        return redissonClient.<T>getPriorityDeque(key).pollLast();
+    }
+
+
+    // -------------------------------------------------------------------------
+    // ReliableQueue / 可靠队列
+    // -------------------------------------------------------------------------
+
+    /**
+     * 设置可靠队列配置。
+     *
+     * @param key    队列 key
+     * @param config 队列配置
+     */
+    @Override
+    public void reliableQueueSetConfig(String key, QueueConfig config) {
+        checkKey(key);
+        Assert.notNull(config, "可靠队列配置不能为空");
+
+        redissonClient.getReliableQueue(key).setConfig(config);
+        log.info("Redis 可靠队列配置已设置，key={}", key);
+    }
+
+    /**
+     * 队列配置不存在时设置可靠队列配置。
+     *
+     * @param key    队列 key
+     * @param config 队列配置
+     * @return 是否设置成功
+     */
+    @Override
+    public boolean reliableQueueSetConfigIfAbsent(String key, QueueConfig config) {
+        checkKey(key);
+        Assert.notNull(config, "可靠队列配置不能为空");
+
+        return redissonClient.getReliableQueue(key).setConfigIfAbsent(config);
+    }
+
+    /**
+     * 可靠队列添加消息。
+     *
+     * @param key  队列 key
+     * @param args 添加参数
+     * @param <T>  消息类型
+     * @return 添加后的消息
+     */
+    @Override
+    public <T> Message<T> reliableQueueAdd(String key, QueueAddArgs<T> args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列添加参数不能为空");
+
+        return redissonClient.<T>getReliableQueue(key).add(args);
+    }
+
+    /**
+     * 可靠队列批量添加消息。
+     *
+     * @param key  队列 key
+     * @param args 添加参数
+     * @param <T>  消息类型
+     * @return 添加后的消息集合
+     */
+    @Override
+    public <T> List<Message<T>> reliableQueueAddMany(String key, QueueAddArgs<T> args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列添加参数不能为空");
+
+        return redissonClient.<T>getReliableQueue(key).addMany(args);
+    }
+
+    /**
+     * 可靠队列拉取一条消息。
+     *
+     * @param key 队列 key
+     * @param <T> 消息类型
+     * @return 消息
+     */
+    @Override
+    public <T> Message<T> reliableQueuePoll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        return redissonClient.<T>getReliableQueue(key).poll();
+    }
+
+    /**
+     * 可靠队列按参数拉取一条消息。
+     *
+     * @param key  队列 key
+     * @param args 拉取参数
+     * @param <T>  消息类型
+     * @return 消息
+     */
+    @Override
+    public <T> Message<T> reliableQueuePoll(String key, QueuePollArgs args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列拉取参数不能为空");
+
+        return redissonClient.<T>getReliableQueue(key).poll(args);
+    }
+
+    /**
+     * 可靠队列批量拉取消息。
+     *
+     * @param key  队列 key
+     * @param args 拉取参数
+     * @param <T>  消息类型
+     * @return 消息集合
+     */
+    @Override
+    public <T> List<Message<T>> reliableQueuePollMany(String key, QueuePollArgs args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列拉取参数不能为空");
+
+        return redissonClient.<T>getReliableQueue(key).pollMany(args);
+    }
+
+    /**
+     * 确认可靠队列消息处理成功。
+     *
+     * @param key  队列 key
+     * @param args ACK 参数
+     */
+    @Override
+    public void reliableQueueAck(String key, QueueAckArgs args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列ACK参数不能为空");
+
+        redissonClient.getReliableQueue(key).acknowledge(args);
+    }
+
+    /**
+     * 标记可靠队列消息处理失败。
+     *
+     * @param key  队列 key
+     * @param args NACK 参数
+     */
+    @Override
+    public void reliableQueueNack(String key, QueueNegativeAckArgs args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列NACK参数不能为空");
+
+        redissonClient.getReliableQueue(key).negativeAcknowledge(args);
+    }
+
+    /**
+     * 根据消息 ID 获取可靠队列消息。
+     *
+     * @param key 队列 key
+     * @param id  消息 ID
+     * @param <T> 消息类型
+     * @return 消息
+     */
+    @Override
+    public <T> Message<T> reliableQueueGet(String key, String id) {
+        if (StrUtil.hasBlank(key, id)) {
+            return null;
+        }
+
+        return redissonClient.<T>getReliableQueue(key).get(id);
+    }
+
+    /**
+     * 根据消息 ID 批量获取可靠队列消息。
+     *
+     * @param key 队列 key
+     * @param ids 消息 ID
+     * @param <T> 消息类型
+     * @return 消息集合
+     */
+    @Override
+    public <T> List<Message<T>> reliableQueueGetAll(String key, String... ids) {
+        if (StrUtil.isBlank(key) || ArrayUtil.isEmpty(ids)) {
+            return Collections.emptyList();
+        }
+
+        String[] idArray = Arrays.stream(ids)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .toArray(String[]::new);
+        if (ArrayUtil.isEmpty(idArray)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.<T>getReliableQueue(key).getAll(idArray);
+    }
+
+    /**
+     * 获取可靠队列所有可拉取消息。
+     *
+     * @param key 队列 key
+     * @param <T> 消息类型
+     * @return 消息集合
+     */
+    @Override
+    public <T> List<Message<T>> reliableQueueListAll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.<T>getReliableQueue(key).listAll();
+    }
+
+    /**
+     * 判断可靠队列是否包含指定消息 ID。
+     *
+     * @param key 队列 key
+     * @param id  消息 ID
+     * @return 包含返回 true
+     */
+    @Override
+    public boolean reliableQueueContains(String key, String id) {
+        if (StrUtil.hasBlank(key, id)) {
+            return false;
+        }
+
+        return redissonClient.getReliableQueue(key).contains(id);
+    }
+
+    /**
+     * 判断可靠队列包含的消息 ID 数量。
+     *
+     * @param key 队列 key
+     * @param ids 消息 ID
+     * @return 匹配数量
+     */
+    @Override
+    public int reliableQueueContainsMany(String key, String... ids) {
+        if (StrUtil.isBlank(key) || ArrayUtil.isEmpty(ids)) {
+            return 0;
+        }
+
+        String[] idArray = Arrays.stream(ids)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .toArray(String[]::new);
+        if (ArrayUtil.isEmpty(idArray)) {
+            return 0;
+        }
+
+        return redissonClient.getReliableQueue(key).containsMany(idArray);
+    }
+
+    /**
+     * 删除可靠队列消息。
+     *
+     * @param key  队列 key
+     * @param args 删除参数
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean reliableQueueRemove(String key, QueueRemoveArgs args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列删除参数不能为空");
+
+        return redissonClient.getReliableQueue(key).remove(args);
+    }
+
+    /**
+     * 批量删除可靠队列消息。
+     *
+     * @param key  队列 key
+     * @param args 删除参数
+     * @return 删除数量
+     */
+    @Override
+    public int reliableQueueRemoveMany(String key, QueueRemoveArgs args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列删除参数不能为空");
+
+        return redissonClient.getReliableQueue(key).removeMany(args);
+    }
+
+    /**
+     * 移动可靠队列消息。
+     *
+     * @param key  队列 key
+     * @param args 移动参数
+     * @return 移动数量
+     */
+    @Override
+    public int reliableQueueMove(String key, QueueMoveArgs args) {
+        checkKey(key);
+        Assert.notNull(args, "可靠队列移动参数不能为空");
+
+        return redissonClient.getReliableQueue(key).move(args);
+    }
+
+    /**
+     * 获取可靠队列消息数量。
+     *
+     * @param key 队列 key
+     * @return 消息数量
+     */
+    @Override
+    public int reliableQueueSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.getReliableQueue(key).size();
+    }
+
+    /**
+     * 获取可靠队列延迟消息数量。
+     *
+     * @param key 队列 key
+     * @return 延迟消息数量
+     */
+    @Override
+    public int reliableQueueDelayedSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.getReliableQueue(key).countDelayedMessages();
+    }
+
+    /**
+     * 获取可靠队列未确认消息数量。
+     *
+     * @param key 队列 key
+     * @return 未确认消息数量
+     */
+    @Override
+    public int reliableQueueUnacknowledgedSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0;
+        }
+
+        return redissonClient.getReliableQueue(key).countUnacknowledgedMessages();
+    }
+
+    /**
+     * 清空可靠队列全部状态消息。
+     *
+     * @param key 队列 key
+     * @return 是否清空成功
+     */
+    @Override
+    public boolean reliableQueueClear(String key) {
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+
+        return redissonClient.getReliableQueue(key).clear();
+    }
+
+    /**
+     * 获取将当前队列作为死信队列的源队列名称。
+     *
+     * @param key 队列 key
+     * @return 源队列名称集合
+     */
+    @Override
+    public Set<String> reliableQueueDeadLetterSources(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Collections.emptySet();
+        }
+
+        return redissonClient.getReliableQueue(key).getDeadLetterQueueSources();
+    }
+
+    /**
+     * 添加可靠队列事件监听器。
+     *
+     * @param key      队列 key
+     * @param listener 监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public String reliableQueueAddListener(String key, QueueEventListener listener) {
+        checkKey(key);
+        Assert.notNull(listener, "可靠队列监听器不能为空");
+
+        return redissonClient.getReliableQueue(key).addListener(listener);
+    }
+
+    /**
+     * 移除可靠队列事件监听器。
+     *
+     * @param key        队列 key
+     * @param listenerId 监听器 ID
+     */
+    @Override
+    public void reliableQueueRemoveListener(String key, String listenerId) {
+        if (StrUtil.hasBlank(key, listenerId)) {
+            return;
+        }
+
+        redissonClient.getReliableQueue(key).removeListener(listenerId);
+    }
+
+    /**
+     * 启用可靠队列指定操作。
+     *
+     * @param key       队列 key
+     * @param operation 队列操作
+     */
+    @Override
+    public void reliableQueueEnableOperation(String key, QueueOperation operation) {
+        checkKey(key);
+        Assert.notNull(operation, "可靠队列操作不能为空");
+
+        redissonClient.getReliableQueue(key).enableOperation(operation);
+    }
+
+    /**
+     * 禁用可靠队列指定操作。
+     *
+     * @param key       队列 key
+     * @param operation 队列操作
+     */
+    @Override
+    public void reliableQueueDisableOperation(String key, QueueOperation operation) {
+        checkKey(key);
+        Assert.notNull(operation, "可靠队列操作不能为空");
+
+        redissonClient.getReliableQueue(key).disableOperation(operation);
+    }
+
+    // -------------------------------------------------------------------------
+    // Stream / 高级消费治理
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取 Stream 详细信息。
+     *
+     * @param streamKey Stream key
+     * @return Stream 信息
+     */
+    @Override
+    public StreamInfo<Object, Object> streamInfo(String streamKey) {
+        checkKey(streamKey);
+
+        return redissonClient.<Object, Object>getStream(streamKey).getInfo();
+    }
+
+    /**
+     * 获取 Stream 消费组列表。
+     *
+     * @param streamKey Stream key
+     * @return 消费组列表
+     */
+    @Override
+    public List<StreamGroup> streamListGroups(String streamKey) {
+        if (StrUtil.isBlank(streamKey)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.<Object, Object>getStream(streamKey).listGroups();
+    }
+
+    /**
+     * 获取 Stream 指定消费组的消费者列表。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @return 消费者列表
+     */
+    @Override
+    public List<StreamConsumer> streamListConsumers(String streamKey, String groupName) {
+        if (StrUtil.hasBlank(streamKey, groupName)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.<Object, Object>getStream(streamKey).listConsumers(groupName);
+    }
+
+    /**
+     * 创建 Stream 消费者。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     */
+    @Override
+    public void streamCreateConsumer(String streamKey, String groupName, String consumerName) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        checkKey(consumerName);
+
+        redissonClient.<Object, Object>getStream(streamKey).createConsumer(groupName, consumerName);
+    }
+
+    /**
+     * 删除 Stream 消费者。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     * @return 该消费者名下的待处理消息数量
+     */
+    @Override
+    public long streamRemoveConsumer(String streamKey, String groupName, String consumerName) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        checkKey(consumerName);
+
+        return redissonClient.<Object, Object>getStream(streamKey).removeConsumer(groupName, consumerName);
+    }
+
+    /**
+     * 删除 Stream 消费组。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     */
+    @Override
+    public void streamRemoveGroup(String streamKey, String groupName) {
+        checkKey(streamKey);
+        checkKey(groupName);
+
+        redissonClient.<Object, Object>getStream(streamKey).removeGroup(groupName);
+    }
+
+    /**
+     * 更新 Stream 消费组读取起始 ID。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @param id        消息 ID
+     */
+    @Override
+    public void streamUpdateGroupMessageId(String streamKey, String groupName, StreamMessageId id) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        Assert.notNull(id, "Stream消息ID不能为空");
+
+        redissonClient.<Object, Object>getStream(streamKey).updateGroupMessageId(groupName, id);
+    }
+
+    /**
+     * 获取 Stream 消费组待处理消息概要。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @return 待处理概要
+     */
+    @Override
+    public PendingResult streamPendingInfo(String streamKey, String groupName) {
+        checkKey(streamKey);
+        checkKey(groupName);
+
+        return redissonClient.<Object, Object>getStream(streamKey).getPendingInfo(groupName);
+    }
+
+    /**
+     * 获取 Stream 消费组待处理消息列表。
+     *
+     * @param streamKey Stream key
+     * @param groupName 消费组
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @param count     数量
+     * @return 待处理消息列表
+     */
+    @Override
+    public List<PendingEntry> streamListPending(String streamKey, String groupName, StreamMessageId startId, StreamMessageId endId, int count) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        checkStreamRangeArgs(startId, endId, count);
+
+        return redissonClient.<Object, Object>getStream(streamKey).listPending(groupName, startId, endId, count);
+    }
+
+    /**
+     * 获取 Stream 指定消费者的待处理消息列表。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     * @param startId      开始 ID
+     * @param endId        结束 ID
+     * @param count        数量
+     * @return 待处理消息列表
+     */
+    @Override
+    public List<PendingEntry> streamListPending(String streamKey, String groupName, String consumerName, StreamMessageId startId, StreamMessageId endId, int count) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        checkKey(consumerName);
+        checkStreamRangeArgs(startId, endId, count);
+
+        return redissonClient.<Object, Object>getStream(streamKey).listPending(groupName, consumerName, startId, endId, count);
+    }
+
+    /**
+     * 获取 Stream 指定消费者满足最小空闲时间的待处理消息列表。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 消费者
+     * @param startId      开始 ID
+     * @param endId        结束 ID
+     * @param idleTime     最小空闲时间
+     * @param unit         时间单位
+     * @param count        数量
+     * @return 待处理消息列表
+     */
+    @Override
+    public List<PendingEntry> streamListPending(String streamKey, String groupName, String consumerName,
+                                                StreamMessageId startId, StreamMessageId endId,
+                                                long idleTime, TimeUnit unit, int count) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        checkKey(consumerName);
+        checkStreamRangeArgs(startId, endId, count);
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(idleTime >= 0, "最小空闲时间不能小于0");
+
+        return redissonClient.<Object, Object>getStream(streamKey)
+                .listPending(groupName, consumerName, startId, endId, idleTime, unit, count);
+    }
+
+    /**
+     * 按 ID 范围读取 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @return 消息 Map
+     */
+    @Override
+    public Map<StreamMessageId, Map<Object, Object>> streamRange(String streamKey, StreamMessageId startId, StreamMessageId endId) {
+        checkKey(streamKey);
+        Assert.notNull(startId, "开始消息ID不能为空");
+        Assert.notNull(endId, "结束消息ID不能为空");
+
+        return redissonClient.<Object, Object>getStream(streamKey).range(startId, endId);
+    }
+
+    /**
+     * 按 ID 范围读取 Stream 消息并限制数量。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @param count     数量
+     * @return 消息 Map
+     */
+    @Override
+    public Map<StreamMessageId, Map<Object, Object>> streamRange(String streamKey, StreamMessageId startId, StreamMessageId endId, int count) {
+        checkKey(streamKey);
+        checkStreamRangeArgs(startId, endId, count);
+
+        return redissonClient.<Object, Object>getStream(streamKey).range(count, startId, endId);
+    }
+
+    /**
+     * 按 ID 范围倒序读取 Stream 消息。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @return 消息 Map
+     */
+    @Override
+    public Map<StreamMessageId, Map<Object, Object>> streamRangeReversed(String streamKey, StreamMessageId startId, StreamMessageId endId) {
+        checkKey(streamKey);
+        Assert.notNull(startId, "开始消息ID不能为空");
+        Assert.notNull(endId, "结束消息ID不能为空");
+
+        return redissonClient.<Object, Object>getStream(streamKey).rangeReversed(startId, endId);
+    }
+
+    /**
+     * 按 ID 范围倒序读取 Stream 消息并限制数量。
+     *
+     * @param streamKey Stream key
+     * @param startId   开始 ID
+     * @param endId     结束 ID
+     * @param count     数量
+     * @return 消息 Map
+     */
+    @Override
+    public Map<StreamMessageId, Map<Object, Object>> streamRangeReversed(String streamKey, StreamMessageId startId, StreamMessageId endId, int count) {
+        checkKey(streamKey);
+        checkStreamRangeArgs(startId, endId, count);
+
+        return redissonClient.<Object, Object>getStream(streamKey).rangeReversed(count, startId, endId);
+    }
+
+    /**
+     * 转移待处理 Stream 消息所有权。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 新消费者
+     * @param idleTime     最小空闲时间
+     * @param unit         时间单位
+     * @param ids          消息 ID
+     * @return 转移后的消息 Map
+     */
+    @Override
+    public Map<StreamMessageId, Map<Object, Object>> streamClaim(String streamKey, String groupName, String consumerName,
+                                                                 long idleTime, TimeUnit unit, StreamMessageId... ids) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        checkKey(consumerName);
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(idleTime >= 0, "最小空闲时间不能小于0");
+
+        if (ArrayUtil.isEmpty(ids)) {
+            return Collections.emptyMap();
+        }
+
+        return redissonClient.<Object, Object>getStream(streamKey)
+                .claim(groupName, consumerName, idleTime, unit, ids);
+    }
+
+    /**
+     * 自动转移待处理 Stream 消息所有权。
+     *
+     * @param streamKey    Stream key
+     * @param groupName    消费组
+     * @param consumerName 新消费者
+     * @param idleTime     最小空闲时间
+     * @param unit         时间单位
+     * @param startId      起始 ID
+     * @param count        数量
+     * @return 自动转移结果
+     */
+    @Override
+    public AutoClaimResult<Object, Object> streamAutoClaim(String streamKey, String groupName, String consumerName,
+                                                           long idleTime, TimeUnit unit, StreamMessageId startId, int count) {
+        checkKey(streamKey);
+        checkKey(groupName);
+        checkKey(consumerName);
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.notNull(startId, "起始消息ID不能为空");
+        Assert.isTrue(idleTime >= 0, "最小空闲时间不能小于0");
+        Assert.isTrue(count > 0, "读取数量必须大于0");
+
+        return redissonClient.<Object, Object>getStream(streamKey)
+                .autoClaim(groupName, consumerName, idleTime, unit, startId, count);
+    }
+
+    /**
+     * 裁剪 Stream。
+     *
+     * @param streamKey Stream key
+     * @param args      裁剪参数
+     * @return 裁剪数量
+     */
+    @Override
+    public long streamTrim(String streamKey, StreamTrimArgs args) {
+        checkKey(streamKey);
+        Assert.notNull(args, "Stream裁剪参数不能为空");
+
+        return redissonClient.<Object, Object>getStream(streamKey).trim(args);
+    }
+
+    /**
+     * 添加 Stream 对象监听器。
+     *
+     * @param streamKey Stream key
+     * @param listener  对象监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public int streamAddListener(String streamKey, ObjectListener listener) {
+        checkKey(streamKey);
+        Assert.notNull(listener, "Stream监听器不能为空");
+
+        return redissonClient.<Object, Object>getStream(streamKey).addListener(listener);
+    }
+
+    /**
+     * 移除 Stream 对象监听器。
+     *
+     * @param streamKey  Stream key
+     * @param listenerId 监听器 ID
+     */
+    @Override
+    public void streamRemoveListener(String streamKey, int listenerId) {
+        if (StrUtil.isBlank(streamKey)) {
+            return;
+        }
+
+        redissonClient.<Object, Object>getStream(streamKey).removeListener(listenerId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Executor / Scheduler 分布式任务
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取分布式执行器。
+     *
+     * @param name 执行器名称
+     * @return RExecutorService
+     */
+    @Override
+    public RExecutorService getExecutorService(String name) {
+        checkKey(name);
+        return redissonClient.getExecutorService(name);
+    }
+
+    /**
+     * 获取分布式定时执行器。
+     *
+     * @param name 执行器名称
+     * @return RScheduledExecutorService
+     */
+    @Override
+    public RScheduledExecutorService getScheduledExecutorService(String name) {
+        checkKey(name);
+
+        // Redisson 3.52.0 中 getExecutorService 返回 RScheduledExecutorService，可同时作为普通执行器和定时执行器使用
+        return redissonClient.getExecutorService(name);
+    }
+
+    /**
+     * 执行 Runnable 分布式任务。
+     *
+     * @param name 执行器名称
+     * @param task 任务
+     */
+    @Override
+    public void executorExecute(String name, Runnable task) {
+        checkKey(name);
+        Assert.notNull(task, "分布式任务不能为空");
+
+        redissonClient.getExecutorService(name).execute(task);
+    }
+
+    /**
+     * 提交 Runnable 分布式任务。
+     *
+     * @param name 执行器名称
+     * @param task 任务
+     * @return Future
+     */
+    @Override
+    public Future<?> executorSubmit(String name, Runnable task) {
+        checkKey(name);
+        Assert.notNull(task, "分布式任务不能为空");
+
+        return redissonClient.getExecutorService(name).submit(task);
+    }
+
+    /**
+     * 提交 Callable 分布式任务。
+     *
+     * @param name 执行器名称
+     * @param task 任务
+     * @param <T>  返回类型
+     * @return Future
+     */
+    @Override
+    public <T> Future<T> executorSubmit(String name, Callable<T> task) {
+        checkKey(name);
+        Assert.notNull(task, "分布式任务不能为空");
+
+        return redissonClient.getExecutorService(name).submit(task);
+    }
+
+    /**
+     * 关闭分布式执行器。
+     *
+     * @param name 执行器名称
+     */
+    @Override
+    public void executorShutdown(String name) {
+        if (StrUtil.isBlank(name)) {
+            return;
+        }
+
+        redissonClient.getExecutorService(name).shutdown();
+    }
+
+    /**
+     * 立即关闭分布式执行器。
+     *
+     * @param name 执行器名称
+     * @return 未执行任务集合
+     */
+    @Override
+    public List<Runnable> executorShutdownNow(String name) {
+        if (StrUtil.isBlank(name)) {
+            return Collections.emptyList();
+        }
+
+        return redissonClient.getExecutorService(name).shutdownNow();
+    }
+
+    /**
+     * 调度 Runnable 分布式任务。
+     *
+     * @param name  执行器名称
+     * @param task  任务
+     * @param delay 延迟时间
+     * @param unit  时间单位
+     * @return ScheduledFuture
+     */
+    @Override
+    public ScheduledFuture<?> schedule(String name, Runnable task, long delay, TimeUnit unit) {
+        checkKey(name);
+        Assert.notNull(task, "分布式定时任务不能为空");
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(delay >= 0, "延迟时间不能小于0");
+
+        return redissonClient.getExecutorService(name).schedule(task, delay, unit);
+    }
+
+    /**
+     * 调度 Callable 分布式任务。
+     *
+     * @param name  执行器名称
+     * @param task  任务
+     * @param delay 延迟时间
+     * @param unit  时间单位
+     * @param <T>   返回类型
+     * @return ScheduledFuture
+     */
+    @Override
+    public <T> ScheduledFuture<T> schedule(String name, Callable<T> task, long delay, TimeUnit unit) {
+        checkKey(name);
+        Assert.notNull(task, "分布式定时任务不能为空");
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(delay >= 0, "延迟时间不能小于0");
+
+        return redissonClient.getExecutorService(name).schedule(task, delay, unit);
+    }
+
+    /**
+     * 固定频率调度 Runnable 分布式任务。
+     *
+     * @param name         执行器名称
+     * @param task         任务
+     * @param initialDelay 初始延迟
+     * @param period       执行周期
+     * @param unit         时间单位
+     * @return ScheduledFuture
+     */
+    @Override
+    public ScheduledFuture<?> scheduleAtFixedRate(String name, Runnable task, long initialDelay, long period, TimeUnit unit) {
+        checkKey(name);
+        Assert.notNull(task, "分布式定时任务不能为空");
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(initialDelay >= 0, "初始延迟时间不能小于0");
+        Assert.isTrue(period > 0, "执行周期必须大于0");
+
+        return redissonClient.getExecutorService(name).scheduleAtFixedRate(task, initialDelay, period, unit);
+    }
+
+    /**
+     * 固定延迟调度 Runnable 分布式任务。
+     *
+     * @param name         执行器名称
+     * @param task         任务
+     * @param initialDelay 初始延迟
+     * @param delay        执行间隔
+     * @param unit         时间单位
+     * @return ScheduledFuture
+     */
+    @Override
+    public ScheduledFuture<?> scheduleWithFixedDelay(String name, Runnable task, long initialDelay, long delay, TimeUnit unit) {
+        checkKey(name);
+        Assert.notNull(task, "分布式定时任务不能为空");
+        Assert.notNull(unit, "时间单位不能为空");
+        Assert.isTrue(initialDelay >= 0, "初始延迟时间不能小于0");
+        Assert.isTrue(delay > 0, "执行间隔必须大于0");
+
+        return redissonClient.getExecutorService(name).scheduleWithFixedDelay(task, initialDelay, delay, unit);
+    }
+
+    // -------------------------------------------------------------------------
+    // RemoteService / LiveObject
+    // -------------------------------------------------------------------------
+
+    /**
+     * 获取远程服务。
+     *
+     * @return RRemoteService
+     */
+    @Override
+    public RRemoteService getRemoteService() {
+        return redissonClient.getRemoteService();
+    }
+
+    /**
+     * 获取指定名称的远程服务。
+     *
+     * @param name 服务名称
+     * @return RRemoteService
+     */
+    @Override
+    public RRemoteService getRemoteService(String name) {
+        checkKey(name);
+        return redissonClient.getRemoteService(name);
+    }
+
+    /**
+     * 注册远程服务实现。
+     *
+     * @param remoteInterface 远程服务接口
+     * @param implementation  远程服务实现
+     * @param <T>             服务类型
+     */
+    @Override
+    public <T> void remoteRegister(Class<T> remoteInterface, T implementation) {
+        Assert.notNull(remoteInterface, "远程服务接口不能为空");
+        Assert.notNull(implementation, "远程服务实现不能为空");
+
+        redissonClient.getRemoteService().register(remoteInterface, implementation);
+    }
+
+    /**
+     * 注册远程服务实现并指定工作线程数量。
+     *
+     * @param remoteInterface 远程服务接口
+     * @param implementation  远程服务实现
+     * @param workers         工作线程数量
+     * @param <T>             服务类型
+     */
+    @Override
+    public <T> void remoteRegister(Class<T> remoteInterface, T implementation, int workers) {
+        Assert.notNull(remoteInterface, "远程服务接口不能为空");
+        Assert.notNull(implementation, "远程服务实现不能为空");
+        Assert.isTrue(workers > 0, "远程服务工作线程数量必须大于0");
+
+        redissonClient.getRemoteService().register(remoteInterface, implementation, workers);
+    }
+
+    /**
+     * 获取远程服务代理。
+     *
+     * @param remoteInterface 远程服务接口
+     * @param <T>             服务类型
+     * @return 服务代理
+     */
+    @Override
+    public <T> T remoteGet(Class<T> remoteInterface) {
+        Assert.notNull(remoteInterface, "远程服务接口不能为空");
+
+        return redissonClient.getRemoteService().get(remoteInterface);
+    }
+
+    /**
+     * 获取 LiveObject 服务。
+     *
+     * @return RLiveObjectService
+     */
+    @Override
+    public RLiveObjectService getLiveObjectService() {
+        return redissonClient.getLiveObjectService();
+    }
+
+    /**
+     * 附加 LiveObject。
+     *
+     * @param detachedObject 游离对象
+     * @param <T>            对象类型
+     * @return LiveObject
+     */
+    @Override
+    public <T> T liveObjectAttach(T detachedObject) {
+        Assert.notNull(detachedObject, "LiveObject游离对象不能为空");
+
+        return redissonClient.getLiveObjectService().attach(detachedObject);
+    }
+
+    /**
+     * 合并 LiveObject。
+     *
+     * @param detachedObject 游离对象
+     * @param <T>            对象类型
+     * @return LiveObject
+     */
+    @Override
+    public <T> T liveObjectMerge(T detachedObject) {
+        Assert.notNull(detachedObject, "LiveObject游离对象不能为空");
+
+        return redissonClient.getLiveObjectService().merge(detachedObject);
+    }
+
+    /**
+     * 获取 LiveObject。
+     *
+     * @param entityClass 实体类型
+     * @param id          实体 ID
+     * @param <T>         对象类型
+     * @return LiveObject
+     */
+    @Override
+    public <T> T liveObjectGet(Class<T> entityClass, Object id) {
+        Assert.notNull(entityClass, "LiveObject实体类型不能为空");
+        Assert.notNull(id, "LiveObject实体ID不能为空");
+
+        return redissonClient.getLiveObjectService().get(entityClass, id);
+    }
+
+    /**
+     * 删除 LiveObject。
+     *
+     * @param attachedObject 已附加对象
+     */
+    @Override
+    public void liveObjectDelete(Object attachedObject) {
+        if (ObjectUtil.isNull(attachedObject)) {
+            return;
+        }
+
+        redissonClient.getLiveObjectService().delete(attachedObject);
+    }
+
+    /**
+     * 根据类型和 ID 删除 LiveObject。
+     *
+     * @param entityClass 实体类型
+     * @param id          实体 ID
+     */
+    @Override
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public void liveObjectDelete(Class<?> entityClass, Object id) {
+        Assert.notNull(entityClass, "LiveObject实体类型不能为空");
+        Assert.notNull(id, "LiveObject实体ID不能为空");
+
+        redissonClient.getLiveObjectService().delete((Class) entityClass, id);
+    }
+
+    // -------------------------------------------------------------------------
+    // Object Listener / 对象监听
+    // -------------------------------------------------------------------------
+
+    /**
+     * 添加全局对象监听器。
+     *
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public int addGlobalObjectListener(ObjectListener listener) {
+        Assert.notNull(listener, "全局对象监听器不能为空");
+
+        return redissonClient.getKeys().addListener(listener);
+    }
+
+    /**
+     * 移除全局对象监听器。
+     *
+     * @param listenerId 监听器 ID
+     */
+    @Override
+    public void removeGlobalObjectListener(int listenerId) {
+        redissonClient.getKeys().removeListener(listenerId);
+    }
+
+    /**
+     * 添加 Bucket 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public int addBucketListener(String key, ObjectListener listener) {
+        checkKey(key);
+        Assert.notNull(listener, "Bucket监听器不能为空");
+
+        return redissonClient.getBucket(key).addListener(listener);
+    }
+
+    /**
+     * 移除 Bucket 对象监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    @Override
+    public void removeBucketListener(String key, int listenerId) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.getBucket(key).removeListener(listenerId);
+    }
+
+    /**
+     * 添加 Map 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public int addMapListener(String key, ObjectListener listener) {
+        checkKey(key);
+        Assert.notNull(listener, "Map监听器不能为空");
+
+        return redissonClient.getMap(key).addListener(listener);
+    }
+
+    /**
+     * 添加 Map Entry 监听器。
+     *
+     * @param key      Redis 键
+     * @param listener Entry 监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public int addMapEntryListener(String key, ObjectListener listener) {
+        checkKey(key);
+        Assert.notNull(listener, "Map Entry监听器不能为空");
+
+        return redissonClient.getMap(key).addListener(listener);
+    }
+
+    /**
+     * 移除 Map 监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    @Override
+    public void removeMapListener(String key, int listenerId) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.getMap(key).removeListener(listenerId);
+    }
+
+    /**
+     * 添加 Queue 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public int addQueueListener(String key, ObjectListener listener) {
+        checkKey(key);
+        Assert.notNull(listener, "Queue监听器不能为空");
+
+        return redissonClient.getQueue(key).addListener(listener);
+    }
+
+    /**
+     * 移除 Queue 对象监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    @Override
+    public void removeQueueListener(String key, int listenerId) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.getQueue(key).removeListener(listenerId);
+    }
+
+    /**
+     * 添加 Set 对象监听器。
+     *
+     * @param key      Redis 键
+     * @param listener 对象监听器
+     * @return 监听器 ID
+     */
+    @Override
+    public int addSetListener(String key, ObjectListener listener) {
+        checkKey(key);
+        Assert.notNull(listener, "Set监听器不能为空");
+
+        return redissonClient.getSet(key).addListener(listener);
+    }
+
+    /**
+     * 移除 Set 对象监听器。
+     *
+     * @param key        Redis 键
+     * @param listenerId 监听器 ID
+     */
+    @Override
+    public void removeSetListener(String key, int listenerId) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        redissonClient.getSet(key).removeListener(listenerId);
+    }
+
     // -------------------------------------------------------------------------
     // 私有辅助方法
     // -------------------------------------------------------------------------
@@ -4739,6 +7492,19 @@ public class RedissonServiceImpl implements RedissonService {
             return Collections.emptyList();
         }
         return keys;
+    }
+
+    /**
+     * 校验 Stream 范围参数。
+     *
+     * @param startId 开始消息 ID
+     * @param endId   结束消息 ID
+     * @param count   数量
+     */
+    private void checkStreamRangeArgs(StreamMessageId startId, StreamMessageId endId, int count) {
+        Assert.notNull(startId, "开始消息ID不能为空");
+        Assert.notNull(endId, "结束消息ID不能为空");
+        Assert.isTrue(count > 0, "读取数量必须大于0");
     }
 
 }
