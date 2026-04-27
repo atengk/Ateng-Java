@@ -809,4 +809,1002 @@ public final class ObjectUtil {
         }
     }
 
+    /**
+     * 判断两个对象是否不相等（考虑 null）
+     *
+     * @param obj1 第一个对象
+     * @param obj2 第二个对象
+     * @return true：不相等；false：相等
+     */
+    public static boolean notEquals(Object obj1, Object obj2) {
+        return !equals(obj1, obj2);
+    }
+
+    /**
+     * 判断对象是否等于任意一个目标值
+     *
+     * @param object  目标对象
+     * @param targets 待比较目标值
+     * @return true：存在相等值；false：不存在
+     */
+    public static boolean equalsAny(Object object, Object... targets) {
+        if (targets == null || targets.length == 0) {
+            return false;
+        }
+        for (Object target : targets) {
+            if (equals(object, target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断对象是否不等于所有目标值
+     *
+     * @param object  目标对象
+     * @param targets 待比较目标值
+     * @return true：全部不相等；false：存在相等值
+     */
+    public static boolean notEqualsAny(Object object, Object... targets) {
+        return !equalsAny(object, targets);
+    }
+
+    /**
+     * 获取非空默认值，如果对象为 null 则通过 Supplier 获取默认值
+     *
+     * @param object          要检查的对象
+     * @param defaultSupplier 默认值提供器
+     * @param <T>             对象类型
+     * @return 对象非空时返回对象值，否则返回默认值
+     */
+    public static <T> T defaultIfNullGet(T object, Supplier<T> defaultSupplier) {
+        if (object != null) {
+            return object;
+        }
+        return defaultSupplier == null ? null : defaultSupplier.get();
+    }
+
+    /**
+     * 获取非空默认值，如果对象为空字符串、空集合、空数组等则返回默认值
+     *
+     * @param object       要检查的对象
+     * @param defaultValue 默认值
+     * @param <T>          对象类型
+     * @return 对象非空时返回对象值，否则返回默认值
+     */
+    public static <T> T defaultIfEmpty(T object, T defaultValue) {
+        return isEmpty(object) ? defaultValue : object;
+    }
+
+    /**
+     * 获取非空默认值，如果对象为空字符串、空集合、空数组等则通过 Supplier 获取默认值
+     *
+     * @param object          要检查的对象
+     * @param defaultSupplier 默认值提供器
+     * @param <T>             对象类型
+     * @return 对象非空时返回对象值，否则返回默认值
+     */
+    public static <T> T defaultIfEmptyGet(T object, Supplier<T> defaultSupplier) {
+        if (isNotEmpty(object)) {
+            return object;
+        }
+        return defaultSupplier == null ? null : defaultSupplier.get();
+    }
+
+    /**
+     * 返回第一个非 null 对象
+     *
+     * @param values 对象数组
+     * @param <T>    对象类型
+     * @return 第一个非 null 对象，如果不存在则返回 null
+     */
+    @SafeVarargs
+    public static <T> T firstNonNull(T... values) {
+        if (values == null || values.length == 0) {
+            return null;
+        }
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 返回第一个非空对象
+     *
+     * @param values 对象数组
+     * @param <T>    对象类型
+     * @return 第一个非空对象，如果不存在则返回 null
+     */
+    @SafeVarargs
+    public static <T> T firstNonEmpty(T... values) {
+        if (values == null || values.length == 0) {
+            return null;
+        }
+        for (T value : values) {
+            if (isNotEmpty(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 校验对象不能为 null
+     *
+     * @param object  对象
+     * @param message 异常信息
+     * @param <T>     对象类型
+     * @return 原对象
+     */
+    public static <T> T requireNonNull(T object, String message) {
+        if (object == null) {
+            throw new IllegalArgumentException(message == null ? "对象不能为 null" : message);
+        }
+        return object;
+    }
+
+    /**
+     * 校验对象不能为空
+     *
+     * @param object  对象
+     * @param message 异常信息
+     * @param <T>     对象类型
+     * @return 原对象
+     */
+    public static <T> T requireNonEmpty(T object, String message) {
+        if (isEmpty(object)) {
+            throw new IllegalArgumentException(message == null ? "对象不能为空" : message);
+        }
+        return object;
+    }
+
+    /**
+     * 判断是否全部为 null
+     *
+     * @param objects 对象数组
+     * @return true：全部为 null；false：存在非 null
+     */
+    public static boolean isAllNull(Object... objects) {
+        if (objects == null || objects.length == 0) {
+            return true;
+        }
+        for (Object object : objects) {
+            if (object != null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 判断是否存在 null
+     *
+     * @param objects 对象数组
+     * @return true：存在 null；false：全部非 null
+     */
+    public static boolean isAnyNull(Object... objects) {
+        if (objects == null || objects.length == 0) {
+            return true;
+        }
+        for (Object object : objects) {
+            if (object == null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断是否全部非 null
+     *
+     * @param objects 对象数组
+     * @return true：全部非 null；false：存在 null
+     */
+    public static boolean isNoneNull(Object... objects) {
+        return !isAnyNull(objects);
+    }
+
+    /**
+     * 判断是否全部为空
+     *
+     * @param objects 对象数组
+     * @return true：全部为空；false：存在非空
+     */
+    public static boolean isAllEmpty(Object... objects) {
+        if (objects == null || objects.length == 0) {
+            return true;
+        }
+        for (Object object : objects) {
+            if (isNotEmpty(object)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 判断是否存在空对象
+     *
+     * @param objects 对象数组
+     * @return true：存在空对象；false：全部非空
+     */
+    public static boolean isAnyEmpty(Object... objects) {
+        if (objects == null || objects.length == 0) {
+            return true;
+        }
+        for (Object object : objects) {
+            if (isEmpty(object)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断是否全部非空
+     *
+     * @param objects 对象数组
+     * @return true：全部非空；false：存在空对象
+     */
+    public static boolean isNoneEmpty(Object... objects) {
+        return !isAnyEmpty(objects);
+    }
+
+    /**
+     * 判断 Class 是否为基本类型包装类
+     *
+     * @param clazz 类型
+     * @return true：是包装类；false：不是
+     */
+    public static boolean isWrapperType(Class<?> clazz) {
+        if (clazz == null) {
+            return false;
+        }
+        return clazz == Integer.class ||
+                clazz == Long.class ||
+                clazz == Double.class ||
+                clazz == Float.class ||
+                clazz == Character.class ||
+                clazz == Boolean.class ||
+                clazz == Byte.class ||
+                clazz == Short.class ||
+                clazz == Void.class ||
+                clazz == BigDecimal.class ||
+                clazz == BigInteger.class;
+    }
+
+    /**
+     * 判断对象是否为简单值类型
+     *
+     * @param object 对象
+     * @return true：简单值类型；false：非简单值类型
+     */
+    public static boolean isSimpleValueType(Object object) {
+        return object != null && isSimpleValueType(object.getClass());
+    }
+
+    /**
+     * 判断 Class 是否为简单值类型
+     *
+     * @param clazz 类型
+     * @return true：简单值类型；false：非简单值类型
+     */
+    public static boolean isSimpleValueType(Class<?> clazz) {
+        if (clazz == null) {
+            return false;
+        }
+        return clazz.isPrimitive() ||
+                isWrapperType(clazz) ||
+                clazz == String.class ||
+                clazz == CharSequence.class ||
+                Number.class.isAssignableFrom(clazz) ||
+                Date.class.isAssignableFrom(clazz) ||
+                clazz.isEnum() ||
+                clazz == UUID.class ||
+                clazz == Class.class ||
+                java.time.temporal.Temporal.class.isAssignableFrom(clazz);
+    }
+
+    /**
+     * 判断对象是否可序列化
+     *
+     * @param object 对象
+     * @return true：可序列化；false：不可序列化
+     */
+    public static boolean isSerializable(Object object) {
+        return object instanceof Serializable;
+    }
+
+    /**
+     * 判断对象是否为集合类型
+     *
+     * @param object 对象
+     * @return true：集合类型；false：非集合类型
+     */
+    public static boolean isCollection(Object object) {
+        return object instanceof Collection;
+    }
+
+    /**
+     * 判断对象是否为 Map 类型
+     *
+     * @param object 对象
+     * @return true：Map 类型；false：非 Map 类型
+     */
+    public static boolean isMap(Object object) {
+        return object instanceof Map;
+    }
+
+    /**
+     * 判断对象是否为 CharSequence 类型
+     *
+     * @param object 对象
+     * @return true：CharSequence 类型；false：非 CharSequence 类型
+     */
+    public static boolean isCharSequence(Object object) {
+        return object instanceof CharSequence;
+    }
+
+    /**
+     * 获取对象长度
+     * <p>支持 CharSequence、Collection、Map、Optional、数组、Iterator、Enumeration。</p>
+     *
+     * @param object 对象
+     * @return 对象长度；不支持的类型返回 -1
+     */
+    public static int length(Object object) {
+        if (object == null) {
+            return 0;
+        }
+        if (object instanceof CharSequence) {
+            return ((CharSequence) object).length();
+        }
+        if (object instanceof Collection) {
+            return ((Collection<?>) object).size();
+        }
+        if (object instanceof Map) {
+            return ((Map<?, ?>) object).size();
+        }
+        if (object instanceof Optional) {
+            return ((Optional<?>) object).isPresent() ? 1 : 0;
+        }
+        if (object.getClass().isArray()) {
+            return Array.getLength(object);
+        }
+        if (object instanceof Iterator) {
+            int count = 0;
+            Iterator<?> iterator = (Iterator<?>) object;
+            while (iterator.hasNext()) {
+                iterator.next();
+                count++;
+            }
+            return count;
+        }
+        if (object instanceof Enumeration) {
+            int count = 0;
+            Enumeration<?> enumeration = (Enumeration<?>) object;
+            while (enumeration.hasMoreElements()) {
+                enumeration.nextElement();
+                count++;
+            }
+            return count;
+        }
+        return -1;
+    }
+
+    /**
+     * 判断容器对象是否包含指定元素
+     * <p>支持 CharSequence、Collection、Map、数组。</p>
+     *
+     * @param container 容器对象
+     * @param element   元素
+     * @return true：包含；false：不包含
+     */
+    public static boolean contains(Object container, Object element) {
+        if (container == null) {
+            return false;
+        }
+        if (container instanceof CharSequence) {
+            return element != null && container.toString().contains(element.toString());
+        }
+        if (container instanceof Collection) {
+            return ((Collection<?>) container).contains(element);
+        }
+        if (container instanceof Map) {
+            return ((Map<?, ?>) container).containsKey(element);
+        }
+        if (container.getClass().isArray()) {
+            int length = Array.getLength(container);
+            for (int i = 0; i < length; i++) {
+                if (equals(Array.get(container, i), element)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断对象是否在给定数组中
+     *
+     * @param object  目标对象
+     * @param targets 候选对象
+     * @return true：存在；false：不存在
+     */
+    public static boolean isIn(Object object, Object... targets) {
+        return contains(targets, object);
+    }
+
+    /**
+     * 安全获取数组元素
+     *
+     * @param array 数组对象
+     * @param index 索引
+     * @return 元素值，数组无效或索引越界时返回 null
+     */
+    public static Object getArrayElement(Object array, int index) {
+        if (array == null || !array.getClass().isArray()) {
+            return null;
+        }
+        int length = Array.getLength(array);
+        if (index < 0 || index >= length) {
+            return null;
+        }
+        return Array.get(array, index);
+    }
+
+    /**
+     * 安全转换对象类型
+     *
+     * @param object      对象
+     * @param targetClass 目标类型
+     * @param <T>         目标类型
+     * @return 转换后的对象，无法转换返回 null
+     */
+    public static <T> T cast(Object object, Class<T> targetClass) {
+        if (object == null || targetClass == null || !targetClass.isInstance(object)) {
+            return null;
+        }
+        return targetClass.cast(object);
+    }
+
+    /**
+     * 安全转换对象类型，无法转换时返回默认值
+     *
+     * @param object       对象
+     * @param targetClass  目标类型
+     * @param defaultValue 默认值
+     * @param <T>          目标类型
+     * @return 转换后的对象，无法转换返回默认值
+     */
+    public static <T> T castOrDefault(Object object, Class<T> targetClass, T defaultValue) {
+        T value = cast(object, targetClass);
+        return value == null ? defaultValue : value;
+    }
+
+    /**
+     * 创建对象实例
+     *
+     * @param clazz 类型
+     * @param <T>   对象类型
+     * @return 对象实例，创建失败返回 null
+     */
+    public static <T> T newInstance(Class<T> clazz) {
+        if (clazz == null) {
+            return null;
+        }
+        try {
+            java.lang.reflect.Constructor<T> constructor = clazz.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取对象所有方法（包括父类方法）
+     *
+     * @param clazz 类型
+     * @return 方法数组
+     */
+    public static Method[] getAllMethods(Class<?> clazz) {
+        List<Method> methods = new ArrayList<>();
+        Set<String> methodSignatures = new HashSet<>();
+        while (clazz != null && clazz != Object.class) {
+            Method[] declaredMethods = clazz.getDeclaredMethods();
+            for (Method method : declaredMethods) {
+                String signature = method.getName() + Arrays.toString(method.getParameterTypes());
+                if (methodSignatures.add(signature)) {
+                    methods.add(method);
+                }
+            }
+            clazz = clazz.getSuperclass();
+        }
+        return methods.toArray(new Method[0]);
+    }
+
+    /**
+     * 判断对象是否包含指定方法
+     *
+     * @param object         对象
+     * @param methodName     方法名
+     * @param parameterTypes 参数类型
+     * @return true：包含；false：不包含
+     */
+    public static boolean hasMethod(Object object, String methodName, Class<?>... parameterTypes) {
+        if (object == null || methodName == null || methodName.isEmpty()) {
+            return false;
+        }
+        return getDeclaredMethod(object.getClass(), methodName, parameterTypes) != null;
+    }
+
+    /**
+     * 调用对象无参方法
+     *
+     * @param object     对象
+     * @param methodName 方法名
+     * @return 方法返回值，调用失败返回 null
+     */
+    public static Object invokeMethod(Object object, String methodName) {
+        return invokeMethod(object, methodName, new Class<?>[0]);
+    }
+
+    /**
+     * 调用对象方法
+     *
+     * @param object         对象
+     * @param methodName     方法名
+     * @param parameterTypes 参数类型
+     * @param args           参数值
+     * @return 方法返回值，调用失败返回 null
+     */
+    public static Object invokeMethod(Object object, String methodName, Class<?>[] parameterTypes, Object... args) {
+        if (object == null || methodName == null || methodName.isEmpty()) {
+            return null;
+        }
+        try {
+            Method method = getDeclaredMethod(object.getClass(), methodName, parameterTypes);
+            if (method == null) {
+                return null;
+            }
+            method.setAccessible(true);
+            return method.invoke(object, args);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取嵌套字段值，字段路径使用 "." 分隔
+     *
+     * @param object    对象
+     * @param fieldPath 字段路径，例如 user.address.city
+     * @return 字段值，获取失败返回 null
+     */
+    public static Object getNestedFieldValue(Object object, String fieldPath) {
+        if (object == null || fieldPath == null || fieldPath.trim().isEmpty()) {
+            return null;
+        }
+        Object current = object;
+        String[] fieldNames = fieldPath.split("\\.");
+        for (String fieldName : fieldNames) {
+            if (current == null || fieldName == null || fieldName.trim().isEmpty()) {
+                return null;
+            }
+            current = getFieldValue(current, fieldName);
+        }
+        return current;
+    }
+
+    /**
+     * 设置嵌套字段值，字段路径使用 "." 分隔
+     *
+     * @param object    对象
+     * @param fieldPath 字段路径，例如 user.address.city
+     * @param value     字段值
+     * @return true：设置成功；false：设置失败
+     */
+    public static boolean setNestedFieldValue(Object object, String fieldPath, Object value) {
+        if (object == null || fieldPath == null || fieldPath.trim().isEmpty()) {
+            return false;
+        }
+        String[] fieldNames = fieldPath.split("\\.");
+        if (fieldNames.length == 0) {
+            return false;
+        }
+        Object current = object;
+        for (int i = 0; i < fieldNames.length - 1; i++) {
+            current = getFieldValue(current, fieldNames[i]);
+            if (current == null) {
+                return false;
+            }
+        }
+        return setFieldValue(current, fieldNames[fieldNames.length - 1], value);
+    }
+
+    /**
+     * 判断对象是否包含嵌套字段路径
+     *
+     * @param object    对象
+     * @param fieldPath 字段路径
+     * @return true：包含；false：不包含
+     */
+    public static boolean hasNestedField(Object object, String fieldPath) {
+        if (object == null || fieldPath == null || fieldPath.trim().isEmpty()) {
+            return false;
+        }
+        Object current = object;
+        String[] fieldNames = fieldPath.split("\\.");
+        for (int i = 0; i < fieldNames.length; i++) {
+            if (current == null || fieldNames[i] == null || fieldNames[i].trim().isEmpty()) {
+                return false;
+            }
+            if (!hasField(current, fieldNames[i])) {
+                return false;
+            }
+            if (i < fieldNames.length - 1) {
+                current = getFieldValue(current, fieldNames[i]);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 获取多个字段值
+     *
+     * @param object     对象
+     * @param fieldNames 字段名数组
+     * @return 字段值 Map
+     */
+    public static Map<String, Object> getFieldValues(Object object, String... fieldNames) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (object == null || fieldNames == null || fieldNames.length == 0) {
+            return result;
+        }
+        for (String fieldName : fieldNames) {
+            if (fieldName != null && !fieldName.trim().isEmpty()) {
+                result.put(fieldName, getFieldValue(object, fieldName));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 判断对象是否包含任意字段
+     *
+     * @param object     对象
+     * @param fieldNames 字段名数组
+     * @return true：包含任意字段；false：不包含
+     */
+    public static boolean hasAnyField(Object object, String... fieldNames) {
+        if (object == null || fieldNames == null || fieldNames.length == 0) {
+            return false;
+        }
+        for (String fieldName : fieldNames) {
+            if (hasField(object, fieldName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断对象是否包含全部字段
+     *
+     * @param object     对象
+     * @param fieldNames 字段名数组
+     * @return true：包含全部字段；false：不包含
+     */
+    public static boolean hasAllFields(Object object, String... fieldNames) {
+        if (object == null || fieldNames == null || fieldNames.length == 0) {
+            return false;
+        }
+        for (String fieldName : fieldNames) {
+            if (!hasField(object, fieldName)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 拷贝对象属性，忽略 null 值
+     *
+     * @param source 源对象
+     * @param target 目标对象
+     * @return true：拷贝成功；false：拷贝失败
+     */
+    public static boolean copyPropertiesIgnoreNull(Object source, Object target) {
+        return copyProperties(source, target, true);
+    }
+
+    /**
+     * 拷贝对象属性，支持忽略 null 值和指定字段
+     *
+     * @param source       源对象
+     * @param target       目标对象
+     * @param ignoreNull   是否忽略 null 值
+     * @param ignoreFields 忽略字段名
+     * @return true：拷贝成功；false：拷贝失败
+     */
+    public static boolean copyProperties(Object source, Object target, boolean ignoreNull, String... ignoreFields) {
+        if (source == null || target == null) {
+            return false;
+        }
+        Set<String> ignoreFieldSet = new HashSet<>();
+        if (ignoreFields != null) {
+            ignoreFieldSet.addAll(Arrays.asList(ignoreFields));
+        }
+        try {
+            Field[] sourceFields = getAllFields(source.getClass());
+            for (Field sourceField : sourceFields) {
+                if (ignoreFieldSet.contains(sourceField.getName())) {
+                    continue;
+                }
+                sourceField.setAccessible(true);
+                Object value = sourceField.get(source);
+                if (ignoreNull && value == null) {
+                    continue;
+                }
+
+                Field targetField = getDeclaredField(target.getClass(), sourceField.getName());
+                if (targetField == null || java.lang.reflect.Modifier.isFinal(targetField.getModifiers())) {
+                    continue;
+                }
+                targetField.setAccessible(true);
+                if (isAssignableValue(targetField.getType(), value)) {
+                    targetField.set(target, value);
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 对象转 Map，默认不忽略 null 值
+     *
+     * @param object 对象
+     * @return Map 对象
+     */
+    public static Map<String, Object> toMap(Object object) {
+        return toMap(object, false);
+    }
+
+    /**
+     * 对象转 Map
+     *
+     * @param object     对象
+     * @param ignoreNull 是否忽略 null 值
+     * @return Map 对象
+     */
+    public static Map<String, Object> toMap(Object object, boolean ignoreNull) {
+        return toMap(object, ignoreNull, true, true);
+    }
+
+    /**
+     * 对象转 Map
+     *
+     * @param object          对象
+     * @param ignoreNull      是否忽略 null 值
+     * @param ignoreStatic    是否忽略 static 字段
+     * @param ignoreTransient 是否忽略 transient 字段
+     * @return Map 对象
+     */
+    public static Map<String, Object> toMap(Object object, boolean ignoreNull, boolean ignoreStatic, boolean ignoreTransient) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (object == null) {
+            return result;
+        }
+        Field[] fields = getAllFields(object.getClass());
+        for (Field field : fields) {
+            int modifiers = field.getModifiers();
+            if (ignoreStatic && java.lang.reflect.Modifier.isStatic(modifiers)) {
+                continue;
+            }
+            if (ignoreTransient && java.lang.reflect.Modifier.isTransient(modifiers)) {
+                continue;
+            }
+            try {
+                field.setAccessible(true);
+                Object value = field.get(object);
+                if (ignoreNull && value == null) {
+                    continue;
+                }
+                result.put(field.getName(), value);
+            } catch (IllegalAccessException e) {
+                // ignore
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Map 填充对象属性
+     *
+     * @param map    Map 数据
+     * @param target 目标对象
+     * @param <T>    目标对象类型
+     * @return true：填充成功；false：填充失败
+     */
+    public static <T> boolean fillObjectFromMap(Map<String, ?> map, T target) {
+        if (map == null || map.isEmpty() || target == null) {
+            return false;
+        }
+        try {
+            for (Map.Entry<String, ?> entry : map.entrySet()) {
+                Field field = getDeclaredField(target.getClass(), entry.getKey());
+                if (field == null || java.lang.reflect.Modifier.isFinal(field.getModifiers())) {
+                    continue;
+                }
+                Object value = entry.getValue();
+                if (!isAssignableValue(field.getType(), value)) {
+                    continue;
+                }
+                field.setAccessible(true);
+                field.set(target, value);
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Map 转对象
+     *
+     * @param map         Map 数据
+     * @param targetClass 目标对象类型
+     * @param <T>         目标对象类型
+     * @return 目标对象，转换失败返回 null
+     */
+    public static <T> T mapToObject(Map<String, ?> map, Class<T> targetClass) {
+        if (map == null || targetClass == null) {
+            return null;
+        }
+        T target = newInstance(targetClass);
+        if (target == null) {
+            return null;
+        }
+        fillObjectFromMap(map, target);
+        return target;
+    }
+
+    /**
+     * 对象为 null 时返回空字符串，否则返回对象字符串
+     *
+     * @param object 对象
+     * @return 字符串
+     */
+    public static String nullToEmpty(Object object) {
+        return object == null ? "" : object.toString();
+    }
+
+    /**
+     * 对象为 null 时返回默认字符串，否则返回对象字符串
+     *
+     * @param object       对象
+     * @param defaultValue 默认字符串
+     * @return 字符串
+     */
+    public static String toStringOrDefault(Object object, String defaultValue) {
+        return object == null ? defaultValue : object.toString();
+    }
+
+    /**
+     * 空对象转 null
+     *
+     * @param object 对象
+     * @param <T>    对象类型
+     * @return 空对象返回 null，否则返回原对象
+     */
+    public static <T> T emptyToNull(T object) {
+        return isEmpty(object) ? null : object;
+    }
+
+    /**
+     * 获取对象标识字符串
+     *
+     * @param object 对象
+     * @return 对象标识字符串，对象为 null 返回 null
+     */
+    public static String identityToString(Object object) {
+        if (object == null) {
+            return null;
+        }
+        return object.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(object));
+    }
+
+    /**
+     * 计算多个对象的 hash 值
+     *
+     * @param objects 对象数组
+     * @return hash 值
+     */
+    public static int hash(Object... objects) {
+        return Arrays.hashCode(objects);
+    }
+
+    /**
+     * 获取指定类的声明方法（支持继承层级）
+     *
+     * @param clazz          类
+     * @param methodName     方法名
+     * @param parameterTypes 参数类型
+     * @return 方法对象，如果找不到返回 null
+     */
+    private static Method getDeclaredMethod(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
+        while (clazz != null && clazz != Object.class) {
+            try {
+                return clazz.getDeclaredMethod(methodName, parameterTypes);
+            } catch (NoSuchMethodException e) {
+                clazz = clazz.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 判断字段值是否可以赋值给目标类型
+     *
+     * @param targetType 目标类型
+     * @param value      字段值
+     * @return true：可以赋值；false：不可赋值
+     */
+    private static boolean isAssignableValue(Class<?> targetType, Object value) {
+        if (targetType == null) {
+            return false;
+        }
+        if (value == null) {
+            return !targetType.isPrimitive();
+        }
+        Class<?> valueType = value.getClass();
+        if (targetType.isPrimitive()) {
+            return primitiveToWrapper(targetType).isAssignableFrom(valueType);
+        }
+        return targetType.isAssignableFrom(valueType);
+    }
+
+    /**
+     * 基本类型转包装类型
+     *
+     * @param clazz 基本类型
+     * @return 包装类型
+     */
+    private static Class<?> primitiveToWrapper(Class<?> clazz) {
+        if (clazz == int.class) {
+            return Integer.class;
+        }
+        if (clazz == long.class) {
+            return Long.class;
+        }
+        if (clazz == double.class) {
+            return Double.class;
+        }
+        if (clazz == float.class) {
+            return Float.class;
+        }
+        if (clazz == boolean.class) {
+            return Boolean.class;
+        }
+        if (clazz == char.class) {
+            return Character.class;
+        }
+        if (clazz == byte.class) {
+            return Byte.class;
+        }
+        if (clazz == short.class) {
+            return Short.class;
+        }
+        if (clazz == void.class) {
+            return Void.class;
+        }
+        return clazz;
+    }
 }

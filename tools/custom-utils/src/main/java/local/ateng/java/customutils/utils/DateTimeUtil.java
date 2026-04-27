@@ -923,4 +923,899 @@ public final class DateTimeUtil {
         return listDateTimeRange(start, end, ChronoUnit.SECONDS, 1, pattern);
     }
 
+    /**
+     * 解析字符串为 LocalDate
+     *
+     * @param dateStr 日期字符串
+     * @return LocalDate 对象
+     */
+    public static LocalDate parseDate(String dateStr) {
+        return parseDate(dateStr, DEFAULT_DATE_PATTERN);
+    }
+
+    /**
+     * 解析字符串为 LocalDate
+     *
+     * @param dateStr 日期字符串
+     * @param pattern 日期格式
+     * @return LocalDate 对象
+     */
+    public static LocalDate parseDate(String dateStr, String pattern) {
+        if (dateStr == null || pattern == null) {
+            return null;
+        }
+        return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern));
+    }
+
+    /**
+     * 解析字符串为 LocalDateTime
+     *
+     * @param dateTimeStr 日期时间字符串
+     * @return LocalDateTime 对象
+     */
+    public static LocalDateTime parseDateTime(String dateTimeStr) {
+        return parseDateTime(dateTimeStr, DEFAULT_DATE_TIME_PATTERN);
+    }
+
+    /**
+     * 解析字符串为 LocalDateTime
+     *
+     * @param dateTimeStr 日期时间字符串
+     * @param pattern     日期时间格式
+     * @return LocalDateTime 对象
+     */
+    public static LocalDateTime parseDateTime(String dateTimeStr, String pattern) {
+        if (dateTimeStr == null || pattern == null) {
+            return null;
+        }
+        return LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ofPattern(pattern));
+    }
+
+    /**
+     * 校验字符串是否符合指定日期格式
+     *
+     * @param dateStr 日期字符串
+     * @param pattern 日期格式
+     * @return true 表示格式正确
+     */
+    public static boolean isValidDateFormat(String dateStr, String pattern) {
+        if (dateStr == null || pattern == null) {
+            return false;
+        }
+        try {
+            LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 校验字符串是否符合指定日期时间格式
+     *
+     * @param dateTimeStr 日期时间字符串
+     * @param pattern     日期时间格式
+     * @return true 表示格式正确
+     */
+    public static boolean isValidDateTimeFormat(String dateTimeStr, String pattern) {
+        if (dateTimeStr == null || pattern == null) {
+            return false;
+        }
+        try {
+            LocalDateTime.parse(dateTimeStr, DateTimeFormatter.ofPattern(pattern));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 指定日期加指定天数
+     *
+     * @param date 日期
+     * @param days 天数（可为负数）
+     * @return 计算后的 LocalDate
+     */
+    public static LocalDate plusDays(LocalDate date, long days) {
+        return date != null ? date.plusDays(days) : null;
+    }
+
+    /**
+     * 指定日期加指定周数
+     *
+     * @param date  日期
+     * @param weeks 周数（可为负数）
+     * @return 计算后的 LocalDate
+     */
+    public static LocalDate plusWeeks(LocalDate date, long weeks) {
+        return date != null ? date.plusWeeks(weeks) : null;
+    }
+
+    /**
+     * 指定日期加指定月数
+     *
+     * @param date   日期
+     * @param months 月数（可为负数）
+     * @return 计算后的 LocalDate
+     */
+    public static LocalDate plusMonths(LocalDate date, long months) {
+        return date != null ? date.plusMonths(months) : null;
+    }
+
+    /**
+     * 指定日期加指定年数
+     *
+     * @param date  日期
+     * @param years 年数（可为负数）
+     * @return 计算后的 LocalDate
+     */
+    public static LocalDate plusYears(LocalDate date, long years) {
+        return date != null ? date.plusYears(years) : null;
+    }
+
+    /**
+     * 指定时间加指定秒数
+     *
+     * @param dateTime 日期时间
+     * @param seconds  秒数（可为负数）
+     * @return 计算后的 LocalDateTime
+     */
+    public static LocalDateTime plusSeconds(LocalDateTime dateTime, long seconds) {
+        return dateTime != null ? dateTime.plusSeconds(seconds) : null;
+    }
+
+    /**
+     * 指定时间加指定分钟数
+     *
+     * @param dateTime 日期时间
+     * @param minutes  分钟数（可为负数）
+     * @return 计算后的 LocalDateTime
+     */
+    public static LocalDateTime plusMinutes(LocalDateTime dateTime, long minutes) {
+        return dateTime != null ? dateTime.plusMinutes(minutes) : null;
+    }
+
+    /**
+     * 指定时间加指定小时数
+     *
+     * @param dateTime 日期时间
+     * @param hours    小时数（可为负数）
+     * @return 计算后的 LocalDateTime
+     */
+    public static LocalDateTime plusHours(LocalDateTime dateTime, long hours) {
+        return dateTime != null ? dateTime.plusHours(hours) : null;
+    }
+
+    /**
+     * 指定时间加指定天数
+     *
+     * @param dateTime 日期时间
+     * @param days     天数（可为负数）
+     * @return 计算后的 LocalDateTime
+     */
+    public static LocalDateTime plusDays(LocalDateTime dateTime, long days) {
+        return dateTime != null ? dateTime.plusDays(days) : null;
+    }
+
+    /**
+     * 指定时间加指定周数
+     *
+     * @param dateTime 日期时间
+     * @param weeks    周数（可为负数）
+     * @return 计算后的 LocalDateTime
+     */
+    public static LocalDateTime plusWeeks(LocalDateTime dateTime, long weeks) {
+        return dateTime != null ? dateTime.plusWeeks(weeks) : null;
+    }
+
+    /**
+     * 指定时间加指定月数
+     *
+     * @param dateTime 日期时间
+     * @param months   月数（可为负数）
+     * @return 计算后的 LocalDateTime
+     */
+    public static LocalDateTime plusMonths(LocalDateTime dateTime, long months) {
+        return dateTime != null ? dateTime.plusMonths(months) : null;
+    }
+
+    /**
+     * 指定时间加指定年数
+     *
+     * @param dateTime 日期时间
+     * @param years    年数（可为负数）
+     * @return 计算后的 LocalDateTime
+     */
+    public static LocalDateTime plusYears(LocalDateTime dateTime, long years) {
+        return dateTime != null ? dateTime.plusYears(years) : null;
+    }
+
+    /**
+     * 获取指定日期当天开始时间
+     *
+     * @param dateTime 日期时间
+     * @return 当天开始时间
+     */
+    public static LocalDateTime getStartOfDay(LocalDateTime dateTime) {
+        return dateTime != null ? dateTime.toLocalDate().atStartOfDay() : null;
+    }
+
+    /**
+     * 获取指定日期当天结束时间
+     *
+     * @param dateTime 日期时间
+     * @return 当天结束时间
+     */
+    public static LocalDateTime getEndOfDay(LocalDateTime dateTime) {
+        return dateTime != null ? dateTime.toLocalDate().atTime(LocalTime.MAX) : null;
+    }
+
+    /**
+     * 获取指定日期所在年的开始时间
+     *
+     * @param date 日期
+     * @return 年开始时间
+     */
+    public static LocalDateTime getStartOfYear(LocalDate date) {
+        if (date == null) {
+            return null;
+        }
+        return date.withDayOfYear(1).atStartOfDay();
+    }
+
+    /**
+     * 获取指定日期所在年的结束时间
+     *
+     * @param date 日期
+     * @return 年结束时间
+     */
+    public static LocalDateTime getEndOfYear(LocalDate date) {
+        if (date == null) {
+            return null;
+        }
+        return date.withDayOfYear(date.lengthOfYear()).atTime(LocalTime.MAX);
+    }
+
+    /**
+     * 获取指定日期所在季度的开始时间
+     *
+     * @param date 日期
+     * @return 季度开始时间
+     */
+    public static LocalDateTime getStartOfQuarter(LocalDate date) {
+        if (date == null) {
+            return null;
+        }
+        int firstMonthOfQuarter = ((date.getMonthValue() - 1) / 3) * 3 + 1;
+        return LocalDate.of(date.getYear(), firstMonthOfQuarter, 1).atStartOfDay();
+    }
+
+    /**
+     * 获取指定日期所在季度的结束时间
+     *
+     * @param date 日期
+     * @return 季度结束时间
+     */
+    public static LocalDateTime getEndOfQuarter(LocalDate date) {
+        if (date == null) {
+            return null;
+        }
+        int firstMonthOfQuarter = ((date.getMonthValue() - 1) / 3) * 3 + 1;
+        LocalDate lastMonthOfQuarter = LocalDate.of(date.getYear(), firstMonthOfQuarter, 1).plusMonths(2);
+        return lastMonthOfQuarter.withDayOfMonth(lastMonthOfQuarter.lengthOfMonth()).atTime(LocalTime.MAX);
+    }
+
+    /**
+     * 获取指定时间所在小时的开始时间
+     *
+     * @param dateTime 日期时间
+     * @return 小时开始时间
+     */
+    public static LocalDateTime getStartOfHour(LocalDateTime dateTime) {
+        return dateTime != null ? dateTime.truncatedTo(ChronoUnit.HOURS) : null;
+    }
+
+    /**
+     * 获取指定时间所在小时的结束时间
+     *
+     * @param dateTime 日期时间
+     * @return 小时结束时间
+     */
+    public static LocalDateTime getEndOfHour(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.truncatedTo(ChronoUnit.HOURS).plusHours(1).minusNanos(1);
+    }
+
+    /**
+     * 获取指定时间所在分钟的开始时间
+     *
+     * @param dateTime 日期时间
+     * @return 分钟开始时间
+     */
+    public static LocalDateTime getStartOfMinute(LocalDateTime dateTime) {
+        return dateTime != null ? dateTime.truncatedTo(ChronoUnit.MINUTES) : null;
+    }
+
+    /**
+     * 获取指定时间所在分钟的结束时间
+     *
+     * @param dateTime 日期时间
+     * @return 分钟结束时间
+     */
+    public static LocalDateTime getEndOfMinute(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.truncatedTo(ChronoUnit.MINUTES).plusMinutes(1).minusNanos(1);
+    }
+
+    /**
+     * 获取指定日期所在月第一天
+     *
+     * @param date 日期
+     * @return 月第一天
+     */
+    public static LocalDate getFirstDayOfMonth(LocalDate date) {
+        return date != null ? date.withDayOfMonth(1) : null;
+    }
+
+    /**
+     * 获取指定日期所在月最后一天
+     *
+     * @param date 日期
+     * @return 月最后一天
+     */
+    public static LocalDate getLastDayOfMonth(LocalDate date) {
+        return date != null ? date.withDayOfMonth(date.lengthOfMonth()) : null;
+    }
+
+    /**
+     * 获取指定日期所在周的周一日期
+     *
+     * @param date 日期
+     * @return 周一日期
+     */
+    public static LocalDate getMondayOfWeek(LocalDate date) {
+        return date != null ? date.with(DayOfWeek.MONDAY) : null;
+    }
+
+    /**
+     * 获取指定日期所在周的周日日期
+     *
+     * @param date 日期
+     * @return 周日日期
+     */
+    public static LocalDate getSundayOfWeek(LocalDate date) {
+        return date != null ? date.with(DayOfWeek.SUNDAY) : null;
+    }
+
+    /**
+     * 判断 LocalDate 是否为今天
+     *
+     * @param date 日期
+     * @return 是否是今天
+     */
+    public static boolean isToday(LocalDate date) {
+        return date != null && LocalDate.now().isEqual(date);
+    }
+
+    /**
+     * 判断 LocalDate 是否为昨天
+     *
+     * @param date 日期
+     * @return 是否是昨天
+     */
+    public static boolean isYesterday(LocalDate date) {
+        return date != null && LocalDate.now().minusDays(1).isEqual(date);
+    }
+
+    /**
+     * 判断 LocalDateTime 是否为昨天
+     *
+     * @param dateTime 日期时间
+     * @return 是否是昨天
+     */
+    public static boolean isYesterday(LocalDateTime dateTime) {
+        return dateTime != null && isYesterday(dateTime.toLocalDate());
+    }
+
+    /**
+     * 判断 LocalDate 是否为明天
+     *
+     * @param date 日期
+     * @return 是否是明天
+     */
+    public static boolean isTomorrow(LocalDate date) {
+        return date != null && LocalDate.now().plusDays(1).isEqual(date);
+    }
+
+    /**
+     * 判断 LocalDateTime 是否为明天
+     *
+     * @param dateTime 日期时间
+     * @return 是否是明天
+     */
+    public static boolean isTomorrow(LocalDateTime dateTime) {
+        return dateTime != null && isTomorrow(dateTime.toLocalDate());
+    }
+
+    /**
+     * 判断是否为周末
+     *
+     * @param date 日期
+     * @return true 表示周末
+     */
+    public static boolean isWeekend(LocalDate date) {
+        if (date == null) {
+            return false;
+        }
+        DayOfWeek day = date.getDayOfWeek();
+        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
+    }
+
+    /**
+     * 判断是否为闰年
+     *
+     * @param date 日期
+     * @return true 表示闰年
+     */
+    public static boolean isLeapYear(LocalDate date) {
+        return date != null && date.isLeapYear();
+    }
+
+    /**
+     * 判断两个日期是否在同一年
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 是否同年
+     */
+    public static boolean isSameYear(LocalDate d1, LocalDate d2) {
+        return d1 != null && d2 != null && d1.getYear() == d2.getYear();
+    }
+
+    /**
+     * 判断两个日期是否在同一季度
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 是否同季度
+     */
+    public static boolean isSameQuarter(LocalDate d1, LocalDate d2) {
+        return d1 != null && d2 != null
+                && d1.getYear() == d2.getYear()
+                && getQuarter(d1) == getQuarter(d2);
+    }
+
+    /**
+     * 判断两个日期是否在同一 ISO 周
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 是否同一周
+     */
+    public static boolean isSameWeek(LocalDate d1, LocalDate d2) {
+        if (d1 == null || d2 == null) {
+            return false;
+        }
+        java.time.temporal.WeekFields weekFields = java.time.temporal.WeekFields.ISO;
+        return d1.get(weekFields.weekBasedYear()) == d2.get(weekFields.weekBasedYear())
+                && d1.get(weekFields.weekOfWeekBasedYear()) == d2.get(weekFields.weekOfWeekBasedYear());
+    }
+
+    /**
+     * 判断目标日期是否在指定日期范围内（含边界）
+     *
+     * @param target 目标日期
+     * @param start  开始日期
+     * @param end    结束日期
+     * @return true 表示在范围内
+     */
+    public static boolean isBetween(LocalDate target, LocalDate start, LocalDate end) {
+        return target != null && start != null && end != null
+                && !target.isBefore(start) && !target.isAfter(end);
+    }
+
+    /**
+     * 判断日期是否早于另一个日期
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 是否早于
+     */
+    public static boolean isBefore(LocalDate d1, LocalDate d2) {
+        return d1 != null && d2 != null && d1.isBefore(d2);
+    }
+
+    /**
+     * 判断日期是否晚于另一个日期
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 是否晚于
+     */
+    public static boolean isAfter(LocalDate d1, LocalDate d2) {
+        return d1 != null && d2 != null && d1.isAfter(d2);
+    }
+
+    /**
+     * 判断两个日期是否相等
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 是否相等
+     */
+    public static boolean isEqual(LocalDate d1, LocalDate d2) {
+        return d1 != null && d2 != null && d1.isEqual(d2);
+    }
+
+    /**
+     * 计算两个时间之间的毫秒数差
+     *
+     * @param start 起始时间
+     * @param end   结束时间
+     * @return 毫秒数差
+     */
+    public static long millisBetween(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return ChronoUnit.MILLIS.between(start, end);
+    }
+
+    /**
+     * 计算两个时间之间的分钟数差
+     *
+     * @param start 起始时间
+     * @param end   结束时间
+     * @return 分钟数差
+     */
+    public static long minutesBetween(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return ChronoUnit.MINUTES.between(start, end);
+    }
+
+    /**
+     * 计算两个时间之间的小时数差
+     *
+     * @param start 起始时间
+     * @param end   结束时间
+     * @return 小时数差
+     */
+    public static long hoursBetween(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return ChronoUnit.HOURS.between(start, end);
+    }
+
+    /**
+     * 计算两个时间之间的天数差
+     *
+     * @param start 起始时间
+     * @param end   结束时间
+     * @return 天数差
+     */
+    public static long daysBetween(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null) {
+            return 0L;
+        }
+        return ChronoUnit.DAYS.between(start, end);
+    }
+
+    /**
+     * 将 LocalDateTime 转为时间戳（秒）
+     *
+     * @param dateTime LocalDateTime
+     * @return 秒级时间戳
+     */
+    public static long toEpochSecond(LocalDateTime dateTime) {
+        return toEpochSecond(dateTime, ZoneId.systemDefault());
+    }
+
+    /**
+     * 将 LocalDateTime 按指定时区转为时间戳（秒）
+     *
+     * @param dateTime LocalDateTime
+     * @param zoneId   时区
+     * @return 秒级时间戳
+     */
+    public static long toEpochSecond(LocalDateTime dateTime, ZoneId zoneId) {
+        if (dateTime == null || zoneId == null) {
+            return 0L;
+        }
+        return dateTime.atZone(zoneId).toEpochSecond();
+    }
+
+    /**
+     * 将 LocalDateTime 按指定时区转为时间戳（毫秒）
+     *
+     * @param dateTime LocalDateTime
+     * @param zoneId   时区
+     * @return 毫秒时间戳
+     */
+    public static long toEpochMilli(LocalDateTime dateTime, ZoneId zoneId) {
+        if (dateTime == null || zoneId == null) {
+            return 0L;
+        }
+        return dateTime.atZone(zoneId).toInstant().toEpochMilli();
+    }
+
+    /**
+     * 从时间戳（秒）构造 LocalDateTime
+     *
+     * @param epochSecond 秒级时间戳
+     * @return LocalDateTime
+     */
+    public static LocalDateTime fromEpochSecond(long epochSecond) {
+        return fromEpochSecond(epochSecond, ZoneId.systemDefault());
+    }
+
+    /**
+     * 从时间戳（秒）按指定时区构造 LocalDateTime
+     *
+     * @param epochSecond 秒级时间戳
+     * @param zoneId      时区
+     * @return LocalDateTime
+     */
+    public static LocalDateTime fromEpochSecond(long epochSecond, ZoneId zoneId) {
+        if (zoneId == null) {
+            return null;
+        }
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSecond), zoneId);
+    }
+
+    /**
+     * 从时间戳（毫秒）按指定时区构造 LocalDateTime
+     *
+     * @param epochMilli 毫秒时间戳
+     * @param zoneId     时区
+     * @return LocalDateTime
+     */
+    public static LocalDateTime fromEpochMilli(long epochMilli, ZoneId zoneId) {
+        if (zoneId == null) {
+            return null;
+        }
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), zoneId);
+    }
+
+    /**
+     * 将 java.util.Date 转为 LocalDate
+     *
+     * @param date Date 对象
+     * @return LocalDate
+     */
+    public static LocalDate toLocalDate(Date date) {
+        if (date == null) {
+            return null;
+        }
+        return Instant.ofEpochMilli(date.getTime()).atZone(ZoneId.systemDefault()).toLocalDate();
+    }
+
+    /**
+     * 将 LocalDate 转为 java.util.Date（当天开始时间）
+     *
+     * @param date LocalDate 对象
+     * @return Date
+     */
+    public static Date toDate(LocalDate date) {
+        if (date == null) {
+            return null;
+        }
+        return Date.from(date.atStartOfDay(ZoneId.systemDefault()).toInstant());
+    }
+
+    /**
+     * 合并 LocalDate 和 LocalTime 为 LocalDateTime
+     *
+     * @param date 日期
+     * @param time 时间
+     * @return LocalDateTime
+     */
+    public static LocalDateTime toLocalDateTime(LocalDate date, LocalTime time) {
+        if (date == null || time == null) {
+            return null;
+        }
+        return LocalDateTime.of(date, time);
+    }
+
+    /**
+     * 按指定时间构造 LocalDateTime
+     *
+     * @param date   日期
+     * @param hour   小时
+     * @param minute 分钟
+     * @param second 秒
+     * @return LocalDateTime
+     */
+    public static LocalDateTime toLocalDateTime(LocalDate date, int hour, int minute, int second) {
+        if (date == null) {
+            return null;
+        }
+        return date.atTime(hour, minute, second);
+    }
+
+    /**
+     * 获取两个日期中较早的日期
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 较早日期
+     */
+    public static LocalDate min(LocalDate d1, LocalDate d2) {
+        if (d1 == null) {
+            return d2;
+        }
+        if (d2 == null) {
+            return d1;
+        }
+        return d1.isBefore(d2) ? d1 : d2;
+    }
+
+    /**
+     * 获取两个日期中较晚的日期
+     *
+     * @param d1 日期1
+     * @param d2 日期2
+     * @return 较晚日期
+     */
+    public static LocalDate max(LocalDate d1, LocalDate d2) {
+        if (d1 == null) {
+            return d2;
+        }
+        if (d2 == null) {
+            return d1;
+        }
+        return d1.isAfter(d2) ? d1 : d2;
+    }
+
+    /**
+     * 获取两个时间中较早的时间
+     *
+     * @param dt1 时间1
+     * @param dt2 时间2
+     * @return 较早时间
+     */
+    public static LocalDateTime min(LocalDateTime dt1, LocalDateTime dt2) {
+        if (dt1 == null) {
+            return dt2;
+        }
+        if (dt2 == null) {
+            return dt1;
+        }
+        return dt1.isBefore(dt2) ? dt1 : dt2;
+    }
+
+    /**
+     * 获取两个时间中较晚的时间
+     *
+     * @param dt1 时间1
+     * @param dt2 时间2
+     * @return 较晚时间
+     */
+    public static LocalDateTime max(LocalDateTime dt1, LocalDateTime dt2) {
+        if (dt1 == null) {
+            return dt2;
+        }
+        if (dt2 == null) {
+            return dt1;
+        }
+        return dt1.isAfter(dt2) ? dt1 : dt2;
+    }
+
+    /**
+     * 将日期限制在指定范围内
+     *
+     * @param date  目标日期
+     * @param start 开始日期
+     * @param end   结束日期
+     * @return 限制后的日期
+     */
+    public static LocalDate clamp(LocalDate date, LocalDate start, LocalDate end) {
+        if (date == null) {
+            return null;
+        }
+        if (start != null && date.isBefore(start)) {
+            return start;
+        }
+        if (end != null && date.isAfter(end)) {
+            return end;
+        }
+        return date;
+    }
+
+    /**
+     * 将时间限制在指定范围内
+     *
+     * @param dateTime 目标时间
+     * @param start    开始时间
+     * @param end      结束时间
+     * @return 限制后的时间
+     */
+    public static LocalDateTime clamp(LocalDateTime dateTime, LocalDateTime start, LocalDateTime end) {
+        if (dateTime == null) {
+            return null;
+        }
+        if (start != null && dateTime.isBefore(start)) {
+            return start;
+        }
+        if (end != null && dateTime.isAfter(end)) {
+            return end;
+        }
+        return dateTime;
+    }
+
+    /**
+     * 获取指定日期范围内的所有日期
+     *
+     * @param start 开始日期（含）
+     * @param end   结束日期（含）
+     * @return 日期列表
+     */
+    public static List<LocalDate> listDateRange(LocalDate start, LocalDate end) {
+        return listDateRange(start, end, 1);
+    }
+
+    /**
+     * 按指定步长获取日期范围内的日期
+     *
+     * @param start 开始日期（含）
+     * @param end   结束日期（含）
+     * @param step  步长，单位：天
+     * @return 日期列表
+     */
+    public static List<LocalDate> listDateRange(LocalDate start, LocalDate end, long step) {
+        if (start == null || end == null || step <= 0 || start.isAfter(end)) {
+            return Collections.emptyList();
+        }
+        List<LocalDate> result = new ArrayList<>();
+        LocalDate current = start;
+        while (!current.isAfter(end)) {
+            result.add(current);
+            current = current.plusDays(step);
+        }
+        return result;
+    }
+
+    /**
+     * 获取两个日期范围的交集
+     *
+     * @param start1 第一个日期范围开始日期
+     * @param end1   第一个日期范围结束日期
+     * @param start2 第二个日期范围开始日期
+     * @param end2   第二个日期范围结束日期
+     * @return 日期范围交集，空数组表示无交集
+     */
+    public static LocalDate[] intersection(LocalDate start1, LocalDate end1, LocalDate start2, LocalDate end2) {
+        if (start1 == null || end1 == null || start2 == null || end2 == null || start1.isAfter(end1) || start2.isAfter(end2)) {
+            return new LocalDate[0];
+        }
+        LocalDate start = max(start1, start2);
+        LocalDate end = min(end1, end2);
+        return start.isAfter(end) ? new LocalDate[0] : new LocalDate[]{start, end};
+    }
+
+    /**
+     * 获取两个时间范围的交集
+     *
+     * @param start1 第一个时间范围开始时间
+     * @param end1   第一个时间范围结束时间
+     * @param start2 第二个时间范围开始时间
+     * @param end2   第二个时间范围结束时间
+     * @return 时间范围交集，空数组表示无交集
+     */
+    public static LocalDateTime[] intersection(LocalDateTime start1, LocalDateTime end1,
+                                               LocalDateTime start2, LocalDateTime end2) {
+        if (start1 == null || end1 == null || start2 == null || end2 == null || start1.isAfter(end1) || start2.isAfter(end2)) {
+            return new LocalDateTime[0];
+        }
+        LocalDateTime start = max(start1, start2);
+        LocalDateTime end = min(end1, end2);
+        return start.isAfter(end) ? new LocalDateTime[0] : new LocalDateTime[]{start, end};
+    }
+
 }

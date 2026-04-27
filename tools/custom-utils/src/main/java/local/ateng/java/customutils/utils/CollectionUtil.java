@@ -3638,4 +3638,768 @@ public final class CollectionUtil {
         }
     }
 
+    /**
+     * 判断集合是否只有一个元素
+     *
+     * @param collection 输入集合
+     * @return 只有一个元素返回 true，否则返回 false
+     */
+    public static boolean isSingle(Collection<?> collection) {
+        return collection != null && collection.size() == 1;
+    }
+
+    /**
+     * 获取集合第一个元素，若不存在则返回默认值
+     *
+     * @param collection   输入集合
+     * @param defaultValue 默认值
+     * @param <T>          元素类型
+     * @return 第一个元素或默认值
+     */
+    public static <T> T getFirstOrDefault(Collection<T> collection, T defaultValue) {
+        T value = getFirst(collection);
+        return value == null ? defaultValue : value;
+    }
+
+    /**
+     * 获取列表最后一个元素，若不存在则返回默认值
+     *
+     * @param list         输入列表
+     * @param defaultValue 默认值
+     * @param <T>          元素类型
+     * @return 最后一个元素或默认值
+     */
+    public static <T> T getLastOrDefault(List<T> list, T defaultValue) {
+        T value = getLast(list);
+        return value == null ? defaultValue : value;
+    }
+
+    /**
+     * List 为 null 时返回空 List
+     *
+     * @param list 输入列表
+     * @param <T>  元素类型
+     * @return 原列表或空列表
+     */
+    public static <T> List<T> emptyIfNull(List<T> list) {
+        return list == null ? Collections.emptyList() : list;
+    }
+
+    /**
+     * Set 为 null 时返回空 Set
+     *
+     * @param set 输入 Set
+     * @param <T> 元素类型
+     * @return 原 Set 或空 Set
+     */
+    public static <T> Set<T> emptyIfNull(Set<T> set) {
+        return set == null ? Collections.emptySet() : set;
+    }
+
+    /**
+     * Map 为 null 时返回空 Map
+     *
+     * @param map 输入 Map
+     * @param <K> key 类型
+     * @param <V> value 类型
+     * @return 原 Map 或空 Map
+     */
+    public static <K, V> Map<K, V> emptyIfNull(Map<K, V> map) {
+        return map == null ? Collections.emptyMap() : map;
+    }
+
+    /**
+     * 复制集合为可变 ArrayList
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 可变 List
+     */
+    public static <T> List<T> copyList(Collection<T> collection) {
+        if (isEmpty(collection)) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(collection);
+    }
+
+    /**
+     * 复制集合为可变 LinkedHashSet，保留遍历顺序并去重
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 可变 LinkedHashSet
+     */
+    public static <T> Set<T> copySet(Collection<T> collection) {
+        if (isEmpty(collection)) {
+            return new LinkedHashSet<>();
+        }
+        return new LinkedHashSet<>(collection);
+    }
+
+    /**
+     * 复制 Map 为可变 LinkedHashMap，保留遍历顺序
+     *
+     * @param map 输入 Map
+     * @param <K> key 类型
+     * @param <V> value 类型
+     * @return 可变 LinkedHashMap
+     */
+    public static <K, V> Map<K, V> copyMap(Map<K, V> map) {
+        if (isEmpty(map)) {
+            return new LinkedHashMap<>();
+        }
+        return new LinkedHashMap<>(map);
+    }
+
+    /**
+     * 转换为不可变 List
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 不可变 List
+     */
+    public static <T> List<T> unmodifiableList(Collection<T> collection) {
+        return Collections.unmodifiableList(copyList(collection));
+    }
+
+    /**
+     * 转换为不可变 Set
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 不可变 Set
+     */
+    public static <T> Set<T> unmodifiableSet(Collection<T> collection) {
+        return Collections.unmodifiableSet(copySet(collection));
+    }
+
+    /**
+     * 转换为不可变 Map
+     *
+     * @param map 输入 Map
+     * @param <K> key 类型
+     * @param <V> value 类型
+     * @return 不可变 Map
+     */
+    public static <K, V> Map<K, V> unmodifiableMap(Map<K, V> map) {
+        return Collections.unmodifiableMap(copyMap(map));
+    }
+
+    /**
+     * 判断集合是否包含指定元素
+     *
+     * @param collection 输入集合
+     * @param value      目标元素
+     * @param <T>        元素类型
+     * @return 包含返回 true，否则返回 false
+     */
+    public static <T> boolean contains(Collection<T> collection, T value) {
+        return !isEmpty(collection) && collection.contains(value);
+    }
+
+    /**
+     * 判断集合是否包含全部目标元素
+     *
+     * @param collection 输入集合
+     * @param values     目标元素集合
+     * @param <T>        元素类型
+     * @return 全部包含返回 true，否则返回 false
+     */
+    public static <T> boolean containsAll(Collection<T> collection, Collection<T> values) {
+        if (isEmpty(values)) {
+            return true;
+        }
+        if (isEmpty(collection)) {
+            return false;
+        }
+        return collection.containsAll(values);
+    }
+
+    /**
+     * 查找第一个满足条件的元素索引
+     *
+     * @param collection 输入集合
+     * @param predicate  判断条件
+     * @param <T>        元素类型
+     * @return 索引位置，未找到返回 -1
+     */
+    public static <T> int indexOf(Collection<T> collection, Predicate<? super T> predicate) {
+        if (isEmpty(collection) || predicate == null) {
+            return -1;
+        }
+
+        int index = 0;
+        for (T item : collection) {
+            if (predicate.test(item)) {
+                return index;
+            }
+            index++;
+        }
+
+        return -1;
+    }
+
+    /**
+     * 查找最后一个满足条件的元素索引
+     *
+     * @param list      输入列表
+     * @param predicate 判断条件
+     * @param <T>       元素类型
+     * @return 索引位置，未找到返回 -1
+     */
+    public static <T> int lastIndexOf(List<T> list, Predicate<? super T> predicate) {
+        if (isEmpty(list) || predicate == null) {
+            return -1;
+        }
+
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (predicate.test(list.get(i))) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * 映射集合并过滤 null 结果
+     *
+     * @param collection 输入集合
+     * @param mapper     映射函数
+     * @param <T>        原始类型
+     * @param <R>        目标类型
+     * @return 映射后的非 null 列表
+     */
+    public static <T, R> List<R> mapNotNull(Collection<T> collection, Function<? super T, ? extends R> mapper) {
+        if (isEmpty(collection) || mapper == null) {
+            return Collections.emptyList();
+        }
+
+        return collection.stream()
+                .filter(Objects::nonNull)
+                .map(mapper)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 根据 Map 的 key 过滤
+     *
+     * @param map       输入 Map
+     * @param predicate key 判断条件
+     * @param <K>       key 类型
+     * @param <V>       value 类型
+     * @return 过滤后的 LinkedHashMap
+     */
+    public static <K, V> Map<K, V> filterMapByKey(Map<K, V> map, Predicate<? super K> predicate) {
+        Map<K, V> result = new LinkedHashMap<>();
+        if (isEmpty(map) || predicate == null) {
+            return result;
+        }
+
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            if (predicate.test(entry.getKey())) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 根据 Map.Entry 过滤
+     *
+     * @param map       输入 Map
+     * @param predicate Entry 判断条件
+     * @param <K>       key 类型
+     * @param <V>       value 类型
+     * @return 过滤后的 LinkedHashMap
+     */
+    public static <K, V> Map<K, V> filterMapByEntry(Map<K, V> map, Predicate<? super Map.Entry<K, V>> predicate) {
+        Map<K, V> result = new LinkedHashMap<>();
+        if (isEmpty(map) || predicate == null) {
+            return result;
+        }
+
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            if (predicate.test(entry)) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 移除 Map 中 value 为 null 的条目
+     *
+     * @param map 输入 Map
+     * @param <K> key 类型
+     * @param <V> value 类型
+     * @return 移除 null value 后的 LinkedHashMap
+     */
+    public static <K, V> Map<K, V> removeNullValues(Map<K, V> map) {
+        Map<K, V> result = new LinkedHashMap<>();
+        if (isEmpty(map)) {
+            return result;
+        }
+
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            if (entry.getValue() != null) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 移除 Map 中 key 或 value 为 null 的条目
+     *
+     * @param map 输入 Map
+     * @param <K> key 类型
+     * @param <V> value 类型
+     * @return 移除 null key 和 null value 后的 LinkedHashMap
+     */
+    public static <K, V> Map<K, V> removeNullEntries(Map<K, V> map) {
+        Map<K, V> result = new LinkedHashMap<>();
+        if (isEmpty(map)) {
+            return result;
+        }
+
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 安全获取 Map 中的值，缺失时返回默认值
+     *
+     * @param map          输入 Map
+     * @param key          key
+     * @param defaultValue 默认值
+     * @param <K>          key 类型
+     * @param <V>          value 类型
+     * @return Map 值或默认值
+     */
+    public static <K, V> V getOrDefault(Map<K, V> map, K key, V defaultValue) {
+        if (map == null || !map.containsKey(key)) {
+            return defaultValue;
+        }
+        V value = map.get(key);
+        return value == null ? defaultValue : value;
+    }
+
+    /**
+     * 统计集合中每个元素出现次数
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 元素出现次数 Map，保留首次出现顺序
+     */
+    public static <T> Map<T, Long> frequencyMap(Collection<T> collection) {
+        Map<T, Long> result = new LinkedHashMap<>();
+        if (isEmpty(collection)) {
+            return result;
+        }
+
+        for (T item : collection) {
+            result.put(item, result.getOrDefault(item, 0L) + 1L);
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取集合中出现次数最多的元素
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 出现次数最多的元素，若集合为空返回 null
+     */
+    public static <T> T mostFrequent(Collection<T> collection) {
+        if (isEmpty(collection)) {
+            return null;
+        }
+
+        Map<T, Long> frequencyMap = frequencyMap(collection);
+        T result = null;
+        long maxCount = Long.MIN_VALUE;
+
+        for (Map.Entry<T, Long> entry : frequencyMap.entrySet()) {
+            if (entry.getValue() > maxCount) {
+                maxCount = entry.getValue();
+                result = entry.getKey();
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取两个集合的并集列表，去重并保留出现顺序
+     *
+     * @param a   集合 A
+     * @param b   集合 B
+     * @param <T> 元素类型
+     * @return 并集列表
+     */
+    public static <T> List<T> unionList(Collection<T> a, Collection<T> b) {
+        LinkedHashSet<T> result = new LinkedHashSet<>();
+        if (!isEmpty(a)) {
+            result.addAll(a);
+        }
+        if (!isEmpty(b)) {
+            result.addAll(b);
+        }
+        return new ArrayList<>(result);
+    }
+
+    /**
+     * 获取两个集合的交集列表，保留集合 A 的遍历顺序
+     *
+     * @param a   集合 A
+     * @param b   集合 B
+     * @param <T> 元素类型
+     * @return 交集列表
+     */
+    public static <T> List<T> intersectionList(Collection<T> a, Collection<T> b) {
+        if (isEmpty(a) || isEmpty(b)) {
+            return Collections.emptyList();
+        }
+
+        Set<T> bSet = new HashSet<>(b);
+        List<T> result = new ArrayList<>();
+        for (T item : a) {
+            if (bSet.contains(item)) {
+                result.add(item);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取两个集合的差集列表，保留集合 A 的遍历顺序
+     *
+     * @param a   集合 A
+     * @param b   集合 B
+     * @param <T> 元素类型
+     * @return 差集列表
+     */
+    public static <T> List<T> differenceList(Collection<T> a, Collection<T> b) {
+        if (isEmpty(a)) {
+            return Collections.emptyList();
+        }
+        if (isEmpty(b)) {
+            return new ArrayList<>(a);
+        }
+
+        Set<T> bSet = new HashSet<>(b);
+        List<T> result = new ArrayList<>();
+        for (T item : a) {
+            if (!bSet.contains(item)) {
+                result.add(item);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取两个集合的对称差集，即只存在于其中一个集合中的元素
+     *
+     * @param a   集合 A
+     * @param b   集合 B
+     * @param <T> 元素类型
+     * @return 对称差集，去重并保留出现顺序
+     */
+    public static <T> Set<T> symmetricDifference(Collection<T> a, Collection<T> b) {
+        LinkedHashSet<T> result = new LinkedHashSet<>();
+
+        if (!isEmpty(a)) {
+            for (T item : a) {
+                if (isEmpty(b) || !b.contains(item)) {
+                    result.add(item);
+                }
+            }
+        }
+
+        if (!isEmpty(b)) {
+            for (T item : b) {
+                if (isEmpty(a) || !a.contains(item)) {
+                    result.add(item);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 将集合转换为 LinkedHashSet，保留遍历顺序并去重
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return LinkedHashSet
+     */
+    public static <T> Set<T> toLinkedHashSet(Collection<T> collection) {
+        if (isEmpty(collection)) {
+            return new LinkedHashSet<>();
+        }
+        return new LinkedHashSet<>(collection);
+    }
+
+    /**
+     * 安全截取子列表
+     *
+     * @param list      输入列表
+     * @param fromIndex 起始索引，包含
+     * @param toIndex   结束索引，不包含
+     * @param <T>       元素类型
+     * @return 子列表，索引非法时返回空列表
+     */
+    public static <T> List<T> safeSubList(List<T> list, int fromIndex, int toIndex) {
+        if (isEmpty(list) || fromIndex < 0 || toIndex <= fromIndex || fromIndex >= list.size()) {
+            return Collections.emptyList();
+        }
+
+        int end = Math.min(toIndex, list.size());
+        return new ArrayList<>(list.subList(fromIndex, end));
+    }
+
+    /**
+     * 截取集合前 n 个元素
+     *
+     * @param collection 输入集合
+     * @param n          截取数量
+     * @param <T>        元素类型
+     * @return 前 n 个元素列表
+     */
+    public static <T> List<T> limit(Collection<T> collection, int n) {
+        if (isEmpty(collection) || n <= 0) {
+            return Collections.emptyList();
+        }
+
+        return collection.stream()
+                .limit(n)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 跳过集合前 n 个元素
+     *
+     * @param collection 输入集合
+     * @param n          跳过数量
+     * @param <T>        元素类型
+     * @return 跳过后的元素列表
+     */
+    public static <T> List<T> skip(Collection<T> collection, int n) {
+        if (isEmpty(collection)) {
+            return Collections.emptyList();
+        }
+        if (n <= 0) {
+            return new ArrayList<>(collection);
+        }
+
+        return collection.stream()
+                .skip(n)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 随机获取集合中的一个元素
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 随机元素，集合为空返回 null
+     */
+    public static <T> T randomOne(Collection<T> collection) {
+        if (isEmpty(collection)) {
+            return null;
+        }
+
+        int index = ThreadLocalRandom.current().nextInt(collection.size());
+        if (collection instanceof List) {
+            return ((List<T>) collection).get(index);
+        }
+
+        int current = 0;
+        for (T item : collection) {
+            if (current == index) {
+                return item;
+            }
+            current++;
+        }
+
+        return null;
+    }
+
+    /**
+     * 打乱集合顺序，返回新列表
+     *
+     * @param collection 输入集合
+     * @param <T>        元素类型
+     * @return 打乱后的新列表
+     */
+    public static <T> List<T> shuffle(Collection<T> collection) {
+        if (isEmpty(collection)) {
+            return Collections.emptyList();
+        }
+
+        List<T> result = new ArrayList<>(collection);
+        Collections.shuffle(result);
+        return result;
+    }
+
+    /**
+     * 计算多个集合的笛卡尔积
+     *
+     * @param collections 多个集合
+     * @param <T>         元素类型
+     * @return 笛卡尔积结果
+     */
+    public static <T> List<List<T>> cartesianProduct(List<? extends Collection<T>> collections) {
+        if (isEmpty(collections)) {
+            return Collections.emptyList();
+        }
+
+        List<List<T>> result = new ArrayList<>();
+        result.add(new ArrayList<>());
+
+        for (Collection<T> collection : collections) {
+            if (isEmpty(collection)) {
+                return Collections.emptyList();
+            }
+
+            List<List<T>> current = new ArrayList<>();
+            for (List<T> prefix : result) {
+                for (T item : collection) {
+                    List<T> next = new ArrayList<>(prefix);
+                    next.add(item);
+                    current.add(next);
+                }
+            }
+            result = current;
+        }
+
+        return result;
+    }
+
+    /**
+     * 按滑动窗口切分列表
+     *
+     * @param list       输入列表
+     * @param windowSize 窗口大小
+     * @param step       滑动步长
+     * @param <T>        元素类型
+     * @return 窗口列表
+     */
+    public static <T> List<List<T>> slidingWindow(List<T> list, int windowSize, int step) {
+        if (isEmpty(list) || windowSize <= 0 || step <= 0) {
+            return Collections.emptyList();
+        }
+
+        List<List<T>> result = new ArrayList<>();
+        for (int i = 0; i + windowSize <= list.size(); i += step) {
+            result.add(new ArrayList<>(list.subList(i, i + windowSize)));
+        }
+
+        return result;
+    }
+
+    /**
+     * 向 Map<K, List<V>> 中追加单个元素
+     *
+     * @param map   目标 Map
+     * @param key   key
+     * @param value 待追加 value
+     * @param <K>   key 类型
+     * @param <V>   value 类型
+     */
+    public static <K, V> void addToMapList(Map<K, List<V>> map, K key, V value) {
+        if (map == null) {
+            return;
+        }
+        map.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+    }
+
+    /**
+     * 向 Map<K, List<V>> 中追加多个元素
+     *
+     * @param map    目标 Map
+     * @param key    key
+     * @param values 待追加 value 集合
+     * @param <K>    key 类型
+     * @param <V>    value 类型
+     */
+    public static <K, V> void addAllToMapList(Map<K, List<V>> map, K key, Collection<V> values) {
+        if (map == null || isEmpty(values)) {
+            return;
+        }
+        map.computeIfAbsent(key, k -> new ArrayList<>()).addAll(values);
+    }
+
+    /**
+     * 根据关联键填充值，目标字段为空时才填充
+     *
+     * @param sourceList        数据来源集合
+     * @param targetList        目标集合
+     * @param sourceKeyFunc     source 关联键获取函数
+     * @param targetKeyFunc     target 关联键获取函数
+     * @param valueGetter       source 值获取函数
+     * @param targetValueGetter target 当前值获取函数
+     * @param valueSetter       target 值设置函数
+     * @param <S>               source 类型
+     * @param <T>               target 类型
+     * @param <K>               关联键类型
+     * @param <V>               填充值类型
+     */
+    public static <S, T, K, V> void fillByKeyIfAbsent(
+            Collection<S> sourceList,
+            Collection<T> targetList,
+            Function<S, K> sourceKeyFunc,
+            Function<T, K> targetKeyFunc,
+            Function<S, V> valueGetter,
+            Function<T, V> targetValueGetter,
+            BiConsumer<T, V> valueSetter
+    ) {
+        if (isEmpty(sourceList) || isEmpty(targetList)
+                || sourceKeyFunc == null || targetKeyFunc == null
+                || valueGetter == null || targetValueGetter == null || valueSetter == null) {
+            return;
+        }
+
+        Map<K, S> sourceMap = sourceList.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> sourceKeyFunc.apply(item) != null)
+                .collect(Collectors.toMap(
+                        sourceKeyFunc,
+                        Function.identity(),
+                        (oldValue, newValue) -> oldValue
+                ));
+
+        for (T target : targetList) {
+            if (target == null || targetValueGetter.apply(target) != null) {
+                continue;
+            }
+
+            K key = targetKeyFunc.apply(target);
+            if (key == null) {
+                continue;
+            }
+
+            S source = sourceMap.get(key);
+            if (source == null) {
+                continue;
+            }
+
+            valueSetter.accept(target, valueGetter.apply(source));
+        }
+    }
+
 }

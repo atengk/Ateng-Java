@@ -2251,4 +2251,837 @@ public final class StringUtil {
         return result;
     }
 
+    /**
+     * null 转为空字符串。
+     *
+     * @param str 原始字符串
+     * @return 非 null 字符串
+     */
+    public static String nullToEmpty(String str) {
+        return str == null ? EMPTY : str;
+    }
+
+    /**
+     * 空字符串转为 null。
+     *
+     * @param str 原始字符串
+     * @return null 或原字符串
+     */
+    public static String emptyToNull(String str) {
+        return isEmpty(str) ? null : str;
+    }
+
+    /**
+     * 空白字符串转为 null。
+     *
+     * @param str 原始字符串
+     * @return null 或原字符串
+     */
+    public static String blankToNull(String str) {
+        return isBlank(str) ? null : str;
+    }
+
+    /**
+     * 当字符串为 null 时返回默认值。
+     *
+     * @param str          原始字符串
+     * @param defaultValue 默认值
+     * @return 原字符串或默认值
+     */
+    public static String defaultIfNull(String str, String defaultValue) {
+        return str == null ? defaultValue : str;
+    }
+
+    /**
+     * 当字符串为空时返回默认值。
+     *
+     * @param str          原始字符串
+     * @param defaultValue 默认值
+     * @return 原字符串或默认值
+     */
+    public static String defaultIfEmpty(String str, String defaultValue) {
+        return isEmpty(str) ? defaultValue : str;
+    }
+
+    /**
+     * 当字符串为空白时返回默认值。
+     *
+     * @param str          原始字符串
+     * @param defaultValue 默认值
+     * @return 原字符串或默认值
+     */
+    public static String defaultIfBlank(String str, String defaultValue) {
+        return isBlank(str) ? defaultValue : str;
+    }
+
+    /**
+     * 返回第一个非空白字符串。
+     *
+     * @param values 字符串数组
+     * @return 第一个非空白字符串，不存在时返回空字符串
+     */
+    public static String firstNotBlank(String... values) {
+        if (values == null || values.length == 0) {
+            return EMPTY;
+        }
+        for (String value : values) {
+            if (isNotBlank(value)) {
+                return value;
+            }
+        }
+        return EMPTY;
+    }
+
+    /**
+     * 判断字符串是否包含指定内容。
+     *
+     * @param str    原始字符串
+     * @param search 查找内容
+     * @return 包含返回 true，否则返回 false
+     */
+    public static boolean contains(String str, String search) {
+        return str != null && search != null && str.contains(search);
+    }
+
+    /**
+     * 判断字符串是否包含指定内容，忽略大小写。
+     *
+     * @param str    原始字符串
+     * @param search 查找内容
+     * @return 包含返回 true，否则返回 false
+     */
+    public static boolean containsIgnoreCase(String str, String search) {
+        return indexOfIgnoreCase(str, search) >= 0;
+    }
+
+    /**
+     * 判断字符串是否以指定前缀开头，忽略大小写。
+     *
+     * @param str    原始字符串
+     * @param prefix 前缀
+     * @return 是指定前缀返回 true，否则返回 false
+     */
+    public static boolean startsWithIgnoreCase(String str, String prefix) {
+        if (str == null || prefix == null || prefix.length() > str.length()) {
+            return false;
+        }
+        return str.regionMatches(true, 0, prefix, 0, prefix.length());
+    }
+
+    /**
+     * 判断字符串是否以指定后缀结尾，忽略大小写。
+     *
+     * @param str    原始字符串
+     * @param suffix 后缀
+     * @return 是指定后缀返回 true，否则返回 false
+     */
+    public static boolean endsWithIgnoreCase(String str, String suffix) {
+        if (str == null || suffix == null || suffix.length() > str.length()) {
+            return false;
+        }
+        int start = str.length() - suffix.length();
+        return str.regionMatches(true, start, suffix, 0, suffix.length());
+    }
+
+    /**
+     * 查找子串位置，忽略大小写。
+     *
+     * @param str    原始字符串
+     * @param search 查找内容
+     * @return 首次出现的位置，不存在返回 -1
+     */
+    public static int indexOfIgnoreCase(String str, String search) {
+        return indexOfIgnoreCase(str, search, 0);
+    }
+
+    /**
+     * 从指定位置查找子串位置，忽略大小写。
+     *
+     * @param str       原始字符串
+     * @param search    查找内容
+     * @param fromIndex 起始位置
+     * @return 首次出现的位置，不存在返回 -1
+     */
+    public static int indexOfIgnoreCase(String str, String search, int fromIndex) {
+        if (str == null || search == null) {
+            return -1;
+        }
+        if (fromIndex < 0) {
+            fromIndex = 0;
+        }
+        if (search.isEmpty()) {
+            return Math.min(fromIndex, str.length());
+        }
+
+        int max = str.length() - search.length();
+        if (fromIndex > max) {
+            return -1;
+        }
+
+        for (int i = fromIndex; i <= max; i++) {
+            if (str.regionMatches(true, i, search, 0, search.length())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 统计子串出现次数。
+     *
+     * @param str    原始字符串
+     * @param search 查找内容
+     * @return 出现次数
+     */
+    public static int countMatches(String str, String search) {
+        if (isEmpty(str) || isEmpty(search)) {
+            return 0;
+        }
+
+        int count = 0;
+        int index = 0;
+        while ((index = str.indexOf(search, index)) >= 0) {
+            count++;
+            index += search.length();
+        }
+        return count;
+    }
+
+    /**
+     * 判断字符串是否等于任意候选值。
+     *
+     * @param str        原始字符串
+     * @param candidates 候选值
+     * @return 匹配任意一个返回 true
+     */
+    public static boolean equalsAny(String str, String... candidates) {
+        if (candidates == null || candidates.length == 0) {
+            return false;
+        }
+        for (String candidate : candidates) {
+            if (Objects.equals(str, candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断字符串是否忽略大小写等于任意候选值。
+     *
+     * @param str        原始字符串
+     * @param candidates 候选值
+     * @return 匹配任意一个返回 true
+     */
+    public static boolean equalsAnyIgnoreCase(String str, String... candidates) {
+        if (candidates == null || candidates.length == 0) {
+            return false;
+        }
+        for (String candidate : candidates) {
+            if (equalsIgnoreCase(str, candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 截取指定分隔符之前的内容。
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @return 分隔符之前的内容
+     */
+    public static String substringBefore(String str, String delimiter) {
+        if (str == null || delimiter == null) {
+            return str;
+        }
+        if (delimiter.isEmpty()) {
+            return EMPTY;
+        }
+        int index = str.indexOf(delimiter);
+        return index < 0 ? str : str.substring(0, index);
+    }
+
+    /**
+     * 截取指定分隔符之后的内容。
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @return 分隔符之后的内容
+     */
+    public static String substringAfter(String str, String delimiter) {
+        if (str == null) {
+            return null;
+        }
+        if (delimiter == null) {
+            return EMPTY;
+        }
+        if (delimiter.isEmpty()) {
+            return str;
+        }
+        int index = str.indexOf(delimiter);
+        return index < 0 ? EMPTY : str.substring(index + delimiter.length());
+    }
+
+    /**
+     * 截取最后一个指定分隔符之前的内容。
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @return 最后一个分隔符之前的内容
+     */
+    public static String substringBeforeLast(String str, String delimiter) {
+        if (str == null || delimiter == null) {
+            return str;
+        }
+        if (delimiter.isEmpty()) {
+            return str;
+        }
+        int index = str.lastIndexOf(delimiter);
+        return index < 0 ? str : str.substring(0, index);
+    }
+
+    /**
+     * 截取最后一个指定分隔符之后的内容。
+     *
+     * @param str       原始字符串
+     * @param delimiter 分隔符
+     * @return 最后一个分隔符之后的内容
+     */
+    public static String substringAfterLast(String str, String delimiter) {
+        if (str == null) {
+            return null;
+        }
+        if (delimiter == null || delimiter.isEmpty()) {
+            return EMPTY;
+        }
+        int index = str.lastIndexOf(delimiter);
+        return index < 0 || index == str.length() - delimiter.length()
+                ? EMPTY
+                : str.substring(index + delimiter.length());
+    }
+
+    /**
+     * 从左侧截取指定长度。
+     *
+     * @param str    原始字符串
+     * @param length 截取长度
+     * @return 截取结果
+     */
+    public static String left(String str, int length) {
+        if (str == null) {
+            return null;
+        }
+        if (length <= 0) {
+            return EMPTY;
+        }
+        return str.length() <= length ? str : str.substring(0, length);
+    }
+
+    /**
+     * 从右侧截取指定长度。
+     *
+     * @param str    原始字符串
+     * @param length 截取长度
+     * @return 截取结果
+     */
+    public static String right(String str, int length) {
+        if (str == null) {
+            return null;
+        }
+        if (length <= 0) {
+            return EMPTY;
+        }
+        return str.length() <= length ? str : str.substring(str.length() - length);
+    }
+
+    /**
+     * 去除指定前缀，区分大小写。
+     *
+     * @param str    原始字符串
+     * @param prefix 前缀
+     * @return 去除后的字符串
+     */
+    public static String removePrefix(String str, String prefix) {
+        if (str == null || prefix == null || prefix.isEmpty()) {
+            return str;
+        }
+        return str.startsWith(prefix) ? str.substring(prefix.length()) : str;
+    }
+
+    /**
+     * 去除指定后缀，区分大小写。
+     *
+     * @param str    原始字符串
+     * @param suffix 后缀
+     * @return 去除后的字符串
+     */
+    public static String removeSuffix(String str, String suffix) {
+        if (str == null || suffix == null || suffix.isEmpty()) {
+            return str;
+        }
+        return str.endsWith(suffix) ? str.substring(0, str.length() - suffix.length()) : str;
+    }
+
+    /**
+     * 前缀不存在时自动追加前缀。
+     *
+     * @param str    原始字符串
+     * @param prefix 前缀
+     * @return 处理后的字符串
+     */
+    public static String prependIfMissing(String str, String prefix) {
+        if (str == null || isEmpty(prefix)) {
+            return str;
+        }
+        return str.startsWith(prefix) ? str : prefix + str;
+    }
+
+    /**
+     * 后缀不存在时自动追加后缀。
+     *
+     * @param str    原始字符串
+     * @param suffix 后缀
+     * @return 处理后的字符串
+     */
+    public static String appendIfMissing(String str, String suffix) {
+        if (str == null || isEmpty(suffix)) {
+            return str;
+        }
+        return str.endsWith(suffix) ? str : str + suffix;
+    }
+
+    /**
+     * 使用指定字符串包裹原字符串。
+     *
+     * @param str     原始字符串
+     * @param wrapper 包裹字符串
+     * @return 包裹后的字符串
+     */
+    public static String wrap(String str, String wrapper) {
+        if (str == null || wrapper == null) {
+            return str;
+        }
+        return wrapper + str + wrapper;
+    }
+
+    /**
+     * 去除两侧相同的包裹字符串。
+     *
+     * @param str     原始字符串
+     * @param wrapper 包裹字符串
+     * @return 去除后的字符串
+     */
+    public static String unwrap(String str, String wrapper) {
+        if (str == null || isEmpty(wrapper)) {
+            return str;
+        }
+        if (str.startsWith(wrapper) && str.endsWith(wrapper) && str.length() >= wrapper.length() * 2) {
+            return str.substring(wrapper.length(), str.length() - wrapper.length());
+        }
+        return str;
+    }
+
+    /**
+     * 规范化空白字符，多个空白合并为一个半角空格。
+     *
+     * @param str 原始字符串
+     * @return 规范化后的字符串
+     */
+    public static String normalizeWhitespace(String str) {
+        if (str == null) {
+            return null;
+        }
+        return str.trim().replaceAll("\\s+", " ");
+    }
+
+    /**
+     * 移除换行符，保留其他内容。
+     *
+     * @param str 原始字符串
+     * @return 移除换行后的字符串
+     */
+    public static String removeLineBreaks(String str) {
+        if (str == null) {
+            return null;
+        }
+        return str.replace("\r", "").replace("\n", "");
+    }
+
+    /**
+     * 按任意换行符拆分为行列表。
+     *
+     * @param str         原始字符串
+     * @param ignoreEmpty 是否忽略空行
+     * @return 行列表
+     */
+    public static List<String> splitLines(String str, boolean ignoreEmpty) {
+        if (str == null) {
+            return Collections.emptyList();
+        }
+
+        String[] lines = str.split("\\R", -1);
+        List<String> result = new ArrayList<>(lines.length);
+        for (String line : lines) {
+            if (ignoreEmpty && line.isEmpty()) {
+                continue;
+            }
+            result.add(line);
+        }
+        return result;
+    }
+
+    /**
+     * 缩略字符串，默认使用 ... 作为省略标记。
+     *
+     * @param str       原始字符串
+     * @param maxLength 最大长度
+     * @return 缩略后的字符串
+     */
+    public static String abbreviate(String str, int maxLength) {
+        return abbreviate(str, maxLength, "...");
+    }
+
+    /**
+     * 缩略字符串。
+     *
+     * @param str       原始字符串
+     * @param maxLength 最大长度
+     * @param marker    省略标记
+     * @return 缩略后的字符串
+     */
+    public static String abbreviate(String str, int maxLength, String marker) {
+        if (str == null) {
+            return null;
+        }
+        if (maxLength <= 0) {
+            return EMPTY;
+        }
+        if (str.length() <= maxLength) {
+            return str;
+        }
+
+        marker = marker == null ? EMPTY : marker;
+        if (marker.length() >= maxLength) {
+            return str.substring(0, maxLength);
+        }
+        return str.substring(0, maxLength - marker.length()) + marker;
+    }
+
+    /**
+     * 通用脱敏处理，默认使用 * 作为脱敏字符。
+     *
+     * @param str           原始字符串
+     * @param prefixVisible 前面可见长度
+     * @param suffixVisible 后面可见长度
+     * @return 脱敏后的字符串
+     */
+    public static String mask(String str, int prefixVisible, int suffixVisible) {
+        return mask(str, prefixVisible, suffixVisible, '*');
+    }
+
+    /**
+     * 通用脱敏处理。
+     *
+     * @param str           原始字符串
+     * @param prefixVisible 前面可见长度
+     * @param suffixVisible 后面可见长度
+     * @param maskChar      脱敏字符
+     * @return 脱敏后的字符串
+     */
+    public static String mask(String str, int prefixVisible, int suffixVisible, char maskChar) {
+        if (str == null) {
+            return null;
+        }
+
+        int length = str.length();
+        prefixVisible = Math.max(prefixVisible, 0);
+        suffixVisible = Math.max(suffixVisible, 0);
+
+        if (prefixVisible + suffixVisible >= length) {
+            return str;
+        }
+
+        int maskLength = length - prefixVisible - suffixVisible;
+        return str.substring(0, prefixVisible)
+                + repeat(String.valueOf(maskChar), maskLength)
+                + str.substring(length - suffixVisible);
+    }
+
+    /**
+     * 提取字符串中的数字。
+     *
+     * @param str 原始字符串
+     * @return 数字字符串
+     */
+    public static String extractDigits(String str) {
+        if (str == null) {
+            return null;
+        }
+        return str.replaceAll("\\D+", EMPTY);
+    }
+
+    /**
+     * 提取字符串中的英文字母。
+     *
+     * @param str 原始字符串
+     * @return 英文字母字符串
+     */
+    public static String extractLetters(String str) {
+        if (str == null) {
+            return null;
+        }
+        return str.replaceAll("[^a-zA-Z]+", EMPTY);
+    }
+
+    /**
+     * 只保留中文字符。
+     *
+     * @param str 原始字符串
+     * @return 中文字符串
+     */
+    public static String retainChinese(String str) {
+        if (str == null) {
+            return null;
+        }
+        return str.replaceAll("[^\\u4E00-\\u9FFF]+", EMPTY);
+    }
+
+    /**
+     * 移除中文字符。
+     *
+     * @param str 原始字符串
+     * @return 移除中文后的字符串
+     */
+    public static String removeChinese(String str) {
+        if (str == null) {
+            return null;
+        }
+        return str.replaceAll("[\\u4E00-\\u9FFF]+", EMPTY);
+    }
+
+    /**
+     * 判断字符串是否只包含中文字符。
+     *
+     * @param str 原始字符串
+     * @return 只包含中文返回 true，否则返回 false
+     */
+    public static boolean isChineseOnly(String str) {
+        return isNotBlank(str) && str.matches("^[\\u4E00-\\u9FFF]+$");
+    }
+
+    /**
+     * 判断字符串是否只包含 ASCII 可打印字符。
+     *
+     * @param str 原始字符串
+     * @return 只包含 ASCII 可打印字符返回 true，否则返回 false
+     */
+    public static boolean isAsciiPrintable(String str) {
+        if (str == null) {
+            return false;
+        }
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c < 32 || c > 126) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 判断字符串是否为十进制数字，支持正负号和小数。
+     *
+     * @param str 原始字符串
+     * @return 是十进制数字返回 true，否则返回 false
+     */
+    public static boolean isDecimal(String str) {
+        if (isBlank(str)) {
+            return false;
+        }
+        return str.matches("^[+-]?((\\d+\\.\\d+)|(\\d+)|(\\.\\d+))$");
+    }
+
+    /**
+     * 判断字符串是否为正整数。
+     *
+     * @param str 原始字符串
+     * @return 是正整数返回 true，否则返回 false
+     */
+    public static boolean isPositiveInteger(String str) {
+        if (isBlank(str)) {
+            return false;
+        }
+        return str.matches("^[1-9]\\d*$");
+    }
+
+    /**
+     * 判断字符串是否为非负整数。
+     *
+     * @param str 原始字符串
+     * @return 是非负整数返回 true，否则返回 false
+     */
+    public static boolean isNonNegativeInteger(String str) {
+        if (isBlank(str)) {
+            return false;
+        }
+        return str.matches("^(0|[1-9]\\d*)$");
+    }
+
+    /**
+     * 判断字符串是否为金额格式，最多两位小数。
+     *
+     * @param str 原始字符串
+     * @return 是金额格式返回 true，否则返回 false
+     */
+    public static boolean isMoney(String str) {
+        if (isBlank(str)) {
+            return false;
+        }
+        return str.matches("^[+-]?(0|[1-9]\\d*)(\\.\\d{1,2})?$");
+    }
+
+    /**
+     * 查找第一个正则匹配内容。
+     *
+     * @param str   原始字符串
+     * @param regex 正则表达式
+     * @return 第一个匹配内容，不存在返回 null
+     */
+    public static String findFirst(String str, String regex) {
+        return findFirst(str, regex, 0);
+    }
+
+    /**
+     * 查找第一个正则匹配分组内容。
+     *
+     * @param str   原始字符串
+     * @param regex 正则表达式
+     * @param group 分组下标，0 表示完整匹配
+     * @return 第一个匹配分组内容，不存在返回 null
+     */
+    public static String findFirst(String str, String regex, int group) {
+        if (str == null || regex == null || group < 0) {
+            return null;
+        }
+
+        Matcher matcher = Pattern.compile(regex).matcher(str);
+        if (matcher.find() && group <= matcher.groupCount()) {
+            return matcher.group(group);
+        }
+        return null;
+    }
+
+    /**
+     * 查找所有正则匹配内容。
+     *
+     * @param str   原始字符串
+     * @param regex 正则表达式
+     * @return 匹配内容列表
+     */
+    public static List<String> findAll(String str, String regex) {
+        return findAll(str, regex, 0);
+    }
+
+    /**
+     * 查找所有正则匹配分组内容。
+     *
+     * @param str   原始字符串
+     * @param regex 正则表达式
+     * @param group 分组下标，0 表示完整匹配
+     * @return 匹配内容列表
+     */
+    public static List<String> findAll(String str, String regex, int group) {
+        if (str == null || regex == null || group < 0) {
+            return Collections.emptyList();
+        }
+
+        Matcher matcher = Pattern.compile(regex).matcher(str);
+        List<String> result = new ArrayList<>();
+        while (matcher.find()) {
+            if (group <= matcher.groupCount()) {
+                result.add(matcher.group(group));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 按中文长度规则从左侧截取，中文按 2 计算，其他字符按 1 计算。
+     *
+     * @param str       原始字符串
+     * @param maxLength 最大长度
+     * @return 截取后的字符串
+     */
+    public static String leftConsideringChineseLength(String str, int maxLength) {
+        if (str == null) {
+            return null;
+        }
+        if (maxLength <= 0) {
+            return EMPTY;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        int length = 0;
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            int charLength = isChineseChar(c) ? 2 : 1;
+            if (length + charLength > maxLength) {
+                break;
+            }
+            sb.append(c);
+            length += charLength;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 按中文长度规则缩略字符串，中文按 2 计算，其他字符按 1 计算。
+     *
+     * @param str       原始字符串
+     * @param maxLength 最大长度
+     * @return 缩略后的字符串
+     */
+    public static String abbreviateConsideringChineseLength(String str, int maxLength) {
+        return abbreviateConsideringChineseLength(str, maxLength, "...");
+    }
+
+    /**
+     * 按中文长度规则缩略字符串，中文按 2 计算，其他字符按 1 计算。
+     *
+     * @param str       原始字符串
+     * @param maxLength 最大长度
+     * @param marker    省略标记
+     * @return 缩略后的字符串
+     */
+    public static String abbreviateConsideringChineseLength(String str, int maxLength, String marker) {
+        if (str == null) {
+            return null;
+        }
+        if (maxLength <= 0) {
+            return EMPTY;
+        }
+        if (lengthConsideringChinese(str) <= maxLength) {
+            return str;
+        }
+
+        marker = marker == null ? EMPTY : marker;
+        int markerLength = lengthConsideringChinese(marker);
+        if (markerLength >= maxLength) {
+            return leftConsideringChineseLength(marker, maxLength);
+        }
+
+        return leftConsideringChineseLength(str, maxLength - markerLength) + marker;
+    }
+
+    /**
+     * 判断字符是否为中文字符。
+     *
+     * @param c 字符
+     * @return 是中文字符返回 true，否则返回 false
+     */
+    private static boolean isChineseChar(char c) {
+        return Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN;
+    }
 }

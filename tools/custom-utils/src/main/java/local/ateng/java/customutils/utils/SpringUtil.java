@@ -2,6 +2,8 @@ package local.ateng.java.customutils.utils;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.support.DefaultSingletonBeanRegistry;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -50,7 +52,6 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
      * Spring 上下文对象
      */
     private static ApplicationContext context;
-
 
     /**
      * Spring 事件发布器
@@ -960,4 +961,806 @@ public final class SpringUtil implements ApplicationContextAware, ApplicationEve
         return buildUrl(baseUrl, queryParams, uriVariables, true);
     }
 
+    /**
+     * 判断 Spring 上下文是否已初始化
+     *
+     * @return 已初始化返回 true，否则返回 false
+     */
+    public static boolean isApplicationContextReady() {
+        return context != null;
+    }
+
+    /**
+     * 获取 Spring 上下文 ID
+     *
+     * @return 上下文 ID，未初始化返回 null
+     */
+    public static String getApplicationContextId() {
+        return context != null ? context.getId() : null;
+    }
+
+    /**
+     * 获取 Spring 上下文显示名称
+     *
+     * @return 上下文显示名称，未初始化返回 null
+     */
+    public static String getApplicationContextDisplayName() {
+        return context != null ? context.getDisplayName() : null;
+    }
+
+    /**
+     * 获取父级 Spring 上下文
+     *
+     * @return 父级 ApplicationContext，未初始化或无父级返回 null
+     */
+    public static ApplicationContext getParentApplicationContext() {
+        return context != null ? context.getParent() : null;
+    }
+
+    /**
+     * 判断当前上下文是否存在父级上下文
+     *
+     * @return 存在父级上下文返回 true，否则返回 false
+     */
+    public static boolean hasParentApplicationContext() {
+        return getParentApplicationContext() != null;
+    }
+
+    /**
+     * 获取 Bean 的别名数组
+     *
+     * @param beanName Bean 名称
+     * @return Bean 别名数组，若不存在或上下文未初始化返回空数组
+     */
+    public static String[] getAliases(String beanName) {
+        if (context == null || beanName == null) {
+            return new String[0];
+        }
+        return context.getAliases(beanName);
+    }
+
+    /**
+     * 判断指定名称的 Bean 是否为原型
+     *
+     * @param name Bean 名称
+     * @return 是原型返回 true，否则返回 false
+     */
+    public static boolean isPrototype(String name) {
+        if (context == null || name == null) {
+            return false;
+        }
+        try {
+            return context.isPrototype(name);
+        } catch (NoSuchBeanDefinitionException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 判断当前上下文本地是否包含指定 Bean，不检查父级上下文
+     *
+     * @param name Bean 名称
+     * @return 本地上下文存在返回 true，否则返回 false
+     */
+    public static boolean containsLocalBean(String name) {
+        if (context == null || name == null) {
+            return false;
+        }
+        return context.containsLocalBean(name);
+    }
+
+    /**
+     * 根据类型安全获取 Bean，不存在时返回 null
+     *
+     * @param requiredType Bean 类型
+     * @param <T>          泛型
+     * @return Bean 实例，不存在返回 null
+     */
+    public static <T> T getBeanOrNull(Class<T> requiredType) {
+        if (context == null || requiredType == null) {
+            return null;
+        }
+        try {
+            return context.getBean(requiredType);
+        } catch (BeansException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 根据名称安全获取 Bean，不存在时返回 null
+     *
+     * @param name Bean 名称
+     * @return Bean 实例，不存在返回 null
+     */
+    public static Object getBeanOrNull(String name) {
+        if (context == null || name == null) {
+            return null;
+        }
+        try {
+            return context.getBean(name);
+        } catch (BeansException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 根据名称和类型安全获取 Bean，不存在时返回 null
+     *
+     * @param name         Bean 名称
+     * @param requiredType Bean 类型
+     * @param <T>          泛型
+     * @return Bean 实例，不存在返回 null
+     */
+    public static <T> T getBeanOrNull(String name, Class<T> requiredType) {
+        if (context == null || name == null || requiredType == null) {
+            return null;
+        }
+        try {
+            return context.getBean(name, requiredType);
+        } catch (BeansException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 根据类型获取 Bean，不存在时返回默认值
+     *
+     * @param requiredType Bean 类型
+     * @param defaultValue 默认值
+     * @param <T>          泛型
+     * @return Bean 实例或默认值
+     */
+    public static <T> T getBeanOrDefault(Class<T> requiredType, T defaultValue) {
+        T bean = getBeanOrNull(requiredType);
+        return bean != null ? bean : defaultValue;
+    }
+
+    /**
+     * 根据名称获取 Bean，不存在时返回默认值
+     *
+     * @param name         Bean 名称
+     * @param defaultValue 默认值
+     * @return Bean 实例或默认值
+     */
+    public static Object getBeanOrDefault(String name, Object defaultValue) {
+        Object bean = getBeanOrNull(name);
+        return bean != null ? bean : defaultValue;
+    }
+
+    /**
+     * 获取指定类型的 ObjectProvider
+     *
+     * @param requiredType Bean 类型
+     * @param <T>          泛型
+     * @return ObjectProvider，未初始化返回 null
+     */
+    public static <T> org.springframework.beans.factory.ObjectProvider<T> getBeanProvider(Class<T> requiredType) {
+        if (context == null || requiredType == null) {
+            return null;
+        }
+        return context.getBeanProvider(requiredType);
+    }
+
+    /**
+     * 获取指定类型可用的 Bean，不存在返回 null，存在多个时按 Spring 规则处理
+     *
+     * @param requiredType Bean 类型
+     * @param <T>          泛型
+     * @return Bean 实例，不存在返回 null
+     */
+    public static <T> T getBeanIfAvailable(Class<T> requiredType) {
+        org.springframework.beans.factory.ObjectProvider<T> provider = getBeanProvider(requiredType);
+        return provider != null ? provider.getIfAvailable() : null;
+    }
+
+    /**
+     * 获取指定类型唯一 Bean，若不存在或不唯一返回 null
+     *
+     * @param requiredType Bean 类型
+     * @param <T>          泛型
+     * @return 唯一 Bean 实例，否则返回 null
+     */
+    public static <T> T getBeanIfUnique(Class<T> requiredType) {
+        org.springframework.beans.factory.ObjectProvider<T> provider = getBeanProvider(requiredType);
+        return provider != null ? provider.getIfUnique() : null;
+    }
+
+    /**
+     * 获取指定类型的所有 Bean，支持控制是否包含非单例 Bean 以及是否允许提前初始化
+     *
+     * @param type                Bean 类型
+     * @param includeNonSingletons 是否包含非单例 Bean
+     * @param allowEagerInit       是否允许提前初始化懒加载 Bean
+     * @param <T>                 泛型
+     * @return Bean 名称与实例映射
+     */
+    public static <T> Map<String, T> getAllBeans(Class<T> type, boolean includeNonSingletons, boolean allowEagerInit) {
+        if (context == null || type == null) {
+            return java.util.Collections.emptyMap();
+        }
+        return context.getBeansOfType(type, includeNonSingletons, allowEagerInit);
+    }
+
+    /**
+     * 根据注解获取 Bean 名称数组
+     *
+     * @param annotationType 注解类型
+     * @param <A>            注解泛型
+     * @return Bean 名称数组，若无匹配返回空数组
+     */
+    public static <A extends Annotation> String[] getBeanNamesForAnnotation(Class<A> annotationType) {
+        if (context == null || annotationType == null) {
+            return new String[0];
+        }
+        return context.getBeanNamesForAnnotation(annotationType);
+    }
+
+    /**
+     * 获取指定 Bean 上的注解
+     *
+     * @param beanName       Bean 名称
+     * @param annotationType 注解类型
+     * @param <A>            注解泛型
+     * @return 注解实例，不存在返回 null
+     */
+    public static <A extends Annotation> A findAnnotationOnBean(String beanName, Class<A> annotationType) {
+        if (context == null || beanName == null || annotationType == null) {
+            return null;
+        }
+        try {
+            return context.findAnnotationOnBean(beanName, annotationType);
+        } catch (NoSuchBeanDefinitionException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 对已有对象执行 Spring 依赖注入
+     *
+     * @param existingBean 已存在的对象
+     */
+    public static void autowireBean(Object existingBean) {
+        if (context != null && existingBean != null) {
+            context.getAutowireCapableBeanFactory().autowireBean(existingBean);
+        }
+    }
+
+    /**
+     * 初始化已有 Bean，触发 BeanPostProcessor 等 Spring 生命周期逻辑
+     *
+     * @param existingBean 已存在的对象
+     * @param beanName     Bean 名称
+     * @return 初始化后的 Bean
+     */
+    public static Object initializeBean(Object existingBean, String beanName) {
+        if (context == null || existingBean == null) {
+            return existingBean;
+        }
+        return context.getAutowireCapableBeanFactory().initializeBean(existingBean, beanName);
+    }
+
+    /**
+     * 销毁已有 Bean，触发 Spring 销毁生命周期逻辑
+     *
+     * @param existingBean 已存在的对象
+     */
+    public static void destroyBean(Object existingBean) {
+        if (context != null && existingBean != null) {
+            context.getAutowireCapableBeanFactory().destroyBean(existingBean);
+        }
+    }
+
+    /**
+     * 获取 AutowireCapableBeanFactory
+     *
+     * @return AutowireCapableBeanFactory，未初始化返回 null
+     */
+    public static org.springframework.beans.factory.config.AutowireCapableBeanFactory getAutowireCapableBeanFactory() {
+        return context != null ? context.getAutowireCapableBeanFactory() : null;
+    }
+
+    /**
+     * 获取当前上下文中的 BeanFactory
+     *
+     * @return ConfigurableListableBeanFactory，非 ConfigurableApplicationContext 时返回 null
+     */
+    public static org.springframework.beans.factory.config.ConfigurableListableBeanFactory getBeanFactory() {
+        if (context instanceof org.springframework.context.ConfigurableApplicationContext) {
+            return ((org.springframework.context.ConfigurableApplicationContext) context).getBeanFactory();
+        }
+        return null;
+    }
+
+    /**
+     * 注册单例 Bean 到 Spring 容器
+     *
+     * @param beanName Bean 名称
+     * @param bean     Bean 实例
+     * @return 注册成功返回 true，否则返回 false
+     */
+    public static boolean registerSingleton(String beanName, Object bean) {
+        org.springframework.beans.factory.config.ConfigurableListableBeanFactory beanFactory = getBeanFactory();
+        if (beanFactory == null || beanName == null || bean == null) {
+            return false;
+        }
+        beanFactory.registerSingleton(beanName, bean);
+        return true;
+    }
+
+    /**
+     * 销毁已注册的单例 Bean
+     *
+     * @param beanName Bean 名称
+     * @return 销毁成功返回 true，否则返回 false
+     */
+    public static boolean destroySingleton(String beanName) {
+        ConfigurableListableBeanFactory beanFactory = getBeanFactory();
+        if (beanFactory == null || beanName == null || beanName.trim().isEmpty()) {
+            return false;
+        }
+
+        if (!(beanFactory instanceof DefaultSingletonBeanRegistry)) {
+            return false;
+        }
+
+        DefaultSingletonBeanRegistry registry =
+                (DefaultSingletonBeanRegistry) beanFactory;
+
+        if (!registry.containsSingleton(beanName)) {
+            return false;
+        }
+
+        registry.destroySingleton(beanName);
+        return true;
+    }
+
+    /**
+     * 判断配置项是否存在
+     *
+     * @param key 配置 key
+     * @return 存在返回 true，否则返回 false
+     */
+    public static boolean containsProperty(String key) {
+        return getEnvironment() != null && getEnvironment().containsProperty(key);
+    }
+
+    /**
+     * 获取必填配置项，不存在时抛出异常
+     *
+     * @param key 配置 key
+     * @return 配置值
+     */
+    public static String getRequiredProperty(String key) {
+        return getEnvironment().getRequiredProperty(key);
+    }
+
+    /**
+     * 获取必填配置项并转换为指定类型，不存在时抛出异常
+     *
+     * @param key        配置 key
+     * @param targetType 目标类型
+     * @param <T>        泛型
+     * @return 配置值
+     */
+    public static <T> T getRequiredProperty(String key, Class<T> targetType) {
+        return getEnvironment().getRequiredProperty(key, targetType);
+    }
+
+    /**
+     * 获取默认 Profile 数组
+     *
+     * @return 默认 profiles，未初始化返回空数组
+     */
+    public static String[] getDefaultProfiles() {
+        return context != null ? context.getEnvironment().getDefaultProfiles() : new String[0];
+    }
+
+    /**
+     * 判断是否接受指定 profiles 表达式
+     *
+     * @param profiles profiles 表达式
+     * @return 匹配返回 true，否则返回 false
+     */
+    public static boolean acceptsProfiles(String... profiles) {
+        if (context == null || profiles == null || profiles.length == 0) {
+            return false;
+        }
+        return context.getEnvironment().acceptsProfiles(org.springframework.core.env.Profiles.of(profiles));
+    }
+
+    /**
+     * 解析字符串中的占位符，无法解析时抛出异常
+     *
+     * @param value 带占位符的字符串
+     * @return 解析后的字符串
+     */
+    public static String resolveRequiredPlaceholders(String value) {
+        if (context == null || value == null) {
+            return value;
+        }
+        return context.getEnvironment().resolveRequiredPlaceholders(value);
+    }
+
+    /**
+     * 使用 Binder 绑定配置到指定类型
+     *
+     * @param key        配置 key
+     * @param targetType 目标类型
+     * @param <T>        泛型
+     * @return 绑定结果，未配置返回 null
+     */
+    public static <T> T bindProperty(String key, Class<T> targetType) {
+        if (context == null || key == null || targetType == null) {
+            return null;
+        }
+        return Binder.get(getEnvironment()).bind(key, targetType).orElse(null);
+    }
+
+    /**
+     * 使用 Binder 绑定配置到指定类型，未配置返回默认值
+     *
+     * @param key          配置 key
+     * @param targetType   目标类型
+     * @param defaultValue 默认值
+     * @param <T>          泛型
+     * @return 绑定结果或默认值
+     */
+    public static <T> T bindProperty(String key, Class<T> targetType, T defaultValue) {
+        T value = bindProperty(key, targetType);
+        return value != null ? value : defaultValue;
+    }
+
+    /**
+     * 获取指定路径资源是否存在
+     *
+     * @param path resources 下的相对路径
+     * @return 存在返回 true，否则返回 false
+     */
+    public static boolean resourceExists(String path) {
+        Resource resource = getResource(path);
+        return resource != null && resource.exists();
+    }
+
+    /**
+     * 获取指定路径资源文件名
+     *
+     * @param path resources 下的相对路径
+     * @return 文件名，异常时返回 null
+     */
+    public static String getResourceFilename(String path) {
+        try {
+            Resource resource = getResource(path);
+            return resource != null ? resource.getFilename() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取指定路径资源 URL
+     *
+     * @param path resources 下的相对路径
+     * @return 资源 URL，异常时返回 null
+     */
+    public static java.net.URL getResourceUrl(String path) {
+        try {
+            Resource resource = getResource(path);
+            return resource != null ? resource.getURL() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 根据 locationPattern 获取多个资源
+     *
+     * @param locationPattern 资源匹配表达式，例如 {@code classpath*:mapper/**&#47;*.xml}
+     * @return Resource 数组，异常时返回空数组
+     */
+    public static Resource[] getResources(String locationPattern) {
+        if (context == null || locationPattern == null) {
+            return new Resource[0];
+        }
+        try {
+            return context.getResources(locationPattern);
+        } catch (Exception e) {
+            return new Resource[0];
+        }
+    }
+
+    /**
+     * 获取当前请求 Header
+     *
+     * @param name Header 名称
+     * @return Header 值，不存在返回 null
+     */
+    public static String getRequestHeader(String name) {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getHeader(name) : null;
+    }
+
+    /**
+     * 获取当前请求参数
+     *
+     * @param name 参数名称
+     * @return 参数值，不存在返回 null
+     */
+    public static String getRequestParam(String name) {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getParameter(name) : null;
+    }
+
+    /**
+     * 获取当前请求参数，支持默认值
+     *
+     * @param name         参数名称
+     * @param defaultValue 默认值
+     * @return 参数值或默认值
+     */
+    public static String getRequestParam(String name, String defaultValue) {
+        String value = getRequestParam(name);
+        return value != null ? value : defaultValue;
+    }
+
+    /**
+     * 获取当前请求参数 Map
+     *
+     * @return 请求参数 Map，若无请求上下文返回空 Map
+     */
+    public static Map<String, String[]> getRequestParamMap() {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getParameterMap() : java.util.Collections.emptyMap();
+    }
+
+    /**
+     * 获取当前请求属性
+     *
+     * @param name 属性名称
+     * @return 属性值，不存在返回 null
+     */
+    public static Object getRequestAttribute(String name) {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getAttribute(name) : null;
+    }
+
+    /**
+     * 设置当前请求属性
+     *
+     * @param name  属性名称
+     * @param value 属性值
+     */
+    public static void setRequestAttribute(String name, Object value) {
+        HttpServletRequest request = getHttpServletRequest();
+        if (request != null) {
+            request.setAttribute(name, value);
+        }
+    }
+
+    /**
+     * 移除当前请求属性
+     *
+     * @param name 属性名称
+     */
+    public static void removeRequestAttribute(String name) {
+        HttpServletRequest request = getHttpServletRequest();
+        if (request != null) {
+            request.removeAttribute(name);
+        }
+    }
+
+    /**
+     * 获取当前 Session 属性
+     *
+     * @param name 属性名称
+     * @return 属性值，不存在返回 null
+     */
+    public static Object getSessionAttribute(String name) {
+        HttpSession session = getHttpSession();
+        return session != null ? session.getAttribute(name) : null;
+    }
+
+    /**
+     * 设置当前 Session 属性
+     *
+     * @param name  属性名称
+     * @param value 属性值
+     */
+    public static void setSessionAttribute(String name, Object value) {
+        HttpSession session = getHttpSession();
+        if (session != null) {
+            session.setAttribute(name, value);
+        }
+    }
+
+    /**
+     * 移除当前 Session 属性
+     *
+     * @param name 属性名称
+     */
+    public static void removeSessionAttribute(String name) {
+        HttpSession session = getHttpSession();
+        if (session != null) {
+            session.removeAttribute(name);
+        }
+    }
+
+    /**
+     * 获取当前请求 Cookie 值
+     *
+     * @param name Cookie 名称
+     * @return Cookie 值，不存在返回 null
+     */
+    public static String getCookieValue(String name) {
+        HttpServletRequest request = getHttpServletRequest();
+        if (request == null || name == null || request.getCookies() == null) {
+            return null;
+        }
+
+        for (javax.servlet.http.Cookie cookie : request.getCookies()) {
+            if (name.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取当前请求 URI
+     *
+     * @return 请求 URI，若无请求上下文返回 null
+     */
+    public static String getRequestUri() {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getRequestURI() : null;
+    }
+
+    /**
+     * 获取当前请求 URL
+     *
+     * @return 请求 URL，若无请求上下文返回 null
+     */
+    public static String getRequestUrl() {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getRequestURL().toString() : null;
+    }
+
+    /**
+     * 获取当前请求完整 URL，包含查询参数
+     *
+     * @return 完整请求 URL，若无请求上下文返回 null
+     */
+    public static String getFullRequestUrl() {
+        HttpServletRequest request = getHttpServletRequest();
+        if (request == null) {
+            return null;
+        }
+
+        String url = request.getRequestURL().toString();
+        String queryString = request.getQueryString();
+        return queryString == null || queryString.length() == 0 ? url : url + "?" + queryString;
+    }
+
+    /**
+     * 获取当前请求方法
+     *
+     * @return 请求方法，若无请求上下文返回 null
+     */
+    public static String getRequestMethod() {
+        HttpServletRequest request = getHttpServletRequest();
+        return request != null ? request.getMethod() : null;
+    }
+
+    /**
+     * 获取当前请求 User-Agent
+     *
+     * @return User-Agent，若无请求上下文返回 null
+     */
+    public static String getUserAgent() {
+        return getRequestHeader("User-Agent");
+    }
+
+    /**
+     * 获取当前请求 Referer
+     *
+     * @return Referer，若无请求上下文返回 null
+     */
+    public static String getReferer() {
+        return getRequestHeader("Referer");
+    }
+
+    /**
+     * 判断当前请求是否为 Ajax 请求
+     *
+     * @return Ajax 请求返回 true，否则返回 false
+     */
+    public static boolean isAjaxRequest() {
+        String requestedWith = getRequestHeader("X-Requested-With");
+        return "XMLHttpRequest".equalsIgnoreCase(requestedWith);
+    }
+
+    /**
+     * 获取当前请求基础地址
+     *
+     * @return 基础地址，例如 http://localhost:8080/context-path，若无请求上下文返回 null
+     */
+    public static String getBaseUrl() {
+        HttpServletRequest request = getHttpServletRequest();
+        if (request == null) {
+            return null;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.append(request.getScheme())
+                .append("://")
+                .append(request.getServerName());
+
+        int port = request.getServerPort();
+        boolean defaultHttpPort = "http".equalsIgnoreCase(request.getScheme()) && port == 80;
+        boolean defaultHttpsPort = "https".equalsIgnoreCase(request.getScheme()) && port == 443;
+        if (!defaultHttpPort && !defaultHttpsPort) {
+            builder.append(":").append(port);
+        }
+
+        builder.append(request.getContextPath());
+        return builder.toString();
+    }
+
+    /**
+     * 获取 ServletContext 真实路径
+     *
+     * @param path Web 应用内路径
+     * @return 真实路径，无法获取返回 null
+     */
+    public static String getRealPath(String path) {
+        ServletContext servletContext = getServletContext();
+        return servletContext != null ? servletContext.getRealPath(path) : null;
+    }
+
+    /**
+     * 判断当前应用上下文是否可关闭
+     *
+     * @return 可关闭返回 true，否则返回 false
+     */
+    public static boolean isCloseableApplicationContext() {
+        return context instanceof org.springframework.context.ConfigurableApplicationContext;
+    }
+
+    /**
+     * 关闭当前 Spring 应用上下文
+     *
+     * @return 关闭成功返回 true，否则返回 false
+     */
+    public static boolean closeApplicationContext() {
+        if (context instanceof org.springframework.context.ConfigurableApplicationContext) {
+            ((org.springframework.context.ConfigurableApplicationContext) context).close();
+            context = null;
+            publisher = null;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 获取 Spring Boot 应用所在目录
+     *
+     * @return 应用所在目录，获取失败返回 null
+     */
+    public static java.io.File getApplicationHomeDir() {
+        try {
+            return new org.springframework.boot.system.ApplicationHome().getDir();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取 Spring Boot 应用所在目录路径
+     *
+     * @return 应用所在目录绝对路径，获取失败返回 null
+     */
+    public static String getApplicationHomePath() {
+        java.io.File dir = getApplicationHomeDir();
+        return dir != null ? dir.getAbsolutePath() : null;
+    }
 }

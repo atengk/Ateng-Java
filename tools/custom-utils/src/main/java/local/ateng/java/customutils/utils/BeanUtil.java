@@ -1539,4 +1539,763 @@ public final class BeanUtil {
                                    String... ignoreProperties) {
         return mergeToNew(first, second, targetClass, true, ignoreProperties);
     }
+
+    /**
+     * 只复制指定属性
+     *
+     * @param source     源对象
+     * @param target     目标对象
+     * @param properties 需要复制的属性名
+     */
+    public static void copyOnlyProperties(Object source, Object target, String... properties) {
+        if (source == null || target == null || properties == null || properties.length == 0) {
+            return;
+        }
+
+        Set<String> includeSet = new HashSet<>(Arrays.asList(properties));
+
+        try {
+            Map<String, PropertyDescriptor> sourceMap = getPropertyDescriptors(source.getClass());
+            Map<String, PropertyDescriptor> targetMap = getPropertyDescriptors(target.getClass());
+
+            for (String name : includeSet) {
+                PropertyDescriptor sourcePd = sourceMap.get(name);
+                PropertyDescriptor targetPd = targetMap.get(name);
+
+                if (sourcePd == null || targetPd == null
+                        || sourcePd.getReadMethod() == null
+                        || targetPd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Object value = sourcePd.getReadMethod().invoke(source);
+                targetPd.getWriteMethod().invoke(target, value);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("复制指定 Bean 属性失败", e);
+        }
+    }
+
+    /**
+     * 只复制指定属性到新对象
+     *
+     * @param source      源对象
+     * @param targetClass 目标类型
+     * @param properties  需要复制的属性名
+     * @param <T>         目标类型
+     * @return 目标对象
+     */
+    public static <T> T copyOnlyTo(Object source, Class<T> targetClass, String... properties) {
+        if (source == null || targetClass == null) {
+            return null;
+        }
+
+        try {
+            T target = targetClass.getDeclaredConstructor().newInstance();
+            copyOnlyProperties(source, target, properties);
+            return target;
+        } catch (Exception e) {
+            throw new RuntimeException("复制指定属性到新对象失败", e);
+        }
+    }
+
+    /**
+     * 将源对象中非空白属性复制到目标对象
+     * <p>
+     * 会跳过 null、空字符串、空集合、空 Map、空数组。
+     *
+     * @param source           源对象
+     * @param target           目标对象
+     * @param ignoreProperties 需要忽略的属性名
+     */
+    public static void copyNonEmptyProperties(Object source, Object target, String... ignoreProperties) {
+        if (source == null || target == null) {
+            return;
+        }
+
+        Set<String> ignoreSet = ignoreProperties != null ? new HashSet<>(Arrays.asList(ignoreProperties)) : Collections.emptySet();
+
+        try {
+            Map<String, PropertyDescriptor> sourceMap = getPropertyDescriptors(source.getClass());
+            Map<String, PropertyDescriptor> targetMap = getPropertyDescriptors(target.getClass());
+
+            for (Map.Entry<String, PropertyDescriptor> entry : sourceMap.entrySet()) {
+                String name = entry.getKey();
+                if (ignoreSet.contains(name)) {
+                    continue;
+                }
+
+                PropertyDescriptor sourcePd = entry.getValue();
+                PropertyDescriptor targetPd = targetMap.get(name);
+
+                if (sourcePd == null || targetPd == null
+                        || sourcePd.getReadMethod() == null
+                        || targetPd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Object value = sourcePd.getReadMethod().invoke(source);
+                if (!isEmptyValue(value)) {
+                    targetPd.getWriteMethod().invoke(target, value);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("复制非空白 Bean 属性失败", e);
+        }
+    }
+
+    /**
+     * 将源对象中非空白属性复制到新对象
+     *
+     * @param source           源对象
+     * @param targetClass      目标类型
+     * @param ignoreProperties 需要忽略的属性名
+     * @param <T>              目标类型
+     * @return 目标对象
+     */
+    public static <T> T copyNonEmptyTo(Object source, Class<T> targetClass, String... ignoreProperties) {
+        if (source == null || targetClass == null) {
+            return null;
+        }
+
+        try {
+            T target = targetClass.getDeclaredConstructor().newInstance();
+            copyNonEmptyProperties(source, target, ignoreProperties);
+            return target;
+        } catch (Exception e) {
+            throw new RuntimeException("复制非空白属性到新对象失败", e);
+        }
+    }
+
+    /**
+     * 支持类型转换的属性复制
+     *
+     * @param source           源对象
+     * @param target           目标对象
+     * @param ignoreProperties 需要忽略的属性名
+     */
+    public static void copyWithConvert(Object source, Object target, String... ignoreProperties) {
+        if (source == null || target == null) {
+            return;
+        }
+
+        Set<String> ignoreSet = ignoreProperties != null ? new HashSet<>(Arrays.asList(ignoreProperties)) : Collections.emptySet();
+
+        try {
+            Map<String, PropertyDescriptor> sourceMap = getPropertyDescriptors(source.getClass());
+            Map<String, PropertyDescriptor> targetMap = getPropertyDescriptors(target.getClass());
+
+            for (Map.Entry<String, PropertyDescriptor> entry : sourceMap.entrySet()) {
+                String name = entry.getKey();
+                if (ignoreSet.contains(name)) {
+                    continue;
+                }
+
+                PropertyDescriptor sourcePd = entry.getValue();
+                PropertyDescriptor targetPd = targetMap.get(name);
+
+                if (sourcePd == null || targetPd == null
+                        || sourcePd.getReadMethod() == null
+                        || targetPd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Object value = sourcePd.getReadMethod().invoke(source);
+                Class<?> targetType = targetPd.getWriteMethod().getParameterTypes()[0];
+                Object convertedValue = convertType(value, targetType);
+                targetPd.getWriteMethod().invoke(target, convertedValue);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("支持类型转换的 Bean 属性复制失败", e);
+        }
+    }
+
+    /**
+     * 支持类型转换的属性复制到新对象
+     *
+     * @param source           源对象
+     * @param targetClass      目标类型
+     * @param ignoreProperties 需要忽略的属性名
+     * @param <T>              目标类型
+     * @return 目标对象
+     */
+    public static <T> T copyWithConvertTo(Object source, Class<T> targetClass, String... ignoreProperties) {
+        if (source == null || targetClass == null) {
+            return null;
+        }
+
+        try {
+            T target = targetClass.getDeclaredConstructor().newInstance();
+            copyWithConvert(source, target, ignoreProperties);
+            return target;
+        } catch (Exception e) {
+            throw new RuntimeException("支持类型转换的 Bean 属性复制到新对象失败", e);
+        }
+    }
+
+    /**
+     * 将 Map 数据填充到已有 Bean
+     *
+     * @param map              Map 数据
+     * @param bean             目标 Bean
+     * @param ignoreProperties 需要忽略的属性名
+     */
+    public static void fillBean(Map<String, ?> map, Object bean, String... ignoreProperties) {
+        fillBean(map, bean, null, ignoreProperties);
+    }
+
+    /**
+     * 将 Map 数据填充到已有 Bean，支持 key 到字段名映射
+     *
+     * @param map              Map 数据
+     * @param bean             目标 Bean
+     * @param keyMapping       Map key -> Bean 字段名映射
+     * @param ignoreProperties 需要忽略的 Bean 字段名
+     */
+    public static void fillBean(Map<String, ?> map,
+                                Object bean,
+                                Map<String, String> keyMapping,
+                                String... ignoreProperties) {
+        if (map == null || map.isEmpty() || bean == null) {
+            return;
+        }
+
+        Set<String> ignoreSet = ignoreProperties != null ? new HashSet<>(Arrays.asList(ignoreProperties)) : Collections.emptySet();
+
+        try {
+            Map<String, PropertyDescriptor> targetMap = getPropertyDescriptors(bean.getClass());
+
+            for (Map.Entry<String, ?> entry : map.entrySet()) {
+                String mapKey = entry.getKey();
+                String fieldName = keyMapping != null && keyMapping.containsKey(mapKey) ? keyMapping.get(mapKey) : mapKey;
+
+                if (ignoreSet.contains(fieldName)) {
+                    continue;
+                }
+
+                PropertyDescriptor pd = targetMap.get(fieldName);
+                if (pd == null || pd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Object value = entry.getValue();
+                Class<?> targetType = pd.getWriteMethod().getParameterTypes()[0];
+                pd.getWriteMethod().invoke(bean, convertType(value, targetType));
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Map 填充 Bean 失败", e);
+        }
+    }
+
+    /**
+     * 将 Map 转换为 Bean，支持 key 到字段名映射和类型转换
+     *
+     * @param map              Map 数据
+     * @param targetClass      目标类型
+     * @param keyMapping       Map key -> Bean 字段名映射
+     * @param ignoreProperties 需要忽略的 Bean 字段名
+     * @param <T>              目标类型
+     * @return Bean 对象
+     */
+    public static <T> T toBean(Map<String, ?> map,
+                               Class<T> targetClass,
+                               Map<String, String> keyMapping,
+                               String... ignoreProperties) {
+        if (map == null || map.isEmpty() || targetClass == null) {
+            return null;
+        }
+
+        try {
+            T bean = targetClass.getDeclaredConstructor().newInstance();
+            fillBean(map, bean, keyMapping, ignoreProperties);
+            return bean;
+        } catch (Exception e) {
+            throw new RuntimeException("Map 转 Bean 失败", e);
+        }
+    }
+
+    /**
+     * 将 Map 列表转换为 Bean 列表，支持 key 到字段名映射和类型转换
+     *
+     * @param mapList          Map 列表
+     * @param targetClass      目标类型
+     * @param keyMapping       Map key -> Bean 字段名映射
+     * @param ignoreProperties 需要忽略的 Bean 字段名
+     * @param <T>              目标类型
+     * @return Bean 列表
+     */
+    public static <T> List<T> toBeanList(List<? extends Map<String, ?>> mapList,
+                                         Class<T> targetClass,
+                                         Map<String, String> keyMapping,
+                                         String... ignoreProperties) {
+        if (mapList == null || mapList.isEmpty() || targetClass == null) {
+            return Collections.emptyList();
+        }
+
+        List<T> result = new ArrayList<>(mapList.size());
+        for (Map<String, ?> map : mapList) {
+            T bean = toBean(map, targetClass, keyMapping, ignoreProperties);
+            if (bean != null) {
+                result.add(bean);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 将 Bean 转为 Map，并排除值为 null 的属性
+     *
+     * @param bean Bean 对象
+     * @return Map 数据
+     */
+    public static Map<String, Object> toMapIgnoreNull(Object bean) {
+        Map<String, Object> map = toMap(bean);
+        map.entrySet().removeIf(entry -> entry.getValue() == null);
+        return map;
+    }
+
+    /**
+     * 将 Bean 转为 Map，并排除空值属性
+     * <p>
+     * 会排除 null、空字符串、空集合、空 Map、空数组。
+     *
+     * @param bean Bean 对象
+     * @return Map 数据
+     */
+    public static Map<String, Object> toMapIgnoreEmpty(Object bean) {
+        Map<String, Object> map = toMap(bean);
+        map.entrySet().removeIf(entry -> isEmptyValue(entry.getValue()));
+        return map;
+    }
+
+    /**
+     * 清空指定属性值
+     *
+     * @param bean       Bean 对象
+     * @param properties 需要清空的属性名
+     */
+    public static void clearProperties(Object bean, String... properties) {
+        if (bean == null || properties == null || properties.length == 0) {
+            return;
+        }
+
+        for (String property : properties) {
+            setProperty(bean, property, null);
+        }
+    }
+
+    /**
+     * 根据默认值填充 Bean 中为空的属性
+     *
+     * @param bean          Bean 对象
+     * @param defaultValues 默认值映射
+     */
+    public static void fillDefaultValues(Object bean, Map<String, ?> defaultValues) {
+        if (bean == null || defaultValues == null || defaultValues.isEmpty()) {
+            return;
+        }
+
+        try {
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(bean.getClass());
+
+            for (Map.Entry<String, ?> entry : defaultValues.entrySet()) {
+                String name = entry.getKey();
+                PropertyDescriptor pd = pdMap.get(name);
+
+                if (pd == null || pd.getReadMethod() == null || pd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Object currentValue = pd.getReadMethod().invoke(bean);
+                if (isEmptyValue(currentValue)) {
+                    Class<?> targetType = pd.getWriteMethod().getParameterTypes()[0];
+                    pd.getWriteMethod().invoke(bean, convertType(entry.getValue(), targetType));
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("填充 Bean 默认值失败", e);
+        }
+    }
+
+    /**
+     * 修剪 Bean 中所有字符串属性的前后空白
+     *
+     * @param bean Bean 对象
+     */
+    public static void trimStringProperties(Object bean) {
+        if (bean == null) {
+            return;
+        }
+
+        try {
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(bean.getClass());
+
+            for (PropertyDescriptor pd : pdMap.values()) {
+                if (pd.getReadMethod() == null || pd.getWriteMethod() == null) {
+                    continue;
+                }
+
+                Class<?> propertyType = pd.getPropertyType();
+                if (!String.class.equals(propertyType)) {
+                    continue;
+                }
+
+                Object value = pd.getReadMethod().invoke(bean);
+                if (value instanceof String) {
+                    pd.getWriteMethod().invoke(bean, ((String) value).trim());
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("修剪 Bean 字符串属性失败", e);
+        }
+    }
+
+    /**
+     * 判断嵌套属性是否存在且可获取
+     *
+     * @param bean Bean 对象
+     * @param path 属性路径
+     * @return 存在返回 true，否则返回 false
+     */
+    public static boolean hasNestedProperty(Object bean, String path) {
+        if (bean == null || path == null || path.trim().isEmpty()) {
+            return false;
+        }
+
+        try {
+            return getNestedProperty(bean, path) != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 获取嵌套属性，如果为空则返回默认值
+     *
+     * @param bean         Bean 对象
+     * @param path         属性路径
+     * @param defaultValue 默认值
+     * @param <T>          返回值类型
+     * @return 属性值或默认值
+     */
+    public static <T> T getNestedProperty(Object bean, String path, T defaultValue) {
+        T value = getNestedProperty(bean, path);
+        return value != null ? value : defaultValue;
+    }
+
+    /**
+     * 获取指定类的属性类型
+     *
+     * @param clazz        类对象
+     * @param propertyName 属性名
+     * @return 属性类型
+     */
+    public static Class<?> getPropertyType(Class<?> clazz, String propertyName) {
+        if (clazz == null || propertyName == null || propertyName.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(clazz);
+            PropertyDescriptor pd = pdMap.get(propertyName);
+
+            if (pd != null) {
+                if (pd.getReadMethod() != null) {
+                    return pd.getReadMethod().getReturnType();
+                }
+                if (pd.getWriteMethod() != null && pd.getWriteMethod().getParameterTypes().length > 0) {
+                    return pd.getWriteMethod().getParameterTypes()[0];
+                }
+            }
+
+            Field field = getField(clazz, propertyName);
+            return field == null ? null : field.getType();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取指定属性的泛型类型
+     *
+     * @param clazz     类对象
+     * @param fieldName 字段名
+     * @return 泛型类型，不存在则返回 null
+     */
+    public static Class<?> getGenericFieldType(Class<?> clazz, String fieldName) {
+        Field field = getField(clazz, fieldName);
+        if (field == null) {
+            return null;
+        }
+
+        java.lang.reflect.Type genericType = field.getGenericType();
+        if (!(genericType instanceof java.lang.reflect.ParameterizedType)) {
+            return null;
+        }
+
+        java.lang.reflect.Type[] actualTypes = ((java.lang.reflect.ParameterizedType) genericType).getActualTypeArguments();
+        if (actualTypes.length == 0 || !(actualTypes[0] instanceof Class)) {
+            return null;
+        }
+
+        return (Class<?>) actualTypes[0];
+    }
+
+    /**
+     * 获取指定类包含父类的所有字段
+     *
+     * @param clazz 类对象
+     * @return 字段列表
+     */
+    public static List<Field> getAllFields(Class<?> clazz) {
+        if (clazz == null) {
+            return Collections.emptyList();
+        }
+
+        List<Field> fields = new ArrayList<>();
+        Set<String> nameSet = new HashSet<>();
+
+        Class<?> current = clazz;
+        while (current != null && current != Object.class) {
+            Field[] declaredFields = current.getDeclaredFields();
+            for (Field field : declaredFields) {
+                if (field.isSynthetic()) {
+                    continue;
+                }
+                if (nameSet.add(field.getName())) {
+                    field.setAccessible(true);
+                    fields.add(field);
+                }
+            }
+            current = current.getSuperclass();
+        }
+
+        return fields;
+    }
+
+    /**
+     * 获取指定字段，支持向父类查找
+     *
+     * @param clazz     类对象
+     * @param fieldName 字段名
+     * @return 字段对象
+     */
+    public static Field getField(Class<?> clazz, String fieldName) {
+        if (clazz == null || fieldName == null || fieldName.trim().isEmpty()) {
+            return null;
+        }
+
+        Class<?> current = clazz;
+        while (current != null && current != Object.class) {
+            try {
+                Field field = current.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                return field;
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取可读属性名
+     *
+     * @param clazz 类对象
+     * @return 可读属性名列表
+     */
+    public static List<String> getReadablePropertyNames(Class<?> clazz) {
+        if (clazz == null) {
+            return Collections.emptyList();
+        }
+
+        try {
+            List<String> names = new ArrayList<>();
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(clazz);
+            for (Map.Entry<String, PropertyDescriptor> entry : pdMap.entrySet()) {
+                if (entry.getValue().getReadMethod() != null) {
+                    names.add(entry.getKey());
+                }
+            }
+            return names;
+        } catch (Exception e) {
+            throw new RuntimeException("获取可读属性名失败", e);
+        }
+    }
+
+    /**
+     * 获取可写属性名
+     *
+     * @param clazz 类对象
+     * @return 可写属性名列表
+     */
+    public static List<String> getWritablePropertyNames(Class<?> clazz) {
+        if (clazz == null) {
+            return Collections.emptyList();
+        }
+
+        try {
+            List<String> names = new ArrayList<>();
+            Map<String, PropertyDescriptor> pdMap = getPropertyDescriptors(clazz);
+            for (Map.Entry<String, PropertyDescriptor> entry : pdMap.entrySet()) {
+                if (entry.getValue().getWriteMethod() != null) {
+                    names.add(entry.getKey());
+                }
+            }
+            return names;
+        } catch (Exception e) {
+            throw new RuntimeException("获取可写属性名失败", e);
+        }
+    }
+
+    /**
+     * 校验必填属性是否都有值
+     *
+     * @param bean               Bean 对象
+     * @param requiredProperties 必填属性名
+     * @return 缺失的属性名列表
+     */
+    public static List<String> validateRequiredProperties(Object bean, String... requiredProperties) {
+        if (bean == null || requiredProperties == null || requiredProperties.length == 0) {
+            return Collections.emptyList();
+        }
+
+        List<String> missingNames = new ArrayList<>();
+        for (String property : requiredProperties) {
+            Object value = getProperty(bean, property);
+            if (isEmptyValue(value)) {
+                missingNames.add(property);
+            }
+        }
+
+        return missingNames;
+    }
+
+    /**
+     * 判断值是否为空
+     */
+    private static boolean isEmptyValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+
+        if (value instanceof CharSequence) {
+            return value.toString().trim().isEmpty();
+        }
+
+        if (value instanceof Collection) {
+            return ((Collection<?>) value).isEmpty();
+        }
+
+        if (value instanceof Map) {
+            return ((Map<?, ?>) value).isEmpty();
+        }
+
+        if (value.getClass().isArray()) {
+            return Array.getLength(value) == 0;
+        }
+
+        return false;
+    }
+
+    /**
+     * 类型转换
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object convertType(Object value, Class<?> targetType) {
+        if (value == null || targetType == null) {
+            return value;
+        }
+
+        Class<?> wrapperType = wrapPrimitiveType(targetType);
+        if (wrapperType.isAssignableFrom(value.getClass())) {
+            return value;
+        }
+
+        if (String.class.equals(wrapperType)) {
+            return String.valueOf(value);
+        }
+
+        String text = String.valueOf(value);
+        if (text.trim().isEmpty()) {
+            return null;
+        }
+
+        if (Integer.class.equals(wrapperType)) {
+            return Integer.valueOf(text);
+        }
+        if (Long.class.equals(wrapperType)) {
+            return Long.valueOf(text);
+        }
+        if (Double.class.equals(wrapperType)) {
+            return Double.valueOf(text);
+        }
+        if (Float.class.equals(wrapperType)) {
+            return Float.valueOf(text);
+        }
+        if (Short.class.equals(wrapperType)) {
+            return Short.valueOf(text);
+        }
+        if (Byte.class.equals(wrapperType)) {
+            return Byte.valueOf(text);
+        }
+        if (Boolean.class.equals(wrapperType)) {
+            return Boolean.valueOf(text);
+        }
+        if (Character.class.equals(wrapperType)) {
+            return text.charAt(0);
+        }
+        if (java.math.BigDecimal.class.equals(wrapperType)) {
+            return new java.math.BigDecimal(text);
+        }
+        if (java.math.BigInteger.class.equals(wrapperType)) {
+            return new java.math.BigInteger(text);
+        }
+        if (Date.class.isAssignableFrom(wrapperType) && value instanceof Date) {
+            return value;
+        }
+        if (wrapperType.isEnum()) {
+            return Enum.valueOf((Class<Enum>) wrapperType, text);
+        }
+
+        return value;
+    }
+
+    /**
+     * 包装基本类型
+     */
+    private static Class<?> wrapPrimitiveType(Class<?> type) {
+        if (!type.isPrimitive()) {
+            return type;
+        }
+
+        if (int.class.equals(type)) {
+            return Integer.class;
+        }
+        if (long.class.equals(type)) {
+            return Long.class;
+        }
+        if (double.class.equals(type)) {
+            return Double.class;
+        }
+        if (float.class.equals(type)) {
+            return Float.class;
+        }
+        if (boolean.class.equals(type)) {
+            return Boolean.class;
+        }
+        if (char.class.equals(type)) {
+            return Character.class;
+        }
+        if (short.class.equals(type)) {
+            return Short.class;
+        }
+        if (byte.class.equals(type)) {
+            return Byte.class;
+        }
+
+        return type;
+    }
+
 }

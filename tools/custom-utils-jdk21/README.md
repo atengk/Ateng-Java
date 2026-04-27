@@ -1,0 +1,80 @@
+# 自定义工具类模块（基于 JDK21）
+
+
+
+## SecureUtil
+
+安全工具类，提供摘要、HMAC、对称加解密、RSA/DSA/SM 系列签名加密、密钥与编码转换等能力。
+
+**添加依赖**
+
+```xml
+<!-- BouncyCastle 依赖 -->
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcprov-jdk18on</artifactId>
+    <version>1.78.1</version>
+</dependency>
+```
+
+
+## VirtualThreadUtil
+
+虚拟线程工具类
+
+
+
+## ValidateUtil
+
+效验工具类
+
+**添加依赖**
+
+```xml
+<!-- Spring Boot 参数校验依赖，提供 Jakarta Bean Validation 支持，用于 @NotNull、@NotBlank、@Size、@Valid 等注解校验 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+```
+
+**校验工具类配置**
+
+```java
+package io.github.atengk.config;
+
+import io.github.atengk.utils.ValidateUtil;
+import jakarta.annotation.PostConstruct;
+import jakarta.validation.Validator;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * 校验工具类配置
+ * 将 Spring Boot 容器管理的 Validator 注入到 ValidateUtil，确保消息源和自定义校验器生效。
+ *
+ * @author Ateng
+ * @since 2026-04-27
+ */
+@Configuration
+public class ValidateUtilConfig {
+
+    private final Validator validator;
+
+    public ValidateUtilConfig(Validator validator) {
+        this.validator = validator;
+    }
+
+    /**
+     * 初始化 ValidateUtil 使用的 Validator。
+     */
+    @PostConstruct
+    public void init() {
+        ValidateUtil.setValidator(validator);
+    }
+
+}
+```
+
+## SpringUtil
+
+Spring 上下文工具类

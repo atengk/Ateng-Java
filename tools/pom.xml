@@ -38,5 +38,6 @@
         <module>warm-flow</module>
         <module>ip2region</module>
         <module>sql-formatter</module>
+        <module>custom-utils-jdk21</module>
     </modules>
 </project>
