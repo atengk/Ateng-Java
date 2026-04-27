@@ -340,7 +340,8 @@ export default defineConfig({
                     {
                         text: '自定义扩展',
                         items: [
-                            { text: '自定义工具类', link: '/tools/custom-utils/README' }
+                            { text: '自定义工具类', link: '/tools/custom-utils/README' },
+                            { text: '自定义工具类（基于 JDK21）', link: '/tools/custom-utils-jdk21/README' },
                         ]
                     }
                 ]
