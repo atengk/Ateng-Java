@@ -3368,6 +3368,11 @@ public final class CollectionUtil {
             Object oldVal = oldMap.get(field);
             Object newVal = newMap.get(field);
 
+            // null、空串、空白串之间互相变化，都视为没有变化
+            if (isEmptyValue(oldVal) && isEmptyValue(newVal)) {
+                continue;
+            }
+
             if (!ObjectUtil.equals(oldVal, newVal)) {
 
                 Map<String, Object> diff = new HashMap<>();
@@ -3379,6 +3384,25 @@ public final class CollectionUtil {
         }
 
         return changes;
+    }
+
+    /**
+     * 判断是否为空值
+     *
+     * @param value 字段值
+     * @return 是否为空值
+     */
+    private static boolean isEmptyValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+
+        if (value instanceof CharSequence) {
+            CharSequence charSequence = (CharSequence) value;
+            return charSequence.toString().trim().isEmpty();
+        }
+
+        return false;
     }
 
     /**
@@ -3580,6 +3604,11 @@ public final class CollectionUtil {
         List<Object> addList = Collections.emptyList();
         List<Object> deleteList = Collections.emptyList();
         List<Map<String, Object>> updateList = new ArrayList<>();
+
+        // null、空串、空白串之间互相变化，都视为没有变化
+        if (isEmptyValue(oldVal) && isEmptyValue(newVal)) {
+            return buildResult(addList, deleteList, updateList);
+        }
 
         // 只要不相等（包含 null 对比），就认为是修改
         if (!ObjectUtil.equals(oldVal, newVal)) {
