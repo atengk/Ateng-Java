@@ -2944,3 +2944,6994 @@ GET /bitmap/bitfield?key=sign:1001:202604&offset=8&limit=16
 DELETE /bitmap/clear?key=sign:1001:202604
 ```
 
+
+
+## RedisTemplate 封装使用
+
+### 服务接口
+
+```java
+package local.ateng.java.redis.service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import org.springframework.data.redis.core.ZSetOperations;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.function.Supplier;
+
+/**
+ * RedisTemplate 通用操作服务接口。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+public interface RedisTemplateService {
+
+    // ==============================
+    // 类型转换
+    // ==============================
+
+    /**
+     * 将 Redis 中读取到的原始值转换为指定类型。
+     *
+     * @param value 原始值，通常来自 Redis 反序列化结果
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的对象；参数为空或转换失败时返回 null
+     */
+    <T> T convertValue(Object value, Class<T> clazz);
+
+    /**
+     * 将 Redis 中读取到的原始值转换为指定泛型类型。
+     *
+     * @param value         原始值，通常来自 Redis 反序列化结果
+     * @param typeReference 目标泛型类型引用，例如 List<User>、Map<String, User>
+     * @param <T>           目标泛型类型
+     * @return 转换后的对象；参数为空或转换失败时返回 null
+     */
+    <T> T convertValue(Object value, TypeReference<T> typeReference);
+
+
+    // ==============================
+    // Key 通用操作
+    // ==============================
+
+    /**
+     * 判断指定 Key 是否存在。
+     *
+     * @param key Redis Key
+     * @return true 表示存在，false 表示不存在或参数无效
+     */
+    boolean hasKey(String key);
+
+    /**
+     * 删除指定 Key。
+     *
+     * @param key Redis Key
+     * @return true 表示删除成功，false 表示 Key 不存在或参数无效
+     */
+    boolean delete(String key);
+
+    /**
+     * 批量删除指定 Key。
+     *
+     * @param keys Redis Key 集合
+     * @return 成功删除的 Key 数量
+     */
+    long delete(Collection<String> keys);
+
+    /**
+     * 设置指定 Key 的过期时间。
+     *
+     * @param key     Redis Key
+     * @param timeout 过期时间
+     * @return true 表示设置成功，false 表示设置失败或参数无效
+     */
+    boolean expire(String key, Duration timeout);
+
+    /**
+     * 设置指定 Key 在指定时间点过期。
+     *
+     * @param key      Redis Key
+     * @param expireAt 过期时间点
+     * @return true 表示设置成功，false 表示设置失败或参数无效
+     */
+    boolean expireAt(String key, Instant expireAt);
+
+    /**
+     * 移除指定 Key 的过期时间，使其永久有效。
+     *
+     * @param key Redis Key
+     * @return true 表示移除成功，false 表示 Key 不存在、无过期时间或参数无效
+     */
+    boolean persist(String key);
+
+    /**
+     * 获取指定 Key 的剩余过期时间。
+     *
+     * @param key Redis Key
+     * @return 剩余过期时间；-1 表示永久有效，-2 表示 Key 不存在
+     */
+    Duration getExpire(String key);
+
+    /**
+     * 按匹配规则扫描 Redis Key。
+     *
+     * @param pattern Key 匹配表达式，例如 user:*、order:2026:*
+     * @return 匹配到的 Key 集合
+     */
+    Set<String> scanKeys(String pattern);
+
+    /**
+     * 按匹配规则和扫描数量扫描 Redis Key。
+     *
+     * @param pattern Key 匹配表达式，例如 user:*、order:2026:*
+     * @param count   每批扫描数量，数值越大单次扫描量越多
+     * @return 匹配到的 Key 集合
+     */
+    Set<String> scanKeys(String pattern, long count);
+
+
+    // ==============================
+    // Value 操作
+    // ==============================
+
+    /**
+     * 设置指定 Key 的缓存值。
+     *
+     * @param key   Redis Key
+     * @param value 缓存值
+     */
+    void set(String key, Object value);
+
+    /**
+     * 设置指定 Key 的缓存值，并指定过期时间。
+     *
+     * @param key     Redis Key
+     * @param value   缓存值
+     * @param timeout 过期时间
+     */
+    void set(String key, Object value, Duration timeout);
+
+    /**
+     * 当指定 Key 不存在时设置缓存值。
+     *
+     * @param key   Redis Key
+     * @param value 缓存值
+     * @return true 表示设置成功，false 表示 Key 已存在或参数无效
+     */
+    boolean setIfAbsent(String key, Object value);
+
+    /**
+     * 当指定 Key 不存在时设置缓存值，并指定过期时间。
+     *
+     * @param key     Redis Key
+     * @param value   缓存值
+     * @param timeout 过期时间
+     * @return true 表示设置成功，false 表示 Key 已存在或参数无效
+     */
+    boolean setIfAbsent(String key, Object value, Duration timeout);
+
+    /**
+     * 当指定 Key 已存在时设置缓存值。
+     *
+     * @param key   Redis Key
+     * @param value 缓存值
+     * @return true 表示设置成功，false 表示 Key 不存在或参数无效
+     */
+    boolean setIfPresent(String key, Object value);
+
+    /**
+     * 当指定 Key 已存在时设置缓存值，并指定过期时间。
+     *
+     * @param key     Redis Key
+     * @param value   缓存值
+     * @param timeout 过期时间
+     * @return true 表示设置成功，false 表示 Key 不存在或参数无效
+     */
+    boolean setIfPresent(String key, Object value, Duration timeout);
+
+    /**
+     * 获取指定 Key 的缓存值。
+     *
+     * @param key Redis Key
+     * @return 缓存值；Key 不存在或参数无效时返回 null
+     */
+    Object get(String key);
+
+    /**
+     * 获取指定 Key 的缓存值，并转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的缓存值；Key 不存在、参数无效或转换失败时返回 null
+     */
+    <T> T get(String key, Class<T> clazz);
+
+    /**
+     * 获取指定 Key 的缓存值，并转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param typeReference 目标泛型类型引用，例如 List<User>、Map<String, User>
+     * @param <T>           目标泛型类型
+     * @return 转换后的缓存值；Key 不存在、参数无效或转换失败时返回 null
+     */
+    <T> T get(String key, TypeReference<T> typeReference);
+
+    /**
+     * 获取指定 Key 的旧值，并设置新值。
+     *
+     * @param key   Redis Key
+     * @param value 新缓存值
+     * @return 旧缓存值；Key 不存在或参数无效时返回 null
+     */
+    Object getAndSet(String key, Object value);
+
+    /**
+     * 获取指定 Key 的旧值并转换为指定类型，同时设置新值。
+     *
+     * @param key   Redis Key
+     * @param value 新缓存值
+     * @param clazz 旧值目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的旧缓存值；Key 不存在、参数无效或转换失败时返回 null
+     */
+    <T> T getAndSet(String key, Object value, Class<T> clazz);
+
+    /**
+     * 获取指定 Key 的旧值并转换为指定泛型类型，同时设置新值。
+     *
+     * @param key           Redis Key
+     * @param value         新缓存值
+     * @param typeReference 旧值目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的旧缓存值；Key 不存在、参数无效或转换失败时返回 null
+     */
+    <T> T getAndSet(String key, Object value, TypeReference<T> typeReference);
+
+    /**
+     * 批量获取多个 Key 的缓存值。
+     *
+     * @param keys Redis Key 集合
+     * @return 缓存值列表，返回顺序与 Key 集合顺序一致
+     */
+    List<Object> multiGet(Collection<String> keys);
+
+    /**
+     * 批量获取多个 Key 的缓存值，并逐个转换为指定类型。
+     *
+     * @param keys  Redis Key 集合
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的缓存值列表，返回顺序与 Key 集合顺序一致
+     */
+    <T> List<T> multiGet(Collection<String> keys, Class<T> clazz);
+
+    /**
+     * 批量获取多个 Key 的缓存值，并逐个转换为指定泛型类型。
+     *
+     * @param keys          Redis Key 集合
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的缓存值列表，返回顺序与 Key 集合顺序一致
+     */
+    <T> List<T> multiGet(Collection<String> keys, TypeReference<T> typeReference);
+
+    /**
+     * 批量获取多个 Key 的缓存值，并按 Key 组装为 Map。
+     *
+     * @param keys Redis Key 集合
+     * @return Key 与缓存值的映射关系
+     */
+    Map<String, Object> multiGetAsMap(Collection<String> keys);
+
+    /**
+     * 批量获取多个 Key 的缓存值，并转换为指定类型后按 Key 组装为 Map。
+     *
+     * @param keys  Redis Key 集合
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return Key 与转换后缓存值的映射关系
+     */
+    <T> Map<String, T> multiGetAsMap(Collection<String> keys, Class<T> clazz);
+
+    /**
+     * 批量获取多个 Key 的缓存值，并转换为指定泛型类型后按 Key 组装为 Map。
+     *
+     * @param keys          Redis Key 集合
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return Key 与转换后缓存值的映射关系
+     */
+    <T> Map<String, T> multiGetAsMap(Collection<String> keys, TypeReference<T> typeReference);
+
+    /**
+     * 将指定 Key 的整数值自增 1。
+     *
+     * @param key Redis Key
+     * @return 自增后的值；参数无效时返回 0
+     */
+    long increment(String key);
+
+    /**
+     * 将指定 Key 的整数值按指定步长自增。
+     *
+     * @param key   Redis Key
+     * @param delta 自增步长
+     * @return 自增后的值；参数无效时返回 0
+     */
+    long increment(String key, long delta);
+
+    /**
+     * 将指定 Key 的浮点数值按指定步长自增。
+     *
+     * @param key   Redis Key
+     * @param delta 自增步长
+     * @return 自增后的值；参数无效时返回 0
+     */
+    double increment(String key, double delta);
+
+    /**
+     * 将指定 Key 的整数值自减 1。
+     *
+     * @param key Redis Key
+     * @return 自减后的值；参数无效时返回 0
+     */
+    long decrement(String key);
+
+    /**
+     * 将指定 Key 的整数值按指定步长自减。
+     *
+     * @param key   Redis Key
+     * @param delta 自减步长
+     * @return 自减后的值；参数无效时返回 0
+     */
+    long decrement(String key, long delta);
+
+    /**
+     * 获取缓存值；缓存不存在时通过 Supplier 加载数据并写入缓存。
+     *
+     * @param key      Redis Key
+     * @param clazz    目标类型
+     * @param supplier 数据加载函数
+     * @param <T>      目标泛型类型
+     * @return 缓存值或加载后的数据；参数无效或加载结果为空时返回 null
+     */
+    <T> T getOrLoad(String key, Class<T> clazz, Supplier<T> supplier);
+
+    /**
+     * 获取缓存值；缓存不存在时通过 Supplier 加载数据并写入缓存，同时设置过期时间。
+     *
+     * @param key      Redis Key
+     * @param clazz    目标类型
+     * @param supplier 数据加载函数
+     * @param timeout  缓存过期时间
+     * @param <T>      目标泛型类型
+     * @return 缓存值或加载后的数据；参数无效或加载结果为空时返回 null
+     */
+    <T> T getOrLoad(String key, Class<T> clazz, Supplier<T> supplier, Duration timeout);
+
+    /**
+     * 获取缓存值并转换为指定泛型类型；缓存不存在时通过 Supplier 加载数据并写入缓存。
+     *
+     * @param key           Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param supplier      数据加载函数
+     * @param <T>           目标泛型类型
+     * @return 缓存值或加载后的数据；参数无效或加载结果为空时返回 null
+     */
+    <T> T getOrLoad(String key, TypeReference<T> typeReference, Supplier<T> supplier);
+
+    /**
+     * 获取缓存值并转换为指定泛型类型；缓存不存在时通过 Supplier 加载数据并写入缓存，同时设置过期时间。
+     *
+     * @param key           Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param supplier      数据加载函数
+     * @param timeout       缓存过期时间
+     * @param <T>           目标泛型类型
+     * @return 缓存值或加载后的数据；参数无效或加载结果为空时返回 null
+     */
+    <T> T getOrLoad(String key, TypeReference<T> typeReference, Supplier<T> supplier, Duration timeout);
+
+    /**
+     * 获取缓存值；缓存不存在时加锁后通过 Supplier 加载数据并写入缓存。
+     *
+     * @param key           Redis Key
+     * @param lockKey       分布式锁 Key
+     * @param clazz         目标类型
+     * @param supplier      数据加载函数
+     * @param cacheTimeout  缓存过期时间
+     * @param lockWaitTime  获取锁最大等待时间
+     * @param lockLeaseTime 锁自动释放时间
+     * @param <T>           目标泛型类型
+     * @return 缓存值或加载后的数据；参数无效、获取锁失败或加载结果为空时返回 null
+     */
+    <T> T getOrLoadWithLock(String key, String lockKey, Class<T> clazz, Supplier<T> supplier, Duration cacheTimeout, Duration lockWaitTime, Duration lockLeaseTime);
+
+    /**
+     * 获取缓存值并转换为指定泛型类型；缓存不存在时加锁后通过 Supplier 加载数据并写入缓存。
+     *
+     * @param key           Redis Key
+     * @param lockKey       分布式锁 Key
+     * @param typeReference 目标泛型类型引用
+     * @param supplier      数据加载函数
+     * @param cacheTimeout  缓存过期时间
+     * @param lockWaitTime  获取锁最大等待时间
+     * @param lockLeaseTime 锁自动释放时间
+     * @param <T>           目标泛型类型
+     * @return 缓存值或加载后的数据；参数无效、获取锁失败或加载结果为空时返回 null
+     */
+    <T> T getOrLoadWithLock(String key, String lockKey, TypeReference<T> typeReference, Supplier<T> supplier, Duration cacheTimeout, Duration lockWaitTime, Duration lockLeaseTime);
+
+    // ==============================
+    // Hash 操作
+    // ==============================
+
+    /**
+     * 设置 Hash 中指定字段的值。
+     *
+     * @param key     Redis Key
+     * @param hashKey Hash 字段 Key
+     * @param value   Hash 字段值
+     */
+    void hPut(String key, Object hashKey, Object value);
+
+    /**
+     * 批量设置 Hash 字段和值。
+     *
+     * @param key Redis Key
+     * @param map Hash 字段和值映射
+     */
+    void hPutAll(String key, Map<?, ?> map);
+
+    /**
+     * 当 Hash 字段不存在时设置字段值。
+     *
+     * @param key     Redis Key
+     * @param hashKey Hash 字段 Key
+     * @param value   Hash 字段值
+     * @return true 表示设置成功，false 表示字段已存在或参数无效
+     */
+    boolean hPutIfAbsent(String key, Object hashKey, Object value);
+
+    /**
+     * 获取 Hash 中指定字段的值。
+     *
+     * @param key     Redis Key
+     * @param hashKey Hash 字段 Key
+     * @return Hash 字段值；Key 或字段不存在时返回 null
+     */
+    Object hGet(String key, Object hashKey);
+
+    /**
+     * 获取 Hash 中指定字段的值，并转换为指定类型。
+     *
+     * @param key     Redis Key
+     * @param hashKey Hash 字段 Key
+     * @param clazz   目标类型
+     * @param <T>     目标泛型类型
+     * @return 转换后的字段值；Key 或字段不存在、参数无效或转换失败时返回 null
+     */
+    <T> T hGet(String key, Object hashKey, Class<T> clazz);
+
+    /**
+     * 获取 Hash 中指定字段的值，并转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param hashKey       Hash 字段 Key
+     * @param typeReference 目标泛型类型引用，例如 List<User>、Map<String, User>
+     * @param <T>           目标泛型类型
+     * @return 转换后的字段值；Key 或字段不存在、参数无效或转换失败时返回 null
+     */
+    <T> T hGet(String key, Object hashKey, TypeReference<T> typeReference);
+
+    /**
+     * 批量获取 Hash 中多个字段的值。
+     *
+     * @param key      Redis Key
+     * @param hashKeys Hash 字段 Key 集合
+     * @return Hash 字段值列表，返回顺序与 hashKeys 顺序一致
+     */
+    List<Object> hMultiGet(String key, Collection<?> hashKeys);
+
+    /**
+     * 批量获取 Hash 中多个字段的值，并逐个转换为指定类型。
+     *
+     * @param key      Redis Key
+     * @param hashKeys Hash 字段 Key 集合
+     * @param clazz    目标类型
+     * @param <T>      目标泛型类型
+     * @return 转换后的字段值列表，返回顺序与 hashKeys 顺序一致
+     */
+    <T> List<T> hMultiGet(String key, Collection<?> hashKeys, Class<T> clazz);
+
+    /**
+     * 批量获取 Hash 中多个字段的值，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param hashKeys      Hash 字段 Key 集合
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的字段值列表，返回顺序与 hashKeys 顺序一致
+     */
+    <T> List<T> hMultiGet(String key, Collection<?> hashKeys, TypeReference<T> typeReference);
+
+    /**
+     * 获取 Hash 中所有字段和值。
+     *
+     * @param key Redis Key
+     * @return Hash 字段和值映射；Key 不存在或参数无效时返回空 Map
+     */
+    Map<Object, Object> hGetAll(String key);
+
+    /**
+     * 获取 Hash 中所有字段和值，并将字段值转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param clazz 字段值目标类型
+     * @param <T>   字段值目标泛型类型
+     * @return Hash 字段与转换后字段值的映射
+     */
+    <T> Map<Object, T> hGetAll(String key, Class<T> clazz);
+
+    /**
+     * 获取 Hash 中所有字段和值，并将字段值转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param typeReference 字段值目标泛型类型引用
+     * @param <T>           字段值目标泛型类型
+     * @return Hash 字段与转换后字段值的映射
+     */
+    <T> Map<Object, T> hGetAll(String key, TypeReference<T> typeReference);
+
+    /**
+     * 判断 Hash 中指定字段是否存在。
+     *
+     * @param key     Redis Key
+     * @param hashKey Hash 字段 Key
+     * @return true 表示存在，false 表示不存在或参数无效
+     */
+    boolean hHasKey(String key, Object hashKey);
+
+    /**
+     * 删除 Hash 中一个或多个字段。
+     *
+     * @param key      Redis Key
+     * @param hashKeys Hash 字段 Key 数组
+     * @return 成功删除的字段数量
+     */
+    long hDelete(String key, Object... hashKeys);
+
+    /**
+     * 获取 Hash 字段数量。
+     *
+     * @param key Redis Key
+     * @return Hash 字段数量；Key 不存在或参数无效时返回 0
+     */
+    long hSize(String key);
+
+    /**
+     * 获取 Hash 中所有字段 Key。
+     *
+     * @param key Redis Key
+     * @return Hash 字段 Key 集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> hKeys(String key);
+
+    /**
+     * 获取 Hash 中所有字段值。
+     *
+     * @param key Redis Key
+     * @return Hash 字段值列表；Key 不存在或参数无效时返回空 List
+     */
+    List<Object> hValues(String key);
+
+    /**
+     * 获取 Hash 中所有字段值，并逐个转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param clazz 字段值目标类型
+     * @param <T>   字段值目标泛型类型
+     * @return 转换后的 Hash 字段值列表
+     */
+    <T> List<T> hValues(String key, Class<T> clazz);
+
+    /**
+     * 获取 Hash 中所有字段值，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param typeReference 字段值目标泛型类型引用
+     * @param <T>           字段值目标泛型类型
+     * @return 转换后的 Hash 字段值列表
+     */
+    <T> List<T> hValues(String key, TypeReference<T> typeReference);
+
+    /**
+     * 将 Hash 中指定字段的整数值按指定步长递增。
+     *
+     * @param key     Redis Key
+     * @param hashKey Hash 字段 Key
+     * @param delta   递增步长
+     * @return 递增后的字段值；参数无效时返回 0
+     */
+    long hIncrement(String key, Object hashKey, long delta);
+
+    /**
+     * 将 Hash 中指定字段的浮点数值按指定步长递增。
+     *
+     * @param key     Redis Key
+     * @param hashKey Hash 字段 Key
+     * @param delta   递增步长
+     * @return 递增后的字段值；参数无效时返回 0
+     */
+    double hIncrement(String key, Object hashKey, double delta);
+
+
+    // ==============================
+    // List 操作
+    // ==============================
+
+    /**
+     * 从 List 左侧插入一个元素。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @return 插入后 List 的长度；参数无效时返回 0
+     */
+    long lLeftPush(String key, Object value);
+
+    /**
+     * 从 List 左侧批量插入元素。
+     *
+     * @param key    Redis Key
+     * @param values 元素值集合
+     * @return 插入后 List 的长度；参数无效时返回 0
+     */
+    long lLeftPushAll(String key, Collection<?> values);
+
+    /**
+     * 从 List 右侧插入一个元素。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @return 插入后 List 的长度；参数无效时返回 0
+     */
+    long lRightPush(String key, Object value);
+
+    /**
+     * 从 List 右侧批量插入元素。
+     *
+     * @param key    Redis Key
+     * @param values 元素值集合
+     * @return 插入后 List 的长度；参数无效时返回 0
+     */
+    long lRightPushAll(String key, Collection<?> values);
+
+    /**
+     * 从 List 左侧弹出一个元素。
+     *
+     * @param key Redis Key
+     * @return 弹出的元素；Key 不存在、List 为空或参数无效时返回 null
+     */
+    Object lLeftPop(String key);
+
+    /**
+     * 从 List 左侧阻塞弹出一个元素。
+     *
+     * @param key     Redis Key
+     * @param timeout 阻塞等待时间
+     * @return 弹出的元素；超时、Key 不存在、List 为空或参数无效时返回 null
+     */
+    Object lLeftPop(String key, Duration timeout);
+
+    /**
+     * 从 List 左侧弹出一个元素，并转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素；弹出为空、参数无效或转换失败时返回 null
+     */
+    <T> T lLeftPop(String key, Class<T> clazz);
+
+    /**
+     * 从 List 左侧弹出一个元素，并转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素；弹出为空、参数无效或转换失败时返回 null
+     */
+    <T> T lLeftPop(String key, TypeReference<T> typeReference);
+
+    /**
+     * 从 List 右侧弹出一个元素。
+     *
+     * @param key Redis Key
+     * @return 弹出的元素；Key 不存在、List 为空或参数无效时返回 null
+     */
+    Object lRightPop(String key);
+
+    /**
+     * 从 List 右侧阻塞弹出一个元素。
+     *
+     * @param key     Redis Key
+     * @param timeout 阻塞等待时间
+     * @return 弹出的元素；超时、Key 不存在、List 为空或参数无效时返回 null
+     */
+    Object lRightPop(String key, Duration timeout);
+
+    /**
+     * 从 List 右侧弹出一个元素，并转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素；弹出为空、参数无效或转换失败时返回 null
+     */
+    <T> T lRightPop(String key, Class<T> clazz);
+
+    /**
+     * 从 List 右侧弹出一个元素，并转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素；弹出为空、参数无效或转换失败时返回 null
+     */
+    <T> T lRightPop(String key, TypeReference<T> typeReference);
+
+    /**
+     * 根据索引获取 List 中的元素。
+     *
+     * @param key   Redis Key
+     * @param index 元素索引，支持负数索引
+     * @return 指定索引位置的元素；索引不存在、Key 不存在或参数无效时返回 null
+     */
+    Object lIndex(String key, long index);
+
+    /**
+     * 根据索引获取 List 中的元素，并转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param index 元素索引，支持负数索引
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素；索引不存在、参数无效或转换失败时返回 null
+     */
+    <T> T lIndex(String key, long index, Class<T> clazz);
+
+    /**
+     * 根据索引获取 List 中的元素，并转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param index         元素索引，支持负数索引
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素；索引不存在、参数无效或转换失败时返回 null
+     */
+    <T> T lIndex(String key, long index, TypeReference<T> typeReference);
+
+    /**
+     * 获取 List 指定范围内的元素。
+     *
+     * @param key   Redis Key
+     * @param start 开始索引，支持负数索引
+     * @param end   结束索引，支持负数索引
+     * @return 指定范围内的元素列表；Key 不存在或参数无效时返回空 List
+     */
+    List<Object> lRange(String key, long start, long end);
+
+    /**
+     * 获取 List 指定范围内的元素，并逐个转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param start 开始索引，支持负数索引
+     * @param end   结束索引，支持负数索引
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素列表；Key 不存在、参数无效或转换失败时返回空 List
+     */
+    <T> List<T> lRange(String key, long start, long end, Class<T> clazz);
+
+    /**
+     * 获取 List 指定范围内的元素，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param start         开始索引，支持负数索引
+     * @param end           结束索引，支持负数索引
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素列表；Key 不存在、参数无效或转换失败时返回空 List
+     */
+    <T> List<T> lRange(String key, long start, long end, TypeReference<T> typeReference);
+
+    /**
+     * 根据索引设置 List 中的元素值。
+     *
+     * @param key   Redis Key
+     * @param index 元素索引
+     * @param value 新元素值
+     */
+    void lSet(String key, long index, Object value);
+
+    /**
+     * 裁剪 List，只保留指定范围内的元素。
+     *
+     * @param key   Redis Key
+     * @param start 开始索引，支持负数索引
+     * @param end   结束索引，支持负数索引
+     */
+    void lTrim(String key, long start, long end);
+
+    /**
+     * 删除 List 中指定数量的匹配元素。
+     *
+     * @param key   Redis Key
+     * @param count 删除数量；大于 0 从左到右删除，小于 0 从右到左删除，等于 0 删除全部匹配元素
+     * @param value 要删除的元素值
+     * @return 成功删除的元素数量；参数无效时返回 0
+     */
+    long lRemove(String key, long count, Object value);
+
+    /**
+     * 获取 List 长度。
+     *
+     * @param key Redis Key
+     * @return List 长度；Key 不存在或参数无效时返回 0
+     */
+    long lSize(String key);
+
+
+    // ==============================
+    // Set 操作
+    // ==============================
+
+    /**
+     * 向 Set 中添加一个或多个元素。
+     *
+     * @param key    Redis Key
+     * @param values 元素值数组
+     * @return 成功添加的元素数量；参数无效时返回 0
+     */
+    long sAdd(String key, Object... values);
+
+    /**
+     * 从 Set 中移除一个或多个元素。
+     *
+     * @param key    Redis Key
+     * @param values 元素值数组
+     * @return 成功移除的元素数量；参数无效时返回 0
+     */
+    long sRemove(String key, Object... values);
+
+    /**
+     * 判断指定元素是否为 Set 成员。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @return true 表示元素存在，false 表示元素不存在或参数无效
+     */
+    boolean sIsMember(String key, Object value);
+
+    /**
+     * 获取 Set 中所有元素。
+     *
+     * @param key Redis Key
+     * @return Set 元素集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> sMembers(String key);
+
+    /**
+     * 获取 Set 中所有元素，并逐个转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的 Set 元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sMembers(String key, Class<T> clazz);
+
+    /**
+     * 获取 Set 中所有元素，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的 Set 元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sMembers(String key, TypeReference<T> typeReference);
+
+    /**
+     * 从 Set 中随机弹出一个元素。
+     *
+     * @param key Redis Key
+     * @return 弹出的元素；Key 不存在、Set 为空或参数无效时返回 null
+     */
+    Object sPop(String key);
+
+    /**
+     * 从 Set 中随机弹出一个元素，并转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素；弹出为空、参数无效或转换失败时返回 null
+     */
+    <T> T sPop(String key, Class<T> clazz);
+
+    /**
+     * 从 Set 中随机弹出一个元素，并转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素；弹出为空、参数无效或转换失败时返回 null
+     */
+    <T> T sPop(String key, TypeReference<T> typeReference);
+
+    /**
+     * 从 Set 中随机弹出指定数量的元素。
+     *
+     * @param key   Redis Key
+     * @param count 弹出数量
+     * @return 弹出的元素列表；Key 不存在、Set 为空或参数无效时返回空 List
+     */
+    List<Object> sPop(String key, long count);
+
+    /**
+     * 从 Set 中随机弹出指定数量的元素，并逐个转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param count 弹出数量
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素列表；Key 不存在、Set 为空、参数无效或转换失败时返回空 List
+     */
+    <T> List<T> sPop(String key, long count, Class<T> clazz);
+
+    /**
+     * 从 Set 中随机弹出指定数量的元素，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param count         弹出数量
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素列表；Key 不存在、Set 为空、参数无效或转换失败时返回空 List
+     */
+    <T> List<T> sPop(String key, long count, TypeReference<T> typeReference);
+
+    /**
+     * 获取 Set 元素数量。
+     *
+     * @param key Redis Key
+     * @return Set 元素数量；Key 不存在或参数无效时返回 0
+     */
+    long sSize(String key);
+
+    /**
+     * 获取两个 Set 的交集。
+     *
+     * @param key      Redis Key
+     * @param otherKey 另一个 Redis Key
+     * @return 交集元素集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> sIntersect(String key, String otherKey);
+
+    /**
+     * 获取两个 Set 的交集，并逐个转换为指定类型。
+     *
+     * @param key      Redis Key
+     * @param otherKey 另一个 Redis Key
+     * @param clazz    目标类型
+     * @param <T>      目标泛型类型
+     * @return 转换后的交集元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sIntersect(String key, String otherKey, Class<T> clazz);
+
+    /**
+     * 获取两个 Set 的交集，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param otherKey      另一个 Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的交集元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sIntersect(String key, String otherKey, TypeReference<T> typeReference);
+
+    /**
+     * 获取两个 Set 的并集。
+     *
+     * @param key      Redis Key
+     * @param otherKey 另一个 Redis Key
+     * @return 并集元素集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> sUnion(String key, String otherKey);
+
+    /**
+     * 获取两个 Set 的并集，并逐个转换为指定类型。
+     *
+     * @param key      Redis Key
+     * @param otherKey 另一个 Redis Key
+     * @param clazz    目标类型
+     * @param <T>      目标泛型类型
+     * @return 转换后的并集元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sUnion(String key, String otherKey, Class<T> clazz);
+
+    /**
+     * 获取两个 Set 的并集，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param otherKey      另一个 Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的并集元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sUnion(String key, String otherKey, TypeReference<T> typeReference);
+
+    /**
+     * 获取两个 Set 的差集。
+     *
+     * @param key      Redis Key
+     * @param otherKey 另一个 Redis Key
+     * @return 差集元素集合，即 key 中存在但 otherKey 中不存在的元素；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> sDifference(String key, String otherKey);
+
+    /**
+     * 获取两个 Set 的差集，并逐个转换为指定类型。
+     *
+     * @param key      Redis Key
+     * @param otherKey 另一个 Redis Key
+     * @param clazz    目标类型
+     * @param <T>      目标泛型类型
+     * @return 转换后的差集元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sDifference(String key, String otherKey, Class<T> clazz);
+
+    /**
+     * 获取两个 Set 的差集，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param otherKey      另一个 Redis Key
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的差集元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> sDifference(String key, String otherKey, TypeReference<T> typeReference);
+
+
+    // ==============================
+    // ZSet 操作
+    // ==============================
+
+    /**
+     * 向 ZSet 中添加元素及其分数。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @param score 元素分数
+     * @return true 表示添加成功，false 表示添加失败或参数无效
+     */
+    boolean zAdd(String key, Object value, double score);
+
+    /**
+     * 从 ZSet 中移除一个或多个元素。
+     *
+     * @param key    Redis Key
+     * @param values 元素值数组
+     * @return 成功移除的元素数量；参数无效时返回 0
+     */
+    long zRemove(String key, Object... values);
+
+    /**
+     * 获取 ZSet 中指定元素的分数。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @return 元素分数；元素不存在、Key 不存在或参数无效时返回 null
+     */
+    Double zScore(String key, Object value);
+
+    /**
+     * 获取 ZSet 中指定元素的正序排名。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @return 元素排名，排名从 0 开始；元素不存在、Key 不存在或参数无效时返回 null
+     */
+    Long zRank(String key, Object value);
+
+    /**
+     * 获取 ZSet 中指定元素的倒序排名。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @return 元素倒序排名，排名从 0 开始；元素不存在、Key 不存在或参数无效时返回 null
+     */
+    Long zReverseRank(String key, Object value);
+
+    /**
+     * 获取 ZSet 元素数量。
+     *
+     * @param key Redis Key
+     * @return ZSet 元素数量；Key 不存在或参数无效时返回 0
+     */
+    long zSize(String key);
+
+    /**
+     * 获取 ZSet 中指定分数区间内的元素数量。
+     *
+     * @param key Redis Key
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 指定分数区间内的元素数量；Key 不存在或参数无效时返回 0
+     */
+    long zCount(String key, double min, double max);
+
+    /**
+     * 按正序排名范围获取 ZSet 元素。
+     *
+     * @param key   Redis Key
+     * @param start 开始排名，支持负数索引
+     * @param end   结束排名，支持负数索引
+     * @return 指定排名范围内的元素集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> zRange(String key, long start, long end);
+
+    /**
+     * 按正序排名范围获取 ZSet 元素，并逐个转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param start 开始排名，支持负数索引
+     * @param end   结束排名，支持负数索引
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zRange(String key, long start, long end, Class<T> clazz);
+
+    /**
+     * 按正序排名范围获取 ZSet 元素，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param start         开始排名，支持负数索引
+     * @param end           结束排名，支持负数索引
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zRange(String key, long start, long end, TypeReference<T> typeReference);
+
+    /**
+     * 按倒序排名范围获取 ZSet 元素。
+     *
+     * @param key   Redis Key
+     * @param start 开始排名，支持负数索引
+     * @param end   结束排名，支持负数索引
+     * @return 指定倒序排名范围内的元素集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> zReverseRange(String key, long start, long end);
+
+    /**
+     * 按倒序排名范围获取 ZSet 元素，并逐个转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param start 开始排名，支持负数索引
+     * @param end   结束排名，支持负数索引
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zReverseRange(String key, long start, long end, Class<T> clazz);
+
+    /**
+     * 按倒序排名范围获取 ZSet 元素，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param start         开始排名，支持负数索引
+     * @param end           结束排名，支持负数索引
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zReverseRange(String key, long start, long end, TypeReference<T> typeReference);
+
+    /**
+     * 按分数区间获取 ZSet 元素。
+     *
+     * @param key Redis Key
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 指定分数区间内的元素集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> zRangeByScore(String key, double min, double max);
+
+    /**
+     * 按分数区间获取 ZSet 元素，并逐个转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param min   最小分数
+     * @param max   最大分数
+     * @param clazz 目标类型
+     * @param <T>   目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zRangeByScore(String key, double min, double max, Class<T> clazz);
+
+    /**
+     * 按分数区间获取 ZSet 元素，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param min           最小分数
+     * @param max           最大分数
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zRangeByScore(String key, double min, double max, TypeReference<T> typeReference);
+
+    /**
+     * 按分数区间分页获取 ZSet 元素。
+     *
+     * @param key    Redis Key
+     * @param min    最小分数
+     * @param max    最大分数
+     * @param offset 偏移量，从 0 开始
+     * @param count  返回数量
+     * @return 指定分数区间内分页后的元素集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<Object> zRangeByScore(String key, double min, double max, long offset, long count);
+
+    /**
+     * 按分数区间分页获取 ZSet 元素，并逐个转换为指定类型。
+     *
+     * @param key    Redis Key
+     * @param min    最小分数
+     * @param max    最大分数
+     * @param offset 偏移量，从 0 开始
+     * @param count  返回数量
+     * @param clazz  目标类型
+     * @param <T>    目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zRangeByScore(String key, double min, double max, long offset, long count, Class<T> clazz);
+
+    /**
+     * 按分数区间分页获取 ZSet 元素，并逐个转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param min           最小分数
+     * @param max           最大分数
+     * @param offset        偏移量，从 0 开始
+     * @param count         返回数量
+     * @param typeReference 目标泛型类型引用
+     * @param <T>           目标泛型类型
+     * @return 转换后的元素集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<T> zRangeByScore(String key, double min, double max, long offset, long count, TypeReference<T> typeReference);
+
+    /**
+     * 按正序排名范围获取 ZSet 元素及其分数。
+     *
+     * @param key   Redis Key
+     * @param start 开始排名，支持负数索引
+     * @param end   结束排名，支持负数索引
+     * @return 元素和值分数元组集合；Key 不存在或参数无效时返回空 Set
+     */
+    Set<ZSetOperations.TypedTuple<Object>> zRangeWithScores(String key, long start, long end);
+
+    /**
+     * 按正序排名范围获取 ZSet 元素及其分数，并将元素值转换为指定类型。
+     *
+     * @param key   Redis Key
+     * @param start 开始排名，支持负数索引
+     * @param end   结束排名，支持负数索引
+     * @param clazz 元素值目标类型
+     * @param <T>   元素值目标泛型类型
+     * @return 转换后的元素和值分数元组集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<ZSetOperations.TypedTuple<T>> zRangeWithScores(String key, long start, long end, Class<T> clazz);
+
+    /**
+     * 按正序排名范围获取 ZSet 元素及其分数，并将元素值转换为指定泛型类型。
+     *
+     * @param key           Redis Key
+     * @param start         开始排名，支持负数索引
+     * @param end           结束排名，支持负数索引
+     * @param typeReference 元素值目标泛型类型引用
+     * @param <T>           元素值目标泛型类型
+     * @return 转换后的元素和值分数元组集合；Key 不存在、参数无效或转换失败时返回空 Set
+     */
+    <T> Set<ZSetOperations.TypedTuple<T>> zRangeWithScores(String key, long start, long end, TypeReference<T> typeReference);
+
+    /**
+     * 按排名范围删除 ZSet 元素。
+     *
+     * @param key   Redis Key
+     * @param start 开始排名，支持负数索引
+     * @param end   结束排名，支持负数索引
+     * @return 成功删除的元素数量；参数无效时返回 0
+     */
+    long zRemoveRange(String key, long start, long end);
+
+    /**
+     * 按分数区间删除 ZSet 元素。
+     *
+     * @param key Redis Key
+     * @param min 最小分数
+     * @param max 最大分数
+     * @return 成功删除的元素数量；参数无效时返回 0
+     */
+    long zRemoveRangeByScore(String key, double min, double max);
+
+    /**
+     * 将 ZSet 中指定元素的分数按指定步长递增。
+     *
+     * @param key   Redis Key
+     * @param value 元素值
+     * @param delta 递增步长
+     * @return 递增后的分数；参数无效时返回 null
+     */
+    Double zIncrementScore(String key, Object value, double delta);
+
+    // ==============================
+    // 分布式锁
+    // ==============================
+
+    /**
+     * 尝试获取分布式锁。
+     *
+     * @param lockKey   锁 Key
+     * @param lockValue 锁值，通常使用唯一标识
+     * @param leaseTime 锁自动释放时间
+     * @return true 表示获取锁成功，false 表示获取锁失败或参数无效
+     */
+    boolean tryLock(String lockKey, String lockValue, Duration leaseTime);
+
+    /**
+     * 在指定等待时间内尝试获取分布式锁。
+     *
+     * @param lockKey   锁 Key
+     * @param lockValue 锁值，通常使用唯一标识
+     * @param waitTime  获取锁最大等待时间
+     * @param leaseTime 锁自动释放时间
+     * @return true 表示获取锁成功，false 表示等待超时、获取锁失败或参数无效
+     */
+    boolean tryLock(String lockKey, String lockValue, Duration waitTime, Duration leaseTime);
+
+    /**
+     * 释放分布式锁。
+     *
+     * @param lockKey   锁 Key
+     * @param lockValue 锁值，必须与加锁时的锁值一致
+     * @return true 表示释放成功，false 表示锁不存在、锁值不匹配或参数无效
+     */
+    boolean unlock(String lockKey, String lockValue);
+
+    /**
+     * 尝试获取分布式锁并执行无返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param leaseTime 锁自动释放时间
+     * @param task      加锁成功后执行的任务
+     * @return true 表示获取锁并执行任务成功，false 表示获取锁失败或参数无效
+     */
+    boolean tryExecuteWithLock(String lockKey, Duration leaseTime, Runnable task);
+
+    /**
+     * 在指定等待时间内尝试获取分布式锁并执行无返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param waitTime  获取锁最大等待时间
+     * @param leaseTime 锁自动释放时间
+     * @param task      加锁成功后执行的任务
+     * @return true 表示获取锁并执行任务成功，false 表示等待超时、获取锁失败或参数无效
+     */
+    boolean tryExecuteWithLock(String lockKey, Duration waitTime, Duration leaseTime, Runnable task);
+
+    /**
+     * 尝试获取分布式锁并执行有返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param leaseTime 锁自动释放时间
+     * @param supplier  加锁成功后执行的数据提供函数
+     * @param <T>       返回值泛型类型
+     * @return Optional 包装的任务结果；获取锁失败、参数无效或任务返回 null 时返回 Optional.empty()
+     */
+    <T> Optional<T> tryExecuteWithLock(String lockKey, Duration leaseTime, Supplier<T> supplier);
+
+    /**
+     * 在指定等待时间内尝试获取分布式锁并执行有返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param waitTime  获取锁最大等待时间
+     * @param leaseTime 锁自动释放时间
+     * @param supplier  加锁成功后执行的数据提供函数
+     * @param <T>       返回值泛型类型
+     * @return Optional 包装的任务结果；等待超时、获取锁失败、参数无效或任务返回 null 时返回 Optional.empty()
+     */
+    <T> Optional<T> tryExecuteWithLock(String lockKey, Duration waitTime, Duration leaseTime, Supplier<T> supplier);
+
+    /**
+     * 获取分布式锁并执行无返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param leaseTime 锁自动释放时间
+     * @param task      加锁成功后执行的任务
+     */
+    void executeWithLock(String lockKey, Duration leaseTime, Runnable task);
+
+    /**
+     * 在指定等待时间内获取分布式锁并执行无返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param waitTime  获取锁最大等待时间
+     * @param leaseTime 锁自动释放时间
+     * @param task      加锁成功后执行的任务
+     */
+    void executeWithLock(String lockKey, Duration waitTime, Duration leaseTime, Runnable task);
+
+    /**
+     * 获取分布式锁并执行有返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param leaseTime 锁自动释放时间
+     * @param supplier  加锁成功后执行的数据提供函数
+     * @param <T>       返回值泛型类型
+     * @return 任务执行结果
+     */
+    <T> T executeWithLock(String lockKey, Duration leaseTime, Supplier<T> supplier);
+
+    /**
+     * 在指定等待时间内获取分布式锁并执行有返回值任务。
+     *
+     * @param lockKey   锁 Key
+     * @param waitTime  获取锁最大等待时间
+     * @param leaseTime 锁自动释放时间
+     * @param supplier  加锁成功后执行的数据提供函数
+     * @param <T>       返回值泛型类型
+     * @return 任务执行结果
+     */
+    <T> T executeWithLock(String lockKey, Duration waitTime, Duration leaseTime, Supplier<T> supplier);
+
+    // ==============================
+    // Lua 脚本操作
+    // ==============================
+
+    /**
+     * 执行 Lua 脚本并返回原始结果。
+     *
+     * @param script Lua 脚本文本
+     * @param keys   Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args   脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @return Lua 脚本执行结果；参数无效或执行失败时返回 null
+     */
+    Object executeLua(String script, List<String> keys, Object... args);
+
+    /**
+     * 执行 Lua 脚本，并将结果转换为指定类型。
+     *
+     * @param script Lua 脚本文本
+     * @param clazz  目标返回类型
+     * @param keys   Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args   脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @param <T>    返回值泛型类型
+     * @return 转换后的 Lua 脚本执行结果；参数无效、执行失败或转换失败时返回 null
+     */
+    <T> T executeLua(String script, Class<T> clazz, List<String> keys, Object... args);
+
+    /**
+     * 执行 Lua 脚本，并将结果转换为指定泛型类型。
+     *
+     * @param script        Lua 脚本文本
+     * @param typeReference 目标返回泛型类型引用
+     * @param keys          Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args          脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @param <T>           返回值泛型类型
+     * @return 转换后的 Lua 脚本执行结果；参数无效、执行失败或转换失败时返回 null
+     */
+    <T> T executeLua(String script, TypeReference<T> typeReference, List<String> keys, Object... args);
+
+    /**
+     * 从资源文件读取 Lua 脚本并执行，返回原始结果。
+     *
+     * @param resourceLocation Lua 脚本资源路径，例如 lua/stock_decrease.lua 或 classpath:lua/stock_decrease.lua
+     * @param keys             Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args             脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @return Lua 脚本执行结果；资源不存在、参数无效或执行失败时返回 null
+     */
+    Object executeLuaFromResource(String resourceLocation, List<String> keys, Object... args);
+
+    /**
+     * 从资源文件读取 Lua 脚本并执行，将结果转换为指定类型。
+     *
+     * @param resourceLocation Lua 脚本资源路径，例如 lua/stock_decrease.lua 或 classpath:lua/stock_decrease.lua
+     * @param clazz            目标返回类型
+     * @param keys             Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args             脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @param <T>              返回值泛型类型
+     * @return 转换后的 Lua 脚本执行结果；资源不存在、参数无效、执行失败或转换失败时返回 null
+     */
+    <T> T executeLuaFromResource(String resourceLocation, Class<T> clazz, List<String> keys, Object... args);
+
+    /**
+     * 从资源文件读取 Lua 脚本并执行，将结果转换为指定泛型类型。
+     *
+     * @param resourceLocation Lua 脚本资源路径，例如 lua/stock_decrease.lua 或 classpath:lua/stock_decrease.lua
+     * @param typeReference    目标返回泛型类型引用
+     * @param keys             Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args             脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @param <T>              返回值泛型类型
+     * @return 转换后的 Lua 脚本执行结果；资源不存在、参数无效、执行失败或转换失败时返回 null
+     */
+    <T> T executeLuaFromResource(String resourceLocation, TypeReference<T> typeReference, List<String> keys, Object... args);
+
+    /**
+     * 执行 Lua 脚本并按 Boolean 结果返回。
+     *
+     * @param script Lua 脚本文本
+     * @param keys   Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args   脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @return true 表示脚本返回 true，false 表示脚本返回 false、参数无效或执行失败
+     */
+    boolean executeLuaAsBoolean(String script, List<String> keys, Object... args);
+
+    /**
+     * 执行 Lua 脚本并按 Long 结果返回。
+     *
+     * @param script Lua 脚本文本
+     * @param keys   Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args   脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @return Lua 脚本返回的 Long 值；参数无效或执行失败时返回 0
+     */
+    long executeLuaAsLong(String script, List<String> keys, Object... args);
+
+    /**
+     * 执行 Lua 脚本并按 String 结果返回。
+     *
+     * @param script Lua 脚本文本
+     * @param keys   Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args   脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @return Lua 脚本返回的字符串；参数无效或执行失败时返回 null
+     */
+    String executeLuaAsString(String script, List<String> keys, Object... args);
+
+    /**
+     * 执行 Lua 脚本并按 List 结果返回。
+     *
+     * @param script Lua 脚本文本
+     * @param keys   Redis Key 列表，对应 Lua 脚本中的 KEYS
+     * @param args   脚本参数数组，对应 Lua 脚本中的 ARGV
+     * @return Lua 脚本返回的列表；参数无效、执行失败或结果为空时返回空 List
+     */
+    List<Object> executeLuaAsList(String script, List<String> keys, Object... args);
+
+    /**
+     * 使用 Lua 脚本比较并删除指定 Key。
+     *
+     * @param key           Redis Key
+     * @param expectedValue 期望值，只有当前值与期望值一致时才删除
+     * @return true 表示删除成功，false 表示 Key 不存在、值不匹配或参数无效
+     */
+    boolean compareAndDeleteByLua(String key, Object expectedValue);
+
+    /**
+     * 使用 Lua 脚本比较并设置指定 Key 的新值。
+     *
+     * @param key           Redis Key
+     * @param expectedValue 期望值，只有当前值与期望值一致时才设置新值
+     * @param newValue      新值
+     * @return true 表示设置成功，false 表示 Key 不存在、值不匹配或参数无效
+     */
+    boolean compareAndSetByLua(String key, Object expectedValue, Object newValue);
+
+    /**
+     * 使用 Lua 脚本比较并设置指定 Key 的新值，同时设置过期时间。
+     *
+     * @param key           Redis Key
+     * @param expectedValue 期望值，只有当前值与期望值一致时才设置新值
+     * @param newValue      新值
+     * @param timeout       过期时间
+     * @return true 表示设置成功，false 表示 Key 不存在、值不匹配或参数无效
+     */
+    boolean compareAndSetByLua(String key, Object expectedValue, Object newValue, Duration timeout);
+
+    /**
+     * 使用 Lua 脚本对指定 Key 执行自增并设置过期时间。
+     *
+     * @param key     Redis Key
+     * @param delta   自增步长
+     * @param timeout 过期时间
+     * @return 自增后的值；参数无效或执行失败时返回 0
+     */
+    long incrementAndExpireByLua(String key, long delta, Duration timeout);
+}
+```
+
+### 服务实现
+
+```java
+package local.ateng.java.redis.service.impl;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.io.resource.ResourceUtil;
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.*;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.stereotype.Service;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+
+/**
+ * RedisTemplate 通用操作服务实现类。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class RedisTemplateServiceImpl implements RedisTemplateService {
+
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    private final ObjectMapper objectMapper;
+
+    private static final long DEFAULT_LOCK_RETRY_INTERVAL_MILLIS = 100L;
+
+    private static final String COMPARE_AND_DELETE_LUA_SCRIPT = """
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                return redis.call('del', KEYS[1])
+            else
+                return 0
+            end
+            """;
+
+    private static final String COMPARE_AND_SET_LUA_SCRIPT = """
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                redis.call('set', KEYS[1], ARGV[2])
+                local ttl = tonumber(ARGV[3])
+                if ttl ~= nil and ttl > 0 then
+                    redis.call('expire', KEYS[1], ttl)
+                end
+                return 1
+            else
+                return 0
+            end
+            """;
+
+    private static final String INCREMENT_AND_EXPIRE_LUA_SCRIPT = """
+            local value = redis.call('incrby', KEYS[1], ARGV[1])
+            local ttl = tonumber(ARGV[2])
+            if ttl ~= nil and ttl > 0 then
+                redis.call('expire', KEYS[1], ttl)
+            end
+            return value
+            """;
+
+    @Override
+    public <T> T convertValue(Object value, Class<T> clazz) {
+        if (ObjectUtil.isNull(value) || ObjectUtil.isNull(clazz)) {
+            return null;
+        }
+
+        if (clazz.isInstance(value)) {
+            return clazz.cast(value);
+        }
+
+        try {
+            if (value instanceof String text) {
+                if (String.class.equals(clazz)) {
+                    return clazz.cast(text);
+                }
+
+                // Redis 中常见字符串值通常是 JSON，这里优先按 JSON 反序列化
+                return objectMapper.readValue(text, clazz);
+            }
+
+            // 非字符串对象通常来自 Jackson 反序列化后的 Map/List 结构，使用 convertValue 进行二次转换
+            return objectMapper.convertValue(value, clazz);
+        } catch (IllegalArgumentException | JsonProcessingException e) {
+            log.warn("Redis 值类型转换失败，targetType={}，valueType={}",
+                    clazz.getName(), value.getClass().getName(), e);
+            return null;
+        }
+    }
+
+    @Override
+    public <T> T convertValue(Object value, TypeReference<T> typeReference) {
+        if (ObjectUtil.isNull(value) || ObjectUtil.isNull(typeReference)) {
+            return null;
+        }
+
+        try {
+            if (value instanceof String text) {
+                try {
+                    // 泛型类型优先按 JSON 字符串解析，适用于 List<User>、Map<String, User> 等结构
+                    return objectMapper.readValue(text, typeReference);
+                } catch (JsonProcessingException ignored) {
+                    // 字符串不是合法 JSON 时，回退到 Jackson convertValue，兼容 String/Object 等简单接收类型
+                    return objectMapper.convertValue(value, typeReference);
+                }
+            }
+
+            // 非字符串对象直接交给 Jackson 转换，适用于 LinkedHashMap -> DTO、List<Map> -> List<DTO>
+            return objectMapper.convertValue(value, typeReference);
+        } catch (IllegalArgumentException e) {
+            log.warn("Redis 值泛型转换失败，targetType={}，valueType={}",
+                    typeReference.getType(), value.getClass().getName(), e);
+            return null;
+        }
+    }
+
+    @Override
+    public boolean hasKey(String key) {
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    }
+
+    @Override
+    public boolean delete(String key) {
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.delete(key));
+    }
+
+    @Override
+    public long delete(Collection<String> keys) {
+        if (CollUtil.isEmpty(keys)) {
+            return 0L;
+        }
+
+        List<String> validKeys = keys.stream()
+                .filter(StrUtil::isNotBlank)
+                .toList();
+
+        if (CollUtil.isEmpty(validKeys)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.delete(validKeys);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public boolean expire(String key, Duration timeout) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(timeout) || timeout.isNegative() || timeout.isZero()) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.expire(key, timeout));
+    }
+
+    @Override
+    public boolean expireAt(String key, Instant expireAt) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(expireAt)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.expireAt(key, expireAt));
+    }
+
+    @Override
+    public boolean persist(String key) {
+        if (StrUtil.isBlank(key)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.persist(key));
+    }
+
+    @Override
+    public Duration getExpire(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Duration.ofMillis(-2);
+        }
+
+        Long millis = redisTemplate.getExpire(key, TimeUnit.MILLISECONDS);
+
+        // Redis TTL 语义：-1 表示永久有效，-2 表示 Key 不存在
+        if (ObjectUtil.isNull(millis)) {
+            return Duration.ofMillis(-2);
+        }
+
+        return Duration.ofMillis(millis);
+    }
+
+    @Override
+    public Set<String> scanKeys(String pattern) {
+        return scanKeys(pattern, 1000);
+    }
+
+    @Override
+    public Set<String> scanKeys(String pattern, long count) {
+        if (StrUtil.isBlank(pattern)) {
+            return Set.of();
+        }
+
+        long scanCount = count > 0 ? count : 1000;
+
+        Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
+            Set<String> result = new LinkedHashSet<>();
+
+            ScanOptions options = ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(scanCount)
+                    .build();
+
+            // 使用 SCAN 分批扫描，避免 Redis KEYS 命令在大 Key 空间下阻塞服务
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    String key = deserializeKey(cursor.next());
+                    if (StrUtil.isNotBlank(key)) {
+                        result.add(key);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Redis Key 扫描失败，pattern={}，count={}", pattern, scanCount, e);
+            }
+
+            return result;
+        });
+
+        return ObjectUtil.defaultIfNull(keys, Set.of());
+    }
+
+    private String deserializeKey(byte[] keyBytes) {
+        if (ObjectUtil.isNull(keyBytes)) {
+            return null;
+        }
+
+        try {
+            RedisSerializer<?> keySerializer = redisTemplate.getKeySerializer();
+            if (ObjectUtil.isNotNull(keySerializer)) {
+                Object key = keySerializer.deserialize(keyBytes);
+                return ObjectUtil.isNull(key) ? null : key.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Redis Key 反序列化失败，使用 UTF-8 字符串兜底", e);
+        }
+
+        return new String(keyBytes, StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public void set(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return;
+        }
+        redisTemplate.opsForValue().set(key, value);
+    }
+
+    @Override
+    public void set(String key, Object value, Duration timeout) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return;
+        }
+
+        if (ObjectUtil.isNull(timeout) || timeout.isNegative() || timeout.isZero()) {
+            set(key, value);
+            return;
+        }
+
+        redisTemplate.opsForValue().set(key, value, timeout);
+    }
+
+    @Override
+    public boolean setIfAbsent(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(key, value));
+    }
+
+    @Override
+    public boolean setIfAbsent(String key, Object value, Duration timeout) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return false;
+        }
+
+        if (ObjectUtil.isNull(timeout) || timeout.isNegative() || timeout.isZero()) {
+            return setIfAbsent(key, value);
+        }
+
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(key, value, timeout));
+    }
+
+    @Override
+    public boolean setIfPresent(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfPresent(key, value));
+    }
+
+    @Override
+    public boolean setIfPresent(String key, Object value, Duration timeout) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return false;
+        }
+
+        if (ObjectUtil.isNull(timeout) || timeout.isNegative() || timeout.isZero()) {
+            return setIfPresent(key, value);
+        }
+
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfPresent(key, value, timeout));
+    }
+
+    @Override
+    public Object get(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+        return redisTemplate.opsForValue().get(key);
+    }
+
+    @Override
+    public <T> T get(String key, Class<T> clazz) {
+        Object value = get(key);
+        return convertValue(value, clazz);
+    }
+
+    @Override
+    public <T> T get(String key, TypeReference<T> typeReference) {
+        Object value = get(key);
+        return convertValue(value, typeReference);
+    }
+
+    @Override
+    public Object getAndSet(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return null;
+        }
+        return redisTemplate.opsForValue().getAndSet(key, value);
+    }
+
+    @Override
+    public <T> T getAndSet(String key, Object value, Class<T> clazz) {
+        Object oldValue = getAndSet(key, value);
+        return convertValue(oldValue, clazz);
+    }
+
+    @Override
+    public <T> T getAndSet(String key, Object value, TypeReference<T> typeReference) {
+        Object oldValue = getAndSet(key, value);
+        return convertValue(oldValue, typeReference);
+    }
+
+    @Override
+    public List<Object> multiGet(Collection<String> keys) {
+        if (CollUtil.isEmpty(keys)) {
+            return List.of();
+        }
+
+        List<String> validKeys = keys.stream()
+                .filter(StrUtil::isNotBlank)
+                .toList();
+
+        if (CollUtil.isEmpty(validKeys)) {
+            return List.of();
+        }
+
+        List<Object> values = redisTemplate.opsForValue().multiGet(validKeys);
+        return ObjectUtil.defaultIfNull(values, List.of());
+    }
+
+    @Override
+    public <T> List<T> multiGet(Collection<String> keys, Class<T> clazz) {
+        List<Object> values = multiGet(keys);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .toList();
+    }
+
+    @Override
+    public <T> List<T> multiGet(Collection<String> keys, TypeReference<T> typeReference) {
+        List<Object> values = multiGet(keys);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .toList();
+    }
+
+    @Override
+    public Map<String, Object> multiGetAsMap(Collection<String> keys) {
+        if (CollUtil.isEmpty(keys)) {
+            return Map.of();
+        }
+
+        List<String> validKeys = keys.stream()
+                .filter(StrUtil::isNotBlank)
+                .toList();
+
+        if (CollUtil.isEmpty(validKeys)) {
+            return Map.of();
+        }
+
+        List<Object> values = redisTemplate.opsForValue().multiGet(validKeys);
+        if (CollUtil.isEmpty(values)) {
+            return Map.of();
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>(validKeys.size());
+
+        // multiGet 返回值顺序与请求 Key 顺序一致，这里按下标组装为 Map
+        for (int i = 0; i < validKeys.size(); i++) {
+            Object value = i < values.size() ? values.get(i) : null;
+            result.put(validKeys.get(i), value);
+        }
+
+        return result;
+    }
+
+    @Override
+    public <T> Map<String, T> multiGetAsMap(Collection<String> keys, Class<T> clazz) {
+        Map<String, Object> valueMap = multiGetAsMap(keys);
+        if (CollUtil.isEmpty(valueMap)) {
+            return Map.of();
+        }
+
+        Map<String, T> result = new LinkedHashMap<>(valueMap.size());
+        valueMap.forEach((key, value) -> result.put(key, convertValue(value, clazz)));
+        return result;
+    }
+
+    @Override
+    public <T> Map<String, T> multiGetAsMap(Collection<String> keys, TypeReference<T> typeReference) {
+        Map<String, Object> valueMap = multiGetAsMap(keys);
+        if (CollUtil.isEmpty(valueMap)) {
+            return Map.of();
+        }
+
+        Map<String, T> result = new LinkedHashMap<>(valueMap.size());
+        valueMap.forEach((key, value) -> result.put(key, convertValue(value, typeReference)));
+        return result;
+    }
+
+    @Override
+    public long increment(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long value = redisTemplate.opsForValue().increment(key);
+        return ObjectUtil.defaultIfNull(value, 0L);
+    }
+
+    @Override
+    public long increment(String key, long delta) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long value = redisTemplate.opsForValue().increment(key, delta);
+        return ObjectUtil.defaultIfNull(value, 0L);
+    }
+
+    @Override
+    public double increment(String key, double delta) {
+        if (StrUtil.isBlank(key)) {
+            return 0D;
+        }
+
+        Double value = redisTemplate.opsForValue().increment(key, delta);
+        return ObjectUtil.defaultIfNull(value, 0D);
+    }
+
+    @Override
+    public long decrement(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long value = redisTemplate.opsForValue().decrement(key);
+        return ObjectUtil.defaultIfNull(value, 0L);
+    }
+
+    @Override
+    public long decrement(String key, long delta) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long value = redisTemplate.opsForValue().decrement(key, delta);
+        return ObjectUtil.defaultIfNull(value, 0L);
+    }
+
+    @Override
+    public <T> T getOrLoad(String key, Class<T> clazz, Supplier<T> supplier) {
+        return getOrLoad(key, clazz, supplier, null);
+    }
+
+    @Override
+    public <T> T getOrLoad(String key, Class<T> clazz, Supplier<T> supplier, Duration timeout) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(clazz) || ObjectUtil.isNull(supplier)) {
+            return null;
+        }
+
+        T cacheValue = get(key, clazz);
+        if (ObjectUtil.isNotNull(cacheValue)) {
+            return cacheValue;
+        }
+
+        T loadedValue = supplier.get();
+        if (ObjectUtil.isNull(loadedValue)) {
+            return null;
+        }
+
+        // 数据源加载成功后再写入缓存，避免空值污染缓存
+        set(key, loadedValue, timeout);
+        return loadedValue;
+    }
+
+    @Override
+    public <T> T getOrLoad(String key, TypeReference<T> typeReference, Supplier<T> supplier) {
+        return getOrLoad(key, typeReference, supplier, null);
+    }
+
+    @Override
+    public <T> T getOrLoad(String key, TypeReference<T> typeReference, Supplier<T> supplier, Duration timeout) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(typeReference) || ObjectUtil.isNull(supplier)) {
+            return null;
+        }
+
+        T cacheValue = get(key, typeReference);
+        if (ObjectUtil.isNotNull(cacheValue)) {
+            return cacheValue;
+        }
+
+        T loadedValue = supplier.get();
+        if (ObjectUtil.isNull(loadedValue)) {
+            return null;
+        }
+
+        // 支持 List<User>、Map<String, User> 等复杂泛型结果的缓存回填
+        set(key, loadedValue, timeout);
+        return loadedValue;
+    }
+
+    @Override
+    public <T> T getOrLoadWithLock(String key, String lockKey, Class<T> clazz, Supplier<T> supplier,
+                                   Duration cacheTimeout, Duration lockWaitTime, Duration lockLeaseTime) {
+        if (StrUtil.isBlank(key) || StrUtil.isBlank(lockKey) || ObjectUtil.isNull(clazz) || ObjectUtil.isNull(supplier)) {
+            return null;
+        }
+
+        T cacheValue = get(key, clazz);
+        if (ObjectUtil.isNotNull(cacheValue)) {
+            return cacheValue;
+        }
+
+        return executeWithLock(lockKey, lockWaitTime, lockLeaseTime, () -> {
+            // 获得锁后再次读取缓存，避免并发场景下重复加载数据源
+            T lockedCacheValue = get(key, clazz);
+            if (ObjectUtil.isNotNull(lockedCacheValue)) {
+                return lockedCacheValue;
+            }
+
+            T loadedValue = supplier.get();
+            if (ObjectUtil.isNotNull(loadedValue)) {
+                set(key, loadedValue, cacheTimeout);
+            }
+            return loadedValue;
+        });
+    }
+
+    @Override
+    public <T> T getOrLoadWithLock(String key, String lockKey, TypeReference<T> typeReference, Supplier<T> supplier,
+                                   Duration cacheTimeout, Duration lockWaitTime, Duration lockLeaseTime) {
+        if (StrUtil.isBlank(key) || StrUtil.isBlank(lockKey) || ObjectUtil.isNull(typeReference) || ObjectUtil.isNull(supplier)) {
+            return null;
+        }
+
+        T cacheValue = get(key, typeReference);
+        if (ObjectUtil.isNotNull(cacheValue)) {
+            return cacheValue;
+        }
+
+        return executeWithLock(lockKey, lockWaitTime, lockLeaseTime, () -> {
+            // 获得锁后进行二次检查，降低缓存击穿时的数据源压力
+            T lockedCacheValue = get(key, typeReference);
+            if (ObjectUtil.isNotNull(lockedCacheValue)) {
+                return lockedCacheValue;
+            }
+
+            T loadedValue = supplier.get();
+            if (ObjectUtil.isNotNull(loadedValue)) {
+                set(key, loadedValue, cacheTimeout);
+            }
+            return loadedValue;
+        });
+    }
+
+    @Override
+    public void hPut(String key, Object hashKey, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(hashKey) || ObjectUtil.isNull(value)) {
+            return;
+        }
+        redisTemplate.opsForHash().put(key, hashKey, value);
+    }
+
+    @Override
+    public void hPutAll(String key, Map<?, ?> map) {
+        if (StrUtil.isBlank(key) || CollUtil.isEmpty(map)) {
+            return;
+        }
+        redisTemplate.opsForHash().putAll(key, map);
+    }
+
+    @Override
+    public boolean hPutIfAbsent(String key, Object hashKey, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(hashKey) || ObjectUtil.isNull(value)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.opsForHash().putIfAbsent(key, hashKey, value));
+    }
+
+    @Override
+    public Object hGet(String key, Object hashKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(hashKey)) {
+            return null;
+        }
+        return redisTemplate.opsForHash().get(key, hashKey);
+    }
+
+    @Override
+    public <T> T hGet(String key, Object hashKey, Class<T> clazz) {
+        Object value = hGet(key, hashKey);
+        return convertValue(value, clazz);
+    }
+
+    @Override
+    public <T> T hGet(String key, Object hashKey, TypeReference<T> typeReference) {
+        Object value = hGet(key, hashKey);
+        return convertValue(value, typeReference);
+    }
+
+    @Override
+    public List<Object> hMultiGet(String key, Collection<?> hashKeys) {
+        if (StrUtil.isBlank(key) || CollUtil.isEmpty(hashKeys)) {
+            return List.of();
+        }
+
+        List<Object> validHashKeys = hashKeys.stream()
+                .filter(ObjectUtil::isNotNull)
+                .map(Object.class::cast)
+                .toList();
+
+        if (CollUtil.isEmpty(validHashKeys)) {
+            return List.of();
+        }
+
+        List<Object> values = redisTemplate.opsForHash().multiGet(key, validHashKeys);
+        return ObjectUtil.defaultIfNull(values, List.of());
+    }
+
+    @Override
+    public <T> List<T> hMultiGet(String key, Collection<?> hashKeys, Class<T> clazz) {
+        List<Object> values = hMultiGet(key, hashKeys);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .toList();
+    }
+
+    @Override
+    public <T> List<T> hMultiGet(String key, Collection<?> hashKeys, TypeReference<T> typeReference) {
+        List<Object> values = hMultiGet(key, hashKeys);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .toList();
+    }
+
+    @Override
+    public Map<Object, Object> hGetAll(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Map.of();
+        }
+
+        Map<Object, Object> entries = redisTemplate.opsForHash().entries(key);
+        return ObjectUtil.defaultIfNull(entries, Map.of());
+    }
+
+    @Override
+    public <T> Map<Object, T> hGetAll(String key, Class<T> clazz) {
+        Map<Object, Object> entries = hGetAll(key);
+        if (CollUtil.isEmpty(entries)) {
+            return Map.of();
+        }
+
+        Map<Object, T> result = new LinkedHashMap<>(entries.size());
+
+        // Hash Value 逐个转换，保留原始 HashKey 类型
+        entries.forEach((hashKey, value) -> result.put(hashKey, convertValue(value, clazz)));
+
+        return result;
+    }
+
+    @Override
+    public <T> Map<Object, T> hGetAll(String key, TypeReference<T> typeReference) {
+        Map<Object, Object> entries = hGetAll(key);
+        if (CollUtil.isEmpty(entries)) {
+            return Map.of();
+        }
+
+        Map<Object, T> result = new LinkedHashMap<>(entries.size());
+
+        // 支持 Hash Value 为复杂泛型结构，例如 List<User>、Map<String, User>
+        entries.forEach((hashKey, value) -> result.put(hashKey, convertValue(value, typeReference)));
+
+        return result;
+    }
+
+    @Override
+    public boolean hHasKey(String key, Object hashKey) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(hashKey)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.opsForHash().hasKey(key, hashKey));
+    }
+
+    @Override
+    public long hDelete(String key, Object... hashKeys) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isEmpty(hashKeys)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.opsForHash().delete(key, hashKeys);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public long hSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForHash().size(key);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public Set<Object> hKeys(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Set.of();
+        }
+
+        Set<Object> keys = redisTemplate.opsForHash().keys(key);
+        return ObjectUtil.defaultIfNull(keys, Set.of());
+    }
+
+    @Override
+    public List<Object> hValues(String key) {
+        if (StrUtil.isBlank(key)) {
+            return List.of();
+        }
+
+        List<Object> values = redisTemplate.opsForHash().values(key);
+        return ObjectUtil.defaultIfNull(values, List.of());
+    }
+
+    @Override
+    public <T> List<T> hValues(String key, Class<T> clazz) {
+        List<Object> values = hValues(key);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .toList();
+    }
+
+    @Override
+    public <T> List<T> hValues(String key, TypeReference<T> typeReference) {
+        List<Object> values = hValues(key);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .toList();
+    }
+
+    @Override
+    public long hIncrement(String key, Object hashKey, long delta) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(hashKey)) {
+            return 0L;
+        }
+        return redisTemplate.opsForHash().increment(key, hashKey, delta);
+    }
+
+    @Override
+    public double hIncrement(String key, Object hashKey, double delta) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(hashKey)) {
+            return 0D;
+        }
+        return redisTemplate.opsForHash().increment(key, hashKey, delta);
+    }
+
+    @Override
+    public long lLeftPush(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForList().leftPush(key, value);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public long lLeftPushAll(String key, Collection<?> values) {
+        if (StrUtil.isBlank(key) || CollUtil.isEmpty(values)) {
+            return 0L;
+        }
+
+        List<Object> validValues = values.stream()
+                .filter(ObjectUtil::isNotNull)
+                .map(Object.class::cast)
+                .toList();
+
+        if (CollUtil.isEmpty(validValues)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForList().leftPushAll(key, validValues);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public long lRightPush(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForList().rightPush(key, value);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public long lRightPushAll(String key, Collection<?> values) {
+        if (StrUtil.isBlank(key) || CollUtil.isEmpty(values)) {
+            return 0L;
+        }
+
+        List<Object> validValues = values.stream()
+                .filter(ObjectUtil::isNotNull)
+                .map(Object.class::cast)
+                .toList();
+
+        if (CollUtil.isEmpty(validValues)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForList().rightPushAll(key, validValues);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public Object lLeftPop(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+        return redisTemplate.opsForList().leftPop(key);
+    }
+
+    @Override
+    public Object lLeftPop(String key, Duration timeout) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        if (ObjectUtil.isNull(timeout) || timeout.isNegative() || timeout.isZero()) {
+            return lLeftPop(key);
+        }
+
+        return redisTemplate.opsForList().leftPop(key, timeout);
+    }
+
+    @Override
+    public <T> T lLeftPop(String key, Class<T> clazz) {
+        Object value = lLeftPop(key);
+        return convertValue(value, clazz);
+    }
+
+    @Override
+    public <T> T lLeftPop(String key, TypeReference<T> typeReference) {
+        Object value = lLeftPop(key);
+        return convertValue(value, typeReference);
+    }
+
+    @Override
+    public Object lRightPop(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+        return redisTemplate.opsForList().rightPop(key);
+    }
+
+    @Override
+    public Object lRightPop(String key, Duration timeout) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+
+        if (ObjectUtil.isNull(timeout) || timeout.isNegative() || timeout.isZero()) {
+            return lRightPop(key);
+        }
+
+        return redisTemplate.opsForList().rightPop(key, timeout);
+    }
+
+    @Override
+    public <T> T lRightPop(String key, Class<T> clazz) {
+        Object value = lRightPop(key);
+        return convertValue(value, clazz);
+    }
+
+    @Override
+    public <T> T lRightPop(String key, TypeReference<T> typeReference) {
+        Object value = lRightPop(key);
+        return convertValue(value, typeReference);
+    }
+
+    @Override
+    public Object lIndex(String key, long index) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+        return redisTemplate.opsForList().index(key, index);
+    }
+
+    @Override
+    public <T> T lIndex(String key, long index, Class<T> clazz) {
+        Object value = lIndex(key, index);
+        return convertValue(value, clazz);
+    }
+
+    @Override
+    public <T> T lIndex(String key, long index, TypeReference<T> typeReference) {
+        Object value = lIndex(key, index);
+        return convertValue(value, typeReference);
+    }
+
+    @Override
+    public List<Object> lRange(String key, long start, long end) {
+        if (StrUtil.isBlank(key)) {
+            return List.of();
+        }
+
+        List<Object> values = redisTemplate.opsForList().range(key, start, end);
+        return ObjectUtil.defaultIfNull(values, List.of());
+    }
+
+    @Override
+    public <T> List<T> lRange(String key, long start, long end, Class<T> clazz) {
+        List<Object> values = lRange(key, start, end);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .toList();
+    }
+
+    @Override
+    public <T> List<T> lRange(String key, long start, long end, TypeReference<T> typeReference) {
+        List<Object> values = lRange(key, start, end);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .toList();
+    }
+
+    @Override
+    public void lSet(String key, long index, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return;
+        }
+        redisTemplate.opsForList().set(key, index, value);
+    }
+
+    @Override
+    public void lTrim(String key, long start, long end) {
+        if (StrUtil.isBlank(key)) {
+            return;
+        }
+
+        // Redis LTRIM 会只保留指定区间内的元素，常用于限制队列长度
+        redisTemplate.opsForList().trim(key, start, end);
+    }
+
+    @Override
+    public long lRemove(String key, long count, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return 0L;
+        }
+
+        Long removeCount = redisTemplate.opsForList().remove(key, count, value);
+        return ObjectUtil.defaultIfNull(removeCount, 0L);
+    }
+
+    @Override
+    public long lSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForList().size(key);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public long sAdd(String key, Object... values) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isEmpty(values)) {
+            return 0L;
+        }
+
+        Object[] validValues = List.of(values).stream()
+                .filter(ObjectUtil::isNotNull)
+                .toArray();
+
+        if (ObjectUtil.isEmpty(validValues)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.opsForSet().add(key, validValues);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public long sRemove(String key, Object... values) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isEmpty(values)) {
+            return 0L;
+        }
+
+        Object[] validValues = List.of(values).stream()
+                .filter(ObjectUtil::isNotNull)
+                .toArray();
+
+        if (ObjectUtil.isEmpty(validValues)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.opsForSet().remove(key, validValues);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public boolean sIsMember(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(key, value));
+    }
+
+    @Override
+    public Set<Object> sMembers(String key) {
+        if (StrUtil.isBlank(key)) {
+            return Set.of();
+        }
+
+        Set<Object> members = redisTemplate.opsForSet().members(key);
+        return ObjectUtil.defaultIfNull(members, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> sMembers(String key, Class<T> clazz) {
+        Set<Object> members = sMembers(key);
+        if (CollUtil.isEmpty(members)) {
+            return Set.of();
+        }
+
+        return members.stream()
+                .map(member -> convertValue(member, clazz))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public <T> Set<T> sMembers(String key, TypeReference<T> typeReference) {
+        Set<Object> members = sMembers(key);
+        if (CollUtil.isEmpty(members)) {
+            return Set.of();
+        }
+
+        return members.stream()
+                .map(member -> convertValue(member, typeReference))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public Object sPop(String key) {
+        if (StrUtil.isBlank(key)) {
+            return null;
+        }
+        return redisTemplate.opsForSet().pop(key);
+    }
+
+    @Override
+    public <T> T sPop(String key, Class<T> clazz) {
+        Object value = sPop(key);
+        return convertValue(value, clazz);
+    }
+
+    @Override
+    public <T> T sPop(String key, TypeReference<T> typeReference) {
+        Object value = sPop(key);
+        return convertValue(value, typeReference);
+    }
+
+    @Override
+    public List<Object> sPop(String key, long count) {
+        if (StrUtil.isBlank(key) || count <= 0) {
+            return List.of();
+        }
+
+        List<Object> values = redisTemplate.opsForSet().pop(key, count);
+        return ObjectUtil.defaultIfNull(values, List.of());
+    }
+
+    @Override
+    public <T> List<T> sPop(String key, long count, Class<T> clazz) {
+        List<Object> values = sPop(key, count);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .toList();
+    }
+
+    @Override
+    public <T> List<T> sPop(String key, long count, TypeReference<T> typeReference) {
+        List<Object> values = sPop(key, count);
+        if (CollUtil.isEmpty(values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .toList();
+    }
+
+    @Override
+    public long sSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForSet().size(key);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public Set<Object> sIntersect(String key, String otherKey) {
+        if (StrUtil.isBlank(key) || StrUtil.isBlank(otherKey)) {
+            return Set.of();
+        }
+
+        Set<Object> values = redisTemplate.opsForSet().intersect(key, otherKey);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> sIntersect(String key, String otherKey, Class<T> clazz) {
+        Set<Object> values = sIntersect(key, otherKey);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public <T> Set<T> sIntersect(String key, String otherKey, TypeReference<T> typeReference) {
+        Set<Object> values = sIntersect(key, otherKey);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public Set<Object> sUnion(String key, String otherKey) {
+        if (StrUtil.isBlank(key) || StrUtil.isBlank(otherKey)) {
+            return Set.of();
+        }
+
+        Set<Object> values = redisTemplate.opsForSet().union(key, otherKey);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> sUnion(String key, String otherKey, Class<T> clazz) {
+        Set<Object> values = sUnion(key, otherKey);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public <T> Set<T> sUnion(String key, String otherKey, TypeReference<T> typeReference) {
+        Set<Object> values = sUnion(key, otherKey);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public Set<Object> sDifference(String key, String otherKey) {
+        if (StrUtil.isBlank(key) || StrUtil.isBlank(otherKey)) {
+            return Set.of();
+        }
+
+        Set<Object> values = redisTemplate.opsForSet().difference(key, otherKey);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> sDifference(String key, String otherKey, Class<T> clazz) {
+        Set<Object> values = sDifference(key, otherKey);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, clazz))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public <T> Set<T> sDifference(String key, String otherKey, TypeReference<T> typeReference) {
+        Set<Object> values = sDifference(key, otherKey);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        return values.stream()
+                .map(value -> convertValue(value, typeReference))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
+    public boolean zAdd(String key, Object value, double score) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.opsForZSet().add(key, value, score));
+    }
+
+    @Override
+    public long zRemove(String key, Object... values) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isEmpty(values)) {
+            return 0L;
+        }
+
+        Object[] validValues = List.of(values).stream()
+                .filter(ObjectUtil::isNotNull)
+                .toArray();
+
+        if (ObjectUtil.isEmpty(validValues)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.opsForZSet().remove(key, validValues);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public Double zScore(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return null;
+        }
+        return redisTemplate.opsForZSet().score(key, value);
+    }
+
+    @Override
+    public Long zRank(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return null;
+        }
+        return redisTemplate.opsForZSet().rank(key, value);
+    }
+
+    @Override
+    public Long zReverseRank(String key, Object value) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return null;
+        }
+        return redisTemplate.opsForZSet().reverseRank(key, value);
+    }
+
+    @Override
+    public long zSize(String key) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long size = redisTemplate.opsForZSet().size(key);
+        return ObjectUtil.defaultIfNull(size, 0L);
+    }
+
+    @Override
+    public long zCount(String key, double min, double max) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.opsForZSet().count(key, min, max);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public Set<Object> zRange(String key, long start, long end) {
+        if (StrUtil.isBlank(key)) {
+            return Set.of();
+        }
+
+        Set<Object> values = redisTemplate.opsForZSet().range(key, start, end);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> zRange(String key, long start, long end, Class<T> clazz) {
+        Set<Object> values = zRange(key, start, end);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // ZSet 查询结果有顺序，使用 LinkedHashSet 保留 Redis 返回顺序
+        values.forEach(value -> result.add(convertValue(value, clazz)));
+
+        return result;
+    }
+
+    @Override
+    public <T> Set<T> zRange(String key, long start, long end, TypeReference<T> typeReference) {
+        Set<Object> values = zRange(key, start, end);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // 支持 ZSet 成员为复杂对象或泛型结构的场景
+        values.forEach(value -> result.add(convertValue(value, typeReference)));
+
+        return result;
+    }
+
+    @Override
+    public Set<Object> zReverseRange(String key, long start, long end) {
+        if (StrUtil.isBlank(key)) {
+            return Set.of();
+        }
+
+        Set<Object> values = redisTemplate.opsForZSet().reverseRange(key, start, end);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> zReverseRange(String key, long start, long end, Class<T> clazz) {
+        Set<Object> values = zReverseRange(key, start, end);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // 反向排名结果同样需要保留 Redis 返回顺序
+        values.forEach(value -> result.add(convertValue(value, clazz)));
+
+        return result;
+    }
+
+    @Override
+    public <T> Set<T> zReverseRange(String key, long start, long end, TypeReference<T> typeReference) {
+        Set<Object> values = zReverseRange(key, start, end);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // 反向范围查询结果逐个转换为指定泛型类型
+        values.forEach(value -> result.add(convertValue(value, typeReference)));
+
+        return result;
+    }
+
+    @Override
+    public Set<Object> zRangeByScore(String key, double min, double max) {
+        if (StrUtil.isBlank(key)) {
+            return Set.of();
+        }
+
+        Set<Object> values = redisTemplate.opsForZSet().rangeByScore(key, min, max);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> zRangeByScore(String key, double min, double max, Class<T> clazz) {
+        Set<Object> values = zRangeByScore(key, min, max);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // 按分数区间查询时，Redis 返回结果默认按 score 升序排列
+        values.forEach(value -> result.add(convertValue(value, clazz)));
+
+        return result;
+    }
+
+    @Override
+    public <T> Set<T> zRangeByScore(String key, double min, double max, TypeReference<T> typeReference) {
+        Set<Object> values = zRangeByScore(key, min, max);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // 分数区间查询结果转换为指定泛型结构
+        values.forEach(value -> result.add(convertValue(value, typeReference)));
+
+        return result;
+    }
+
+    @Override
+    public Set<Object> zRangeByScore(String key, double min, double max, long offset, long count) {
+        if (StrUtil.isBlank(key) || offset < 0 || count <= 0) {
+            return Set.of();
+        }
+
+        Set<Object> values = redisTemplate.opsForZSet().rangeByScore(key, min, max, offset, count);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<T> zRangeByScore(String key, double min, double max, long offset, long count, Class<T> clazz) {
+        Set<Object> values = zRangeByScore(key, min, max, offset, count);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // 分页区间查询结果需要保留原始顺序，便于排行榜、时间线等场景使用
+        values.forEach(value -> result.add(convertValue(value, clazz)));
+
+        return result;
+    }
+
+    @Override
+    public <T> Set<T> zRangeByScore(String key, double min, double max, long offset, long count, TypeReference<T> typeReference) {
+        Set<Object> values = zRangeByScore(key, min, max, offset, count);
+        if (CollUtil.isEmpty(values)) {
+            return Set.of();
+        }
+
+        Set<T> result = new LinkedHashSet<>(values.size());
+
+        // 分页区间查询结果逐个转换为指定泛型类型
+        values.forEach(value -> result.add(convertValue(value, typeReference)));
+
+        return result;
+    }
+
+    @Override
+    public Set<ZSetOperations.TypedTuple<Object>> zRangeWithScores(String key, long start, long end) {
+        if (StrUtil.isBlank(key)) {
+            return Set.of();
+        }
+
+        Set<ZSetOperations.TypedTuple<Object>> values = redisTemplate.opsForZSet().rangeWithScores(key, start, end);
+        return ObjectUtil.defaultIfNull(values, Set.of());
+    }
+
+    @Override
+    public <T> Set<ZSetOperations.TypedTuple<T>> zRangeWithScores(String key, long start, long end, Class<T> clazz) {
+        Set<ZSetOperations.TypedTuple<Object>> tuples = zRangeWithScores(key, start, end);
+        if (CollUtil.isEmpty(tuples)) {
+            return Set.of();
+        }
+
+        Set<ZSetOperations.TypedTuple<T>> result = new LinkedHashSet<>(tuples.size());
+
+        for (ZSetOperations.TypedTuple<Object> tuple : tuples) {
+            if (ObjectUtil.isNull(tuple)) {
+                continue;
+            }
+
+            T value = convertValue(tuple.getValue(), clazz);
+            Double score = tuple.getScore();
+
+            // 重新构造 TypedTuple，保留原始 score，并只转换 value 类型
+            result.add(new DefaultTypedTuple<>(value, score));
+        }
+
+        return result;
+    }
+
+    @Override
+    public <T> Set<ZSetOperations.TypedTuple<T>> zRangeWithScores(String key, long start, long end, TypeReference<T> typeReference) {
+        Set<ZSetOperations.TypedTuple<Object>> tuples = zRangeWithScores(key, start, end);
+        if (CollUtil.isEmpty(tuples)) {
+            return Set.of();
+        }
+
+        Set<ZSetOperations.TypedTuple<T>> result = new LinkedHashSet<>(tuples.size());
+
+        for (ZSetOperations.TypedTuple<Object> tuple : tuples) {
+            if (ObjectUtil.isNull(tuple)) {
+                continue;
+            }
+
+            T value = convertValue(tuple.getValue(), typeReference);
+            Double score = tuple.getScore();
+
+            // 泛型转换只处理成员值，score 原样保留
+            result.add(new DefaultTypedTuple<>(value, score));
+        }
+
+        return result;
+    }
+
+    @Override
+    public long zRemoveRange(String key, long start, long end) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.opsForZSet().removeRange(key, start, end);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public long zRemoveRangeByScore(String key, double min, double max) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        Long count = redisTemplate.opsForZSet().removeRangeByScore(key, min, max);
+        return ObjectUtil.defaultIfNull(count, 0L);
+    }
+
+    @Override
+    public Double zIncrementScore(String key, Object value, double delta) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(value)) {
+            return null;
+        }
+        return redisTemplate.opsForZSet().incrementScore(key, value, delta);
+    }
+
+    @Override
+    public boolean tryLock(String lockKey, String lockValue, Duration leaseTime) {
+        if (StrUtil.isBlank(lockKey) || StrUtil.isBlank(lockValue)
+                || ObjectUtil.isNull(leaseTime) || leaseTime.isNegative() || leaseTime.isZero()) {
+            return false;
+        }
+
+        // 使用 Redis SET NX + 过期时间实现互斥锁，避免进程异常退出后锁永久不释放
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, leaseTime));
+    }
+
+    @Override
+    public boolean tryLock(String lockKey, String lockValue, Duration waitTime, Duration leaseTime) {
+        if (StrUtil.isBlank(lockKey) || StrUtil.isBlank(lockValue)
+                || ObjectUtil.isNull(leaseTime) || leaseTime.isNegative() || leaseTime.isZero()) {
+            return false;
+        }
+
+        if (ObjectUtil.isNull(waitTime) || waitTime.isNegative() || waitTime.isZero()) {
+            return tryLock(lockKey, lockValue, leaseTime);
+        }
+
+        long deadline = System.nanoTime() + waitTime.toNanos();
+
+        while (System.nanoTime() <= deadline) {
+            if (tryLock(lockKey, lockValue, leaseTime)) {
+                return true;
+            }
+
+            // 未获取到锁时短暂休眠，避免高频自旋压垮 Redis
+            sleepBeforeRetry(deadline);
+        }
+
+        return false;
+    }
+
+    @Override
+    public boolean unlock(String lockKey, String lockValue) {
+        if (StrUtil.isBlank(lockKey) || StrUtil.isBlank(lockValue)) {
+            return false;
+        }
+
+        boolean unlocked = compareAndDeleteByLua(lockKey, lockValue);
+        if (!unlocked) {
+            log.warn("Redis 分布式锁未释放或已过期，lockKey={}", lockKey);
+        }
+
+        return unlocked;
+    }
+
+    @Override
+    public boolean tryExecuteWithLock(String lockKey, Duration leaseTime, Runnable task) {
+        return tryExecuteWithLock(lockKey, null, leaseTime, task);
+    }
+
+    @Override
+    public boolean tryExecuteWithLock(String lockKey, Duration waitTime, Duration leaseTime, Runnable task) {
+        if (StrUtil.isBlank(lockKey) || ObjectUtil.isNull(task)) {
+            return false;
+        }
+
+        String lockValue = generateLockValue();
+        boolean locked = tryLock(lockKey, lockValue, waitTime, leaseTime);
+        if (!locked) {
+            log.warn("Redis 分布式锁获取失败，lockKey={}", lockKey);
+            return false;
+        }
+
+        try {
+            task.run();
+            return true;
+        } finally {
+            boolean unlocked = unlock(lockKey, lockValue);
+            if (!unlocked) {
+                log.warn("Redis 分布式锁未释放或已过期，lockKey={}", lockKey);
+            }
+        }
+    }
+
+    @Override
+    public <T> Optional<T> tryExecuteWithLock(String lockKey, Duration leaseTime, Supplier<T> supplier) {
+        return tryExecuteWithLock(lockKey, null, leaseTime, supplier);
+    }
+
+    @Override
+    public <T> Optional<T> tryExecuteWithLock(String lockKey, Duration waitTime, Duration leaseTime, Supplier<T> supplier) {
+        if (StrUtil.isBlank(lockKey) || ObjectUtil.isNull(supplier)) {
+            return Optional.empty();
+        }
+
+        String lockValue = generateLockValue();
+        boolean locked = tryLock(lockKey, lockValue, waitTime, leaseTime);
+        if (!locked) {
+            log.warn("Redis 分布式锁获取失败，lockKey={}", lockKey);
+            return Optional.empty();
+        }
+
+        try {
+            return Optional.ofNullable(supplier.get());
+        } finally {
+            boolean unlocked = unlock(lockKey, lockValue);
+            if (!unlocked) {
+                log.warn("Redis 分布式锁未释放或已过期，lockKey={}", lockKey);
+            }
+        }
+    }
+
+    @Override
+    public void executeWithLock(String lockKey, Duration leaseTime, Runnable task) {
+        executeWithLock(lockKey, null, leaseTime, task);
+    }
+
+    @Override
+    public void executeWithLock(String lockKey, Duration waitTime, Duration leaseTime, Runnable task) {
+        boolean executed = tryExecuteWithLock(lockKey, waitTime, leaseTime, task);
+        if (!executed) {
+            throw new IllegalStateException("Redis 分布式锁获取失败，lockKey=" + lockKey);
+        }
+    }
+
+    @Override
+    public <T> T executeWithLock(String lockKey, Duration leaseTime, Supplier<T> supplier) {
+        return executeWithLock(lockKey, null, leaseTime, supplier);
+    }
+
+    @Override
+    public <T> T executeWithLock(String lockKey, Duration waitTime, Duration leaseTime, Supplier<T> supplier) {
+        Optional<T> result = tryExecuteWithLock(lockKey, waitTime, leaseTime, supplier);
+        if (result.isEmpty()) {
+            throw new IllegalStateException("Redis 分布式锁获取失败，lockKey=" + lockKey);
+        }
+        return result.get();
+    }
+
+    private String generateLockValue() {
+        return IdUtil.fastSimpleUUID();
+    }
+
+    private void sleepBeforeRetry(long deadline) {
+        long remainingNanos = deadline - System.nanoTime();
+        if (remainingNanos <= 0) {
+            return;
+        }
+
+        long sleepMillis = Math.min(DEFAULT_LOCK_RETRY_INTERVAL_MILLIS, TimeUnit.NANOSECONDS.toMillis(remainingNanos));
+        if (sleepMillis <= 0) {
+            sleepMillis = 1L;
+        }
+
+        try {
+            Thread.sleep(sleepMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Redis 分布式锁等待被中断", e);
+        }
+    }
+
+    @Override
+    public Object executeLua(String script, List<String> keys, Object... args) {
+        return executeLua(script, Object.class, keys, args);
+    }
+
+    @Override
+    public <T> T executeLua(String script, Class<T> clazz, List<String> keys, Object... args) {
+        if (StrUtil.isBlank(script) || ObjectUtil.isNull(clazz)) {
+            return null;
+        }
+
+        List<String> validKeys = buildLuaKeys(keys);
+
+        try {
+            RedisScript<T> redisScript = RedisScript.of(script, clazz);
+
+            // RedisScript 的 resultType 会影响 Redis 返回值解析方式，例如 Long、Boolean、List、String
+            T result = redisTemplate.execute(redisScript, validKeys, args);
+
+            return convertValue(result, clazz);
+        } catch (Exception e) {
+            log.warn("Redis Lua 脚本执行失败，resultType={}，keyCount={}，argCount={}",
+                    clazz.getName(), validKeys.size(), ObjectUtil.isNull(args) ? 0 : args.length, e);
+            return null;
+        }
+    }
+
+    @Override
+    public <T> T executeLua(String script, TypeReference<T> typeReference, List<String> keys, Object... args) {
+        if (StrUtil.isBlank(script) || ObjectUtil.isNull(typeReference)) {
+            return null;
+        }
+
+        Class<?> resultClass = resolveLuaResultClass(typeReference);
+        Object result = executeLua(script, resultClass, keys, args);
+
+        return convertValue(result, typeReference);
+    }
+
+    @Override
+    public Object executeLuaFromResource(String resourceLocation, List<String> keys, Object... args) {
+        return executeLuaFromResource(resourceLocation, Object.class, keys, args);
+    }
+
+    @Override
+    public <T> T executeLuaFromResource(String resourceLocation, Class<T> clazz, List<String> keys, Object... args) {
+        if (StrUtil.isBlank(resourceLocation) || ObjectUtil.isNull(clazz)) {
+            return null;
+        }
+
+        String script = readLuaScriptFromResource(resourceLocation);
+        if (StrUtil.isBlank(script)) {
+            return null;
+        }
+
+        return executeLua(script, clazz, keys, args);
+    }
+
+    @Override
+    public <T> T executeLuaFromResource(String resourceLocation, TypeReference<T> typeReference, List<String> keys, Object... args) {
+        if (StrUtil.isBlank(resourceLocation) || ObjectUtil.isNull(typeReference)) {
+            return null;
+        }
+
+        String script = readLuaScriptFromResource(resourceLocation);
+        if (StrUtil.isBlank(script)) {
+            return null;
+        }
+
+        return executeLua(script, typeReference, keys, args);
+    }
+
+    @Override
+    public boolean executeLuaAsBoolean(String script, List<String> keys, Object... args) {
+        Boolean result = executeLua(script, Boolean.class, keys, args);
+        return Boolean.TRUE.equals(result);
+    }
+
+    @Override
+    public long executeLuaAsLong(String script, List<String> keys, Object... args) {
+        Long result = executeLua(script, Long.class, keys, args);
+        return ObjectUtil.defaultIfNull(result, 0L);
+    }
+
+    @Override
+    public String executeLuaAsString(String script, List<String> keys, Object... args) {
+        return executeLua(script, String.class, keys, args);
+    }
+
+    @Override
+    public List<Object> executeLuaAsList(String script, List<String> keys, Object... args) {
+        List<?> result = executeLua(script, List.class, keys, args);
+        if (CollUtil.isEmpty(result)) {
+            return List.of();
+        }
+
+        return result.stream()
+                .map(Object.class::cast)
+                .toList();
+    }
+
+    @Override
+    public boolean compareAndDeleteByLua(String key, Object expectedValue) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(expectedValue)) {
+            return false;
+        }
+
+        Long result = executeLua(
+                COMPARE_AND_DELETE_LUA_SCRIPT,
+                Long.class,
+                List.of(key),
+                expectedValue
+        );
+
+        return ObjectUtil.defaultIfNull(result, 0L) > 0;
+    }
+
+    @Override
+    public boolean compareAndSetByLua(String key, Object expectedValue, Object newValue) {
+        return compareAndSetByLua(key, expectedValue, newValue, null);
+    }
+
+    @Override
+    public boolean compareAndSetByLua(String key, Object expectedValue, Object newValue, Duration timeout) {
+        if (StrUtil.isBlank(key) || ObjectUtil.isNull(expectedValue) || ObjectUtil.isNull(newValue)) {
+            return false;
+        }
+
+        long ttlSeconds = ObjectUtil.isNotNull(timeout) && !timeout.isNegative() && !timeout.isZero()
+                ? timeout.toSeconds()
+                : 0L;
+
+        Long result = executeLua(
+                COMPARE_AND_SET_LUA_SCRIPT,
+                Long.class,
+                List.of(key),
+                expectedValue,
+                newValue,
+                ttlSeconds
+        );
+
+        return ObjectUtil.defaultIfNull(result, 0L) > 0;
+    }
+
+    @Override
+    public long incrementAndExpireByLua(String key, long delta, Duration timeout) {
+        if (StrUtil.isBlank(key)) {
+            return 0L;
+        }
+
+        long ttlSeconds = ObjectUtil.isNotNull(timeout) && !timeout.isNegative() && !timeout.isZero()
+                ? timeout.toSeconds()
+                : 0L;
+
+        Long result = executeLua(
+                INCREMENT_AND_EXPIRE_LUA_SCRIPT,
+                Long.class,
+                List.of(key),
+                delta,
+                ttlSeconds
+        );
+
+        return ObjectUtil.defaultIfNull(result, 0L);
+    }
+
+    private List<String> buildLuaKeys(List<String> keys) {
+        if (CollUtil.isEmpty(keys)) {
+            return List.of();
+        }
+
+        return keys.stream()
+                .filter(StrUtil::isNotBlank)
+                .toList();
+    }
+
+    private String readLuaScriptFromResource(String resourceLocation) {
+        if (StrUtil.isBlank(resourceLocation)) {
+            return null;
+        }
+
+        try {
+            String location = StrUtil.removePrefix(resourceLocation, "classpath:");
+
+            // 支持读取 resources 目录下的 Lua 文件，例如 lua/stock_decrease.lua
+            return ResourceUtil.readUtf8Str(location);
+        } catch (Exception e) {
+            log.warn("读取 Redis Lua 脚本资源失败，resourceLocation={}", resourceLocation, e);
+            return null;
+        }
+    }
+
+    private Class<?> resolveLuaResultClass(TypeReference<?> typeReference) {
+        JavaType javaType = objectMapper.getTypeFactory().constructType(typeReference);
+        Class<?> rawClass = javaType.getRawClass();
+
+        if (Boolean.class.equals(rawClass) || boolean.class.equals(rawClass)) {
+            return Boolean.class;
+        }
+
+        if (Long.class.equals(rawClass)
+                || long.class.equals(rawClass)
+                || Integer.class.equals(rawClass)
+                || int.class.equals(rawClass)
+                || Number.class.equals(rawClass)) {
+            return Long.class;
+        }
+
+        if (String.class.equals(rawClass)) {
+            return String.class;
+        }
+
+        if (List.class.isAssignableFrom(rawClass)
+                || Collection.class.isAssignableFrom(rawClass)
+                || Set.class.isAssignableFrom(rawClass)) {
+            return List.class;
+        }
+
+        return Object.class;
+    }
+}
+```
+
+### 控制器使用示例
+
+#### Key 通用操作
+
+```java
+package local.ateng.java.redis.controller;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Redis Key 通用操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/key")
+public class RedisKeyController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    /**
+     * 判断指定 Redis Key 是否存在。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/key/has-key?key=user:1"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return true 表示存在，false 表示不存在
+     */
+    @GetMapping("/has-key")
+    public ApiResult<Boolean> hasKey(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        boolean exists = redisTemplateService.hasKey(key);
+        return ApiResult.ok(exists);
+    }
+
+    /**
+     * 删除指定 Redis Key。
+     *
+     * <pre>{@code
+     * curl -X DELETE "http://localhost:8080/api/redis/key?key=user:1"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return true 表示删除成功，false 表示 Key 不存在或删除失败
+     */
+    @DeleteMapping
+    public ApiResult<Boolean> delete(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        boolean deleted = redisTemplateService.delete(key);
+        log.info("删除 Redis Key，key={}，deleted={}", key, deleted);
+
+        return ApiResult.ok(deleted);
+    }
+
+    /**
+     * 批量删除多个 Redis Key。
+     *
+     * <pre>{@code
+     * curl -X DELETE "http://localhost:8080/api/redis/key/batch" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"keys":["user:1","user:2","order:1"]}'
+     * }</pre>
+     *
+     * @param request 批量删除请求参数
+     * @return 成功删除的 Key 数量
+     */
+    @DeleteMapping("/batch")
+    public ApiResult<Long> deleteBatch(@RequestBody BatchDeleteRequest request) {
+        if (ObjectUtil.isNull(request) || CollUtil.isEmpty(request.keys())) {
+            return ApiResult.fail("keys 不能为空");
+        }
+
+        long count = redisTemplateService.delete(request.keys());
+        log.info("批量删除 Redis Key，keyCount={}，deleteCount={}", request.keys().size(), count);
+
+        return ApiResult.ok(count);
+    }
+
+    /**
+     * 设置指定 Redis Key 的过期时间。
+     *
+     * <pre>{@code
+     * curl -X PUT "http://localhost:8080/api/redis/key/expire?key=user:1&timeoutSeconds=3600"
+     * }</pre>
+     *
+     * @param key            Redis Key
+     * @param timeoutSeconds 过期时间，单位：秒
+     * @return true 表示设置成功，false 表示设置失败
+     */
+    @PutMapping("/expire")
+    public ApiResult<Boolean> expire(@RequestParam String key, @RequestParam Long timeoutSeconds) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(timeoutSeconds) || timeoutSeconds <= 0) {
+            return ApiResult.fail("timeoutSeconds 必须大于 0");
+        }
+
+        boolean result = redisTemplateService.expire(key, Duration.ofSeconds(timeoutSeconds));
+        log.info("设置 Redis Key 过期时间，key={}，timeoutSeconds={}，result={}", key, timeoutSeconds, result);
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 设置指定 Redis Key 在指定时间点过期。
+     *
+     * <pre>{@code
+     * curl -X PUT "http://localhost:8080/api/redis/key/expire-at?key=user:1&expireAt=2026-04-28T10:00:00Z"
+     * }</pre>
+     *
+     * @param key      Redis Key
+     * @param expireAt 过期时间点，ISO-8601 格式，例如：2026-04-28T10:00:00Z
+     * @return true 表示设置成功，false 表示设置失败
+     */
+    @PutMapping("/expire-at")
+    public ApiResult<Boolean> expireAt(@RequestParam String key, @RequestParam String expireAt) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (StrUtil.isBlank(expireAt)) {
+            return ApiResult.fail("expireAt 不能为空");
+        }
+
+        Instant expireInstant;
+        try {
+            expireInstant = Instant.parse(expireAt);
+        } catch (Exception e) {
+            log.warn("Redis Key 过期时间格式错误，key={}，expireAt={}", key, expireAt, e);
+            return ApiResult.fail("expireAt 格式错误，请使用 ISO-8601 格式，例如：2026-04-28T10:00:00Z");
+        }
+
+        boolean result = redisTemplateService.expireAt(key, expireInstant);
+        log.info("设置 Redis Key 指定时间过期，key={}，expireAt={}，result={}", key, expireAt, result);
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 移除指定 Redis Key 的过期时间，使其永久有效。
+     *
+     * <pre>{@code
+     * curl -X PUT "http://localhost:8080/api/redis/key/persist?key=user:1"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return true 表示移除成功，false 表示 Key 不存在、无过期时间或移除失败
+     */
+    @PutMapping("/persist")
+    public ApiResult<Boolean> persist(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        boolean result = redisTemplateService.persist(key);
+        log.info("移除 Redis Key 过期时间，key={}，result={}", key, result);
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 获取指定 Redis Key 的剩余过期时间。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/key/expire?key=user:1"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return Key 剩余过期时间信息；-1 表示永久有效，-2 表示 Key 不存在
+     */
+    @GetMapping("/expire")
+    public ApiResult<ExpireResponse> getExpire(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        Duration expire = redisTemplateService.getExpire(key);
+        ExpireResponse response = buildExpireResponse(expire);
+
+        return ApiResult.ok(response);
+    }
+
+    /**
+     * 使用 SCAN 按匹配规则扫描 Redis Key。
+     *
+     * <pre>{@code
+     * curl -G "http://localhost:8080/api/redis/key/scan" \
+     *   --data-urlencode "pattern=user:*" \
+     *   --data-urlencode "count=1000"
+     * }</pre>
+     *
+     * @param pattern Key 匹配表达式，例如 user:*、order:*
+     * @param count   每批扫描数量
+     * @return 匹配到的 Redis Key 集合
+     */
+    @GetMapping("/scan")
+    public ApiResult<Set<String>> scanKeys(@RequestParam String pattern,
+                                           @RequestParam(defaultValue = "1000") Long count) {
+        if (StrUtil.isBlank(pattern)) {
+            return ApiResult.fail("pattern 不能为空");
+        }
+
+        long scanCount = ObjectUtil.defaultIfNull(count, 1000L);
+        if (scanCount <= 0) {
+            return ApiResult.fail("count 必须大于 0");
+        }
+
+        // 使用 service 内部的 SCAN 实现，避免直接调用 Redis KEYS 命令造成阻塞
+        Set<String> keys = redisTemplateService.scanKeys(pattern, scanCount);
+
+        log.info("扫描 Redis Key，pattern={}，count={}，resultSize={}", pattern, scanCount, keys.size());
+
+        return ApiResult.ok(keys);
+    }
+
+    private ExpireResponse buildExpireResponse(Duration expire) {
+        if (ObjectUtil.isNull(expire)) {
+            return new ExpireResponse(-2L, -2L, "Key 不存在");
+        }
+
+        long millis = expire.toMillis();
+        long seconds = expire.toSeconds();
+
+        if (millis == -1L) {
+            return new ExpireResponse(-1L, -1L, "Key 永久有效");
+        }
+        if (millis == -2L) {
+            return new ExpireResponse(-2L, -2L, "Key 不存在");
+        }
+
+        return new ExpireResponse(seconds, millis, "Key 存在且已设置过期时间");
+    }
+
+    public record BatchDeleteRequest(List<String> keys) {
+    }
+
+    public record ExpireResponse(Long seconds, Long millis, String description) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+```
+
+#### Value 操作
+
+```java
+package local.ateng.java.redis.controller;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Redis Value 操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/value")
+public class RedisValueController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    /**
+     * 设置 Redis String 类型缓存值。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/set" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:1","value":{"id":1,"name":"Ateng"},"timeoutSeconds":3600}'
+     * }</pre>
+     *
+     * @param request 设置缓存请求参数
+     * @return true 表示设置成功
+     */
+    @PostMapping("/set")
+    public ApiResult<Boolean> set(@RequestBody SetValueRequest request) {
+        ApiResult<Boolean> validateResult = validateSetValueRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        if (ObjectUtil.isNull(request.timeoutSeconds())) {
+            redisTemplateService.set(request.key(), request.value());
+        } else {
+            redisTemplateService.set(request.key(), request.value(), Duration.ofSeconds(request.timeoutSeconds()));
+        }
+
+        log.info("设置 Redis Value，key={}，hasTimeout={}", request.key(), ObjectUtil.isNotNull(request.timeoutSeconds()));
+        return ApiResult.ok(true);
+    }
+
+    /**
+     * 当 Redis Key 不存在时设置缓存值。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/set-if-absent" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"lock:user:1","value":"request-001","timeoutSeconds":30}'
+     * }</pre>
+     *
+     * @param request 设置缓存请求参数
+     * @return true 表示设置成功，false 表示 Key 已存在
+     */
+    @PostMapping("/set-if-absent")
+    public ApiResult<Boolean> setIfAbsent(@RequestBody SetValueRequest request) {
+        ApiResult<Boolean> validateResult = validateSetValueRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        boolean result;
+        if (ObjectUtil.isNull(request.timeoutSeconds())) {
+            result = redisTemplateService.setIfAbsent(request.key(), request.value());
+        } else {
+            result = redisTemplateService.setIfAbsent(request.key(), request.value(), Duration.ofSeconds(request.timeoutSeconds()));
+        }
+
+        log.info("仅不存在时设置 Redis Value，key={}，result={}", request.key(), result);
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 当 Redis Key 已存在时设置缓存值。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/set-if-present" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:1","value":{"id":1,"name":"Ateng-Updated"},"timeoutSeconds":3600}'
+     * }</pre>
+     *
+     * @param request 设置缓存请求参数
+     * @return true 表示设置成功，false 表示 Key 不存在
+     */
+    @PostMapping("/set-if-present")
+    public ApiResult<Boolean> setIfPresent(@RequestBody SetValueRequest request) {
+        ApiResult<Boolean> validateResult = validateSetValueRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        boolean result;
+        if (ObjectUtil.isNull(request.timeoutSeconds())) {
+            result = redisTemplateService.setIfPresent(request.key(), request.value());
+        } else {
+            result = redisTemplateService.setIfPresent(request.key(), request.value(), Duration.ofSeconds(request.timeoutSeconds()));
+        }
+
+        log.info("仅存在时设置 Redis Value，key={}，result={}", request.key(), result);
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 获取指定 Redis Key 的缓存值。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/value/get?key=user:1"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return 缓存值；Key 不存在时返回 null
+     */
+    @GetMapping("/get")
+    public ApiResult<Object> get(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        Object value = redisTemplateService.get(key);
+        return ApiResult.ok(value);
+    }
+
+    /**
+     * 获取指定 Redis Key 的旧值，并设置新值。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/get-and-set" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:1","value":{"id":1,"name":"Ateng-New"}}'
+     * }</pre>
+     *
+     * @param request 获取并替换缓存请求参数
+     * @return 替换前的旧值；Key 不存在时返回 null
+     */
+    @PostMapping("/get-and-set")
+    public ApiResult<Object> getAndSet(@RequestBody GetAndSetRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+
+        Object oldValue = redisTemplateService.getAndSet(request.key(), request.value());
+
+        log.info("获取并替换 Redis Value，key={}", request.key());
+        return ApiResult.ok(oldValue);
+    }
+
+    /**
+     * 批量获取多个 Redis Key 的缓存值。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/multi-get" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"keys":["user:1","user:2","user:3"]}'
+     * }</pre>
+     *
+     * @param request 多 Key 查询请求参数
+     * @return 缓存值列表，返回顺序与请求 Key 顺序一致
+     */
+    @PostMapping("/multi-get")
+    public ApiResult<List<Object>> multiGet(@RequestBody MultiKeyRequest request) {
+        if (ObjectUtil.isNull(request) || CollUtil.isEmpty(request.keys())) {
+            return ApiResult.fail("keys 不能为空");
+        }
+
+        List<Object> values = redisTemplateService.multiGet(request.keys());
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 批量获取多个 Redis Key 的缓存值，并按 Key 组装为 Map。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/multi-get-map" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"keys":["user:1","user:2","user:3"]}'
+     * }</pre>
+     *
+     * @param request 多 Key 查询请求参数
+     * @return Key 与缓存值的映射关系
+     */
+    @PostMapping("/multi-get-map")
+    public ApiResult<Map<String, Object>> multiGetAsMap(@RequestBody MultiKeyRequest request) {
+        if (ObjectUtil.isNull(request) || CollUtil.isEmpty(request.keys())) {
+            return ApiResult.fail("keys 不能为空");
+        }
+
+        // 按请求 Key 顺序组装 Map，便于调用方定位每个 Key 对应的缓存值
+        Map<String, Object> valueMap = redisTemplateService.multiGetAsMap(request.keys());
+        return ApiResult.ok(valueMap);
+    }
+
+    /**
+     * 对指定 Redis Key 执行整数自增。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/increment" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"counter:user:1","delta":1}'
+     * }</pre>
+     *
+     * @param request 计数器请求参数；delta 为空时默认自增 1
+     * @return 自增后的值
+     */
+    @PostMapping("/increment")
+    public ApiResult<Long> increment(@RequestBody CounterRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNotNull(request.delta()) && request.delta() <= 0) {
+            return ApiResult.fail("delta 必须大于 0");
+        }
+
+        long value = ObjectUtil.isNull(request.delta())
+                ? redisTemplateService.increment(request.key())
+                : redisTemplateService.increment(request.key(), request.delta());
+
+        log.info("Redis Value 自增，key={}，delta={}，value={}", request.key(), request.delta(), value);
+        return ApiResult.ok(value);
+    }
+
+    /**
+     * 对指定 Redis Key 执行浮点数自增。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/increment-double" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"score:user:1","delta":1.5}'
+     * }</pre>
+     *
+     * @param request 浮点计数器请求参数
+     * @return 自增后的值
+     */
+    @PostMapping("/increment-double")
+    public ApiResult<Double> incrementDouble(@RequestBody DoubleCounterRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.delta()) || request.delta() <= 0) {
+            return ApiResult.fail("delta 必须大于 0");
+        }
+
+        double value = redisTemplateService.increment(request.key(), request.delta());
+
+        log.info("Redis Value 浮点自增，key={}，delta={}，value={}", request.key(), request.delta(), value);
+        return ApiResult.ok(value);
+    }
+
+    /**
+     * 对指定 Redis Key 执行整数自减。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/value/decrement" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"counter:user:1","delta":1}'
+     * }</pre>
+     *
+     * @param request 计数器请求参数；delta 为空时默认自减 1
+     * @return 自减后的值
+     */
+    @PostMapping("/decrement")
+    public ApiResult<Long> decrement(@RequestBody CounterRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNotNull(request.delta()) && request.delta() <= 0) {
+            return ApiResult.fail("delta 必须大于 0");
+        }
+
+        long value = ObjectUtil.isNull(request.delta())
+                ? redisTemplateService.decrement(request.key())
+                : redisTemplateService.decrement(request.key(), request.delta());
+
+        log.info("Redis Value 自减，key={}，delta={}，value={}", request.key(), request.delta(), value);
+        return ApiResult.ok(value);
+    }
+
+    private ApiResult<Boolean> validateSetValueRequest(SetValueRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+        if (ObjectUtil.isNotNull(request.timeoutSeconds()) && request.timeoutSeconds() <= 0) {
+            return ApiResult.fail("timeoutSeconds 必须大于 0");
+        }
+        return null;
+    }
+
+    public record SetValueRequest(String key, Object value, Long timeoutSeconds) {
+    }
+
+    public record GetAndSetRequest(String key, Object value) {
+    }
+
+    public record MultiKeyRequest(List<String> keys) {
+    }
+
+    public record CounterRequest(String key, Long delta) {
+    }
+
+    public record DoubleCounterRequest(String key, Double delta) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+```
+
+#### Hash 操作
+
+```java
+package local.ateng.java.redis.controller;
+
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Redis Hash 操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/hash")
+public class RedisHashController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    @PostMapping("/put")
+    public ApiResult<Boolean> hPut(@RequestBody HashPutRequest request) {
+        ApiResult<Boolean> validateResult = validateHashPutRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        redisTemplateService.hPut(request.key(), request.hashKey(), request.value());
+
+        log.info("设置 Redis Hash，key={}，hashKey={}", request.key(), request.hashKey());
+        return ApiResult.ok(true);
+    }
+
+    @PostMapping("/put-all")
+    public ApiResult<Boolean> hPutAll(@RequestBody HashPutAllRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (CollUtil.isEmpty(request.map())) {
+            return ApiResult.fail("map 不能为空");
+        }
+
+        redisTemplateService.hPutAll(request.key(), request.map());
+
+        log.info("批量设置 Redis Hash，key={}，fieldCount={}", request.key(), request.map().size());
+        return ApiResult.ok(true);
+    }
+
+    @PostMapping("/put-if-absent")
+    public ApiResult<Boolean> hPutIfAbsent(@RequestBody HashPutRequest request) {
+        ApiResult<Boolean> validateResult = validateHashPutRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        boolean result = redisTemplateService.hPutIfAbsent(request.key(), request.hashKey(), request.value());
+
+        log.info("仅不存在时设置 Redis Hash，key={}，hashKey={}，result={}", request.key(), request.hashKey(), result);
+        return ApiResult.ok(result);
+    }
+
+    @GetMapping("/get")
+    public ApiResult<Object> hGet(@RequestParam String key, @RequestParam String hashKey) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (StrUtil.isBlank(hashKey)) {
+            return ApiResult.fail("hashKey 不能为空");
+        }
+
+        Object value = redisTemplateService.hGet(key, hashKey);
+        return ApiResult.ok(value);
+    }
+
+    @PostMapping("/multi-get")
+    public ApiResult<List<Object>> hMultiGet(@RequestBody HashMultiGetRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (CollUtil.isEmpty(request.hashKeys())) {
+            return ApiResult.fail("hashKeys 不能为空");
+        }
+
+        List<Object> values = redisTemplateService.hMultiGet(request.key(), request.hashKeys());
+        return ApiResult.ok(values);
+    }
+
+    @GetMapping("/get-all")
+    public ApiResult<Map<Object, Object>> hGetAll(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        Map<Object, Object> values = redisTemplateService.hGetAll(key);
+        return ApiResult.ok(values);
+    }
+
+    @GetMapping("/has-key")
+    public ApiResult<Boolean> hHasKey(@RequestParam String key, @RequestParam String hashKey) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (StrUtil.isBlank(hashKey)) {
+            return ApiResult.fail("hashKey 不能为空");
+        }
+
+        boolean exists = redisTemplateService.hHasKey(key, hashKey);
+        return ApiResult.ok(exists);
+    }
+
+    @DeleteMapping
+    public ApiResult<Long> hDelete(@RequestBody HashDeleteRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (CollUtil.isEmpty(request.hashKeys())) {
+            return ApiResult.fail("hashKeys 不能为空");
+        }
+
+        // RedisTemplate Hash delete 接收 Object...，这里将请求集合转换为可变参数数组
+        long count = redisTemplateService.hDelete(request.key(), request.hashKeys().toArray());
+
+        log.info("删除 Redis Hash 字段，key={}，fieldCount={}，deleteCount={}",
+                request.key(), request.hashKeys().size(), count);
+
+        return ApiResult.ok(count);
+    }
+
+    @GetMapping("/size")
+    public ApiResult<Long> hSize(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        long size = redisTemplateService.hSize(key);
+        return ApiResult.ok(size);
+    }
+
+    @GetMapping("/keys")
+    public ApiResult<Set<Object>> hKeys(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        Set<Object> hashKeys = redisTemplateService.hKeys(key);
+        return ApiResult.ok(hashKeys);
+    }
+
+    @GetMapping("/values")
+    public ApiResult<List<Object>> hValues(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        List<Object> values = redisTemplateService.hValues(key);
+        return ApiResult.ok(values);
+    }
+
+    @PostMapping("/increment")
+    public ApiResult<Long> hIncrement(@RequestBody HashCounterRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.hashKey())) {
+            return ApiResult.fail("hashKey 不能为空");
+        }
+        if (ObjectUtil.isNull(request.delta()) || request.delta() == 0) {
+            return ApiResult.fail("delta 不能为 0");
+        }
+
+        long value = redisTemplateService.hIncrement(request.key(), request.hashKey(), request.delta());
+
+        log.info("Redis Hash 整数递增，key={}，hashKey={}，delta={}，value={}",
+                request.key(), request.hashKey(), request.delta(), value);
+
+        return ApiResult.ok(value);
+    }
+
+    @PostMapping("/increment-double")
+    public ApiResult<Double> hIncrementDouble(@RequestBody HashDoubleCounterRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.hashKey())) {
+            return ApiResult.fail("hashKey 不能为空");
+        }
+        if (ObjectUtil.isNull(request.delta()) || request.delta() == 0D) {
+            return ApiResult.fail("delta 不能为 0");
+        }
+
+        double value = redisTemplateService.hIncrement(request.key(), request.hashKey(), request.delta());
+
+        log.info("Redis Hash 浮点递增，key={}，hashKey={}，delta={}，value={}",
+                request.key(), request.hashKey(), request.delta(), value);
+
+        return ApiResult.ok(value);
+    }
+
+    private ApiResult<Boolean> validateHashPutRequest(HashPutRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.hashKey())) {
+            return ApiResult.fail("hashKey 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+        return null;
+    }
+
+    public record HashPutRequest(String key, Object hashKey, Object value) {
+    }
+
+    public record HashPutAllRequest(String key, Map<Object, Object> map) {
+    }
+
+    public record HashMultiGetRequest(String key, List<Object> hashKeys) {
+    }
+
+    public record HashDeleteRequest(String key, List<Object> hashKeys) {
+    }
+
+    public record HashCounterRequest(String key, Object hashKey, Long delta) {
+    }
+
+    public record HashDoubleCounterRequest(String key, Object hashKey, Double delta) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+
+```
+
+#### List 操作
+
+```java
+package local.ateng.java.redis.controller;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * Redis List 操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/list")
+public class RedisListController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    /**
+     * 从 Redis List 左侧插入一个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/left-push" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","value":{"id":1,"content":"hello"}}'
+     * }</pre>
+     *
+     * @param request List 插入请求参数
+     * @return 插入后 List 的长度
+     */
+    @PostMapping("/left-push")
+    public ApiResult<Long> lLeftPush(@RequestBody ListPushRequest request) {
+        ApiResult<Long> validateResult = validateListPushRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        long size = redisTemplateService.lLeftPush(request.key(), request.value());
+
+        log.info("Redis List 左侧插入元素，key={}，size={}", request.key(), size);
+        return ApiResult.ok(size);
+    }
+
+    /**
+     * 从 Redis List 左侧批量插入元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/left-push-all" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","values":[{"id":1,"content":"a"},{"id":2,"content":"b"}]}'
+     * }</pre>
+     *
+     * @param request List 批量插入请求参数
+     * @return 插入后 List 的长度
+     */
+    @PostMapping("/left-push-all")
+    public ApiResult<Long> lLeftPushAll(@RequestBody ListPushAllRequest request) {
+        ApiResult<Long> validateResult = validateListPushAllRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        long size = redisTemplateService.lLeftPushAll(request.key(), request.values());
+
+        log.info("Redis List 左侧批量插入元素，key={}，valueCount={}，size={}",
+                request.key(), request.values().size(), size);
+
+        return ApiResult.ok(size);
+    }
+
+    /**
+     * 从 Redis List 右侧插入一个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/right-push" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","value":{"id":3,"content":"hello"}}'
+     * }</pre>
+     *
+     * @param request List 插入请求参数
+     * @return 插入后 List 的长度
+     */
+    @PostMapping("/right-push")
+    public ApiResult<Long> lRightPush(@RequestBody ListPushRequest request) {
+        ApiResult<Long> validateResult = validateListPushRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        long size = redisTemplateService.lRightPush(request.key(), request.value());
+
+        log.info("Redis List 右侧插入元素，key={}，size={}", request.key(), size);
+        return ApiResult.ok(size);
+    }
+
+    /**
+     * 从 Redis List 右侧批量插入元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/right-push-all" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","values":[{"id":3,"content":"c"},{"id":4,"content":"d"}]}'
+     * }</pre>
+     *
+     * @param request List 批量插入请求参数
+     * @return 插入后 List 的长度
+     */
+    @PostMapping("/right-push-all")
+    public ApiResult<Long> lRightPushAll(@RequestBody ListPushAllRequest request) {
+        ApiResult<Long> validateResult = validateListPushAllRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        long size = redisTemplateService.lRightPushAll(request.key(), request.values());
+
+        log.info("Redis List 右侧批量插入元素，key={}，valueCount={}，size={}",
+                request.key(), request.values().size(), size);
+
+        return ApiResult.ok(size);
+    }
+
+    /**
+     * 从 Redis List 左侧弹出一个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/left-pop" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message"}'
+     * }</pre>
+     *
+     * 阻塞弹出示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/left-pop" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","timeoutSeconds":5}'
+     * }</pre>
+     *
+     * @param request List 弹出请求参数
+     * @return 弹出的元素；List 为空或超时时返回 null
+     */
+    @PostMapping("/left-pop")
+    public ApiResult<Object> lLeftPop(@RequestBody ListPopRequest request) {
+        ApiResult<Object> validateResult = validateListPopRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        Object value;
+        if (ObjectUtil.isNull(request.timeoutSeconds())) {
+            value = redisTemplateService.lLeftPop(request.key());
+        } else {
+            // timeoutSeconds 存在时使用阻塞弹出，适合简单消费队列场景
+            value = redisTemplateService.lLeftPop(request.key(), Duration.ofSeconds(request.timeoutSeconds()));
+        }
+
+        log.info("Redis List 左侧弹出元素，key={}，hasTimeout={}",
+                request.key(), ObjectUtil.isNotNull(request.timeoutSeconds()));
+
+        return ApiResult.ok(value);
+    }
+
+    /**
+     * 从 Redis List 右侧弹出一个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/right-pop" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message"}'
+     * }</pre>
+     *
+     * 阻塞弹出示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/right-pop" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","timeoutSeconds":5}'
+     * }</pre>
+     *
+     * @param request List 弹出请求参数
+     * @return 弹出的元素；List 为空或超时时返回 null
+     */
+    @PostMapping("/right-pop")
+    public ApiResult<Object> lRightPop(@RequestBody ListPopRequest request) {
+        ApiResult<Object> validateResult = validateListPopRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        Object value;
+        if (ObjectUtil.isNull(request.timeoutSeconds())) {
+            value = redisTemplateService.lRightPop(request.key());
+        } else {
+            // timeoutSeconds 存在时使用阻塞弹出，避免调用方频繁轮询 Redis
+            value = redisTemplateService.lRightPop(request.key(), Duration.ofSeconds(request.timeoutSeconds()));
+        }
+
+        log.info("Redis List 右侧弹出元素，key={}，hasTimeout={}",
+                request.key(), ObjectUtil.isNotNull(request.timeoutSeconds()));
+
+        return ApiResult.ok(value);
+    }
+
+    /**
+     * 根据索引获取 Redis List 中的元素。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/list/index?key=queue:message&index=0"
+     * }</pre>
+     *
+     * 获取最后一个元素示例：
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/list/index?key=queue:message&index=-1"
+     * }</pre>
+     *
+     * @param key   Redis Key
+     * @param index 元素索引，支持负数索引
+     * @return 指定索引位置的元素；索引不存在时返回 null
+     */
+    @GetMapping("/index")
+    public ApiResult<Object> lIndex(@RequestParam String key, @RequestParam Long index) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(index)) {
+            return ApiResult.fail("index 不能为空");
+        }
+
+        Object value = redisTemplateService.lIndex(key, index);
+        return ApiResult.ok(value);
+    }
+
+    /**
+     * 获取 Redis List 指定范围内的元素。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/list/range?key=queue:message&start=0&end=9"
+     * }</pre>
+     *
+     * 获取全部元素示例：
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/list/range?key=queue:message&start=0&end=-1"
+     * }</pre>
+     *
+     * @param key   Redis Key
+     * @param start 开始索引，支持负数索引
+     * @param end   结束索引，支持负数索引
+     * @return 指定范围内的元素列表
+     */
+    @GetMapping("/range")
+    public ApiResult<List<Object>> lRange(@RequestParam String key,
+                                          @RequestParam Long start,
+                                          @RequestParam Long end) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(start)) {
+            return ApiResult.fail("start 不能为空");
+        }
+        if (ObjectUtil.isNull(end)) {
+            return ApiResult.fail("end 不能为空");
+        }
+
+        List<Object> values = redisTemplateService.lRange(key, start, end);
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 根据索引设置 Redis List 中的元素值。
+     *
+     * <pre>{@code
+     * curl -X PUT "http://localhost:8080/api/redis/list/set" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","index":0,"value":{"id":1,"content":"updated"}}'
+     * }</pre>
+     *
+     * @param request List 索引设置请求参数
+     * @return true 表示设置成功
+     */
+    @PutMapping("/set")
+    public ApiResult<Boolean> lSet(@RequestBody ListSetRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.index())) {
+            return ApiResult.fail("index 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+
+        redisTemplateService.lSet(request.key(), request.index(), request.value());
+
+        log.info("Redis List 按索引设置元素，key={}，index={}", request.key(), request.index());
+        return ApiResult.ok(true);
+    }
+
+    /**
+     * 裁剪 Redis List，只保留指定范围内的元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/trim" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","start":0,"end":99}'
+     * }</pre>
+     *
+     * @param request List 范围请求参数
+     * @return true 表示裁剪成功
+     */
+    @PostMapping("/trim")
+    public ApiResult<Boolean> lTrim(@RequestBody ListRangeRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.start())) {
+            return ApiResult.fail("start 不能为空");
+        }
+        if (ObjectUtil.isNull(request.end())) {
+            return ApiResult.fail("end 不能为空");
+        }
+
+        // LTRIM 会保留指定区间元素，常用于固定长度队列或时间线裁剪
+        redisTemplateService.lTrim(request.key(), request.start(), request.end());
+
+        log.info("Redis List 裁剪元素，key={}，start={}，end={}",
+                request.key(), request.start(), request.end());
+
+        return ApiResult.ok(true);
+    }
+
+    /**
+     * 删除 Redis List 中指定数量的匹配元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/remove" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","count":1,"value":{"id":1,"content":"hello"}}'
+     * }</pre>
+     *
+     * 删除全部匹配元素示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/list/remove" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"queue:message","count":0,"value":"hello"}'
+     * }</pre>
+     *
+     * @param request List 删除元素请求参数；count 大于 0 从左到右删除，小于 0 从右到左删除，等于 0 删除全部匹配元素
+     * @return 成功删除的元素数量
+     */
+    @PostMapping("/remove")
+    public ApiResult<Long> lRemove(@RequestBody ListRemoveRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.count())) {
+            return ApiResult.fail("count 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+
+        long removeCount = redisTemplateService.lRemove(request.key(), request.count(), request.value());
+
+        log.info("Redis List 删除指定元素，key={}，count={}，removeCount={}",
+                request.key(), request.count(), removeCount);
+
+        return ApiResult.ok(removeCount);
+    }
+
+    /**
+     * 获取 Redis List 的长度。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/list/size?key=queue:message"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return List 长度；Key 不存在时返回 0
+     */
+    @GetMapping("/size")
+    public ApiResult<Long> lSize(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        long size = redisTemplateService.lSize(key);
+        return ApiResult.ok(size);
+    }
+
+    private ApiResult<Long> validateListPushRequest(ListPushRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+        return null;
+    }
+
+    private ApiResult<Long> validateListPushAllRequest(ListPushAllRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (CollUtil.isEmpty(request.values())) {
+            return ApiResult.fail("values 不能为空");
+        }
+        return null;
+    }
+
+    private ApiResult<Object> validateListPopRequest(ListPopRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNotNull(request.timeoutSeconds()) && request.timeoutSeconds() <= 0) {
+            return ApiResult.fail("timeoutSeconds 必须大于 0");
+        }
+        return null;
+    }
+
+    public record ListPushRequest(String key, Object value) {
+    }
+
+    public record ListPushAllRequest(String key, List<Object> values) {
+    }
+
+    public record ListPopRequest(String key, Long timeoutSeconds) {
+    }
+
+    public record ListSetRequest(String key, Long index, Object value) {
+    }
+
+    public record ListRangeRequest(String key, Long start, Long end) {
+    }
+
+    public record ListRemoveRequest(String key, Long count, Object value) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+```
+
+#### Set 操作
+
+```java
+package local.ateng.java.redis.controller;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Redis Set 操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/set")
+public class RedisSetController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    /**
+     * 向 Redis Set 中添加一个或多个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/add" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:tags:1","values":["java","redis","springboot"]}'
+     * }</pre>
+     *
+     * 添加对象元素示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/add" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:favorites:1","values":[{"id":1,"name":"Redis"},{"id":2,"name":"SpringBoot"}]}'
+     * }</pre>
+     *
+     * @param request Set 批量元素请求参数
+     * @return 成功添加的元素数量
+     */
+    @PostMapping("/add")
+    public ApiResult<Long> sAdd(@RequestBody SetValuesRequest request) {
+        ApiResult<Long> validateResult = validateSetValuesRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        long count = redisTemplateService.sAdd(request.key(), request.values().toArray());
+
+        log.info("Redis Set 添加元素，key={}，valueCount={}，addCount={}",
+                request.key(), request.values().size(), count);
+
+        return ApiResult.ok(count);
+    }
+
+    /**
+     * 从 Redis Set 中删除一个或多个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/remove" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:tags:1","values":["redis","springboot"]}'
+     * }</pre>
+     *
+     * @param request Set 批量元素请求参数
+     * @return 成功删除的元素数量
+     */
+    @PostMapping("/remove")
+    public ApiResult<Long> sRemove(@RequestBody SetValuesRequest request) {
+        ApiResult<Long> validateResult = validateSetValuesRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        long count = redisTemplateService.sRemove(request.key(), request.values().toArray());
+
+        log.info("Redis Set 删除元素，key={}，valueCount={}，removeCount={}",
+                request.key(), request.values().size(), count);
+
+        return ApiResult.ok(count);
+    }
+
+    /**
+     * 判断指定元素是否为 Redis Set 的成员。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/is-member" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:tags:1","value":"java"}'
+     * }</pre>
+     *
+     * @param request Set 单元素请求参数
+     * @return true 表示元素存在，false 表示元素不存在
+     */
+    @PostMapping("/is-member")
+    public ApiResult<Boolean> sIsMember(@RequestBody SetValueRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+
+        boolean result = redisTemplateService.sIsMember(request.key(), request.value());
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 获取 Redis Set 中的所有元素。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/set/members?key=user:tags:1"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return Set 元素集合；Key 不存在时返回空集合
+     */
+    @GetMapping("/members")
+    public ApiResult<Set<Object>> sMembers(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        Set<Object> members = redisTemplateService.sMembers(key);
+        return ApiResult.ok(members);
+    }
+
+    /**
+     * 从 Redis Set 中随机弹出一个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/pop" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"lottery:pool"}'
+     * }</pre>
+     *
+     * @param request Set 随机弹出请求参数
+     * @return 随机弹出的元素；Set 为空时返回 null
+     */
+    @PostMapping("/pop")
+    public ApiResult<Object> sPop(@RequestBody SetPopRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        Object value = redisTemplateService.sPop(request.key());
+
+        log.info("Redis Set 随机弹出单个元素，key={}", request.key());
+        return ApiResult.ok(value);
+    }
+
+    /**
+     * 从 Redis Set 中随机弹出指定数量的元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/pop-count" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"lottery:pool","count":3}'
+     * }</pre>
+     *
+     * @param request Set 随机弹出请求参数
+     * @return 随机弹出的元素列表；Set 为空时返回空列表
+     */
+    @PostMapping("/pop-count")
+    public ApiResult<List<Object>> sPopCount(@RequestBody SetPopRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.count()) || request.count() <= 0) {
+            return ApiResult.fail("count 必须大于 0");
+        }
+
+        // SPOP 会从集合中移除并返回随机元素，适合抽奖、任务随机领取等场景
+        List<Object> values = redisTemplateService.sPop(request.key(), request.count());
+
+        log.info("Redis Set 随机弹出多个元素，key={}，count={}，resultSize={}",
+                request.key(), request.count(), values.size());
+
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 获取 Redis Set 的元素数量。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/set/size?key=user:tags:1"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return Set 元素数量；Key 不存在时返回 0
+     */
+    @GetMapping("/size")
+    public ApiResult<Long> sSize(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        long size = redisTemplateService.sSize(key);
+        return ApiResult.ok(size);
+    }
+
+    /**
+     * 获取两个 Redis Set 的交集。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/intersect" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:tags:1","otherKey":"user:tags:2"}'
+     * }</pre>
+     *
+     * @param request Set 集合运算请求参数
+     * @return 两个 Set 的交集元素集合
+     */
+    @PostMapping("/intersect")
+    public ApiResult<Set<Object>> sIntersect(@RequestBody SetOperationRequest request) {
+        ApiResult<Set<Object>> validateResult = validateSetOperationRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        Set<Object> values = redisTemplateService.sIntersect(request.key(), request.otherKey());
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 获取两个 Redis Set 的并集。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/union" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:tags:1","otherKey":"user:tags:2"}'
+     * }</pre>
+     *
+     * @param request Set 集合运算请求参数
+     * @return 两个 Set 的并集元素集合
+     */
+    @PostMapping("/union")
+    public ApiResult<Set<Object>> sUnion(@RequestBody SetOperationRequest request) {
+        ApiResult<Set<Object>> validateResult = validateSetOperationRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        Set<Object> values = redisTemplateService.sUnion(request.key(), request.otherKey());
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 获取两个 Redis Set 的差集。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/set/difference" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"user:tags:1","otherKey":"user:tags:2"}'
+     * }</pre>
+     *
+     * @param request Set 集合运算请求参数
+     * @return 差集元素集合，即 key 中存在但 otherKey 中不存在的元素
+     */
+    @PostMapping("/difference")
+    public ApiResult<Set<Object>> sDifference(@RequestBody SetOperationRequest request) {
+        ApiResult<Set<Object>> validateResult = validateSetOperationRequest(request);
+        if (ObjectUtil.isNotNull(validateResult)) {
+            return validateResult;
+        }
+
+        // 差集结果为 key 中存在但 otherKey 中不存在的元素
+        Set<Object> values = redisTemplateService.sDifference(request.key(), request.otherKey());
+        return ApiResult.ok(values);
+    }
+
+    private ApiResult<Long> validateSetValuesRequest(SetValuesRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (CollUtil.isEmpty(request.values())) {
+            return ApiResult.fail("values 不能为空");
+        }
+        return null;
+    }
+
+    private ApiResult<Set<Object>> validateSetOperationRequest(SetOperationRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (StrUtil.isBlank(request.otherKey())) {
+            return ApiResult.fail("otherKey 不能为空");
+        }
+        return null;
+    }
+
+    public record SetValueRequest(String key, Object value) {
+    }
+
+    public record SetValuesRequest(String key, List<Object> values) {
+    }
+
+    public record SetPopRequest(String key, Long count) {
+    }
+
+    public record SetOperationRequest(String key, String otherKey) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+```
+
+#### ZSet 操作
+
+```java
+package local.ateng.java.redis.controller;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Redis ZSet 操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/zset")
+public class RedisZSetController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    /**
+     * 向 Redis ZSet 中添加一个元素及其分数。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/add" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","value":{"userId":1,"name":"Ateng"},"score":98.5}'
+     * }</pre>
+     *
+     * 添加字符串元素示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/add" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","value":"user:1","score":98.5}'
+     * }</pre>
+     *
+     * @param request ZSet 添加元素请求参数
+     * @return true 表示添加成功，false 表示添加失败
+     */
+    @PostMapping("/add")
+    public ApiResult<Boolean> zAdd(@RequestBody ZSetAddRequest request) {
+        String errorMessage = validateZSetAddRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        boolean result = redisTemplateService.zAdd(request.key(), request.value(), request.score());
+
+        log.info("Redis ZSet 添加元素，key={}，score={}，result={}", request.key(), request.score(), result);
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 从 Redis ZSet 中删除一个或多个元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/remove" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","values":["user:1","user:2"]}'
+     * }</pre>
+     *
+     * @param request ZSet 批量元素请求参数
+     * @return 成功删除的元素数量
+     */
+    @PostMapping("/remove")
+    public ApiResult<Long> zRemove(@RequestBody ZSetValuesRequest request) {
+        String errorMessage = validateZSetValuesRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        long count = redisTemplateService.zRemove(request.key(), request.values().toArray());
+
+        log.info("Redis ZSet 删除元素，key={}，valueCount={}，removeCount={}",
+                request.key(), request.values().size(), count);
+
+        return ApiResult.ok(count);
+    }
+
+    /**
+     * 获取 Redis ZSet 中指定元素的分数。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/score" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","value":"user:1"}'
+     * }</pre>
+     *
+     * @param request ZSet 单元素请求参数
+     * @return 元素分数；元素不存在时返回 null
+     */
+    @PostMapping("/score")
+    public ApiResult<Double> zScore(@RequestBody ZSetValueRequest request) {
+        String errorMessage = validateZSetValueRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Double score = redisTemplateService.zScore(request.key(), request.value());
+        return ApiResult.ok(score);
+    }
+
+    /**
+     * 获取 Redis ZSet 中指定元素的正序排名。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/rank" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","value":"user:1"}'
+     * }</pre>
+     *
+     * @param request ZSet 单元素请求参数
+     * @return 元素正序排名，排名从 0 开始；元素不存在时返回 null
+     */
+    @PostMapping("/rank")
+    public ApiResult<Long> zRank(@RequestBody ZSetValueRequest request) {
+        String errorMessage = validateZSetValueRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Long rank = redisTemplateService.zRank(request.key(), request.value());
+        return ApiResult.ok(rank);
+    }
+
+    /**
+     * 获取 Redis ZSet 中指定元素的倒序排名。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/reverse-rank" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","value":"user:1"}'
+     * }</pre>
+     *
+     * @param request ZSet 单元素请求参数
+     * @return 元素倒序排名，排名从 0 开始；元素不存在时返回 null
+     */
+    @PostMapping("/reverse-rank")
+    public ApiResult<Long> zReverseRank(@RequestBody ZSetValueRequest request) {
+        String errorMessage = validateZSetValueRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Long rank = redisTemplateService.zReverseRank(request.key(), request.value());
+        return ApiResult.ok(rank);
+    }
+
+    /**
+     * 获取 Redis ZSet 的元素数量。
+     *
+     * <pre>{@code
+     * curl -X GET "http://localhost:8080/api/redis/zset/size?key=rank:user:score"
+     * }</pre>
+     *
+     * @param key Redis Key
+     * @return ZSet 元素数量；Key 不存在时返回 0
+     */
+    @GetMapping("/size")
+    public ApiResult<Long> zSize(@RequestParam String key) {
+        if (StrUtil.isBlank(key)) {
+            return ApiResult.fail("key 不能为空");
+        }
+
+        long size = redisTemplateService.zSize(key);
+        return ApiResult.ok(size);
+    }
+
+    /**
+     * 获取 Redis ZSet 中指定分数区间内的元素数量。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/count" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","min":60,"max":100}'
+     * }</pre>
+     *
+     * @param request ZSet 分数区间请求参数
+     * @return 指定分数区间内的元素数量
+     */
+    @PostMapping("/count")
+    public ApiResult<Long> zCount(@RequestBody ZSetScoreRangeRequest request) {
+        String errorMessage = validateScoreRangeRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        long count = redisTemplateService.zCount(request.key(), request.min(), request.max());
+        return ApiResult.ok(count);
+    }
+
+    /**
+     * 按正序排名范围获取 Redis ZSet 元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/range" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","start":0,"end":9}'
+     * }</pre>
+     *
+     * 获取全部元素示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/range" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","start":0,"end":-1}'
+     * }</pre>
+     *
+     * @param request ZSet 排名范围请求参数
+     * @return 指定排名范围内的元素集合
+     */
+    @PostMapping("/range")
+    public ApiResult<Set<Object>> zRange(@RequestBody ZSetRangeRequest request) {
+        String errorMessage = validateRangeRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Set<Object> values = redisTemplateService.zRange(request.key(), request.start(), request.end());
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 按倒序排名范围获取 Redis ZSet 元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/reverse-range" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","start":0,"end":9}'
+     * }</pre>
+     *
+     * @param request ZSet 排名范围请求参数
+     * @return 指定倒序排名范围内的元素集合
+     */
+    @PostMapping("/reverse-range")
+    public ApiResult<Set<Object>> zReverseRange(@RequestBody ZSetRangeRequest request) {
+        String errorMessage = validateRangeRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Set<Object> values = redisTemplateService.zReverseRange(request.key(), request.start(), request.end());
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 按分数区间获取 Redis ZSet 元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/range-by-score" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","min":60,"max":100}'
+     * }</pre>
+     *
+     * @param request ZSet 分数区间请求参数
+     * @return 指定分数区间内的元素集合
+     */
+    @PostMapping("/range-by-score")
+    public ApiResult<Set<Object>> zRangeByScore(@RequestBody ZSetScoreRangeRequest request) {
+        String errorMessage = validateScoreRangeRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Set<Object> values = redisTemplateService.zRangeByScore(request.key(), request.min(), request.max());
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 按分数区间分页获取 Redis ZSet 元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/range-by-score-page" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","min":60,"max":100,"offset":0,"count":10}'
+     * }</pre>
+     *
+     * @param request ZSet 分数区间分页请求参数
+     * @return 指定分数区间内分页后的元素集合
+     */
+    @PostMapping("/range-by-score-page")
+    public ApiResult<Set<Object>> zRangeByScorePage(@RequestBody ZSetScorePageRequest request) {
+        String errorMessage = validateScorePageRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        // 按 score 区间分页查询，适合排行榜、时间线、延迟队列分页查看等场景
+        Set<Object> values = redisTemplateService.zRangeByScore(
+                request.key(),
+                request.min(),
+                request.max(),
+                request.offset(),
+                request.count()
+        );
+
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 按正序排名范围获取 Redis ZSet 元素及其分数。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/range-with-scores" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","start":0,"end":9}'
+     * }</pre>
+     *
+     * @param request ZSet 排名范围请求参数
+     * @return 元素和分数列表
+     */
+    @PostMapping("/range-with-scores")
+    public ApiResult<List<ZSetTupleResponse>> zRangeWithScores(@RequestBody ZSetRangeRequest request) {
+        String errorMessage = validateRangeRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Set<ZSetOperations.TypedTuple<Object>> tuples = redisTemplateService.zRangeWithScores(
+                request.key(),
+                request.start(),
+                request.end()
+        );
+
+        // TypedTuple 直接返回给前端可读性较差，这里转换为 value + score 的稳定结构
+        List<ZSetTupleResponse> values = tuples.stream()
+                .filter(ObjectUtil::isNotNull)
+                .map(tuple -> new ZSetTupleResponse(tuple.getValue(), tuple.getScore()))
+                .toList();
+
+        return ApiResult.ok(values);
+    }
+
+    /**
+     * 按排名范围删除 Redis ZSet 元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/remove-range" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","start":100,"end":-1}'
+     * }</pre>
+     *
+     * 删除前 10 名示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/remove-range" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","start":0,"end":9}'
+     * }</pre>
+     *
+     * @param request ZSet 排名范围请求参数
+     * @return 成功删除的元素数量
+     */
+    @PostMapping("/remove-range")
+    public ApiResult<Long> zRemoveRange(@RequestBody ZSetRangeRequest request) {
+        String errorMessage = validateRangeRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        long count = redisTemplateService.zRemoveRange(request.key(), request.start(), request.end());
+
+        log.info("Redis ZSet 按排名区间删除元素，key={}，start={}，end={}，removeCount={}",
+                request.key(), request.start(), request.end(), count);
+
+        return ApiResult.ok(count);
+    }
+
+    /**
+     * 按分数区间删除 Redis ZSet 元素。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/remove-range-by-score" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","min":0,"max":59}'
+     * }</pre>
+     *
+     * @param request ZSet 分数区间请求参数
+     * @return 成功删除的元素数量
+     */
+    @PostMapping("/remove-range-by-score")
+    public ApiResult<Long> zRemoveRangeByScore(@RequestBody ZSetScoreRangeRequest request) {
+        String errorMessage = validateScoreRangeRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        long count = redisTemplateService.zRemoveRangeByScore(request.key(), request.min(), request.max());
+
+        log.info("Redis ZSet 按分数区间删除元素，key={}，min={}，max={}，removeCount={}",
+                request.key(), request.min(), request.max(), count);
+
+        return ApiResult.ok(count);
+    }
+
+    /**
+     * 对 Redis ZSet 中指定元素的分数执行递增。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/increment-score" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","value":"user:1","delta":5.5}'
+     * }</pre>
+     *
+     * 递减分数示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/zset/increment-score" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"key":"rank:user:score","value":"user:1","delta":-2}'
+     * }</pre>
+     *
+     * @param request ZSet 分数递增请求参数
+     * @return 递增后的元素分数
+     */
+    @PostMapping("/increment-score")
+    public ApiResult<Double> zIncrementScore(@RequestBody ZSetIncrementScoreRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return ApiResult.fail("key 不能为空");
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return ApiResult.fail("value 不能为空");
+        }
+        if (ObjectUtil.isNull(request.delta()) || request.delta() == 0D) {
+            return ApiResult.fail("delta 不能为 0");
+        }
+
+        Double score = redisTemplateService.zIncrementScore(request.key(), request.value(), request.delta());
+
+        log.info("Redis ZSet 分数递增，key={}，delta={}，score={}", request.key(), request.delta(), score);
+        return ApiResult.ok(score);
+    }
+
+    private String validateZSetAddRequest(ZSetAddRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return "value 不能为空";
+        }
+        if (ObjectUtil.isNull(request.score())) {
+            return "score 不能为空";
+        }
+        return null;
+    }
+
+    private String validateZSetValueRequest(ZSetValueRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.value())) {
+            return "value 不能为空";
+        }
+        return null;
+    }
+
+    private String validateZSetValuesRequest(ZSetValuesRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (CollUtil.isEmpty(request.values())) {
+            return "values 不能为空";
+        }
+        return null;
+    }
+
+    private String validateRangeRequest(ZSetRangeRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.start())) {
+            return "start 不能为空";
+        }
+        if (ObjectUtil.isNull(request.end())) {
+            return "end 不能为空";
+        }
+        return null;
+    }
+
+    private String validateScoreRangeRequest(ZSetScoreRangeRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.min())) {
+            return "min 不能为空";
+        }
+        if (ObjectUtil.isNull(request.max())) {
+            return "max 不能为空";
+        }
+        if (request.min() > request.max()) {
+            return "min 不能大于 max";
+        }
+        return null;
+    }
+
+    private String validateScorePageRequest(ZSetScorePageRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.min())) {
+            return "min 不能为空";
+        }
+        if (ObjectUtil.isNull(request.max())) {
+            return "max 不能为空";
+        }
+        if (request.min() > request.max()) {
+            return "min 不能大于 max";
+        }
+        if (ObjectUtil.isNull(request.offset()) || request.offset() < 0) {
+            return "offset 必须大于等于 0";
+        }
+        if (ObjectUtil.isNull(request.count()) || request.count() <= 0) {
+            return "count 必须大于 0";
+        }
+        return null;
+    }
+
+    public record ZSetAddRequest(String key, Object value, Double score) {
+    }
+
+    public record ZSetValueRequest(String key, Object value) {
+    }
+
+    public record ZSetValuesRequest(String key, List<Object> values) {
+    }
+
+    public record ZSetRangeRequest(String key, Long start, Long end) {
+    }
+
+    public record ZSetScoreRangeRequest(String key, Double min, Double max) {
+    }
+
+    public record ZSetScorePageRequest(String key, Double min, Double max, Long offset, Long count) {
+    }
+
+    public record ZSetIncrementScoreRequest(String key, Object value, Double delta) {
+    }
+
+    public record ZSetTupleResponse(Object value, Double score) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+```
+
+#### 分布式锁
+
+```java
+package local.ateng.java.redis.controller;
+
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Duration;
+import java.util.Optional;
+
+/**
+ * Redis 分布式锁操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/lock")
+public class RedisLockController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    /**
+     * 尝试获取 Redis 分布式锁，不等待锁释放。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/try-lock" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:order:1001","lockValue":"request-001","leaseSeconds":30}'
+     * }</pre>
+     *
+     * @param request 加锁请求参数
+     * @return true 表示获取锁成功，false 表示锁已存在或获取失败
+     */
+    @PostMapping("/try-lock")
+    public ApiResult<Boolean> tryLock(@RequestBody LockRequest request) {
+        String errorMessage = validateLockRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        boolean locked = redisTemplateService.tryLock(
+                request.lockKey(),
+                request.lockValue(),
+                Duration.ofSeconds(request.leaseSeconds())
+        );
+
+        log.info("尝试获取 Redis 分布式锁，lockKey={}，locked={}", request.lockKey(), locked);
+        return ApiResult.ok(locked);
+    }
+
+    /**
+     * 在指定等待时间内尝试获取 Redis 分布式锁。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/try-lock-wait" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:order:1001","lockValue":"request-002","waitSeconds":5,"leaseSeconds":30}'
+     * }</pre>
+     *
+     * @param request 等待加锁请求参数
+     * @return true 表示获取锁成功，false 表示等待超时或获取失败
+     */
+    @PostMapping("/try-lock-wait")
+    public ApiResult<Boolean> tryLockWithWait(@RequestBody WaitLockRequest request) {
+        String errorMessage = validateWaitLockRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        boolean locked = redisTemplateService.tryLock(
+                request.lockKey(),
+                request.lockValue(),
+                Duration.ofSeconds(request.waitSeconds()),
+                Duration.ofSeconds(request.leaseSeconds())
+        );
+
+        log.info("等待获取 Redis 分布式锁，lockKey={}，waitSeconds={}，locked={}",
+                request.lockKey(), request.waitSeconds(), locked);
+
+        return ApiResult.ok(locked);
+    }
+
+    /**
+     * 释放 Redis 分布式锁。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/unlock" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:order:1001","lockValue":"request-001"}'
+     * }</pre>
+     *
+     * @param request 解锁请求参数，lockValue 必须与加锁时一致
+     * @return true 表示释放成功，false 表示锁不存在、锁值不一致或释放失败
+     */
+    @PostMapping("/unlock")
+    public ApiResult<Boolean> unlock(@RequestBody UnlockRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return ApiResult.fail("请求参数不能为空");
+        }
+        if (StrUtil.isBlank(request.lockKey())) {
+            return ApiResult.fail("lockKey 不能为空");
+        }
+        if (StrUtil.isBlank(request.lockValue())) {
+            return ApiResult.fail("lockValue 不能为空");
+        }
+
+        boolean unlocked = redisTemplateService.unlock(request.lockKey(), request.lockValue());
+
+        log.info("释放 Redis 分布式锁，lockKey={}，unlocked={}", request.lockKey(), unlocked);
+        return ApiResult.ok(unlocked);
+    }
+
+    /**
+     * 尝试获取 Redis 分布式锁并执行无返回值任务，获取锁失败时不抛出异常。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/try-execute" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:sync-order","leaseSeconds":30,"taskName":"同步订单任务","sleepMillis":1000}'
+     * }</pre>
+     *
+     * 带等待时间示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/try-execute" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:sync-order","waitSeconds":5,"leaseSeconds":30,"taskName":"同步订单任务","sleepMillis":1000}'
+     * }</pre>
+     *
+     * @param request 带锁执行任务请求参数
+     * @return true 表示获取锁并执行任务成功，false 表示获取锁失败或执行失败
+     */
+    @PostMapping("/try-execute")
+    public ApiResult<Boolean> tryExecuteWithLock(@RequestBody LockTaskRequest request) {
+        String errorMessage = validateLockTaskRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        boolean executed;
+        if (ObjectUtil.isNull(request.waitSeconds())) {
+            executed = redisTemplateService.tryExecuteWithLock(
+                    request.lockKey(),
+                    Duration.ofSeconds(request.leaseSeconds()),
+                    () -> runMockTask(request)
+            );
+        } else {
+            executed = redisTemplateService.tryExecuteWithLock(
+                    request.lockKey(),
+                    Duration.ofSeconds(request.waitSeconds()),
+                    Duration.ofSeconds(request.leaseSeconds()),
+                    () -> runMockTask(request)
+            );
+        }
+
+        log.info("尝试带锁执行 Runnable 任务，lockKey={}，taskName={}，executed={}",
+                request.lockKey(), request.taskName(), executed);
+
+        return ApiResult.ok(executed);
+    }
+
+    /**
+     * 尝试获取 Redis 分布式锁并执行有返回值任务，获取锁失败时返回未执行状态。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/try-execute-supplier" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:calculate","leaseSeconds":30,"taskName":"计算任务","sleepMillis":1000,"result":{"success":true,"count":10}}'
+     * }</pre>
+     *
+     * 带等待时间示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/try-execute-supplier" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:calculate","waitSeconds":5,"leaseSeconds":30,"taskName":"计算任务","sleepMillis":1000,"result":"OK"}'
+     * }</pre>
+     *
+     * @param request 带锁执行 Supplier 任务请求参数
+     * @return 任务执行状态和任务返回值
+     */
+    @PostMapping("/try-execute-supplier")
+    public ApiResult<LockTaskResponse> tryExecuteSupplierWithLock(@RequestBody LockSupplierTaskRequest request) {
+        String errorMessage = validateLockSupplierTaskRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Optional<Object> optionalResult;
+        if (ObjectUtil.isNull(request.waitSeconds())) {
+            optionalResult = redisTemplateService.tryExecuteWithLock(
+                    request.lockKey(),
+                    Duration.ofSeconds(request.leaseSeconds()),
+                    () -> runMockSupplierTask(request)
+            );
+        } else {
+            optionalResult = redisTemplateService.tryExecuteWithLock(
+                    request.lockKey(),
+                    Duration.ofSeconds(request.waitSeconds()),
+                    Duration.ofSeconds(request.leaseSeconds()),
+                    () -> runMockSupplierTask(request)
+            );
+        }
+
+        LockTaskResponse response = new LockTaskResponse(optionalResult.isPresent(), optionalResult.orElse(null));
+
+        log.info("尝试带锁执行 Supplier 任务，lockKey={}，taskName={}，executed={}",
+                request.lockKey(), request.taskName(), response.executed());
+
+        return ApiResult.ok(response);
+    }
+
+    /**
+     * 获取 Redis 分布式锁并执行无返回值任务，获取锁失败时返回失败信息。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/execute" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:stock-deduct","leaseSeconds":30,"taskName":"库存扣减任务","sleepMillis":1000}'
+     * }</pre>
+     *
+     * 带等待时间示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/execute" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:stock-deduct","waitSeconds":5,"leaseSeconds":30,"taskName":"库存扣减任务","sleepMillis":1000}'
+     * }</pre>
+     *
+     * @param request 带锁执行任务请求参数
+     * @return true 表示任务执行成功；获取锁失败时返回失败信息
+     */
+    @PostMapping("/execute")
+    public ApiResult<Boolean> executeWithLock(@RequestBody LockTaskRequest request) {
+        String errorMessage = validateLockTaskRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        try {
+            if (ObjectUtil.isNull(request.waitSeconds())) {
+                redisTemplateService.executeWithLock(
+                        request.lockKey(),
+                        Duration.ofSeconds(request.leaseSeconds()),
+                        () -> runMockTask(request)
+                );
+            } else {
+                redisTemplateService.executeWithLock(
+                        request.lockKey(),
+                        Duration.ofSeconds(request.waitSeconds()),
+                        Duration.ofSeconds(request.leaseSeconds()),
+                        () -> runMockTask(request)
+                );
+            }
+
+            log.info("带锁执行 Runnable 任务成功，lockKey={}，taskName={}", request.lockKey(), request.taskName());
+            return ApiResult.ok(true);
+        } catch (IllegalStateException e) {
+            log.warn("带锁执行 Runnable 任务失败，lockKey={}，taskName={}", request.lockKey(), request.taskName(), e);
+            return ApiResult.fail(e.getMessage());
+        }
+    }
+
+    /**
+     * 获取 Redis 分布式锁并执行有返回值任务，获取锁失败时返回失败信息。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/execute-supplier" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:query-report","leaseSeconds":30,"taskName":"报表查询任务","sleepMillis":1000,"result":{"total":100,"status":"DONE"}}'
+     * }</pre>
+     *
+     * 带等待时间示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lock/execute-supplier" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{"lockKey":"lock:task:query-report","waitSeconds":5,"leaseSeconds":30,"taskName":"报表查询任务","sleepMillis":1000,"result":"SUCCESS"}'
+     * }</pre>
+     *
+     * @param request 带锁执行 Supplier 任务请求参数
+     * @return 任务返回值；获取锁失败时返回失败信息
+     */
+    @PostMapping("/execute-supplier")
+    public ApiResult<Object> executeSupplierWithLock(@RequestBody LockSupplierTaskRequest request) {
+        String errorMessage = validateLockSupplierTaskRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        try {
+            Object result;
+            if (ObjectUtil.isNull(request.waitSeconds())) {
+                result = redisTemplateService.executeWithLock(
+                        request.lockKey(),
+                        Duration.ofSeconds(request.leaseSeconds()),
+                        () -> runMockSupplierTask(request)
+                );
+            } else {
+                result = redisTemplateService.executeWithLock(
+                        request.lockKey(),
+                        Duration.ofSeconds(request.waitSeconds()),
+                        Duration.ofSeconds(request.leaseSeconds()),
+                        () -> runMockSupplierTask(request)
+                );
+            }
+
+            log.info("带锁执行 Supplier 任务成功，lockKey={}，taskName={}", request.lockKey(), request.taskName());
+            return ApiResult.ok(result);
+        } catch (IllegalStateException e) {
+            log.warn("带锁执行 Supplier 任务失败，lockKey={}，taskName={}", request.lockKey(), request.taskName(), e);
+            return ApiResult.fail(e.getMessage());
+        }
+    }
+
+    private void runMockTask(LockTaskRequest request) {
+        // 这里模拟 Runnable 任务执行，实际业务中可以替换为订单处理、库存扣减、定时补偿等逻辑
+        log.info("开始执行 Redis 分布式锁 Runnable 任务，taskName={}，sleepMillis={}",
+                request.taskName(), request.sleepMillis());
+
+        sleepQuietly(request.sleepMillis());
+
+        log.info("完成执行 Redis 分布式锁 Runnable 任务，taskName={}", request.taskName());
+    }
+
+    private Object runMockSupplierTask(LockSupplierTaskRequest request) {
+        // 这里模拟 Supplier 任务执行，实际业务中可以替换为查询、计算、生成结果等逻辑
+        log.info("开始执行 Redis 分布式锁 Supplier 任务，taskName={}，sleepMillis={}",
+                request.taskName(), request.sleepMillis());
+
+        sleepQuietly(request.sleepMillis());
+
+        log.info("完成执行 Redis 分布式锁 Supplier 任务，taskName={}，result={}",
+                request.taskName(), request.result());
+
+        return request.result();
+    }
+
+    private void sleepQuietly(Long sleepMillis) {
+        if (ObjectUtil.isNull(sleepMillis) || sleepMillis <= 0) {
+            return;
+        }
+
+        try {
+            Thread.sleep(sleepMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Redis 分布式锁模拟任务被中断", e);
+        }
+    }
+
+    private String validateLockRequest(LockRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.lockKey())) {
+            return "lockKey 不能为空";
+        }
+        if (StrUtil.isBlank(request.lockValue())) {
+            return "lockValue 不能为空";
+        }
+        if (ObjectUtil.isNull(request.leaseSeconds()) || request.leaseSeconds() <= 0) {
+            return "leaseSeconds 必须大于 0";
+        }
+        return null;
+    }
+
+    private String validateWaitLockRequest(WaitLockRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.lockKey())) {
+            return "lockKey 不能为空";
+        }
+        if (StrUtil.isBlank(request.lockValue())) {
+            return "lockValue 不能为空";
+        }
+        if (ObjectUtil.isNull(request.waitSeconds()) || request.waitSeconds() <= 0) {
+            return "waitSeconds 必须大于 0";
+        }
+        if (ObjectUtil.isNull(request.leaseSeconds()) || request.leaseSeconds() <= 0) {
+            return "leaseSeconds 必须大于 0";
+        }
+        return null;
+    }
+
+    private String validateLockTaskRequest(LockTaskRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.lockKey())) {
+            return "lockKey 不能为空";
+        }
+        if (ObjectUtil.isNull(request.leaseSeconds()) || request.leaseSeconds() <= 0) {
+            return "leaseSeconds 必须大于 0";
+        }
+        if (ObjectUtil.isNotNull(request.waitSeconds()) && request.waitSeconds() <= 0) {
+            return "waitSeconds 必须大于 0";
+        }
+        if (ObjectUtil.isNotNull(request.sleepMillis()) && request.sleepMillis() < 0) {
+            return "sleepMillis 不能小于 0";
+        }
+        return null;
+    }
+
+    private String validateLockSupplierTaskRequest(LockSupplierTaskRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.lockKey())) {
+            return "lockKey 不能为空";
+        }
+        if (ObjectUtil.isNull(request.leaseSeconds()) || request.leaseSeconds() <= 0) {
+            return "leaseSeconds 必须大于 0";
+        }
+        if (ObjectUtil.isNotNull(request.waitSeconds()) && request.waitSeconds() <= 0) {
+            return "waitSeconds 必须大于 0";
+        }
+        if (ObjectUtil.isNotNull(request.sleepMillis()) && request.sleepMillis() < 0) {
+            return "sleepMillis 不能小于 0";
+        }
+        return null;
+    }
+
+    public record LockRequest(String lockKey, String lockValue, Long leaseSeconds) {
+    }
+
+    public record WaitLockRequest(String lockKey, String lockValue, Long waitSeconds, Long leaseSeconds) {
+    }
+
+    public record UnlockRequest(String lockKey, String lockValue) {
+    }
+
+    public record LockTaskRequest(String lockKey, Long waitSeconds, Long leaseSeconds, String taskName,
+                                  Long sleepMillis) {
+    }
+
+    public record LockSupplierTaskRequest(String lockKey, Long waitSeconds, Long leaseSeconds, String taskName,
+                                          Long sleepMillis, Object result) {
+    }
+
+    public record LockTaskResponse(Boolean executed, Object result) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+```
+
+#### Lua 脚本操作
+
+```java
+package local.ateng.java.redis.controller;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import local.ateng.java.redis.service.RedisTemplateService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * Redis Lua 脚本操作控制器。
+ *
+ * @author Ateng
+ * @since 2026-04-28
+ */
+@Slf4j
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/redis/lua")
+public class RedisLuaController {
+
+    private final RedisTemplateService redisTemplateService;
+
+    /**
+     * 执行 Redis Lua 脚本并返回原始结果。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "script":"return redis.call('get', KEYS[1])",
+     *     "keys":["user:1"],
+     *     "args":[]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 脚本执行请求参数
+     * @return Lua 脚本执行结果
+     */
+    @PostMapping("/execute")
+    public ApiResult<Object> executeLua(@RequestBody LuaExecuteRequest request) {
+        String errorMessage = validateLuaExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Object result = redisTemplateService.executeLua(
+                request.script(),
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 脚本，keyCount={}，argCount={}",
+                getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 执行 Redis Lua 脚本并按 Boolean 结果返回。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-boolean" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "script":"return redis.call('exists', KEYS[1]) == 1",
+     *     "keys":["user:1"],
+     *     "args":[]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 脚本执行请求参数
+     * @return true 表示脚本执行结果为 true
+     */
+    @PostMapping("/execute-boolean")
+    public ApiResult<Boolean> executeLuaAsBoolean(@RequestBody LuaExecuteRequest request) {
+        String errorMessage = validateLuaExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        boolean result = redisTemplateService.executeLuaAsBoolean(
+                request.script(),
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 脚本并返回 Boolean，keyCount={}，argCount={}",
+                getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 执行 Redis Lua 脚本并按 Long 结果返回。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-long" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "script":"return redis.call('incrby', KEYS[1], ARGV[1])",
+     *     "keys":["counter:order"],
+     *     "args":[1]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 脚本执行请求参数
+     * @return Lua 脚本返回的 Long 值
+     */
+    @PostMapping("/execute-long")
+    public ApiResult<Long> executeLuaAsLong(@RequestBody LuaExecuteRequest request) {
+        String errorMessage = validateLuaExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        long result = redisTemplateService.executeLuaAsLong(
+                request.script(),
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 脚本并返回 Long，keyCount={}，argCount={}",
+                getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 执行 Redis Lua 脚本并按 String 结果返回。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-string" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "script":"return redis.call('get', KEYS[1])",
+     *     "keys":["user:name:1"],
+     *     "args":[]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 脚本执行请求参数
+     * @return Lua 脚本返回的字符串
+     */
+    @PostMapping("/execute-string")
+    public ApiResult<String> executeLuaAsString(@RequestBody LuaExecuteRequest request) {
+        String errorMessage = validateLuaExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        String result = redisTemplateService.executeLuaAsString(
+                request.script(),
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 脚本并返回 String，keyCount={}，argCount={}",
+                getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 执行 Redis Lua 脚本并按 List 结果返回。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-list" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "script":"return redis.call('mget', KEYS[1], KEYS[2], KEYS[3])",
+     *     "keys":["user:1","user:2","user:3"],
+     *     "args":[]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 脚本执行请求参数
+     * @return Lua 脚本返回的列表
+     */
+    @PostMapping("/execute-list")
+    public ApiResult<List<Object>> executeLuaAsList(@RequestBody LuaExecuteRequest request) {
+        String errorMessage = validateLuaExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        List<Object> result = redisTemplateService.executeLuaAsList(
+                request.script(),
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 脚本并返回 List，keyCount={}，argCount={}，resultSize={}",
+                getSize(request.keys()), getSize(request.args()), result.size());
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 从 classpath 资源文件读取 Redis Lua 脚本并执行，返回原始结果。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-resource" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "resourceLocation":"lua/stock_decrease.lua",
+     *     "keys":["stock:product:1001"],
+     *     "args":[1]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 资源脚本执行请求参数
+     * @return Lua 脚本执行结果
+     */
+    @PostMapping("/execute-resource")
+    public ApiResult<Object> executeLuaFromResource(@RequestBody LuaResourceExecuteRequest request) {
+        String errorMessage = validateLuaResourceExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Object result = redisTemplateService.executeLuaFromResource(
+                request.resourceLocation(),
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 资源脚本，resourceLocation={}，keyCount={}，argCount={}",
+                request.resourceLocation(), getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 从 classpath 资源文件读取 Redis Lua 脚本并执行，按 Boolean 结果返回。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-resource-boolean" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "resourceLocation":"lua/check_exists.lua",
+     *     "keys":["user:1"],
+     *     "args":[]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 资源脚本执行请求参数
+     * @return true 表示脚本执行结果为 true
+     */
+    @PostMapping("/execute-resource-boolean")
+    public ApiResult<Boolean> executeLuaFromResourceAsBoolean(@RequestBody LuaResourceExecuteRequest request) {
+        String errorMessage = validateLuaResourceExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Boolean result = redisTemplateService.executeLuaFromResource(
+                request.resourceLocation(),
+                Boolean.class,
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 资源脚本并返回 Boolean，resourceLocation={}，keyCount={}，argCount={}",
+                request.resourceLocation(), getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(Boolean.TRUE.equals(result));
+    }
+
+    /**
+     * 从 classpath 资源文件读取 Redis Lua 脚本并执行，按 Long 结果返回。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-resource-long" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "resourceLocation":"lua/increment_and_expire.lua",
+     *     "keys":["counter:sms:18800000000"],
+     *     "args":[1,60]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 资源脚本执行请求参数
+     * @return Lua 脚本返回的 Long 值
+     */
+    @PostMapping("/execute-resource-long")
+    public ApiResult<Long> executeLuaFromResourceAsLong(@RequestBody LuaResourceExecuteRequest request) {
+        String errorMessage = validateLuaResourceExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        Long result = redisTemplateService.executeLuaFromResource(
+                request.resourceLocation(),
+                Long.class,
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 资源脚本并返回 Long，resourceLocation={}，keyCount={}，argCount={}",
+                request.resourceLocation(), getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(ObjectUtil.defaultIfNull(result, 0L));
+    }
+
+    /**
+     * 从 classpath 资源文件读取 Redis Lua 脚本并执行，按 String 结果返回。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/execute-resource-string" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "resourceLocation":"lua/get_value.lua",
+     *     "keys":["user:name:1"],
+     *     "args":[]
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 资源脚本执行请求参数
+     * @return Lua 脚本返回的字符串
+     */
+    @PostMapping("/execute-resource-string")
+    public ApiResult<String> executeLuaFromResourceAsString(@RequestBody LuaResourceExecuteRequest request) {
+        String errorMessage = validateLuaResourceExecuteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        String result = redisTemplateService.executeLuaFromResource(
+                request.resourceLocation(),
+                String.class,
+                buildKeys(request.keys()),
+                buildArgs(request.args())
+        );
+
+        log.info("执行 Redis Lua 资源脚本并返回 String，resourceLocation={}，keyCount={}，argCount={}",
+                request.resourceLocation(), getSize(request.keys()), getSize(request.args()));
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 使用 Lua 脚本比较并删除指定 Redis Key。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/compare-delete" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "key":"lock:order:1001",
+     *     "expectedValue":"request-001"
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 比较删除请求参数
+     * @return true 表示当前值与期望值一致并删除成功
+     */
+    @PostMapping("/compare-delete")
+    public ApiResult<Boolean> compareAndDeleteByLua(@RequestBody LuaCompareDeleteRequest request) {
+        String errorMessage = validateCompareDeleteRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        boolean result = redisTemplateService.compareAndDeleteByLua(request.key(), request.expectedValue());
+
+        log.info("执行 Redis Lua 比较删除，key={}，result={}", request.key(), result);
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 使用 Lua 脚本比较并设置指定 Redis Key 的新值。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/compare-set" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "key":"config:version",
+     *     "expectedValue":"v1",
+     *     "newValue":"v2",
+     *     "timeoutSeconds":3600
+     *   }'
+     * }</pre>
+     *
+     * 不设置过期时间示例：
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/compare-set" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "key":"config:version",
+     *     "expectedValue":"v1",
+     *     "newValue":"v2"
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 比较设置请求参数
+     * @return true 表示当前值与期望值一致并设置成功
+     */
+    @PostMapping("/compare-set")
+    public ApiResult<Boolean> compareAndSetByLua(@RequestBody LuaCompareSetRequest request) {
+        String errorMessage = validateCompareSetRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        boolean result;
+        if (ObjectUtil.isNull(request.timeoutSeconds())) {
+            result = redisTemplateService.compareAndSetByLua(
+                    request.key(),
+                    request.expectedValue(),
+                    request.newValue()
+            );
+        } else {
+            result = redisTemplateService.compareAndSetByLua(
+                    request.key(),
+                    request.expectedValue(),
+                    request.newValue(),
+                    Duration.ofSeconds(request.timeoutSeconds())
+            );
+        }
+
+        log.info("执行 Redis Lua 比较设置，key={}，hasTimeout={}，result={}",
+                request.key(), ObjectUtil.isNotNull(request.timeoutSeconds()), result);
+
+        return ApiResult.ok(result);
+    }
+
+    /**
+     * 使用 Lua 脚本对指定 Redis Key 自增并设置过期时间。
+     *
+     * <pre>{@code
+     * curl -X POST "http://localhost:8080/api/redis/lua/increment-expire" \
+     *   -H "Content-Type: application/json" \
+     *   -d '{
+     *     "key":"limit:sms:18800000000",
+     *     "delta":1,
+     *     "timeoutSeconds":60
+     *   }'
+     * }</pre>
+     *
+     * @param request Lua 自增并设置过期时间请求参数
+     * @return 自增后的值
+     */
+    @PostMapping("/increment-expire")
+    public ApiResult<Long> incrementAndExpireByLua(@RequestBody LuaIncrementExpireRequest request) {
+        String errorMessage = validateIncrementExpireRequest(request);
+        if (StrUtil.isNotBlank(errorMessage)) {
+            return ApiResult.fail(errorMessage);
+        }
+
+        long result = redisTemplateService.incrementAndExpireByLua(
+                request.key(),
+                request.delta(),
+                Duration.ofSeconds(request.timeoutSeconds())
+        );
+
+        log.info("执行 Redis Lua 自增并设置过期时间，key={}，delta={}，timeoutSeconds={}，result={}",
+                request.key(), request.delta(), request.timeoutSeconds(), result);
+
+        return ApiResult.ok(result);
+    }
+
+    private String validateLuaExecuteRequest(LuaExecuteRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.script())) {
+            return "script 不能为空";
+        }
+        return null;
+    }
+
+    private String validateLuaResourceExecuteRequest(LuaResourceExecuteRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.resourceLocation())) {
+            return "resourceLocation 不能为空";
+        }
+        return null;
+    }
+
+    private String validateCompareDeleteRequest(LuaCompareDeleteRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.expectedValue())) {
+            return "expectedValue 不能为空";
+        }
+        return null;
+    }
+
+    private String validateCompareSetRequest(LuaCompareSetRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.expectedValue())) {
+            return "expectedValue 不能为空";
+        }
+        if (ObjectUtil.isNull(request.newValue())) {
+            return "newValue 不能为空";
+        }
+        if (ObjectUtil.isNotNull(request.timeoutSeconds()) && request.timeoutSeconds() <= 0) {
+            return "timeoutSeconds 必须大于 0";
+        }
+        return null;
+    }
+
+    private String validateIncrementExpireRequest(LuaIncrementExpireRequest request) {
+        if (ObjectUtil.isNull(request)) {
+            return "请求参数不能为空";
+        }
+        if (StrUtil.isBlank(request.key())) {
+            return "key 不能为空";
+        }
+        if (ObjectUtil.isNull(request.delta()) || request.delta() == 0L) {
+            return "delta 不能为 0";
+        }
+        if (ObjectUtil.isNull(request.timeoutSeconds()) || request.timeoutSeconds() <= 0) {
+            return "timeoutSeconds 必须大于 0";
+        }
+        return null;
+    }
+
+    private List<String> buildKeys(List<String> keys) {
+        if (CollUtil.isEmpty(keys)) {
+            return List.of();
+        }
+
+        // 过滤空 Key，避免 Lua 执行时 KEYS 下标和调用方预期不一致
+        return keys.stream()
+                .filter(StrUtil::isNotBlank)
+                .toList();
+    }
+
+    private Object[] buildArgs(List<Object> args) {
+        if (CollUtil.isEmpty(args)) {
+            return new Object[0];
+        }
+
+        // ARGV 支持字符串、数字等 Redis 可序列化对象，复杂对象依赖 RedisTemplate 的 valueSerializer
+        return args.stream()
+                .filter(ObjectUtil::isNotNull)
+                .toArray();
+    }
+
+    private int getSize(List<?> list) {
+        return ObjectUtil.isNull(list) ? 0 : list.size();
+    }
+
+    public record LuaExecuteRequest(String script, List<String> keys, List<Object> args) {
+    }
+
+    public record LuaResourceExecuteRequest(String resourceLocation, List<String> keys, List<Object> args) {
+    }
+
+    public record LuaCompareDeleteRequest(String key, Object expectedValue) {
+    }
+
+    public record LuaCompareSetRequest(String key, Object expectedValue, Object newValue, Long timeoutSeconds) {
+    }
+
+    public record LuaIncrementExpireRequest(String key, Long delta, Long timeoutSeconds) {
+    }
+
+    public record ApiResult<T>(Integer code, String message, T data) {
+
+        public static <T> ApiResult<T> ok(T data) {
+            return new ApiResult<>(200, "操作成功", data);
+        }
+
+        public static <T> ApiResult<T> fail(String message) {
+            return new ApiResult<>(500, message, null);
+        }
+
+    }
+
+}
+```
+
+
+
