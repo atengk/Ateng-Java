@@ -1,13 +1,13 @@
-package local.ateng.java.awss3;
+package io.github.atengk.aws.s3;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class AwsS3Application {
+public class StorageAwsS3Application {
 
     public static void main(String[] args) {
-        SpringApplication.run(AwsS3Application.class, args);
+        SpringApplication.run(StorageAwsS3Application.class, args);
     }
 
 }

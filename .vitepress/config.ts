@@ -492,7 +492,8 @@ export default defineConfig({
                         text: '存储',
                         items: [
                             {text: 'X File Storage', link: '/storage/x-file-storage/README'},
-                            {text: 'AWS S3', link: '/storage/aws-s3/README'}
+                            {text: 'AWS S3 JDK8', link: '/storage/aws-s3-jdk8/README'},
+                            {text: 'AWS S3', link: '/storage/aws-s3/README'},
                         ]
                     }
                 ]
