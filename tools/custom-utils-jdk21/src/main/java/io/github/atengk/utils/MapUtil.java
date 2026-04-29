@@ -40,7 +40,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * General purpose Map utilities implemented with JDK native APIs only.
+ * 基于 JDK 原生 API 实现的通用 Map 工具类。
  *
  * @author Ateng
  * @since 2026-04-29
@@ -56,145 +56,145 @@ public final class MapUtil {
     }
 
     /**
-     * Returns whether the map is null or empty.
+     * 判断 Map 是否为 null 或空。
      *
-     * @param map map to check
-     * @return true if the map is null or empty
+     * @param map 待检查的 Map
+     * @return 如果 Map 为 null 或空则返回 true
      */
     public static boolean isEmpty(Map<?, ?> map) {
         return map == null || map.isEmpty();
     }
 
     /**
-     * Returns whether the map is not null and not empty.
+     * 判断 Map 是否非 null 且非空。
      *
-     * @param map map to check
-     * @return true if the map has at least one entry
+     * @param map 待检查的 Map
+     * @return 如果 Map 至少包含一个条目则返回 true
      */
     public static boolean isNotEmpty(Map<?, ?> map) {
         return !isEmpty(map);
     }
 
     /**
-     * Returns whether the map is null or empty.
+     * 判断 Map 是否为 null 或空。
      *
-     * @param map map to check
-     * @return true if the map is null or empty
+     * @param map 待检查的 Map
+     * @return 如果 Map 为 null 或空则返回 true
      */
     public static boolean isNullOrEmpty(Map<?, ?> map) {
         return isEmpty(map);
     }
 
     /**
-     * Safely returns the map size.
+     * 安全返回 Map 的大小。
      *
-     * @param map map to inspect
-     * @return map size, or 0 if map is null
+     * @param map 待检查的 Map
+     * @return Map 大小；如果 Map 为 null 则返回 0
      */
     public static int size(Map<?, ?> map) {
         return map == null ? 0 : map.size();
     }
 
     /**
-     * Safely checks whether the map contains the key.
+     * 安全判断 Map 是否包含指定键。
      *
-     * @param map map to inspect
-     * @param key key to find
-     * @return true if the map contains the key
+     * @param map 待检查的 Map
+     * @param key 待查找的键
+     * @return 如果 Map 包含指定键则返回 true
      */
     public static boolean containsKey(Map<?, ?> map, Object key) {
         return map != null && map.containsKey(key);
     }
 
     /**
-     * Safely checks whether the map contains the value.
+     * 安全判断 Map 是否包含指定值。
      *
-     * @param map map to inspect
-     * @param value value to find
-     * @return true if the map contains the value
+     * @param map 待检查的 Map
+     * @param value 待查找的值
+     * @return 如果 Map 包含指定值则返回 true
      */
     public static boolean containsValue(Map<?, ?> map, Object value) {
         return map != null && map.containsValue(value);
     }
 
     /**
-     * Safely checks whether the map has the key.
+     * 安全判断 Map 是否拥有指定键。
      *
-     * @param map map to inspect
-     * @param key key to find
-     * @return true if the map contains the key
+     * @param map 待检查的 Map
+     * @param key 待查找的键
+     * @return 如果 Map 包含指定键则返回 true
      */
     public static boolean hasKey(Map<?, ?> map, Object key) {
         return containsKey(map, key);
     }
 
     /**
-     * Safely checks whether the map has the value.
+     * 安全判断 Map 是否拥有指定值。
      *
-     * @param map map to inspect
-     * @param value value to find
-     * @return true if the map contains the value
+     * @param map 待检查的 Map
+     * @param value 待查找的值
+     * @return 如果 Map 包含指定值则返回 true
      */
     public static boolean hasValue(Map<?, ?> map, Object value) {
         return containsValue(map, value);
     }
 
     /**
-     * Returns an empty map when the input map is null.
+     * 当输入 Map 为 null 时返回空 Map。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return original map or an immutable empty map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 原始 Map；如果为 null 则返回不可变空 Map
      */
     public static <K, V> Map<K, V> emptyIfNull(Map<K, V> map) {
         return map == null ? Collections.emptyMap() : map;
     }
 
     /**
-     * Returns the default map when the source map is null.
+     * 当源 Map 为 null 时返回默认 Map。
      *
-     * @param map source map
-     * @param defaultMap default map
-     * @param <K> key type
-     * @param <V> value type
-     * @return source map or default map
+     * @param map 源 Map
+     * @param defaultMap 默认 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 源 Map 或默认 Map
      */
     public static <K, V> Map<K, V> defaultIfNull(Map<K, V> map, Map<K, V> defaultMap) {
         return map == null ? defaultMap : map;
     }
 
     /**
-     * Converts an empty map to null.
+     * 将空 Map 转换为 null。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return null if the map is null or empty, otherwise the original map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 如果 Map 为 null 或空则返回 null，否则返回原始 Map
      */
     public static <K, V> Map<K, V> nullIfEmpty(Map<K, V> map) {
         return isEmpty(map) ? null : map;
     }
 
     /**
-     * Converts an empty map to null.
+     * 将空 Map 转换为 null。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return null if the map is null or empty, otherwise the original map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 如果 Map 为 null 或空则返回 null，否则返回原始 Map
      */
     public static <K, V> Map<K, V> emptyToNull(Map<K, V> map) {
         return nullIfEmpty(map);
     }
 
     /**
-     * Returns a copy without entries whose value is null.
+     * 返回一个移除了 null 值条目的副本。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return new map without null values
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 不包含 null 值的新 Map
      */
     public static <K, V> Map<K, V> removeNullValue(Map<K, V> map) {
         if (map == null) {
@@ -210,12 +210,12 @@ public final class MapUtil {
     }
 
     /**
-     * Returns a copy without entries whose key is null.
+     * 返回一个移除了 null 键条目的副本。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return new map without null keys
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 不包含 null 键的新 Map
      */
     public static <K, V> Map<K, V> removeNullKey(Map<K, V> map) {
         if (map == null) {
@@ -231,11 +231,11 @@ public final class MapUtil {
     }
 
     /**
-     * Returns a copy without entries whose value is a blank CharSequence.
+     * 返回一个移除了空白字符序列值条目的副本。
      *
-     * @param map source map
-     * @param <K> key type
-     * @return new map without blank string values
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @return 不包含空白字符串值的新 Map
      */
     public static <K> Map<K, Object> removeBlankValue(Map<K, ?> map) {
         if (map == null) {
@@ -252,11 +252,11 @@ public final class MapUtil {
     }
 
     /**
-     * Returns a copy and trims all CharSequence values.
+     * 返回一个副本，并去除所有字符序列值两端的空白。
      *
-     * @param map source map
-     * @param <K> key type
-     * @return new map with trimmed string values
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @return 字符串值已去除首尾空白的新 Map
      */
     public static <K> Map<K, Object> trimStringValue(Map<K, ?> map) {
         if (map == null) {
@@ -271,23 +271,23 @@ public final class MapUtil {
     }
 
     /**
-     * Creates a new HashMap.
+     * 创建一个新的 HashMap。
      *
-     * @param <K> key type
-     * @param <V> value type
-     * @return new HashMap
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 新的 HashMap
      */
     public static <K, V> HashMap<K, V> newHashMap() {
         return new HashMap<>();
     }
 
     /**
-     * Creates a new HashMap with the initial capacity.
+     * 创建一个指定初始容量的 HashMap。
      *
-     * @param initialCapacity initial capacity
-     * @param <K> key type
-     * @param <V> value type
-     * @return new HashMap
+     * @param initialCapacity 初始容量
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 新的 HashMap
      */
     public static <K, V> HashMap<K, V> newHashMap(int initialCapacity) {
         if (initialCapacity < 0) {
@@ -297,23 +297,23 @@ public final class MapUtil {
     }
 
     /**
-     * Creates a new LinkedHashMap.
+     * 创建一个新的 LinkedHashMap。
      *
-     * @param <K> key type
-     * @param <V> value type
-     * @return new LinkedHashMap
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 新的 LinkedHashMap
      */
     public static <K, V> LinkedHashMap<K, V> newLinkedHashMap() {
         return new LinkedHashMap<>();
     }
 
     /**
-     * Creates a new LinkedHashMap with the initial capacity.
+     * 创建一个指定初始容量的 LinkedHashMap。
      *
-     * @param initialCapacity initial capacity
-     * @param <K> key type
-     * @param <V> value type
-     * @return new LinkedHashMap
+     * @param initialCapacity 初始容量
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 新的 LinkedHashMap
      */
     public static <K, V> LinkedHashMap<K, V> newLinkedHashMap(int initialCapacity) {
         if (initialCapacity < 0) {
@@ -323,24 +323,24 @@ public final class MapUtil {
     }
 
     /**
-     * Creates a new ConcurrentHashMap.
+     * 创建一个新的 ConcurrentHashMap。
      *
-     * @param <K> key type
-     * @param <V> value type
-     * @return new ConcurrentHashMap
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 新的 ConcurrentHashMap
      */
     public static <K, V> ConcurrentHashMap<K, V> newConcurrentHashMap() {
         return new ConcurrentHashMap<>();
     }
 
     /**
-     * Creates an immutable map with one entry.
+     * 创建一个包含一个条目的不可变 Map。
      *
-     * @param key key
-     * @param value value
-     * @param <K> key type
-     * @param <V> value type
-     * @return immutable map
+     * @param key 键
+     * @param value 值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 不可变 Map
      */
     public static <K, V> Map<K, V> of(K key, V value) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -349,15 +349,15 @@ public final class MapUtil {
     }
 
     /**
-     * Creates an immutable map with two entries.
+     * 创建一个包含两个条目的不可变 Map。
      *
-     * @param k1 first key
-     * @param v1 first value
-     * @param k2 second key
-     * @param v2 second value
-     * @param <K> key type
-     * @param <V> value type
-     * @return immutable map
+     * @param k1 第一个键
+     * @param v1 第一个值
+     * @param k2 第二个键
+     * @param v2 第二个值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 不可变 Map
      */
     public static <K, V> Map<K, V> of(K k1, V v1, K k2, V v2) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -367,12 +367,12 @@ public final class MapUtil {
     }
 
     /**
-     * Creates a mutable HashMap from key-value pairs.
+     * 根据键值对创建可变 HashMap。
      *
-     * @param keyValues key-value pairs, length must be even
-     * @param <K> key type
-     * @param <V> value type
-     * @return mutable HashMap
+     * @param keyValues 键值对，长度必须为偶数
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 可变 HashMap
      */
     @SuppressWarnings("unchecked")
     public static <K, V> Map<K, V> mutableOf(Object... keyValues) {
@@ -385,12 +385,12 @@ public final class MapUtil {
     }
 
     /**
-     * Creates a mutable LinkedHashMap from key-value pairs.
+     * 根据键值对创建可变 LinkedHashMap。
      *
-     * @param keyValues key-value pairs, length must be even
-     * @param <K> key type
-     * @param <V> value type
-     * @return mutable LinkedHashMap
+     * @param keyValues 键值对，长度必须为偶数
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 可变 LinkedHashMap
      */
     @SuppressWarnings("unchecked")
     public static <K, V> Map<K, V> linkedOf(Object... keyValues) {
@@ -403,38 +403,38 @@ public final class MapUtil {
     }
 
     /**
-     * Creates a linked map builder.
+     * 创建一个有序 Map 构建器。
      *
-     * @param <K> key type
-     * @param <V> value type
-     * @return map builder
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return Map 构建器
      */
     public static <K, V> Builder<K, V> builder() {
         return new Builder<>();
     }
 
     /**
-     * Safely reads a value from the map.
+     * 从 Map 中安全读取值。
      *
-     * @param map source map
-     * @param key key to read
-     * @param <K> key type
-     * @param <V> value type
-     * @return value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 值；如果不存在则返回 null
      */
     public static <K, V> V get(Map<K, V> map, K key) {
         return map == null ? null : map.get(key);
     }
 
     /**
-     * Safely reads a value or returns the default value.
+     * 安全读取值，不存在时返回默认值。
      *
-     * @param map source map
-     * @param key key to read
-     * @param defaultValue default value
-     * @param <K> key type
-     * @param <V> value type
-     * @return value or default value
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @param defaultValue 默认值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 读取到的值或默认值
      */
     public static <K, V> V getOrDefault(Map<K, V> map, K key, V defaultValue) {
         if (map == null) {
@@ -445,26 +445,26 @@ public final class MapUtil {
     }
 
     /**
-     * Safely reads a value or returns null.
+     * 安全读取值，不存在时返回 null。
      *
-     * @param map source map
-     * @param key key to read
-     * @param <K> key type
-     * @param <V> value type
-     * @return value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 值；如果不存在则返回 null
      */
     public static <K, V> V getOrNull(Map<K, V> map, K key) {
         return get(map, key);
     }
 
     /**
-     * Reads a required value.
+     * 读取必填值。
      *
-     * @param map source map
-     * @param key key to read
-     * @param <K> key type
-     * @param <V> value type
-     * @return non-null value
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 非 null 值
      */
     public static <K, V> V getRequired(Map<K, V> map, K key) {
         if (map == null || !map.containsKey(key) || map.get(key) == null) {
@@ -474,13 +474,13 @@ public final class MapUtil {
     }
 
     /**
-     * Reads the first value whose key exists in the map.
+     * 读取候选键中第一个存在的键对应的值。
      *
-     * @param map source map
-     * @param keys candidate keys
-     * @param <K> key type
-     * @param <V> value type
-     * @return first matched value or null
+     * @param map 源 Map
+     * @param keys 候选键集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 第一个匹配的值；如果不存在则返回 null
      */
     public static <K, V> V getFirst(Map<K, V> map, Collection<K> keys) {
         if (map == null || keys == null) {
@@ -495,13 +495,13 @@ public final class MapUtil {
     }
 
     /**
-     * Reads the first non-null value from candidate keys.
+     * 从候选键中读取第一个非 null 值。
      *
-     * @param map source map
-     * @param keys candidate keys
-     * @param <K> key type
-     * @param <V> value type
-     * @return first non-null value or null
+     * @param map 源 Map
+     * @param keys 候选键集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 第一个非 null 值；如果不存在则返回 null
      */
     public static <K, V> V getFirstNonNull(Map<K, V> map, Collection<K> keys) {
         if (map == null || keys == null) {
@@ -517,23 +517,23 @@ public final class MapUtil {
     }
 
     /**
-     * Reads a nested value by dot-separated path.
+     * 根据点号分隔路径读取嵌套值。
      *
-     * @param map source map
-     * @param path dot-separated path
-     * @return value or null
+     * @param map 源 Map
+     * @param path 点号分隔路径
+     * @return 值；如果不存在则返回 null
      */
     public static Object getByPath(Map<String, Object> map, String path) {
         return getByPath(map, path, null);
     }
 
     /**
-     * Reads a nested value by dot-separated path or returns a default value.
+     * 根据点号分隔路径读取嵌套值，不存在时返回默认值。
      *
-     * @param map source map
-     * @param path dot-separated path
-     * @param defaultValue default value
-     * @return value or default value
+     * @param map 源 Map
+     * @param path 点号分隔路径
+     * @param defaultValue 默认值
+     * @return 读取到的值或默认值
      */
     @SuppressWarnings("unchecked")
     public static Object getByPath(Map<String, Object> map, String path, Object defaultValue) {
@@ -554,23 +554,23 @@ public final class MapUtil {
     }
 
     /**
-     * Reads a String value.
+     * 读取 String 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return String value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return String 值；如果不存在则返回 null
      */
     public static String getStr(Map<?, ?> map, Object key) {
         return getStr(map, key, null);
     }
 
     /**
-     * Reads a String value or returns the default value.
+     * 读取 String 值，不存在时返回默认值。
      *
-     * @param map source map
-     * @param key key to read
-     * @param defaultValue default value
-     * @return String value or default value
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @param defaultValue 默认值
+     * @return String 值或默认值
      */
     public static String getStr(Map<?, ?> map, Object key, String defaultValue) {
         Object value = rawGet(map, key);
@@ -578,101 +578,101 @@ public final class MapUtil {
     }
 
     /**
-     * Reads an Integer value.
+     * 读取 Integer 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return Integer value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return Integer 值；如果不存在则返回 null
      */
     public static Integer getInt(Map<?, ?> map, Object key) {
         return convertToInteger(rawGet(map, key));
     }
 
     /**
-     * Reads a Long value.
+     * 读取 Long 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return Long value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return Long 值；如果不存在则返回 null
      */
     public static Long getLong(Map<?, ?> map, Object key) {
         return convertToLong(rawGet(map, key));
     }
 
     /**
-     * Reads a Double value.
+     * 读取 Double 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return Double value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return Double 值；如果不存在则返回 null
      */
     public static Double getDouble(Map<?, ?> map, Object key) {
         return convertToDouble(rawGet(map, key));
     }
 
     /**
-     * Reads a BigDecimal value.
+     * 读取 BigDecimal 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return BigDecimal value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return BigDecimal 值；如果不存在则返回 null
      */
     public static BigDecimal getBigDecimal(Map<?, ?> map, Object key) {
         return convertToBigDecimal(rawGet(map, key));
     }
 
     /**
-     * Reads a Boolean value.
+     * 读取 Boolean 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return Boolean value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return Boolean 值；如果不存在则返回 null
      */
     public static Boolean getBool(Map<?, ?> map, Object key) {
         return convertToBoolean(rawGet(map, key));
     }
 
     /**
-     * Reads a Date value.
+     * 读取 Date 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return Date value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return Date 值；如果不存在则返回 null
      */
     public static Date getDate(Map<?, ?> map, Object key) {
         return convertToDate(rawGet(map, key));
     }
 
     /**
-     * Reads a LocalDate value.
+     * 读取 LocalDate 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return LocalDate value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return LocalDate 值；如果不存在则返回 null
      */
     public static LocalDate getLocalDate(Map<?, ?> map, Object key) {
         return convertToLocalDate(rawGet(map, key));
     }
 
     /**
-     * Reads a LocalDateTime value.
+     * 读取 LocalDateTime 值。
      *
-     * @param map source map
-     * @param key key to read
-     * @return LocalDateTime value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return LocalDateTime 值；如果不存在则返回 null
      */
     public static LocalDateTime getLocalDateTime(Map<?, ?> map, Object key) {
         return convertToLocalDateTime(rawGet(map, key));
     }
 
     /**
-     * Reads a typed list value.
+     * 读取指定元素类型的列表值。
      *
-     * @param map source map
-     * @param key key to read
-     * @param elementType element type
-     * @param <T> element type
-     * @return typed list, empty if value is null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @param elementType 元素类型
+     * @param <T> 元素类型
+     * @return 指定类型列表；如果值为 null 则返回空列表
      */
     public static <T> List<T> getList(Map<?, ?> map, Object key, Class<T> elementType) {
         Objects.requireNonNull(elementType, "elementType must not be null");
@@ -699,11 +699,11 @@ public final class MapUtil {
     }
 
     /**
-     * Reads a nested map value and converts keys to String.
+     * 读取嵌套 Map 值，并将键转换为 String。
      *
-     * @param map source map
-     * @param key key to read
-     * @return nested map, empty if value is null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @return 嵌套 Map；如果值为 null 则返回空 Map
      */
     public static Map<String, Object> getMap(Map<?, ?> map, Object key) {
         Object value = rawGet(map, key);
@@ -717,13 +717,13 @@ public final class MapUtil {
     }
 
     /**
-     * Reads an enum value.
+     * 读取枚举值。
      *
-     * @param map source map
-     * @param key key to read
-     * @param enumType enum class
-     * @param <E> enum type
-     * @return enum value or null
+     * @param map 源 Map
+     * @param key 待读取的键
+     * @param enumType 枚举类型
+     * @param <E> 枚举类型
+     * @return 枚举值；如果不存在则返回 null
      */
     public static <E extends Enum<E>> E getEnum(Map<?, ?> map, Object key, Class<E> enumType) {
         Objects.requireNonNull(enumType, "enumType must not be null");
@@ -731,14 +731,14 @@ public final class MapUtil {
     }
 
     /**
-     * Puts a value when it is not null.
+     * 当值非 null 时写入 Map。
      *
-     * @param map target map
-     * @param key key to write
-     * @param value value to write
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param map 目标 Map
+     * @param key 待写入的键
+     * @param value 待写入的值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> putIfNotNull(Map<K, V> map, K key, V value) {
         requireMap(map);
@@ -749,13 +749,13 @@ public final class MapUtil {
     }
 
     /**
-     * Puts a string value when it is not blank.
+     * 当字符串值非空白时写入 Map。
      *
-     * @param map target map
-     * @param key key to write
-     * @param value value to write
-     * @param <K> key type
-     * @return target map
+     * @param map 目标 Map
+     * @param key 待写入的键
+     * @param value 待写入的值
+     * @param <K> 键类型
+     * @return 目标 Map
      */
     public static <K> Map<K, String> putIfNotBlank(Map<K, String> map, K key, String value) {
         requireMap(map);
@@ -766,14 +766,14 @@ public final class MapUtil {
     }
 
     /**
-     * Puts a value when the key is absent.
+     * 当键不存在时写入值。
      *
-     * @param map target map
-     * @param key key to write
-     * @param value value to write
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param map 目标 Map
+     * @param key 待写入的键
+     * @param value 待写入的值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> putIfAbsent(Map<K, V> map, K key, V value) {
         requireMap(map);
@@ -782,14 +782,14 @@ public final class MapUtil {
     }
 
     /**
-     * Puts a value when the key already exists.
+     * 当键已存在时写入值。
      *
-     * @param map target map
-     * @param key key to write
-     * @param value value to write
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param map 目标 Map
+     * @param key 待写入的键
+     * @param value 待写入的值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> putIfPresent(Map<K, V> map, K key, V value) {
         requireMap(map);
@@ -800,13 +800,13 @@ public final class MapUtil {
     }
 
     /**
-     * Puts all entries when source is not null.
+     * 当源 Map 非 null 时批量写入所有条目。
      *
-     * @param target target map
-     * @param source source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param target 目标 Map
+     * @param source 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> putAllIfNotNull(Map<K, V> target, Map<K, V> source) {
         requireMap(target);
@@ -817,13 +817,13 @@ public final class MapUtil {
     }
 
     /**
-     * Puts all entries and skips entries whose value is null.
+     * 批量写入所有条目，并跳过值为 null 的条目。
      *
-     * @param target target map
-     * @param source source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param target 目标 Map
+     * @param source 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> putAllIgnoreNullValue(Map<K, V> target, Map<K, V> source) {
         requireMap(target);
@@ -838,14 +838,14 @@ public final class MapUtil {
     }
 
     /**
-     * Sets a default value when the current value is null.
+     * 当当前值为 null 时设置默认值。
      *
-     * @param map target map
-     * @param key key to write
-     * @param defaultValue default value
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param map 目标 Map
+     * @param key 待写入的键
+     * @param defaultValue 默认值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> setDefault(Map<K, V> map, K key, V defaultValue) {
         requireMap(map);
@@ -856,14 +856,14 @@ public final class MapUtil {
     }
 
     /**
-     * Replaces a value for the given key.
+     * 替换指定键对应的值。
      *
-     * @param map target map
-     * @param key key to replace
-     * @param value new value
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param map 目标 Map
+     * @param key 待替换的键
+     * @param value 新值
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> replaceValue(Map<K, V> map, K key, V value) {
         requireMap(map);
@@ -874,13 +874,13 @@ public final class MapUtil {
     }
 
     /**
-     * Removes a collection of keys.
+     * 批量移除指定键集合。
      *
-     * @param map target map
-     * @param keys keys to remove
-     * @param <K> key type
-     * @param <V> value type
-     * @return target map
+     * @param map 目标 Map
+     * @param keys 待移除的键集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 目标 Map
      */
     public static <K, V> Map<K, V> removeKeys(Map<K, V> map, Collection<K> keys) {
         requireMap(map);
@@ -893,26 +893,26 @@ public final class MapUtil {
     }
 
     /**
-     * Merges source and target maps, where target entries override source entries.
+     * 合并源 Map 和目标 Map，目标 Map 条目覆盖源 Map 条目。
      *
-     * @param source source map
-     * @param target target map
-     * @param <K> key type
-     * @param <V> value type
-     * @return merged map
+     * @param source 源 Map
+     * @param target 目标 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 合并后的 Map
      */
     public static <K, V> Map<K, V> merge(Map<K, V> source, Map<K, V> target) {
         return mergeOverwrite(source, target);
     }
 
     /**
-     * Merges maps, where override entries override base entries.
+     * 合并 Map，覆盖 Map 条目覆盖基础 Map 条目。
      *
-     * @param base base map
-     * @param override override map
-     * @param <K> key type
-     * @param <V> value type
-     * @return merged map
+     * @param base 基础 Map
+     * @param override 覆盖 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 合并后的 Map
      */
     public static <K, V> Map<K, V> mergeOverwrite(Map<K, V> base, Map<K, V> override) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -926,13 +926,13 @@ public final class MapUtil {
     }
 
     /**
-     * Merges maps and ignores null values in the override map.
+     * 合并 Map，并忽略覆盖 Map 中值为 null 的条目。
      *
-     * @param base base map
-     * @param override override map
-     * @param <K> key type
-     * @param <V> value type
-     * @return merged map
+     * @param base 基础 Map
+     * @param override 覆盖 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 合并后的 Map
      */
     public static <K, V> Map<K, V> mergeIgnoreNull(Map<K, V> base, Map<K, V> override) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -950,13 +950,13 @@ public final class MapUtil {
     }
 
     /**
-     * Merges maps and keeps original values when keys conflict.
+     * 合并 Map，键冲突时保留原始值。
      *
-     * @param base base map
-     * @param append append map
-     * @param <K> key type
-     * @param <V> value type
-     * @return merged map
+     * @param base 基础 Map
+     * @param append 追加 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 合并后的 Map
      */
     public static <K, V> Map<K, V> mergeKeepOriginal(Map<K, V> base, Map<K, V> append) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -972,14 +972,14 @@ public final class MapUtil {
     }
 
     /**
-     * Merges maps with a custom value merge function.
+     * 使用自定义值合并函数合并 Map。
      *
-     * @param left left map
-     * @param right right map
-     * @param valueMerger value merger for duplicate keys
-     * @param <K> key type
-     * @param <V> value type
-     * @return merged map
+     * @param left 左侧 Map
+     * @param right 右侧 Map
+     * @param valueMerger 重复键的值合并函数
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 合并后的 Map
      */
     public static <K, V> Map<K, V> mergeWith(Map<K, V> left, Map<K, V> right, BinaryOperator<V> valueMerger) {
         Objects.requireNonNull(valueMerger, "valueMerger must not be null");
@@ -996,11 +996,11 @@ public final class MapUtil {
     }
 
     /**
-     * Deeply merges nested maps, where override entries override base entries.
+     * 深度合并嵌套 Map，覆盖 Map 条目覆盖基础 Map 条目。
      *
-     * @param base base map
-     * @param override override map
-     * @return deeply merged map
+     * @param base 基础 Map
+     * @param override 覆盖 Map
+     * @return 深度合并后的 Map
      */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> deepMerge(Map<String, Object> base, Map<String, Object> override) {
@@ -1025,12 +1025,12 @@ public final class MapUtil {
     }
 
     /**
-     * Merges a collection of maps, where later maps override earlier maps.
+     * 合并多个 Map，后面的 Map 覆盖前面的 Map。
      *
-     * @param maps source maps
-     * @param <K> key type
-     * @param <V> value type
-     * @return merged map
+     * @param maps 源 Map 集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 合并后的 Map
      */
     public static <K, V> Map<K, V> mergeList(Collection<Map<K, V>> maps) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -1045,13 +1045,13 @@ public final class MapUtil {
     }
 
     /**
-     * Filters entries with the given predicate.
+     * 使用指定断言过滤条目。
      *
-     * @param map source map
-     * @param predicate entry predicate
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param predicate 条目断言
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> filter(Map<K, V> map, BiPredicate<K, V> predicate) {
         Objects.requireNonNull(predicate, "predicate must not be null");
@@ -1067,13 +1067,13 @@ public final class MapUtil {
     }
 
     /**
-     * Filters entries by key.
+     * 按键过滤条目。
      *
-     * @param map source map
-     * @param predicate key predicate
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param predicate 键断言
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> filterKeys(Map<K, V> map, Predicate<K> predicate) {
         Objects.requireNonNull(predicate, "predicate must not be null");
@@ -1081,13 +1081,13 @@ public final class MapUtil {
     }
 
     /**
-     * Filters entries by value.
+     * 按值过滤条目。
      *
-     * @param map source map
-     * @param predicate value predicate
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param predicate 值断言
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> filterValues(Map<K, V> map, Predicate<V> predicate) {
         Objects.requireNonNull(predicate, "predicate must not be null");
@@ -1095,13 +1095,13 @@ public final class MapUtil {
     }
 
     /**
-     * Includes only the given keys.
+     * 仅保留指定键。
      *
-     * @param map source map
-     * @param keys keys to include
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param keys 待保留的键集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> includeKeys(Map<K, V> map, Collection<K> keys) {
         if (map == null || keys == null) {
@@ -1112,13 +1112,13 @@ public final class MapUtil {
     }
 
     /**
-     * Excludes the given keys.
+     * 排除指定键。
      *
-     * @param map source map
-     * @param keys keys to exclude
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param keys 待排除的键集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> excludeKeys(Map<K, V> map, Collection<K> keys) {
         if (map == null) {
@@ -1132,63 +1132,63 @@ public final class MapUtil {
     }
 
     /**
-     * Picks only the given keys.
+     * 挑选指定键。
      *
-     * @param map source map
-     * @param keys keys to pick
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param keys 待挑选的键集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> pick(Map<K, V> map, Collection<K> keys) {
         return includeKeys(map, keys);
     }
 
     /**
-     * Omits the given keys.
+     * 忽略指定键。
      *
-     * @param map source map
-     * @param keys keys to omit
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param keys 待忽略的键集合
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> omit(Map<K, V> map, Collection<K> keys) {
         return excludeKeys(map, keys);
     }
 
     /**
-     * Keeps entries whose value is not null.
+     * 保留值非 null 的条目。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return filtered map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 过滤后的 Map
      */
     public static <K, V> Map<K, V> filterNotNullValue(Map<K, V> map) {
         return filterValues(map, Objects::nonNull);
     }
 
     /**
-     * Keeps entries whose string value is not blank.
+     * 保留字符串值非空白的条目。
      *
-     * @param map source map
-     * @param <K> key type
-     * @return filtered map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @return 过滤后的 Map
      */
     public static <K> Map<K, String> filterNotBlankValue(Map<K, String> map) {
         return filterValues(map, value -> !isBlank(value));
     }
 
     /**
-     * Maps keys and keeps original values.
+     * 转换键并保留原始值。
      *
-     * @param map source map
-     * @param keyMapper key mapper
-     * @param <K> source key type
-     * @param <V> value type
-     * @param <NK> new key type
-     * @return mapped map
+     * @param map 源 Map
+     * @param keyMapper 键映射函数
+     * @param <K> 源键类型
+     * @param <V> 值类型
+     * @param <NK> 新键类型
+     * @return 映射后的 Map
      */
     public static <K, V, NK> Map<NK, V> mapKeys(Map<K, V> map, Function<K, NK> keyMapper) {
         Objects.requireNonNull(keyMapper, "keyMapper must not be null");
@@ -1202,14 +1202,14 @@ public final class MapUtil {
     }
 
     /**
-     * Maps values and keeps original keys.
+     * 转换值并保留原始键。
      *
-     * @param map source map
-     * @param valueMapper value mapper
-     * @param <K> key type
-     * @param <V> source value type
-     * @param <NV> new value type
-     * @return mapped map
+     * @param map 源 Map
+     * @param valueMapper 值映射函数
+     * @param <K> 键类型
+     * @param <V> 源值类型
+     * @param <NV> 新值类型
+     * @return 映射后的 Map
      */
     public static <K, V, NV> Map<K, NV> mapValues(Map<K, V> map, Function<V, NV> valueMapper) {
         Objects.requireNonNull(valueMapper, "valueMapper must not be null");
@@ -1223,15 +1223,15 @@ public final class MapUtil {
     }
 
     /**
-     * Maps entries to new entries.
+     * 将条目映射为新的条目。
      *
-     * @param map source map
-     * @param mapper entry mapper
-     * @param <K> source key type
-     * @param <V> source value type
-     * @param <NK> new key type
-     * @param <NV> new value type
-     * @return mapped map
+     * @param map 源 Map
+     * @param mapper 条目映射函数
+     * @param <K> 源键类型
+     * @param <V> 源值类型
+     * @param <NK> 新键类型
+     * @param <NV> 新值类型
+     * @return 映射后的 Map
      */
     public static <K, V, NK, NV> Map<NK, NV> mapEntries(Map<K, V> map, Function<Map.Entry<K, V>, Map.Entry<NK, NV>> mapper) {
         Objects.requireNonNull(mapper, "mapper must not be null");
@@ -1248,58 +1248,58 @@ public final class MapUtil {
     }
 
     /**
-     * Converts map entries to a list.
+     * 将 Map 条目转换为列表。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return entry list
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 条目列表
      */
     public static <K, V> List<Map.Entry<K, V>> toList(Map<K, V> map) {
         return map == null ? new ArrayList<>() : new ArrayList<>(map.entrySet());
     }
 
     /**
-     * Converts map keys to a list.
+     * 将 Map 键转换为列表。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return key list
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 键列表
      */
     public static <K, V> List<K> toKeyList(Map<K, V> map) {
         return map == null ? new ArrayList<>() : new ArrayList<>(map.keySet());
     }
 
     /**
-     * Converts map values to a list.
+     * 将 Map 值转换为列表。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return value list
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 值列表
      */
     public static <K, V> List<V> toValueList(Map<K, V> map) {
         return map == null ? new ArrayList<>() : new ArrayList<>(map.values());
     }
 
     /**
-     * Converts map entries to a set.
+     * 将 Map 条目转换为集合。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return entry set
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 条目集合
      */
     public static <K, V> Set<Map.Entry<K, V>> toSet(Map<K, V> map) {
         return map == null ? new LinkedHashSet<>() : new LinkedHashSet<>(map.entrySet());
     }
 
     /**
-     * Converts keys to String and keeps values as Object.
+     * 将键转换为 String，并将值保留为 Object。
      *
-     * @param map source map
-     * @return object map
+     * @param map 源 Map
+     * @return Object 值 Map
      */
     public static Map<String, Object> toObjectMap(Map<?, ?> map) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -1312,10 +1312,10 @@ public final class MapUtil {
     }
 
     /**
-     * Converts keys and values to String.
+     * 将键和值都转换为 String。
      *
-     * @param map source map
-     * @return string map
+     * @param map 源 Map
+     * @return String 值 Map
      */
     public static Map<String, String> toStringMap(Map<?, ?> map) {
         Map<String, String> result = new LinkedHashMap<>();
@@ -1328,33 +1328,33 @@ public final class MapUtil {
     }
 
     /**
-     * Converts the map to a LinkedHashMap.
+     * 将 Map 转换为 LinkedHashMap。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return linked map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 有序 Map
      */
     public static <K, V> LinkedHashMap<K, V> toLinkedMap(Map<K, V> map) {
         return map == null ? new LinkedHashMap<>() : new LinkedHashMap<>(map);
     }
 
     /**
-     * Converts a bean to a map.
+     * 将 Bean 转换为 Map。
      *
-     * @param bean source bean
-     * @return bean field map
+     * @param bean 源 Bean
+     * @return Bean 字段 Map
      */
     public static Map<String, Object> beanToMap(Object bean) {
         return beanToMap(bean, false);
     }
 
     /**
-     * Converts a bean to a map.
+     * 将 Bean 转换为 Map。
      *
-     * @param bean source bean
-     * @param ignoreNull whether null field values should be ignored
-     * @return bean field map
+     * @param bean 源 Bean
+     * @param ignoreNull 是否忽略 null 字段值
+     * @return Bean 字段 Map
      */
     public static Map<String, Object> beanToMap(Object bean, boolean ignoreNull) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -1379,12 +1379,12 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a map to a bean instance.
+     * 将 Map 转换为 Bean 实例。
      *
-     * @param map source map
-     * @param beanType bean class
-     * @param <T> bean type
-     * @return bean instance
+     * @param map 源 Map
+     * @param beanType Bean 类型
+     * @param <T> Bean 类型
+     * @return Bean 实例
      */
     public static <T> T mapToBean(Map<String, Object> map, Class<T> beanType) {
         Objects.requireNonNull(beanType, "beanType must not be null");
@@ -1394,12 +1394,12 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a map to a bean instance and ignores failed field assignments.
+     * 将 Map 转换为 Bean 实例，并忽略字段赋值失败。
      *
-     * @param map source map
-     * @param beanType bean class
-     * @param <T> bean type
-     * @return bean instance
+     * @param map 源 Map
+     * @param beanType Bean 类型
+     * @param <T> Bean 类型
+     * @return Bean 实例
      */
     public static <T> T mapToBeanIgnoreError(Map<String, Object> map, Class<T> beanType) {
         Objects.requireNonNull(beanType, "beanType must not be null");
@@ -1418,19 +1418,19 @@ public final class MapUtil {
                     field.set(bean, convertValue(value, field.getType()));
                 }
             } catch (RuntimeException | IllegalAccessException ignored) {
-                // Intentionally ignore invalid field values for this API variant.
+                // 当前 API 变体需要主动忽略非法字段值。
             }
         }
         return bean;
     }
 
     /**
-     * Copies map values to an existing bean.
+     * 将 Map 值复制到已有 Bean。
      *
-     * @param map source map
-     * @param bean target bean
-     * @param <T> bean type
-     * @return target bean
+     * @param map 源 Map
+     * @param bean 目标 Bean
+     * @param <T> Bean 类型
+     * @return 目标 Bean
      */
     public static <T> T copyToBean(Map<String, Object> map, T bean) {
         Objects.requireNonNull(bean, "bean must not be null");
@@ -1455,11 +1455,11 @@ public final class MapUtil {
     }
 
     /**
-     * Copies bean fields to a target map.
+     * 将 Bean 字段复制到目标 Map。
      *
-     * @param bean source bean
-     * @param target target map
-     * @return target map
+     * @param bean 源 Bean
+     * @param target 目标 Map
+     * @return 目标 Map
      */
     public static Map<String, Object> copyFromBean(Object bean, Map<String, Object> target) {
         requireMap(target);
@@ -1468,35 +1468,35 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a bean to a string map.
+     * 将 Bean 转换为字符串 Map。
      *
-     * @param bean source bean
-     * @return string map
+     * @param bean 源 Bean
+     * @return String 值 Map
      */
     public static Map<String, String> beanToStringMap(Object bean) {
         return toStringMap(beanToMap(bean));
     }
 
     /**
-     * Sorts a map by key using natural order.
+     * 按键的自然顺序排序 Map。
      *
-     * @param map source map
-     * @param <K> comparable key type
-     * @param <V> value type
-     * @return sorted linked map
+     * @param map 源 Map
+     * @param <K> 可比较键类型
+     * @param <V> 值类型
+     * @return 排序后的有序 Map
      */
     public static <K extends Comparable<? super K>, V> Map<K, V> sortByKey(Map<K, V> map) {
         return sortByKey(map, Comparator.nullsFirst(Comparator.naturalOrder()));
     }
 
     /**
-     * Sorts a map by key using the comparator.
+     * 使用比较器按键排序 Map。
      *
-     * @param map source map
-     * @param comparator key comparator
-     * @param <K> key type
-     * @param <V> value type
-     * @return sorted linked map
+     * @param map 源 Map
+     * @param comparator 键比较器
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 排序后的有序 Map
      */
     public static <K, V> Map<K, V> sortByKey(Map<K, V> map, Comparator<K> comparator) {
         Objects.requireNonNull(comparator, "comparator must not be null");
@@ -1510,25 +1510,25 @@ public final class MapUtil {
     }
 
     /**
-     * Sorts a map by value using natural order.
+     * 按值的自然顺序排序 Map。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> comparable value type
-     * @return sorted linked map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 可比较值类型
+     * @return 排序后的有序 Map
      */
     public static <K, V extends Comparable<? super V>> Map<K, V> sortByValue(Map<K, V> map) {
         return sortByValue(map, Comparator.nullsFirst(Comparator.naturalOrder()));
     }
 
     /**
-     * Sorts a map by value using the comparator.
+     * 使用比较器按值排序 Map。
      *
-     * @param map source map
-     * @param comparator value comparator
-     * @param <K> key type
-     * @param <V> value type
-     * @return sorted linked map
+     * @param map 源 Map
+     * @param comparator 值比较器
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 排序后的有序 Map
      */
     public static <K, V> Map<K, V> sortByValue(Map<K, V> map, Comparator<V> comparator) {
         Objects.requireNonNull(comparator, "comparator must not be null");
@@ -1542,12 +1542,12 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a map to a TreeMap.
+     * 将 Map 转换为 TreeMap。
      *
-     * @param map source map
-     * @param <K> comparable key type
-     * @param <V> value type
-     * @return tree map
+     * @param map 源 Map
+     * @param <K> 可比较键类型
+     * @param <V> 值类型
+     * @return TreeMap
      */
     public static <K extends Comparable<? super K>, V> TreeMap<K, V> toTreeMap(Map<K, V> map) {
         TreeMap<K, V> result = new TreeMap<>();
@@ -1558,24 +1558,24 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a map to a LinkedHashMap.
+     * 将 Map 转换为 LinkedHashMap。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return linked hash map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return LinkedHashMap
      */
     public static <K, V> LinkedHashMap<K, V> toLinkedHashMap(Map<K, V> map) {
         return toLinkedMap(map);
     }
 
     /**
-     * Reverses the current iteration order.
+     * 反转当前迭代顺序。
      *
-     * @param map source map
-     * @param <K> key type
-     * @param <V> value type
-     * @return reversed linked map
+     * @param map 源 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 反转后的有序 Map
      */
     public static <K, V> Map<K, V> reverse(Map<K, V> map) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -1591,27 +1591,27 @@ public final class MapUtil {
     }
 
     /**
-     * Builds an index map from a collection, where later items override earlier items.
+     * 根据集合构建索引 Map，后面的元素覆盖前面的元素。
      *
-     * @param collection source collection
-     * @param keyMapper key mapper
-     * @param <T> item type
-     * @param <K> key type
-     * @return indexed map
+     * @param collection 源集合
+     * @param keyMapper 键映射函数
+     * @param <T> 元素类型
+     * @param <K> 键类型
+     * @return 索引 Map
      */
     public static <T, K> Map<K, T> indexBy(Collection<T> collection, Function<T, K> keyMapper) {
         return indexBy(collection, keyMapper, (oldValue, newValue) -> newValue);
     }
 
     /**
-     * Builds an index map from a collection with a merge function.
+     * 根据集合和合并函数构建索引 Map。
      *
-     * @param collection source collection
-     * @param keyMapper key mapper
-     * @param mergeFunction merge function for duplicate keys
-     * @param <T> item type
-     * @param <K> key type
-     * @return indexed map
+     * @param collection 源集合
+     * @param keyMapper 键映射函数
+     * @param mergeFunction 重复键的合并函数
+     * @param <T> 元素类型
+     * @param <K> 键类型
+     * @return 索引 Map
      */
     public static <T, K> Map<K, T> indexBy(Collection<T> collection, Function<T, K> keyMapper, BinaryOperator<T> mergeFunction) {
         Objects.requireNonNull(keyMapper, "keyMapper must not be null");
@@ -1631,13 +1631,13 @@ public final class MapUtil {
     }
 
     /**
-     * Groups collection items by key.
+     * 按键对集合元素分组。
      *
-     * @param collection source collection
-     * @param keyMapper key mapper
-     * @param <T> item type
-     * @param <K> key type
-     * @return grouped map
+     * @param collection 源集合
+     * @param keyMapper 键映射函数
+     * @param <T> 元素类型
+     * @param <K> 键类型
+     * @return 分组 Map
      */
     public static <T, K> Map<K, List<T>> groupBy(Collection<T> collection, Function<T, K> keyMapper) {
         Objects.requireNonNull(keyMapper, "keyMapper must not be null");
@@ -1651,13 +1651,13 @@ public final class MapUtil {
     }
 
     /**
-     * Counts collection items by key.
+     * 按键统计集合元素数量。
      *
-     * @param collection source collection
-     * @param keyMapper key mapper
-     * @param <T> item type
-     * @param <K> key type
-     * @return count map
+     * @param collection 源集合
+     * @param keyMapper 键映射函数
+     * @param <T> 元素类型
+     * @param <K> 键类型
+     * @return 计数 Map
      */
     public static <T, K> Map<K, Long> groupCount(Collection<T> collection, Function<T, K> keyMapper) {
         Objects.requireNonNull(keyMapper, "keyMapper must not be null");
@@ -1671,14 +1671,14 @@ public final class MapUtil {
     }
 
     /**
-     * Sums BigDecimal values by key.
+     * 按键汇总 BigDecimal 值。
      *
-     * @param collection source collection
-     * @param keyMapper key mapper
-     * @param valueMapper value mapper
-     * @param <T> item type
-     * @param <K> key type
-     * @return sum map
+     * @param collection 源集合
+     * @param keyMapper 键映射函数
+     * @param valueMapper 值映射函数
+     * @param <T> 元素类型
+     * @param <K> 键类型
+     * @return 汇总 Map
      */
     public static <T, K> Map<K, BigDecimal> groupSum(Collection<T> collection, Function<T, K> keyMapper, Function<T, BigDecimal> valueMapper) {
         Objects.requireNonNull(keyMapper, "keyMapper must not be null");
@@ -1694,15 +1694,15 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a collection to a map, where later items override earlier items.
+     * 将集合转换为 Map，后面的元素覆盖前面的元素。
      *
-     * @param collection source collection
-     * @param keyMapper key mapper
-     * @param valueMapper value mapper
-     * @param <T> item type
-     * @param <K> key type
-     * @param <V> value type
-     * @return mapped map
+     * @param collection 源集合
+     * @param keyMapper 键映射函数
+     * @param valueMapper 值映射函数
+     * @param <T> 元素类型
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 映射后的 Map
      */
     public static <T, K, V> Map<K, V> toMap(Collection<T> collection, Function<T, K> keyMapper, Function<T, V> valueMapper) {
         Objects.requireNonNull(keyMapper, "keyMapper must not be null");
@@ -1717,15 +1717,15 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a collection to a LinkedHashMap, where later items override earlier items.
+     * 将集合转换为 LinkedHashMap，后面的元素覆盖前面的元素。
      *
-     * @param collection source collection
-     * @param keyMapper key mapper
-     * @param valueMapper value mapper
-     * @param <T> item type
-     * @param <K> key type
-     * @param <V> value type
-     * @return mapped linked map
+     * @param collection 源集合
+     * @param keyMapper 键映射函数
+     * @param valueMapper 值映射函数
+     * @param <T> 元素类型
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 映射后的有序 Map
      */
     public static <T, K, V> Map<K, V> toLinkedMap(Collection<T> collection, Function<T, K> keyMapper, Function<T, V> valueMapper) {
         Objects.requireNonNull(keyMapper, "keyMapper must not be null");
@@ -1740,12 +1740,12 @@ public final class MapUtil {
     }
 
     /**
-     * Writes a value by dot-separated path and creates intermediate maps when needed.
+     * 根据点号分隔路径写入值，并在需要时创建中间 Map。
      *
-     * @param map target map
-     * @param path dot-separated path
-     * @param value value to write
-     * @return target map
+     * @param map 目标 Map
+     * @param path 点号分隔路径
+     * @param value 待写入的值
+     * @return 目标 Map
      */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> putByPath(Map<String, Object> map, String path, Object value) {
@@ -1769,22 +1769,22 @@ public final class MapUtil {
     }
 
     /**
-     * Checks whether a dot-separated path exists.
+     * 判断点号分隔路径是否存在。
      *
-     * @param map source map
-     * @param path dot-separated path
-     * @return true if the path exists
+     * @param map 源 Map
+     * @param path 点号分隔路径
+     * @return 如果路径存在则返回 true
      */
     public static boolean containsPath(Map<String, Object> map, String path) {
         return containsPathInternal(map, path);
     }
 
     /**
-     * Removes a value by dot-separated path.
+     * 根据点号分隔路径移除值。
      *
-     * @param map target map
-     * @param path dot-separated path
-     * @return removed value or null
+     * @param map 目标 Map
+     * @param path 点号分隔路径
+     * @return 被移除的值；如果不存在则返回 null
      */
     @SuppressWarnings("unchecked")
     public static Object removeByPath(Map<String, Object> map, String path) {
@@ -1804,10 +1804,10 @@ public final class MapUtil {
     }
 
     /**
-     * Flattens a nested map into dot-separated keys.
+     * 将嵌套 Map 扁平化为点号分隔键。
      *
-     * @param map source map
-     * @return flattened map
+     * @param map 源 Map
+     * @return 扁平化后的 Map
      */
     public static Map<String, Object> flatten(Map<String, Object> map) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -1816,10 +1816,10 @@ public final class MapUtil {
     }
 
     /**
-     * Restores a flattened dot-separated map to nested maps.
+     * 将点号分隔键的扁平 Map 还原为嵌套 Map。
      *
-     * @param map flattened map
-     * @return nested map
+     * @param map 扁平化 Map
+     * @return 嵌套 Map
      */
     public static Map<String, Object> unflatten(Map<String, Object> map) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -1832,26 +1832,26 @@ public final class MapUtil {
     }
 
     /**
-     * Compares two maps and returns a diff model.
+     * 比较两个 Map 并返回差异模型。
      *
-     * @param oldMap old map
-     * @param newMap new map
-     * @param <K> key type
-     * @param <V> value type
-     * @return diff model
+     * @param oldMap 旧 Map
+     * @param newMap 新 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 差异模型
      */
     public static <K, V> MapDiff<K, V> diff(Map<K, V> oldMap, Map<K, V> newMap) {
         return new MapDiff<>(added(oldMap, newMap), removed(oldMap, newMap), changed(oldMap, newMap));
     }
 
     /**
-     * Returns entries that exist only in the new map.
+     * 返回仅存在于新 Map 中的条目。
      *
-     * @param oldMap old map
-     * @param newMap new map
-     * @param <K> key type
-     * @param <V> value type
-     * @return added entries
+     * @param oldMap 旧 Map
+     * @param newMap 新 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 新增条目
      */
     public static <K, V> Map<K, V> added(Map<K, V> oldMap, Map<K, V> newMap) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -1866,13 +1866,13 @@ public final class MapUtil {
     }
 
     /**
-     * Returns entries that exist only in the old map.
+     * 返回仅存在于旧 Map 中的条目。
      *
-     * @param oldMap old map
-     * @param newMap new map
-     * @param <K> key type
-     * @param <V> value type
-     * @return removed entries
+     * @param oldMap 旧 Map
+     * @param newMap 新 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 删除条目
      */
     public static <K, V> Map<K, V> removed(Map<K, V> oldMap, Map<K, V> newMap) {
         Map<K, V> result = new LinkedHashMap<>();
@@ -1887,13 +1887,13 @@ public final class MapUtil {
     }
 
     /**
-     * Returns changed values for common keys.
+     * 返回共同键中发生变化的值。
      *
-     * @param oldMap old map
-     * @param newMap new map
-     * @param <K> key type
-     * @param <V> value type
-     * @return changed entries
+     * @param oldMap 旧 Map
+     * @param newMap 新 Map
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 变更条目
      */
     public static <K, V> Map<K, ValueChange<V>> changed(Map<K, V> oldMap, Map<K, V> newMap) {
         Map<K, ValueChange<V>> result = new LinkedHashMap<>();
@@ -1910,36 +1910,36 @@ public final class MapUtil {
     }
 
     /**
-     * Checks whether two maps are equal.
+     * 判断两个 Map 是否相等。
      *
-     * @param left left map
-     * @param right right map
-     * @return true if maps are equal
+     * @param left 左侧 Map
+     * @param right 右侧 Map
+     * @return 如果两个 Map 相等则返回 true
      */
     public static boolean same(Map<?, ?> left, Map<?, ?> right) {
         return Objects.equals(left, right);
     }
 
     /**
-     * Checks whether two maps are equal regardless of iteration order.
+     * 判断两个 Map 是否相等，不考虑迭代顺序。
      *
-     * @param left left map
-     * @param right right map
-     * @return true if maps contain the same entries
+     * @param left 左侧 Map
+     * @param right 右侧 Map
+     * @return 如果两个 Map 包含相同条目则返回 true
      */
     public static boolean equalsIgnoreOrder(Map<?, ?> left, Map<?, ?> right) {
         return Objects.equals(left, right);
     }
 
     /**
-     * Compares one key value between two maps.
+     * 比较两个 Map 中指定键的值。
      *
-     * @param oldMap old map
-     * @param newMap new map
-     * @param key key to compare
-     * @param <K> key type
-     * @param <V> value type
-     * @return value change when the key state or value differs
+     * @param oldMap 旧 Map
+     * @param newMap 新 Map
+     * @param key 待比较的键
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 当键状态或值不同时返回值变化对象
      */
     public static <K, V> Optional<ValueChange<V>> compareValue(Map<K, V> oldMap, Map<K, V> newMap, K key) {
         boolean oldContains = oldMap != null && oldMap.containsKey(key);
@@ -1953,21 +1953,21 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a map to a URL query string without URL encoding.
+     * 将 Map 转换为未进行 URL 编码的查询字符串。
      *
-     * @param map source map
-     * @return query string
+     * @param map 源 Map
+     * @return 查询字符串
      */
     public static String toQueryString(Map<String, ?> map) {
         return toQueryString(map, false);
     }
 
     /**
-     * Converts a map to a URL query string.
+     * 将 Map 转换为 URL 查询字符串。
      *
-     * @param map source map
-     * @param encode whether key and value should be URL encoded
-     * @return query string
+     * @param map 源 Map
+     * @param encode 是否对键和值进行 URL 编码
+     * @return 查询字符串
      */
     public static String toQueryString(Map<String, ?> map, boolean encode) {
         if (map == null || map.isEmpty()) {
@@ -1983,10 +1983,10 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a map to a URL query string sorted by key.
+     * 将 Map 按键排序后转换为 URL 查询字符串。
      *
-     * @param map source map
-     * @return sorted query string
+     * @param map 源 Map
+     * @return 排序后的查询字符串
      */
     public static String toSortedQueryString(Map<String, ?> map) {
         if (map == null) {
@@ -1996,12 +1996,12 @@ public final class MapUtil {
     }
 
     /**
-     * Joins entries with custom separators.
+     * 使用自定义分隔符拼接条目。
      *
-     * @param map source map
-     * @param entrySeparator separator between entries
-     * @param keyValueSeparator separator between key and value
-     * @return joined string
+     * @param map 源 Map
+     * @param entrySeparator 条目之间的分隔符
+     * @param keyValueSeparator 键和值之间的分隔符
+     * @return 拼接后的字符串
      */
     public static String join(Map<?, ?> map, String entrySeparator, String keyValueSeparator) {
         if (map == null || map.isEmpty()) {
@@ -2017,22 +2017,22 @@ public final class MapUtil {
     }
 
     /**
-     * Joins entries with custom separators and skips null values.
+     * 使用自定义分隔符拼接条目，并跳过 null 值。
      *
-     * @param map source map
-     * @param entrySeparator separator between entries
-     * @param keyValueSeparator separator between key and value
-     * @return joined string
+     * @param map 源 Map
+     * @param entrySeparator 条目之间的分隔符
+     * @param keyValueSeparator 键和值之间的分隔符
+     * @return 拼接后的字符串
      */
     public static String joinIgnoreNull(Map<?, ?> map, String entrySeparator, String keyValueSeparator) {
         return join(filterValues(map, Objects::nonNull), entrySeparator, keyValueSeparator);
     }
 
     /**
-     * Converts a map to a signature string sorted by key and ignoring null values.
+     * 将 Map 按键排序并忽略 null 值后转换为签名字符串。
      *
-     * @param map source map
-     * @return signature string
+     * @param map 源 Map
+     * @return 签名字符串
      */
     public static String toSignString(Map<String, ?> map) {
         if (map == null) {
@@ -2042,20 +2042,20 @@ public final class MapUtil {
     }
 
     /**
-     * Converts a map to a log-friendly string.
+     * 将 Map 转换为适合日志输出的字符串。
      *
-     * @param map source map
-     * @return log string
+     * @param map 源 Map
+     * @return 日志字符串
      */
     public static String toLogString(Map<?, ?> map) {
         return map == null ? "{}" : map.toString();
     }
 
     /**
-     * Parses a URL query string to a map.
+     * 将 URL 查询字符串解析为 Map。
      *
-     * @param queryString query string
-     * @return parsed map
+     * @param queryString 查询字符串
+     * @return 解析后的 Map
      */
     public static Map<String, String> parseQueryString(String queryString) {
         Map<String, String> result = new LinkedHashMap<>();
@@ -2079,11 +2079,11 @@ public final class MapUtil {
     }
 
     /**
-     * Masks selected keys with the default mask rule.
+     * 使用默认脱敏规则对指定键进行脱敏。
      *
-     * @param map source map
-     * @param keys keys to mask
-     * @return copied map with masked values
+     * @param map 源 Map
+     * @param keys 待脱敏的键集合
+     * @return 包含脱敏值的 Map 副本
      */
     public static Map<String, Object> mask(Map<String, Object> map, Collection<String> keys) {
         Map<String, Object> result = map == null ? new LinkedHashMap<>() : new LinkedHashMap<>(map);
@@ -2098,11 +2098,11 @@ public final class MapUtil {
     }
 
     /**
-     * Masks values with custom mask rules.
+     * 使用自定义脱敏规则处理值。
      *
-     * @param map source map
-     * @param maskRules key to mask function rules
-     * @return copied map with masked values
+     * @param map 源 Map
+     * @param maskRules 键与脱敏函数规则
+     * @return 包含脱敏值的 Map 副本
      */
     public static Map<String, Object> mask(Map<String, Object> map, Map<String, Function<Object, Object>> maskRules) {
         Map<String, Object> result = map == null ? new LinkedHashMap<>() : new LinkedHashMap<>(map);
@@ -2117,22 +2117,22 @@ public final class MapUtil {
     }
 
     /**
-     * Returns a copy without sensitive keys.
+     * 返回一个不包含敏感键的副本。
      *
-     * @param map source map
-     * @param keys keys to remove
-     * @return copied map without sensitive keys
+     * @param map 源 Map
+     * @param keys 待移除的键集合
+     * @return 不包含敏感键的 Map 副本
      */
     public static Map<String, Object> removeSensitiveKeys(Map<String, Object> map, Collection<String> keys) {
         return copyWithoutSensitiveKeys(map, keys);
     }
 
     /**
-     * Returns a copy without sensitive keys.
+     * 返回一个不包含敏感键的副本。
      *
-     * @param map source map
-     * @param keys keys to remove
-     * @return copied map without sensitive keys
+     * @param map 源 Map
+     * @param keys 待移除的键集合
+     * @return 不包含敏感键的 Map 副本
      */
     public static Map<String, Object> copyWithoutSensitiveKeys(Map<String, Object> map, Collection<String> keys) {
         Map<String, Object> result = map == null ? new LinkedHashMap<>() : new LinkedHashMap<>(map);
@@ -2145,46 +2145,46 @@ public final class MapUtil {
     }
 
     /**
-     * Masks a phone number value for the given key.
+     * 对指定键对应的手机号值进行脱敏。
      *
-     * @param map source map
-     * @param key key to mask
-     * @return copied map with masked phone value
+     * @param map 源 Map
+     * @param key 待脱敏的键
+     * @return 包含脱敏手机号值的 Map 副本
      */
     public static Map<String, Object> maskPhone(Map<String, Object> map, String key) {
         return mask(map, Map.of(key, MapUtil::maskPhoneValue));
     }
 
     /**
-     * Masks an email value for the given key.
+     * 对指定键对应的邮箱值进行脱敏。
      *
-     * @param map source map
-     * @param key key to mask
-     * @return copied map with masked email value
+     * @param map 源 Map
+     * @param key 待脱敏的键
+     * @return 包含脱敏邮箱值的 Map 副本
      */
     public static Map<String, Object> maskEmail(Map<String, Object> map, String key) {
         return mask(map, Map.of(key, MapUtil::maskEmailValue));
     }
 
     /**
-     * Masks an ID card value for the given key.
+     * 对指定键对应的身份证号值进行脱敏。
      *
-     * @param map source map
-     * @param key key to mask
-     * @return copied map with masked ID card value
+     * @param map 源 Map
+     * @param key 待脱敏的键
+     * @return 包含脱敏身份证号值的 Map 副本
      */
     public static Map<String, Object> maskIdCard(Map<String, Object> map, String key) {
         return mask(map, Map.of(key, MapUtil::maskIdCardValue));
     }
 
     /**
-     * Requires a map to be not empty.
+     * 要求 Map 不能为空。
      *
-     * @param map map to validate
-     * @param message exception message
-     * @param <K> key type
-     * @param <V> value type
-     * @return original map
+     * @param map 待校验的 Map
+     * @param message 异常消息
+     * @param <K> 键类型
+     * @param <V> 值类型
+     * @return 原始 Map
      */
     public static <K, V> Map<K, V> requireNotEmpty(Map<K, V> map, String message) {
         if (isEmpty(map)) {
@@ -2194,11 +2194,11 @@ public final class MapUtil {
     }
 
     /**
-     * Requires a key to exist.
+     * 要求指定键必须存在。
      *
-     * @param map map to validate
-     * @param key required key
-     * @param message exception message
+     * @param map 待校验的 Map
+     * @param key 必须存在的键
+     * @param message 异常消息
      */
     public static void requireKey(Map<?, ?> map, Object key, String message) {
         if (map == null || !map.containsKey(key)) {
@@ -2207,11 +2207,11 @@ public final class MapUtil {
     }
 
     /**
-     * Requires all keys to exist.
+     * 要求所有指定键都必须存在。
      *
-     * @param map map to validate
-     * @param keys required keys
-     * @param message exception message
+     * @param map 待校验的 Map
+     * @param keys 必须存在的键集合
+     * @param message 异常消息
      */
     public static void requireKeys(Map<?, ?> map, Collection<?> keys, String message) {
         List<?> missing = missingKeys(map, keys);
@@ -2221,11 +2221,11 @@ public final class MapUtil {
     }
 
     /**
-     * Requires a key value to be not null.
+     * 要求指定键对应的值不能为 null。
      *
-     * @param map map to validate
-     * @param key required key
-     * @param message exception message
+     * @param map 待校验的 Map
+     * @param key 必须存在的键
+     * @param message 异常消息
      */
     public static void requireValue(Map<?, ?> map, Object key, String message) {
         if (map == null || !map.containsKey(key) || map.get(key) == null) {
@@ -2234,11 +2234,11 @@ public final class MapUtil {
     }
 
     /**
-     * Returns missing keys.
+     * 返回缺失的键。
      *
-     * @param map map to validate
-     * @param keys required keys
-     * @return missing key list
+     * @param map 待校验的 Map
+     * @param keys 必须存在的键集合
+     * @return 缺失键列表
      */
     public static List<Object> missingKeys(Map<?, ?> map, Collection<?> keys) {
         List<Object> result = new ArrayList<>();
@@ -2254,22 +2254,22 @@ public final class MapUtil {
     }
 
     /**
-     * Checks whether all keys exist.
+     * 判断所有指定键是否都存在。
      *
-     * @param map map to validate
-     * @param keys required keys
-     * @return true if all keys exist
+     * @param map 待校验的 Map
+     * @param keys 必须存在的键集合
+     * @return 如果所有键都存在则返回 true
      */
     public static boolean hasAllKeys(Map<?, ?> map, Collection<?> keys) {
         return missingKeys(map, keys).isEmpty();
     }
 
     /**
-     * Checks whether any key exists.
+     * 判断任意指定键是否存在。
      *
-     * @param map map to validate
-     * @param keys candidate keys
-     * @return true if any key exists
+     * @param map 待校验的 Map
+     * @param keys 候选键集合
+     * @return 如果任意键存在则返回 true
      */
     public static boolean hasAnyKey(Map<?, ?> map, Collection<?> keys) {
         if (map == null || keys == null) {
@@ -2284,10 +2284,10 @@ public final class MapUtil {
     }
 
     /**
-     * Linked map builder.
+     * 有序 Map 构建器。
      *
-     * @param <K> key type
-     * @param <V> value type
+     * @param <K> 键类型
+     * @param <V> 值类型
      */
     public static final class Builder<K, V> {
         private final LinkedHashMap<K, V> map = new LinkedHashMap<>();
@@ -2296,11 +2296,11 @@ public final class MapUtil {
         }
 
         /**
-         * Adds an entry.
+         * 添加一个条目。
          *
-         * @param key key
-         * @param value value
-         * @return this builder
+         * @param key 键
+         * @param value 值
+         * @return 当前构建器
          */
         public Builder<K, V> put(K key, V value) {
             map.put(key, value);
@@ -2308,11 +2308,11 @@ public final class MapUtil {
         }
 
         /**
-         * Adds an entry when value is not null.
+         * 当值非 null 时添加条目。
          *
-         * @param key key
-         * @param value value
-         * @return this builder
+         * @param key 键
+         * @param value 值
+         * @return 当前构建器
          */
         public Builder<K, V> putIfNotNull(K key, V value) {
             if (value != null) {
@@ -2322,10 +2322,10 @@ public final class MapUtil {
         }
 
         /**
-         * Adds all entries.
+         * 添加所有条目。
          *
-         * @param source source map
-         * @return this builder
+         * @param source 源 Map
+         * @return 当前构建器
          */
         public Builder<K, V> putAll(Map<K, V> source) {
             if (source != null) {
@@ -2335,27 +2335,27 @@ public final class MapUtil {
         }
 
         /**
-         * Builds an immutable map.
+         * 构建不可变 Map。
          *
-         * @return immutable map
+         * @return 不可变 Map
          */
         public Map<K, V> build() {
             return Collections.unmodifiableMap(new LinkedHashMap<>(map));
         }
 
         /**
-         * Builds a mutable linked map.
+         * 构建可变有序 Map。
          *
-         * @return mutable linked map
+         * @return 可变有序 Map
          */
         public LinkedHashMap<K, V> buildMutable() {
             return new LinkedHashMap<>(map);
         }
 
         /**
-         * Builds an immutable map.
+         * 构建不可变 Map。
          *
-         * @return immutable map
+         * @return 不可变 Map
          */
         public Map<K, V> buildImmutable() {
             return build();
@@ -2363,9 +2363,9 @@ public final class MapUtil {
     }
 
     /**
-     * Value change model.
+     * 值变化模型。
      *
-     * @param <V> value type
+     * @param <V> 值类型
      */
     public static final class ValueChange<V> {
         private final V oldValue;
@@ -2377,18 +2377,18 @@ public final class MapUtil {
         }
 
         /**
-         * Returns the old value.
+         * 返回旧值。
          *
-         * @return old value
+         * @return 旧值
          */
         public V getOldValue() {
             return oldValue;
         }
 
         /**
-         * Returns the new value.
+         * 返回新值。
          *
-         * @return new value
+         * @return 新值
          */
         public V getNewValue() {
             return newValue;
@@ -2396,10 +2396,10 @@ public final class MapUtil {
     }
 
     /**
-     * Map diff model.
+     * Map 差异模型。
      *
-     * @param <K> key type
-     * @param <V> value type
+     * @param <K> 键类型
+     * @param <V> 值类型
      */
     public static final class MapDiff<K, V> {
         private final Map<K, V> added;
@@ -2413,27 +2413,27 @@ public final class MapUtil {
         }
 
         /**
-         * Returns added entries.
+         * 返回新增条目。
          *
-         * @return added entries
+         * @return 新增条目
          */
         public Map<K, V> getAdded() {
             return added;
         }
 
         /**
-         * Returns removed entries.
+         * 返回删除条目。
          *
-         * @return removed entries
+         * @return 删除条目
          */
         public Map<K, V> getRemoved() {
             return removed;
         }
 
         /**
-         * Returns changed entries.
+         * 返回变更条目。
          *
-         * @return changed entries
+         * @return 变更条目
          */
         public Map<K, ValueChange<V>> getChanged() {
             return changed;
@@ -2573,13 +2573,13 @@ public final class MapUtil {
         try {
             return Date.from(Instant.parse(text));
         } catch (DateTimeParseException ignored) {
-            // Try common local date-time formats below.
+            // 尝试下面的常用本地日期时间格式。
         }
         for (String pattern : List.of("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd")) {
             try {
                 return new SimpleDateFormat(pattern).parse(text);
             } catch (ParseException ignored) {
-                // Continue to next pattern.
+                // 继续尝试下一个格式。
             }
         }
         throw new IllegalArgumentException("Cannot convert value to Date: " + value);
@@ -2602,7 +2602,7 @@ public final class MapUtil {
         try {
             return LocalDate.parse(text);
         } catch (DateTimeParseException ignored) {
-            // Try local date-time formats below.
+            // 尝试下面的本地日期时间格式。
         }
         return convertToLocalDateTime(value).toLocalDate();
     }
@@ -2624,17 +2624,17 @@ public final class MapUtil {
         try {
             return LocalDateTime.parse(text);
         } catch (DateTimeParseException ignored) {
-            // Try common local date-time formats below.
+            // 尝试下面的常用本地日期时间格式。
         }
         try {
             return LocalDateTime.parse(text, DATE_TIME_SPACE_FORMATTER);
         } catch (DateTimeParseException ignored) {
-            // Try minute precision below.
+            // 继续尝试分钟精度格式。
         }
         try {
             return LocalDateTime.parse(text, DATE_TIME_MINUTE_FORMATTER);
         } catch (DateTimeParseException ignored) {
-            // Try date only below.
+            // 继续尝试仅日期格式。
         }
         try {
             return LocalDate.parse(text).atStartOfDay();
