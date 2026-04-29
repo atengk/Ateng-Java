@@ -110,6 +110,6 @@ Spring 上下文工具类
 
 ## CommonUtil
 
-通用基础工具类（基于 Hutool 工具包）
+通用基础工具类（基于 Hutool 工具库）
 
 使用方法（Test包）：io.github.atengk.CommonUtilTest

@@ -57,7 +57,7 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
- * 通用基础工具类（基于 Hutool 工具包）
+ * 通用基础工具类（基于 Hutool 工具库）
  *
  * @author Ateng
  * @since 2026-04-29
