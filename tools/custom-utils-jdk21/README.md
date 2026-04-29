@@ -17,10 +17,19 @@
 </dependency>
 ```
 
+**使用方法**
+
+```
+io.github.atengk.controller.SecureDemoController
+```
+
+
 
 ## VirtualThreadUtil
 
 虚拟线程工具类
+
+使用方法：io.github.atengk.controller.VirtualThreadDemoController
 
 
 
@@ -75,6 +84,24 @@ public class ValidateUtilConfig {
 }
 ```
 
+**使用方法**
+
+```
+io.github.atengk.controller.ValidateUtilDemoController
+```
+
+
+
 ## SpringUtil
 
 Spring 上下文工具类
+
+使用方法：io.github.atengk.controller.SpringUtilDemoController
+
+
+
+## CollectionUtil
+
+集合工具类
+
+使用方法（Test包）：io.github.atengk.collection
