@@ -218,3 +218,21 @@ Map 工具类
 使用方法（Test包）：io.github.atengk.file
 
 
+
+## FileTypeUtil
+
+文件类型 工具类
+
+使用方法（Test包）：io.github.atengk.filetype
+
+添加依赖
+
+```xml
+<!-- Apache Tika 核心模块：提供文件类型检测和 MIME 类型识别能力 -->
+<dependency>
+    <groupId>org.apache.tika</groupId>
+    <artifactId>tika-core</artifactId>
+    <version>3.3.0</version>
+</dependency>
+```
+

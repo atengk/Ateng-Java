@@ -125,6 +125,14 @@
             <artifactId>xz</artifactId>
             <version>${xz.version}</version>
         </dependency>
+
+        <!-- Apache Tika 核心模块：提供文件类型检测和 MIME 类型识别能力 -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>3.3.0</version>
+        </dependency>
+
     </dependencies>
 
     <!-- 依赖版本管理 -->
