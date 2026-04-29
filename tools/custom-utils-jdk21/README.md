@@ -139,8 +139,39 @@ Java Bean 基础反射工具类
 使用方法（Test包）：io.github.atengk.datetime
 
 
-## AssertUtil
 
-通用断言工具类
+## ZipUtil
 
-使用方法（Test包）：io.github.atengk.asserttest
+压缩解压工具类
+
+使用方法（Test包）：io.github.atengk.zip
+
+添加依赖
+
+```xml
+<properties>
+    <!-- 解压压缩依赖版本 -->
+    <zip4j.version>2.11.6</zip4j.version>
+    <commons-compress.version>1.28.0</commons-compress.version>
+    <xz.version>1.12</xz.version>
+</properties>
+<!-- 项目依赖 -->
+<dependencies>
+    <dependency>
+        <groupId>net.lingala.zip4j</groupId>
+        <artifactId>zip4j</artifactId>
+        <version>${zip4j.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.tukaani</groupId>
+        <artifactId>xz</artifactId>
+        <version>${xz.version}</version>
+    </dependency>
+</dependencies>
+```
+
