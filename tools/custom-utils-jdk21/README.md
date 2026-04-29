@@ -100,6 +100,14 @@ Spring 上下文工具类
 
 
 
+## CommonUtil
+
+通用基础工具类（基于 Hutool 工具库）
+
+使用方法（Test包）：io.github.atengk.CommonUtilTest
+
+
+
 ## CollectionUtil
 
 集合工具类
@@ -108,8 +116,8 @@ Spring 上下文工具类
 
 
 
-## CommonUtil
+## StringUtil
 
-通用基础工具类（基于 Hutool 工具库）
+字符串工具类
 
-使用方法（Test包）：io.github.atengk.CommonUtilTest
+使用方法（Test包）：io.github.atengk.string
