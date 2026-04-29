@@ -105,3 +105,11 @@ Spring 上下文工具类
 集合工具类
 
 使用方法（Test包）：io.github.atengk.collection
+
+
+
+## CommonUtil
+
+通用基础工具类（基于 Hutool 工具包）
+
+使用方法（Test包）：io.github.atengk.CommonUtilTest
