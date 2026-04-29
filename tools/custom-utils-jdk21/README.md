@@ -121,3 +121,12 @@ Spring 上下文工具类
 字符串工具类
 
 使用方法（Test包）：io.github.atengk.string
+
+
+
+## BeanUtil
+
+Java Bean 基础反射工具类
+
+使用方法（Test包）：io.github.atengk.bean
+
