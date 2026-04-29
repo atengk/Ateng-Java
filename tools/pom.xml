@@ -39,5 +39,6 @@
         <module>ip2region</module>
         <module>sql-formatter</module>
         <module>custom-utils-jdk21</module>
+        <module>apache-mina-sshd</module>
     </modules>
 </project>

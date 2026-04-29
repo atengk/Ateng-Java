@@ -334,7 +334,8 @@ export default defineConfig({
                     {
                         text: '网络与远程',
                         items: [
-                            { text: 'SSHJ', link: '/tools/sshj/README' }
+                            { text: 'SSHJ', link: '/tools/sshj/README' },
+                            { text: 'Apache MINA SSHD', link: '/tools/apache-mina-sshd/README' },
                         ]
                     },
                     {
