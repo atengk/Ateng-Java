@@ -63,6 +63,10 @@
         <poi.version>5.5.1</poi.version>
 
         <openpdf.version>3.0.3</openpdf.version>
+
+        <jakarta.mail.version>2.0.1</jakarta.mail.version>
+        <jakarta.activation.version>2.0.1</jakarta.activation.version>
+
     </properties>
 
     <!-- 项目依赖 -->
@@ -175,6 +179,21 @@
             <artifactId>openpdf</artifactId>
             <version>${openpdf.version}</version>
         </dependency>
+
+        <!-- Jakarta Mail 实现，提供 SMTP、IMAP、POP3、MIME 等邮件能力 -->
+        <dependency>
+            <groupId>com.sun.mail</groupId>
+            <artifactId>jakarta.mail</artifactId>
+            <version>${jakarta.mail.version}</version>
+        </dependency>
+
+        <!-- Jakarta Activation，处理附件、DataHandler、DataSource 等内容类型能力 -->
+        <dependency>
+            <groupId>com.sun.activation</groupId>
+            <artifactId>jakarta.activation</artifactId>
+            <version>${jakarta.activation.version}</version>
+        </dependency>
+
     </dependencies>
 
     <!-- 依赖版本管理 -->

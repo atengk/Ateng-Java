@@ -352,3 +352,35 @@ PDF 通用工具类，基于 OpenPDF 封装 PDF 创建、编辑、读取、加�
 ID 工具类，提供 UUID、UUID v7、Snowflake、ULID、业务单号、TraceId、短 ID、验证码、文件名、安全随机 ID 等常用能力
 
 使用方法（Test包）：io.github.atengk.id
+
+
+
+## MailUtil
+
+邮件工具类，基于 JDK 21 与 Jakarta Mail 提供邮件发送、接收、解析、附件、模板、校验等通用能力
+
+使用方法（Test包）：io.github.atengk.mail
+
+添加依赖
+
+```xml
+<properties>
+    <jakarta.mail.version>2.0.1</jakarta.mail.version>
+    <jakarta.activation.version>2.0.1</jakarta.activation.version>
+</properties>
+<dependencies>
+    <!-- Jakarta Mail 实现，提供 SMTP、IMAP、POP3、MIME 等邮件能力 -->
+    <dependency>
+        <groupId>com.sun.mail</groupId>
+        <artifactId>jakarta.mail</artifactId>
+        <version>${jakarta.mail.version}</version>
+    </dependency>
+    
+    <!-- Jakarta Activation，处理附件、DataHandler、DataSource 等内容类型能力 -->
+    <dependency>
+        <groupId>com.sun.activation</groupId>
+        <artifactId>jakarta.activation</artifactId>
+        <version>${jakarta.activation.version}</version>
+    </dependency>
+</dependencies>
+```
