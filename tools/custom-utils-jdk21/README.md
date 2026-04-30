@@ -384,3 +384,15 @@ ID 工具类，提供 UUID、UUID v7、Snowflake、ULID、业务单号、TraceId
     </dependency>
 </dependencies>
 ```
+
+
+
+
+## AnnotationUtil
+
+JDK 原生注解工具类，提供注解判断、查找、属性读取、元注解解析、合并、缓存等通用能力
+
+使用方法（Test包）：io.github.atengk.annotation
+
+
+
