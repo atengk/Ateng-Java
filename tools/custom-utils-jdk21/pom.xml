@@ -138,6 +138,17 @@
             <artifactId>spring-tx</artifactId>
         </dependency>
 
+        <!-- Jackson XML：对象、Tree、Map 与 XML 互转核心依赖 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-xml</artifactId>
+        </dependency>
+
+        <!-- Jackson JavaTime：支持 LocalDate、LocalDateTime 等 JDK 8+ 时间类型 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
     </dependencies>
 
     <!-- 依赖版本管理 -->

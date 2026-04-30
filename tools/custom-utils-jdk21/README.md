@@ -215,3 +215,25 @@ Map 工具类
 
 
 
+## XmlUtil
+
+系统运行环境工具类，提供操作系统、JVM、进程、环境变量、路径、命令、网络、容器和诊断等通用能力
+
+使用方法（Test包）：io.github.atengk.xml
+
+添加依赖
+
+```xml
+<!-- Jackson XML：对象、Tree、Map 与 XML 互转核心依赖 -->
+<dependency>
+    <groupId>com.fasterxml.jackson.dataformat</groupId>
+    <artifactId>jackson-dataformat-xml</artifactId>
+</dependency>
+
+<!-- Jackson JavaTime：支持 LocalDate、LocalDateTime 等 JDK 8+ 时间类型 -->
+<dependency>
+    <groupId>com.fasterxml.jackson.datatype</groupId>
+    <artifactId>jackson-datatype-jsr310</artifactId>
+</dependency>
+```
+
