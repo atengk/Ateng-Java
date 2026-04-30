@@ -96,7 +96,16 @@ io.github.atengk.utils.validate.controller.ValidateUtilDemoController
 
 Spring 上下文工具类
 
-使用方法：io.github.atengk.controller.SpringUtilDemoController
+使用方法：io.github.atengk.spring
+
+添加依赖
+
+```xml
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-tx</artifactId>
+</dependency>
+```
 
 
 
