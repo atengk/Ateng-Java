@@ -1,25 +1,88 @@
-server:
-  port: 12015
-  servlet:
-    context-path: /
-spring:
-  main:
-    web-application-type: servlet
-  application:
-    name: ${project.artifactId}
 ---
-# 邮箱配置
+# 服务配置
+server:
+  # 服务端口
+  port: 12015
+
+# Spring 配置
+spring:
+  application:
+    # 应用名称
+    name: ${project.artifactId}
+
+# 日志配置
+logging:
+  level:
+    # 默认日志级别
+    root: INFO
+    # 项目包日志级别
+    io.github.atengk: DEBUG
+---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+---
 spring:
   mail:
-    host: smtp.qq.com
-    port: 465
-    username: 2385569970@qq.com
-    password: xxxxxx
+    # SMTP 服务器地址，例如 smtp.qq.com、smtp.163.com、smtp.exmail.qq.com
+    host: ${MAIL_HOST:smtp.qq.com}
+
+    # SMTP 服务端口，SSL 通常使用 465，STARTTLS 通常使用 587
+    port: ${MAIL_PORT:465}
+
+    # 发件邮箱账号
+    username: ${MAIL_USERNAME:your-email@qq.com}
+
+    # 邮箱授权码或应用专用密码，不建议使用邮箱登录密码
+    password: ${MAIL_PASSWORD:your-mail-auth-code}
+
+    # 默认邮件编码，建议统一使用 UTF-8
+    default-encoding: UTF-8
+
     properties:
       mail:
         smtp:
+          # 开启 SMTP 身份认证
           auth: true
+
+          # 使用 465 端口时通常开启 SSL
           ssl:
             enable: true
-    default-encoding: UTF-8
 
+          # SMTP 连接超时时间，单位毫秒
+          connectiontimeout: 10000
+
+          # SMTP 读取超时时间，单位毫秒
+          timeout: 10000
+
+          # SMTP 写入超时时间，单位毫秒
+          writetimeout: 10000
+mail:
+  biz:
+    # 是否启用邮件发送，测试环境可以关闭真实发送
+    enabled: true
+
+    # 默认发件人名称，会展示在收件人邮箱中
+    from-name: 系统通知
+
+    # 是否记录邮件发送日志
+    record-enabled: true
+
+    # 是否启用异步发送
+    async-enabled: true
+
+    # 测试环境收件人白名单，为空表示不限制
+    test-receiver-whitelist:
+      - test@example.com
+      - admin@example.com
+
+    # 单封邮件最大附件大小，单位 MB
+    max-attachment-size-mb: 20
+
+    # 单次最多收件人数，避免一次发送过多导致服务商拦截
+    max-receiver-count: 50

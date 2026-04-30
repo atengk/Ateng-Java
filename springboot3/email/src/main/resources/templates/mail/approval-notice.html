@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>审批通知</title>
+</head>
+<body>
+<div style="font-family: Arial, 'Microsoft YaHei', sans-serif; line-height: 1.8; color: #333;">
+    <h2 style="margin-bottom: 16px;">审批通知</h2>
+
+    <p>
+        您有一条新的审批任务：
+        <strong th:text="${approvalTitle}">采购申请审批</strong>
+    </p>
+
+    <table style="border-collapse: collapse; width: 100%; margin-top: 16px;">
+        <tr>
+            <td style="border: 1px solid #ddd; padding: 8px; width: 120px;">申请人</td>
+            <td style="border: 1px solid #ddd; padding: 8px;" th:text="${applicantName}">张三</td>
+        </tr>
+        <tr>
+            <td style="border: 1px solid #ddd; padding: 8px;">申请时间</td>
+            <td style="border: 1px solid #ddd; padding: 8px;" th:text="${applyTime}">2026-04-30 10:30:00</td>
+        </tr>
+        <tr>
+            <td style="border: 1px solid #ddd; padding: 8px;">审批状态</td>
+            <td style="border: 1px solid #ddd; padding: 8px;" th:text="${approvalStatus}">待审批</td>
+        </tr>
+    </table>
+
+    <p style="margin-top: 20px;">
+        <a th:href="${approvalUrl}"
+           style="display: inline-block; padding: 8px 16px; background: #1677ff; color: #fff; text-decoration: none; border-radius: 4px;">
+            查看审批详情
+        </a>
+    </p>
+</div>
+</body>
+</html>
