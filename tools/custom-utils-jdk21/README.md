@@ -52,7 +52,7 @@ io.github.atengk.controller.SecureDemoController
 ```java
 package io.github.atengk.config;
 
-import io.github.atengk.utils.ValidateUtil;
+import io.github.atengk.utils.validate.ValidateUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.validation.Validator;
 import org.springframework.context.annotation.Configuration;
@@ -87,7 +87,7 @@ public class ValidateUtilConfig {
 **使用方法**
 
 ```
-io.github.atengk.controller.ValidateUtilDemoController
+io.github.atengk.utils.validate.controller.ValidateUtilDemoController
 ```
 
 

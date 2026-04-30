@@ -1,7 +1,7 @@
-package io.github.atengk.controller;
+package io.github.atengk.utils.validate.controller;
 
 import cn.hutool.core.lang.Dict;
-import io.github.atengk.utils.ValidateUtil;
+import io.github.atengk.utils.validate.ValidateUtil;
 import jakarta.validation.Validator;
 import jakarta.validation.constraints.*;
 import org.slf4j.Logger;

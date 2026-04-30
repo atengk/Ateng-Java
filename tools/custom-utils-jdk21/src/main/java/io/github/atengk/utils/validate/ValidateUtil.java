@@ -1,4 +1,4 @@
-package io.github.atengk.utils;
+package io.github.atengk.utils.validate;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.text.CharSequenceUtil;

@@ -1,6 +1,6 @@
-package io.github.atengk.config;
+package io.github.atengk.utils.validate.config;
 
-import io.github.atengk.utils.ValidateUtil;
+import io.github.atengk.utils.validate.ValidateUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.validation.Validator;
 import org.springframework.context.annotation.Configuration;
