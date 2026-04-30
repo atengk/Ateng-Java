@@ -333,3 +333,13 @@ PDF 通用工具类，基于 OpenPDF 封装 PDF 创建、编辑、读取、加�
     </dependency>
 </dependencies>
 ```
+
+
+
+
+
+## DiffUtil
+
+差异对比工具类，覆盖单值、对象、集合、Map、文本、JSON、文件、补丁、审计日志、树、快照和同步数据等常见项目场景
+
+使用方法（Test包）：io.github.atengk.diff
