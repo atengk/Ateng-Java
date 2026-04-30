@@ -507,6 +507,7 @@ export default defineConfig({
                     {
                         text: 'Kafka',
                         items: [
+                            { text: '开发使用文档', link: '/mq/kafka/README' },
                             { text: '生产者', link: '/mq/kafka-provider/README' },
                             { text: '消费者', link: '/mq/kafka-consumer/README' }
                         ]
