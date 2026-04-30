@@ -21,5 +21,6 @@
         <module>rocketmq-provider</module>
         <module>rocketmq-consumer</module>
         <module>rabbitmq</module>
+        <module>kafka</module>
     </modules>
 </project>
