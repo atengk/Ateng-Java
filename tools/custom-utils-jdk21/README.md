@@ -207,11 +207,11 @@ Map 工具类
 
 
 
-## SystemUtil
+## OsUtil
 
 系统运行环境工具类，提供操作系统、JVM、进程、环境变量、路径、命令、网络、容器和诊断等通用能力
 
-使用方法（Test包）：io.github.atengk.system
+使用方法（Test包）：io.github.atengk.os
 
 
 

@@ -20,7 +20,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.time.Duration;
 import java.time.Instant;
@@ -58,7 +57,7 @@ import java.util.regex.Pattern;
  * @author Ateng
  * @since 2026-04-30
  */
-public final class SystemUtil {
+public final class OsUtil {
 
     private static final Charset DEFAULT_CHARSET = Charset.defaultCharset();
     private static final int DEFAULT_COMMAND_TIMEOUT_MILLIS = 60_000;
@@ -66,8 +65,8 @@ public final class SystemUtil {
     private static final Pattern CONTAINER_ID_PATTERN = Pattern.compile("[0-9a-fA-F]{64}");
     private static final AtomicInteger SHUTDOWN_HOOK_INDEX = new AtomicInteger(1);
 
-    private SystemUtil() {
-        throw new UnsupportedOperationException("SystemUtil 是静态工具类，禁止实例化");
+    private OsUtil() {
+        throw new UnsupportedOperationException("OsUtil 是静态工具类，禁止实例化");
     }
 
     /**
@@ -1971,7 +1970,7 @@ public final class SystemUtil {
     public static Optional<Path> getResourcePath(String name) {
         String resourceName = requireText(name, "资源名称不能为空");
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        URL resource = classLoader == null ? SystemUtil.class.getClassLoader().getResource(resourceName) : classLoader.getResource(resourceName);
+        URL resource = classLoader == null ? OsUtil.class.getClassLoader().getResource(resourceName) : classLoader.getResource(resourceName);
         if (resource == null) {
             return Optional.empty();
         }
@@ -2146,7 +2145,7 @@ public final class SystemUtil {
      */
     public static Thread addShutdownHook(Runnable runnable) {
         Objects.requireNonNull(runnable, "关闭钩子逻辑不能为空");
-        Thread thread = new Thread(runnable, "system-util-shutdown-hook-" + SHUTDOWN_HOOK_INDEX.getAndIncrement());
+        Thread thread = new Thread(runnable, "os-util-shutdown-hook-" + SHUTDOWN_HOOK_INDEX.getAndIncrement());
         Runtime.getRuntime().addShutdownHook(thread);
         return thread;
     }
@@ -2663,7 +2662,7 @@ public final class SystemUtil {
 
     private static Optional<Path> getCodeLocation() {
         try {
-            CodeSource codeSource = SystemUtil.class.getProtectionDomain().getCodeSource();
+            CodeSource codeSource = OsUtil.class.getProtectionDomain().getCodeSource();
             if (codeSource == null || codeSource.getLocation() == null) {
                 return Optional.empty();
             }
