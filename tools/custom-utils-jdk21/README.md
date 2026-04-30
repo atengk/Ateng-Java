@@ -245,3 +245,10 @@ Map 工具类
 </dependency>
 ```
 
+
+
+## CodecUtil
+
+通用编解码工具类
+
+使用方法（Test包）：io.github.atengk.codec
