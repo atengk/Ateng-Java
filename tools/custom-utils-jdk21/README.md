@@ -311,3 +311,25 @@ Word 文档工具类，基于 Apache POI 的 XWPFDocument 实现常用 docx 操�
 </dependencies>
 ```
 
+
+
+## PDFUtil
+
+PDF 通用工具类，基于 OpenPDF 封装 PDF 创建、编辑、读取、加密、表单和常用业务能力
+
+使用方法（Test包）：io.github.atengk.pdf
+
+添加依赖
+
+```xml
+<properties>
+    <openpdf.version>3.0.3</openpdf.version>
+</properties>
+<dependencies>
+    <dependency>
+        <groupId>com.github.librepdf</groupId>
+        <artifactId>openpdf</artifactId>
+        <version>${openpdf.version}</version>
+    </dependency>
+</dependencies>
+```

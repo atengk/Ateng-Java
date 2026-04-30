@@ -62,6 +62,7 @@
 
         <poi.version>5.5.1</poi.version>
 
+        <openpdf.version>3.0.3</openpdf.version>
     </properties>
 
     <!-- 项目依赖 -->
@@ -167,6 +168,12 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>${poi.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>${openpdf.version}</version>
         </dependency>
     </dependencies>
 
