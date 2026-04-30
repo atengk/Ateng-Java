@@ -255,4 +255,27 @@ Map 工具类
 
 
 
+## OshiUtil
+
+OSHI 系统监控静态工具类，封装操作系统、CPU、内存、磁盘、网络、进程、硬件、JVM 和运行环境信息
+
+使用方法（Test包）：io.github.atengk.oshi
+
+添加依赖
+
+```xml
+<properties>
+    <oshi.version>6.12.0</oshi.version>
+</properties>
+<dependencies>
+    <!-- OSHI JNA 版 -->
+    <dependency>
+        <groupId>com.github.oshi</groupId>
+        <artifactId>oshi-core</artifactId>
+        <version>${oshi.version}</version>
+    </dependency>
+</dependencies>
+```
+
+
 
