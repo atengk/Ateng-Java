@@ -523,6 +523,7 @@ export default defineConfig({
                     {
                         text: 'RocketMQ',
                         items: [
+                            { text: '开发使用文档', link: '/mq/rocketmq/README' },
                             { text: '生产者', link: '/mq/rocketmq-provider/README' },
                             { text: '消费者', link: '/mq/rocketmq-consumer/README' }
                         ]
