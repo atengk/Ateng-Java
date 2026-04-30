@@ -1,8 +1,8 @@
 package io.github.atengk.enums.sample;
 
 
-import io.github.atengk.annotation.EnumDict;
-import io.github.atengk.annotation.EnumItem;
+import io.github.atengk.utils.enumutil.annotation.EnumDict;
+import io.github.atengk.utils.enumutil.annotation.EnumItem;
 
 /**
  * 注解式枚举项。

@@ -1,9 +1,9 @@
 package io.github.atengk.enums.util;
 
-import io.github.atengk.annotation.EnumDict;
-import io.github.atengk.core.FrontendEnum;
+import io.github.atengk.utils.enumutil.annotation.EnumDict;
+import io.github.atengk.utils.enumutil.core.FrontendEnum;
 import io.github.atengk.enums.sample.scanned.ScannedStatusEnum;
-import io.github.atengk.utils.EnumUtil;
+import io.github.atengk.utils.enumutil.EnumUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 

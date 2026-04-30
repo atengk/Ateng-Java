@@ -1,4 +1,4 @@
-package io.github.atengk.annotation;
+package io.github.atengk.utils.enumutil.annotation;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

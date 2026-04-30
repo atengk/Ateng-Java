@@ -1,4 +1,4 @@
-package io.github.atengk.core;
+package io.github.atengk.utils.enumutil.core;
 
 /**
  * 描述枚举契约。

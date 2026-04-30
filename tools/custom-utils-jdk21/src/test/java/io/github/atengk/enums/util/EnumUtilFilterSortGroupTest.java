@@ -2,7 +2,7 @@ package io.github.atengk.enums.util;
 
 import io.github.atengk.enums.sample.OrderStatusEnum;
 import io.github.atengk.enums.sample.UserStatusEnum;
-import io.github.atengk.utils.EnumUtil;
+import io.github.atengk.utils.enumutil.EnumUtil;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

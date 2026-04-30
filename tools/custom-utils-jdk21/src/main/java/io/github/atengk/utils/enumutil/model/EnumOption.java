@@ -1,4 +1,4 @@
-package io.github.atengk.model;
+package io.github.atengk.utils.enumutil.model;
 
 import java.util.List;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package io.github.atengk.core;
+package io.github.atengk.utils.enumutil.core;
 
 /**
  * 启停状态枚举契约。

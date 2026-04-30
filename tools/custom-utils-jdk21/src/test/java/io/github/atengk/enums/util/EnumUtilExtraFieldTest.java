@@ -2,8 +2,8 @@ package io.github.atengk.enums.util;
 
 import io.github.atengk.enums.sample.AnnotatedItemEnum;
 import io.github.atengk.enums.sample.UserStatusEnum;
-import io.github.atengk.model.EnumOption;
-import io.github.atengk.utils.EnumUtil;
+import io.github.atengk.utils.enumutil.model.EnumOption;
+import io.github.atengk.utils.enumutil.EnumUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 

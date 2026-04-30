@@ -3,7 +3,7 @@ package io.github.atengk.enums.util;
 import io.github.atengk.enums.sample.AnnotatedItemEnum;
 import io.github.atengk.enums.sample.FieldOnlyEnum;
 import io.github.atengk.enums.sample.UserStatusEnum;
-import io.github.atengk.utils.EnumUtil;
+import io.github.atengk.utils.enumutil.EnumUtil;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

@@ -1,10 +1,10 @@
-package io.github.atengk.utils;
+package io.github.atengk.utils.enumutil;
 
-import io.github.atengk.annotation.EnumDict;
-import io.github.atengk.annotation.EnumItem;
-import io.github.atengk.core.*;
-import io.github.atengk.model.EnumMetadata;
-import io.github.atengk.model.EnumOption;
+import io.github.atengk.utils.enumutil.annotation.EnumDict;
+import io.github.atengk.utils.enumutil.annotation.EnumItem;
+import io.github.atengk.utils.enumutil.core.*;
+import io.github.atengk.utils.enumutil.model.EnumMetadata;
+import io.github.atengk.utils.enumutil.model.EnumOption;
 
 import java.io.File;
 import java.io.IOException;

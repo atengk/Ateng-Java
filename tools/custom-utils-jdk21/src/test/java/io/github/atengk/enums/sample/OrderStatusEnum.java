@@ -1,9 +1,9 @@
 package io.github.atengk.enums.sample;
 
 
-import io.github.atengk.annotation.EnumDict;
-import io.github.atengk.core.FrontendEnum;
-import io.github.atengk.core.GroupEnum;
+import io.github.atengk.utils.enumutil.annotation.EnumDict;
+import io.github.atengk.utils.enumutil.core.FrontendEnum;
+import io.github.atengk.utils.enumutil.core.GroupEnum;
 
 import java.util.Map;
 
