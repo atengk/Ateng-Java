@@ -343,3 +343,12 @@ PDF 通用工具类，基于 OpenPDF 封装 PDF 创建、编辑、读取、加�
 差异对比工具类，覆盖单值、对象、集合、Map、文本、JSON、文件、补丁、审计日志、树、快照和同步数据等常见项目场景
 
 使用方法（Test包）：io.github.atengk.diff
+
+
+
+
+## IdUtil
+
+ID 工具类，提供 UUID、UUID v7、Snowflake、ULID、业务单号、TraceId、短 ID、验证码、文件名、安全随机 ID 等常用能力
+
+使用方法（Test包）：io.github.atengk.id
