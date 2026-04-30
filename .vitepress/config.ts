@@ -514,6 +514,7 @@ export default defineConfig({
                     {
                         text: 'RabbitMQ',
                         items: [
+                            { text: '开发使用文档', link: '/mq/rabbitmq/README' },
                             { text: '生产者', link: '/mq/rabbitmq-provider/README' },
                             { text: '消费者', link: '/mq/rabbitmq-consumer/README' }
                         ]
