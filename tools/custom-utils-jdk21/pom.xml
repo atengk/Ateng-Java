@@ -59,6 +59,9 @@
         <xz.version>1.12</xz.version>
 
         <oshi.version>6.12.0</oshi.version>
+
+        <poi.version>5.5.1</poi.version>
+
     </properties>
 
     <!-- 项目依赖 -->
@@ -159,7 +162,12 @@
             <version>${oshi.version}</version>
         </dependency>
 
-
+        <!-- Apache POI OOXML，用于处理 docx 文档 -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
     </dependencies>
 
     <!-- 依赖版本管理 -->

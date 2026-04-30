@@ -287,3 +287,27 @@ OSHI 系统监控静态工具类，封装操作系统、CPU、内存、磁盘、
 
 使用方法（Test包）：io.github.atengk.random
 
+
+
+## WordUtil
+
+Word 文档工具类，基于 Apache POI 的 XWPFDocument 实现常用 docx 操作
+
+使用方法（Test包）：io.github.atengk.word
+
+添加依赖
+
+```xml
+<properties>
+    <poi.version>5.5.1</poi.version>
+</properties>
+<dependencies>
+    <!-- Apache POI OOXML，用于处理 docx 文档 -->
+    <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>${poi.version}</version>
+    </dependency>
+</dependencies>
+```
+
