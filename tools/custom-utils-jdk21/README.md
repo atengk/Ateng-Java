@@ -244,3 +244,15 @@ Map 工具类
 图像处理工具类，提供读取、写入、缩放、裁剪、压缩、格式转换、水印、拼接、校验等常用能力
 
 使用方法（Test包）：io.github.atengk.image
+
+
+
+## DesensitizedUtil
+
+数据脱敏工具类，提供常见个人信息、联系方式、账号凭证、金融支付、网络设备、文本、日志、对象字段等脱敏能力
+
+使用方法（Test包）：io.github.atengk.desensitized
+
+
+
+
