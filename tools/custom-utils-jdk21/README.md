@@ -237,3 +237,10 @@ Map 工具类
 </dependency>
 ```
 
+
+
+## ImageUtil
+
+图像处理工具类，提供读取、写入、缩放、裁剪、压缩、格式转换、水印、拼接、校验等常用能力
+
+使用方法（Test包）：io.github.atengk.image
