@@ -1,4 +1,4 @@
-package io.github.atengk.utils;
+package io.github.atengk.utils.spring;
 
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletContext;

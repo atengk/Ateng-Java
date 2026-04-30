@@ -1,6 +1,6 @@
 package io.github.atengk.spring;
 
-import io.github.atengk.utils.SpringUtil;
+import io.github.atengk.utils.spring.SpringUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.boot.info.BuildProperties;

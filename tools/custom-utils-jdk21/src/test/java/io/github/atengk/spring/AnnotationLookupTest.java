@@ -1,6 +1,6 @@
 package io.github.atengk.spring;
 
-import io.github.atengk.utils.SpringUtil;
+import io.github.atengk.utils.spring.SpringUtil;
 import org.junit.jupiter.api.Test;
 
 import java.lang.annotation.Retention;
