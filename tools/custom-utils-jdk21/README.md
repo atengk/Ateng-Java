@@ -196,3 +196,12 @@ Map 工具类
 通用编解码工具类
 
 使用方法（Test包）：io.github.atengk.codec
+
+
+
+## ResourceUtil
+
+基于 Spring Resource 的资源工具类
+
+使用方法（Test包）：io.github.atengk.resource
+
