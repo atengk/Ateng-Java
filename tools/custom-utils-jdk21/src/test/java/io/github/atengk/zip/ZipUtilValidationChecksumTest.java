@@ -1,7 +1,7 @@
 package io.github.atengk.zip;
 
-import io.github.atengk.exception.ZipUtilException;
-import io.github.atengk.utils.ZipUtil;
+import io.github.atengk.utils.zip.exception.ZipUtilException;
+import io.github.atengk.utils.zip.ZipUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

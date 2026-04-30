@@ -1,4 +1,4 @@
-package io.github.atengk.exception;
+package io.github.atengk.utils.zip.exception;
 
 /**
  * 压缩解压工具异常，统一包装底层 IO、格式、密码、校验等异常。

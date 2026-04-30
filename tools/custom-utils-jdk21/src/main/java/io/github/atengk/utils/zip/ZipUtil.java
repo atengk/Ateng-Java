@@ -1,6 +1,6 @@
-package io.github.atengk.utils;
+package io.github.atengk.utils.zip;
 
-import io.github.atengk.exception.ZipUtilException;
+import io.github.atengk.utils.zip.exception.ZipUtilException;
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.model.FileHeader;
 import net.lingala.zip4j.model.ZipParameters;
