@@ -15,29 +15,43 @@
     <packaging>pom</packaging>
     <!-- 项目包含的子模块 -->
     <modules>
+        <!-- P0：最高优先级，Spring Boot 项目最常用，建议优先掌握和沉淀 -->
         <module>singleton</module>
-        <module>factory</module>
         <module>strategy</module>
         <module>template</module>
-        <module>decorator</module>
         <module>proxy</module>
-        <module>observer</module>
+        <module>factory</module>
+        <module>factorymethod</module>
+        <module>builder</module>
         <module>adapter</module>
         <module>facade</module>
         <module>chain</module>
-        <module>builder</module>
-        <module>prototype</module>
+
+        <!-- P1：高优先级，业务复杂后非常常见 -->
+        <module>observer</module>
         <module>state</module>
         <module>command</module>
+        <module>decorator</module>
+        <module>abstractfactory</module>
         <module>composite</module>
         <module>iterator</module>
-        <module>abstractfactory</module>
-        <module>factorymethod</module>
+
+        <!-- P2：中优先级，适合特定业务结构或复杂扩展场景 -->
         <module>bridge</module>
         <module>mediator</module>
-        <module>flyweight</module>
+        <module>prototype</module>
         <module>memento</module>
-        <module>interpreter</module>
         <module>visitor</module>
+
+        <!-- P3：低优先级，场景更窄，建议了解但不必优先落地 -->
+        <module>flyweight</module>
+        <module>interpreter</module>
+
+        <!-- 非 GoF，但 Spring Boot 项目常用 -->
+        <module>event-driven</module>
+        <module>repository</module>
+        <module>specification</module>
+        <module>nullobject</module>
+        <module>dependency-injection</module>
     </modules>
 </project>

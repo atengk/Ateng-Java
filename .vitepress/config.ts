@@ -695,29 +695,60 @@ export default defineConfig({
                 text: '设计模式',
                 collapsed: false,
                 items: [
-                    {text: '单例模式', link: '/designpattern/singleton/README'},
-                    {text: '🔥工厂模式🔥', link: '/designpattern/factory/README'},
-                    {text: '🔥策略模式🔥', link: '/designpattern/strategy/README'},
-                    {text: '模板方法模式', link: '/designpattern/template/README'},
-                    {text: '装饰器模式', link: '/designpattern/decorator/README'},
-                    {text: '代理模式', link: '/designpattern/proxy/README'},
-                    {text: '适配器模式', link: '/designpattern/adapter/README'},
-                    {text: '外观模式', link: '/designpattern/facade/README'},
-                    {text: '责任链模式', link: '/designpattern/chain/README'},
-                    {text: '构建者模式', link: '/designpattern/builder/README'},
-                    {text: '原型模式', link: '/designpattern/prototype/README'},
-                    {text: '状态模式', link: '/designpattern/state/README'},
-                    {text: '命令模式', link: '/designpattern/command/README'},
-                    {text: '组合模式', link: '/designpattern/composite/README'},
-                    {text: '迭代器模式', link: '/designpattern/iterator/README'},
-                    {text: '抽象工厂模式', link: '/designpattern/abstractfactory/README'},
-                    {text: '工厂方法模式', link: '/designpattern/factorymethod/README'},
-                    {text: '桥接模式', link: '/designpattern/bridge/README'},
-                    {text: '中介者模式', link: '/designpattern/mediator/README'},
-                    {text: '享元模式', link: '/designpattern/flyweight/README'},
-                    {text: '备忘录模式', link: '/designpattern/memento/README'},
-                    {text: '解释器模式', link: '/designpattern/interpreter/README'},
-                    {text: '访问者模式', link: '/designpattern/visitor/README'}
+                    {
+                        text: 'P0：最高优先级，Spring Boot 项目最常用',
+                        items: [
+                            {text: '单例模式', link: '/designpattern/singleton/README'},
+                            {text: '策略模式', link: '/designpattern/strategy/README'},
+                            {text: '模板方法模式', link: '/designpattern/template/README'},
+                            {text: '代理模式', link: '/designpattern/proxy/README'},
+                            {text: '工厂模式', link: '/designpattern/factory/README'},
+                            {text: '工厂方法模式', link: '/designpattern/factorymethod/README'},
+                            {text: '构建者模式', link: '/designpattern/builder/README'},
+                            {text: '适配器模式', link: '/designpattern/adapter/README'},
+                            {text: '外观模式', link: '/designpattern/facade/README'},
+                            {text: '责任链模式', link: '/designpattern/chain/README'},
+                        ]
+                    },
+                    {
+                        text: 'P1：高优先级，业务复杂后非常常见',
+                        items: [
+                            {text: '观察者模式', link: '/designpattern/observer/README'},
+                            {text: '状态模式', link: '/designpattern/state/README'},
+                            {text: '命令模式', link: '/designpattern/command/README'},
+                            {text: '装饰器模式', link: '/designpattern/decorator/README'},
+                            {text: '抽象工厂模式', link: '/designpattern/abstractfactory/README'},
+                            {text: '组合模式', link: '/designpattern/composite/README'},
+                            {text: '迭代器模式', link: '/designpattern/iterator/README'},
+                        ]
+                    },
+                    {
+                        text: 'P2：中优先级，适合特定业务结构或复杂扩展场景',
+                        items: [
+                            {text: '桥接模式', link: '/designpattern/bridge/README'},
+                            {text: '中介者模式', link: '/designpattern/mediator/README'},
+                            {text: '原型模式', link: '/designpattern/prototype/README'},
+                            {text: '备忘录模式', link: '/designpattern/memento/README'},
+                            {text: '访问者模式', link: '/designpattern/visitor/README'},
+                        ]
+                    },
+                    {
+                        text: 'P3：低优先级，场景更窄，建议了解但不必优先落地',
+                        items: [
+                            {text: '享元模式', link: '/designpattern/flyweight/README'},
+                            {text: '解释器模式', link: '/designpattern/interpreter/README'},
+                        ]
+                    },
+                    {
+                        text: '非 GoF，但 Spring Boot 项目常用',
+                        items: [
+                            {text: '事件驱动模式', link: '/designpattern/event-driven/README'},
+                            {text: '仓储模式', link: '/designpattern/repository/README'},
+                            {text: '规格模式', link: '/designpattern/specification/README'},
+                            {text: '空对象模式', link: '/designpattern/nullobject/README'},
+                            {text: '依赖注入模式', link: '/designpattern/dependency-injection/README'},
+                        ]
+                    },
                 ]
             }
         },

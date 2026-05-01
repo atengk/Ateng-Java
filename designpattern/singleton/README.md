@@ -1,150 +1,237 @@
-# 单例模式
+# 设计模式：单例模式
 
-单例模式确保一个类在整个应用中只有一个实例，并提供全局访问点。在 Spring 中最常见的体现是 Bean 默认是单例作用域（`@Scope("singleton")`）。这种模式常用于管理全局资源，如配置类、工具类、线程池等。
+单例模式用于保证一个类在 JVM 进程内只有一个实例，并提供全局访问入口。在 JDK21 和 Spring Boot 3 项目中，单例模式通常用于全局配置、轻量级工具封装、缓存管理器、序列号生成器、客户端连接包装器等场景。
 
+需要注意：在 Spring Boot 项目中，大部分业务组件不建议手写单例，而是交给 Spring 容器管理。Spring Bean 默认就是单例作用域。
 
- 下面包含三种实用变体（推荐在企业项目中优先使用前两种）：
+## 基础配置
 
-- **1）Spring 管理的单例 Bean（推荐）** — 最符合 Spring 生态、简单且线程安全，适合大多数场景（配置、工具、ID 生成器等）。
-- **2）枚举单例（Enum Singleton）** — JDK 推荐的线程安全单例实现，适合独立工具类或非 Spring 管理的全局单例。
-- **3）双重检查锁（DCL）懒加载单例** — 经典写法，适合需要懒初始化并且不使用 Spring 管理时的场景（示范用途）。
+本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
 
-下面直接给出可复制到项目的完整代码（每个文件的包名均为 `io.github.atengk.designpattern.singleton`）。你可以把它们放进 `src/main/java`，启动 Spring Boot 后访问演示接口。
+文件位置：`pom.xml`
 
-------
+```xml
+<dependencies>
+    <!-- Spring Boot Web，用于提供接口验证单例行为 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
 
-## Spring 管理的单例服务
+    <!-- Hutool 工具类，项目中用于字符串、ID、日期等通用处理 -->
+    <dependency>
+        <groupId>cn.hutool</groupId>
+        <artifactId>hutool-all</artifactId>
+        <version>5.8.27</version>
+    </dependency>
 
-```java
-package io.github.atengk.designpattern.singleton;
+    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
 
-import org.springframework.stereotype.Service;
-
-import java.util.concurrent.atomic.AtomicLong;
-
-/**
- * Spring 管理的单例服务。
- *
- * <p>说明：
- * 1. Spring 容器中默认的 Bean 作用域是单例（singleton），因此使用 {@code @Service} 注解的类在容器中是单例的。
- * 2. 本类演示一个线程安全的 ID 生成器，适合作为应用级全局服务（例如订单号、流水号等）。
- * 3. 推荐在业务中优先使用 Spring 管理的单例 Bean，而非手动实现单例，便于集成 AOP、配置、测试等功能。
- * </p>
- */
-@Service
-public class SpringSingletonService {
-
-    /**
-     * 线程安全的自增计数器，用于生成唯一 ID。
-     */
-    private final AtomicLong idCounter = new AtomicLong(0L);
-
-    /**
-     * 生成下一个唯一 ID。
-     *
-     * @return 下一个唯一 ID（long 类型）
-     */
-    public long nextId() {
-        return idCounter.incrementAndGet();
-    }
-
-    /**
-     * 获取当前计数值（不会改变计数器）。
-     *
-     * @return 当前计数值
-     */
-    public long currentId() {
-        return idCounter.get();
-    }
-}
+    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
 ```
 
-------
+如果使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
 
-## 枚举单例实现
+## 核心概念
+
+单例模式的目标是控制对象创建，避免同一个全局组件被重复实例化。
+
+常见实现方式如下：
+
+| 实现方式           |   是否推荐 | 适用场景                           |
+| -------------- | -----: | ------------------------------ |
+| 枚举单例           |     推荐 | 纯 Java 工具、全局管理器、无 Spring 依赖的组件 |
+| 静态内部类单例        |     推荐 | 需要懒加载的普通 Java 类                |
+| 双重检查锁单例        | 可用但不优先 | 需要延迟加载且构造成本较高的对象               |
+| Spring 单例 Bean |   强烈推荐 | Spring Boot 项目中的业务组件、服务类、配置类   |
+| 饿汉式单例          |     可用 | 对象轻量，启动即需要                     |
+| 懒汉式非线程安全写法     |    不推荐 | 多线程环境下存在并发问题                   |
+
+在 Spring Boot 项目中，优先级通常是：
+
+```text
+Spring Bean 单例 > 枚举单例 > 静态内部类单例 > 双重检查锁单例
+```
+
+## 枚举单例
+
+枚举单例是 Java 中非常稳妥的单例实现方式，天然防止反射破坏，并且天然支持序列化安全。适合无状态工具、轻状态管理器、全局 ID 生成器等场景。
+
+文件位置：`src/main/java/io/github/atengk/design/singleton/GlobalTraceIdGenerator.java`
+
+下面的枚举单例用于生成全局追踪 ID，可在非 Spring 管理的工具场景中直接调用。
 
 ```java
-package io.github.atengk.designpattern.singleton;
+package io.github.atengk.design.singleton;
+
+import cn.hutool.core.util.IdUtil;
+import lombok.extern.slf4j.Slf4j;
 
 /**
- * 枚举单例实现。
+ * 全局追踪ID生成器
  *
- * <p>说明：
- * 1. 使用枚举实现单例是最简单、最安全的单例实现方式，能防止反射、序列化导致的多实例问题。
- * 2. 适用于独立工具类或在非 Spring 管理环境下需要单例的场景。
- * </p>
+ * @author Ateng
+ * @since 2026-04-30
  */
-public enum EnumSingleton {
+@Slf4j
+public enum GlobalTraceIdGenerator {
+
     /**
-     * 单例实例。
+     * 单例实例
      */
     INSTANCE;
 
     /**
-     * 示例状态或配置字段，演示可在单例中持有状态。
-     */
-    private String configValue = "default";
-
-    /**
-     * 获取配置值。
+     * 生成追踪ID
      *
-     * @return 当前配置值
+     * @return 追踪ID
      */
-    public String getConfigValue() {
-        return configValue;
-    }
-
-    /**
-     * 设置配置值。
-     *
-     * @param configValue 新的配置值
-     */
-    public void setConfigValue(String configValue) {
-        this.configValue = configValue;
+    public String nextTraceId() {
+        String traceId = IdUtil.fastSimpleUUID();
+        log.debug("生成追踪ID：{}", traceId);
+        return traceId;
     }
 }
 ```
 
-------
-
-## 双重检查锁（Double-Checked Locking，DCL）单例实现
+使用方式：
 
 ```java
-package io.github.atengk.designpattern.singleton;
+String traceId = GlobalTraceIdGenerator.INSTANCE.nextTraceId();
+```
+
+这种方式适合工具层或基础设施层，不依赖 Spring 容器。缺点是不能直接使用 Spring 的依赖注入能力。
+
+## 静态内部类单例
+
+静态内部类单例利用 JVM 类加载机制实现延迟加载和线程安全。它适合需要懒加载，但又不希望使用同步锁的场景。
+
+文件位置：`src/main/java/io/github/atengk/design/singleton/CacheKeyBuilder.java`
+
+下面的静态内部类单例用于统一构建缓存 Key。
+
+```java
+package io.github.atengk.design.singleton;
+
+import cn.hutool.core.util.StrUtil;
+import lombok.extern.slf4j.Slf4j;
 
 /**
- * 双重检查锁（Double-Checked Locking，DCL）单例实现。
+ * 缓存Key构建器
  *
- * <p>说明：
- * 1. 这是经典的懒加载单例实现，适合不使用 Spring 管理、但想在第一次使用时才初始化的场景。
- * 2. 该实现使用 volatile 修饰实例变量以保证可见性，避免指令重排问题。
- * 3. 在 Spring 管理环境中通常不推荐使用手写单例，除非有特殊理由。
- * </p>
+ * @author Ateng
+ * @since 2026-04-30
  */
-public final class DoubleCheckedLockingSingleton {
+@Slf4j
+public class CacheKeyBuilder {
 
-    /**
-     * 单例实例，使用 volatile 防止指令重排导致的安全问题。
-     */
-    private static volatile DoubleCheckedLockingSingleton instance;
+    private static final String DEFAULT_SEPARATOR = ":";
 
-    /**
-     * 私有构造函数，防止外部直接实例化。
-     */
-    private DoubleCheckedLockingSingleton() {
-        // Prevent instantiation
+    private CacheKeyBuilder() {
+        log.info("初始化缓存Key构建器");
     }
 
     /**
-     * 获取单例实例。使用双重检查锁以降低同步开销。
+     * 获取单例实例
      *
-     * @return 单例实例
+     * @return 缓存Key构建器
      */
-    public static DoubleCheckedLockingSingleton getInstance() {
+    public static CacheKeyBuilder getInstance() {
+        return Holder.INSTANCE;
+    }
+
+    /**
+     * 构建缓存Key
+     *
+     * @param module 模块名称
+     * @param bizId  业务ID
+     * @return 缓存Key
+     */
+    public String build(String module, String bizId) {
+        if (StrUtil.hasBlank(module, bizId)) {
+            log.warn("构建缓存Key失败，模块名称或业务ID为空");
+            throw new IllegalArgumentException("模块名称和业务ID不能为空");
+        }
+
+        String cacheKey = StrUtil.join(DEFAULT_SEPARATOR, module, bizId);
+        log.debug("构建缓存Key：{}", cacheKey);
+        return cacheKey;
+    }
+
+    /**
+     * 单例持有者
+     *
+     * @author Ateng
+     * @since 2026-04-30
+     */
+    private static class Holder {
+
+        private static final CacheKeyBuilder INSTANCE = new CacheKeyBuilder();
+    }
+}
+```
+
+使用方式：
+
+```java
+String cacheKey = CacheKeyBuilder.getInstance().build("user", "10001");
+```
+
+静态内部类单例的优点是懒加载、线程安全、代码清晰。缺点是仍然属于手写单例，不适合需要 Spring 注入其他 Bean 的复杂业务类。
+
+## 双重检查锁单例
+
+双重检查锁，也就是 Double-Checked Locking，适合构造成本较高、需要延迟初始化的对象。JDK5 以后必须配合 `volatile` 使用，否则可能出现指令重排序问题。
+
+文件位置：`src/main/java/io/github/atengk/design/singleton/HeavyClientHolder.java`
+
+下面的示例模拟一个重量级客户端对象的单例持有器。
+
+```java
+package io.github.atengk.design.singleton;
+
+import cn.hutool.core.date.DateUtil;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 重量级客户端持有器
+ *
+ * @author Ateng
+ * @since 2026-04-30
+ */
+@Slf4j
+public class HeavyClientHolder {
+
+    private static volatile HeavyClientHolder instance;
+
+    private final String initTime;
+
+    private HeavyClientHolder() {
+        this.initTime = DateUtil.now();
+        log.info("初始化重量级客户端持有器，初始化时间：{}", initTime);
+    }
+
+    /**
+     * 获取单例实例
+     *
+     * @return 重量级客户端持有器
+     */
+    public static HeavyClientHolder getInstance() {
         if (instance == null) {
-            synchronized (DoubleCheckedLockingSingleton.class) {
+            synchronized (HeavyClientHolder.class) {
                 if (instance == null) {
-                    instance = new DoubleCheckedLockingSingleton();
+                    instance = new HeavyClientHolder();
                 }
             }
         }
@@ -152,103 +239,281 @@ public final class DoubleCheckedLockingSingleton {
     }
 
     /**
-     * 示例方法，返回一个字符串以示作用。
+     * 执行客户端请求
      *
-     * @return 示例字符串
+     * @param requestId 请求ID
+     * @return 执行结果
      */
-    public String hello() {
-        return "hello from DCL singleton";
+    public String execute(String requestId) {
+        log.info("执行客户端请求，请求ID：{}，客户端初始化时间：{}", requestId, initTime);
+        return "执行成功，requestId=" + requestId + ", initTime=" + initTime;
     }
 }
 ```
 
-------
+这种方式代码比静态内部类复杂，除非确实需要更细粒度控制初始化逻辑，否则优先使用枚举单例、静态内部类单例或 Spring Bean 单例。
 
-## 单例模式演示控制器
+## Spring Boot 单例 Bean
+
+在 Spring Boot 3 中，`@Component`、`@Service`、`@Repository`、`@Controller` 等组件默认都是单例 Bean。也就是说，Spring 容器启动时会创建一个 Bean 实例，后续注入的都是同一个对象。
+
+这也是 Spring Boot 项目中最推荐的单例方式。
+
+### 文件结构
+
+```text
+src/main/java/io/github/atengk/design/
+├── SingletonApplication.java
+├── controller/
+│   └── SerialNumberController.java
+└── service/
+    ├── SerialNumberService.java
+    └── impl/
+        └── SerialNumberServiceImpl.java
+```
+
+文件位置：`src/main/java/io/github/atengk/design/SingletonApplication.java`
+
+下面是 Spring Boot 启动类。
 
 ```java
-package io.github.atengk.designpattern.singleton;
+package io.github.atengk.design;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.util.HashMap;
-import java.util.Map;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * 单例模式演示控制器。
+ * 单例模式示例启动类
  *
- * <p>提供简单的 HTTP 接口以验证三种单例用法在运行时的行为。</p>
+ * @author Ateng
+ * @since 2026-04-30
  */
-@RestController
-@RequestMapping("/designpattern/singleton")
-public class SingletonDemoController {
-
-    private final SpringSingletonService springSingletonService;
+@SpringBootApplication
+public class SingletonApplication {
 
     /**
-     * Spring 会注入 {@link SpringSingletonService}，该 Bean 在容器中为单例。
+     * 应用启动入口
      *
-     * @param springSingletonService 注入的单例服务
+     * @param args 启动参数
      */
-    public SingletonDemoController(SpringSingletonService springSingletonService) {
-        this.springSingletonService = springSingletonService;
-    }
-
-    /**
-     * 演示 Spring 单例 Bean 的 ID 生成功能。
-     *
-     * @return 包含生成 ID 的 JSON 对象
-     */
-    @GetMapping("/spring/id")
-    public Map<String, Object> springId() {
-        Map<String, Object> result = new HashMap<>(4);
-        long id = springSingletonService.nextId();
-        result.put("type", "spring-singleton");
-        result.put("id", id);
-        result.put("currentId", springSingletonService.currentId());
-        return result;
-    }
-
-    /**
-     * 演示枚举单例的读取与修改状态。
-     *
-     * @return 当前枚举单例的状态
-     */
-    @GetMapping("/enum/value")
-    public Map<String, Object> enumValue() {
-        Map<String, Object> result = new HashMap<>(4);
-        EnumSingleton singleton = EnumSingleton.INSTANCE;
-        String before = singleton.getConfigValue();
-        singleton.setConfigValue(before + "-updated");
-        result.put("type", "enum-singleton");
-        result.put("before", before);
-        result.put("after", singleton.getConfigValue());
-        return result;
-    }
-
-    /**
-     * 演示 DCL 单例的简单方法调用。
-     *
-     * @return DCL 单例返回的示例字符串
-     */
-    @GetMapping("/dcl/hello")
-    public Map<String, Object> dclHello() {
-        Map<String, Object> result = new HashMap<>(3);
-        DoubleCheckedLockingSingleton instance = DoubleCheckedLockingSingleton.getInstance();
-        result.put("type", "dcl-singleton");
-        result.put("message", instance.hello());
-        return result;
+    public static void main(String[] args) {
+        SpringApplication.run(SingletonApplication.class, args);
     }
 }
 ```
 
-------
+文件位置：`src/main/java/io/github/atengk/design/service/SerialNumberService.java`
 
-## 实践建议
+下面是序列号服务接口。
 
-- **优先使用 Spring 单例 Bean**：绝大多数服务类、资源管理、工具类都应该交给 Spring 管理。这样可以享受依赖注入、AOP、生命周期管理、测试替换等优点。
-- **枚举单例**：当你需要一个**与 Spring 无关**的、抵抗反射与序列化破坏的单例（例如某些低依赖的工具或库代码）时使用。
-- **DCL 懒加载单例**：仅在确实需要延迟初始化但又不使用 Spring 管理的场景中使用，且实现时必须使用 `volatile` 保证线程安全。
+```java
+package io.github.atengk.design.service;
 
+/**
+ * 序列号服务
+ *
+ * @author Ateng
+ * @since 2026-04-30
+ */
+public interface SerialNumberService {
+
+    /**
+     * 生成下一个序列号
+     *
+     * @param bizType 业务类型
+     * @return 序列号
+     */
+    String nextSerialNumber(String bizType);
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/design/service/impl/SerialNumberServiceImpl.java`
+
+下面是默认单例 Bean 实现，使用 `ConcurrentHashMap` 和 `AtomicLong` 保证并发场景下的序列号递增安全。
+
+```java
+package io.github.atengk.design.service.impl;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.design.service.SerialNumberService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * 序列号服务实现
+ *
+ * @author Ateng
+ * @since 2026-04-30
+ */
+@Slf4j
+@Service
+public class SerialNumberServiceImpl implements SerialNumberService {
+
+    private final ConcurrentHashMap<String, AtomicLong> counterMap = new ConcurrentHashMap<>();
+
+    /**
+     * 生成下一个序列号
+     *
+     * @param bizType 业务类型
+     * @return 序列号
+     */
+    @Override
+    public String nextSerialNumber(String bizType) {
+        if (StrUtil.isBlank(bizType)) {
+            log.warn("生成序列号失败，业务类型为空");
+            throw new IllegalArgumentException("业务类型不能为空");
+        }
+
+        AtomicLong counter = counterMap.computeIfAbsent(bizType, key -> {
+            log.info("初始化业务类型计数器，业务类型：{}", key);
+            return new AtomicLong(0);
+        });
+
+        long sequence = counter.incrementAndGet();
+        String date = DateUtil.format(DateUtil.date(), "yyyyMMdd");
+        String serialNumber = StrUtil.format("{}-{}-{}", bizType.toUpperCase(), date, sequence);
+
+        log.info("生成序列号成功，业务类型：{}，序列号：{}", bizType, serialNumber);
+        return serialNumber;
+    }
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/design/controller/SerialNumberController.java`
+
+下面是用于验证 Spring 单例 Bean 行为的接口层代码。
+
+```java
+package io.github.atengk.design.controller;
+
+import io.github.atengk.design.service.SerialNumberService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 序列号控制器
+ *
+ * @author Ateng
+ * @since 2026-04-30
+ */
+@RestController
+@RequiredArgsConstructor
+public class SerialNumberController {
+
+    private final SerialNumberService serialNumberService;
+
+    /**
+     * 获取下一个序列号
+     *
+     * @param bizType 业务类型
+     * @return 序列号
+     */
+    @GetMapping("/singleton/serial-number")
+    public String nextSerialNumber(@RequestParam String bizType) {
+        return serialNumberService.nextSerialNumber(bizType);
+    }
+}
+```
+
+接口调用示例：
+
+```bash
+curl "http://localhost:8080/singleton/serial-number?bizType=order"
+curl "http://localhost:8080/singleton/serial-number?bizType=order"
+curl "http://localhost:8080/singleton/serial-number?bizType=pay"
+```
+
+可能返回：
+
+```text
+ORDER-20260430-1
+ORDER-20260430-2
+PAY-20260430-1
+```
+
+这里的 `SerialNumberServiceImpl` 是 Spring 管理的单例 Bean。由于 `counterMap` 是对象字段，因此同一个 Bean 实例内会持续维护不同业务类型的计数器。
+
+## Spring 单例 Bean 与普通单例的区别
+
+Spring 单例 Bean 的单例范围是 Spring 容器级别，不是 JVM 全局级别。
+
+也就是说：
+
+```text
+一个 Spring ApplicationContext 中，同一个 Bean 默认只有一个实例。
+多个 ApplicationContext 中，同一个 Bean 可以有多个实例。
+多个 JVM 进程中，同一个 Bean 也会有多个实例。
+```
+
+普通 Java 单例通常是 JVM 级别的单例。在单 JVM 单类加载器场景下，一个类对应一个单例对象。
+
+在 Spring Boot 项目中，推荐这样选择：
+
+| 场景                                   | 推荐方式                           |
+| ------------------------------------ | ------------------------------ |
+| Service、Manager、Client、Handler 等业务组件 | Spring 单例 Bean                 |
+| 无需依赖 Spring 的基础工具                    | 枚举单例                           |
+| 需要懒加载的普通 Java 对象                     | 静态内部类单例                        |
+| 复杂初始化且必须手动控制                         | 双重检查锁单例                        |
+| 分布式全局唯一对象                            | 不应使用本地单例，应使用 Redis、数据库、分布式锁等方案 |
+
+## 验证方式
+
+启动 Spring Boot 项目：
+
+```bash
+mvn spring-boot:run
+```
+
+执行接口：
+
+```bash
+curl "http://localhost:8080/singleton/serial-number?bizType=order"
+curl "http://localhost:8080/singleton/serial-number?bizType=order"
+```
+
+如果第二次请求返回的序号递增，说明 Spring 单例 Bean 中的状态被同一个实例持续维护。
+
+也可以通过日志观察：
+
+```text
+初始化业务类型计数器，业务类型：order
+生成序列号成功，业务类型：order，序列号：ORDER-20260430-1
+生成序列号成功，业务类型：order，序列号：ORDER-20260430-2
+```
+
+`初始化业务类型计数器` 只打印一次，说明同一个业务类型的计数器没有被重复创建。
+
+## 注意事项
+
+单例对象中不要随意保存用户级、请求级、线程级状态。例如当前登录用户、请求参数、分页参数、临时表单数据等，不应该放在单例 Bean 的成员变量中。
+
+错误示例：
+
+```java
+private Long currentUserId;
+private String currentRequestId;
+private List<String> currentImportRows;
+```
+
+这些字段在并发请求下会互相污染，导致线程安全问题。
+
+Spring 单例 Bean 中可以保存线程安全的共享资源，例如：
+
+```java
+private final ConcurrentHashMap<String, AtomicLong> counterMap = new ConcurrentHashMap<>();
+```
+
+如果共享状态涉及分布式部署，不要依赖本地单例。比如订单号、库存扣减、优惠券发放、限流计数等场景，应使用 Redis、数据库唯一约束、分布式锁或专门的中间件来保证全局一致性。
+
+## 总结
+
+在 JDK21 和 Spring Boot 3 项目中，单例模式的实践重点不是“如何手写一个单例”，而是“如何选择合适的单例管理边界”。
+
+普通 Java 工具类优先使用枚举单例或静态内部类单例。Spring Boot 业务组件优先交给 Spring 容器管理。只要组件由 Spring 扫描并注册为 Bean，默认就是单例作用域，不需要额外手写单例逻辑。
