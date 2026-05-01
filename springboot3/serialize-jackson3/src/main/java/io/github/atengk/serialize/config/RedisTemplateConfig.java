@@ -1,64 +1,79 @@
 package io.github.atengk.serialize.config;
 
+import io.github.atengk.serialize.common.jackson.JacksonJsonMapperFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
+import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * RedisTemplate 配置类，统一定义 Key/Value 的序列化策略。
- * Key 使用字符串序列化，Value 使用 Jackson JSON 序列化。
+ * RedisTemplate 序列化配置。
+ * <p>
+ * 定义 Redis 数据访问组件的序列化策略，统一约束 Key、Value、HashKey、HashValue
+ * 在 Redis 协议边界上的编码与解码行为。
+ * </p>
+ * <p>
+ * Key 与 HashKey 采用字符串序列化策略，保证键空间具备可读性与命令行可操作性；
+ * Value 与 HashValue 采用 Jackson JSON 序列化策略，保证对象结构以 JSON 形式
+ * 持久化，并与 JDK 原生序列化机制解耦。
+ * </p>
  *
  * @author Ateng
  * @since 2026-04-14
  */
-@Configuration
+@Slf4j
+@Configuration(proxyBeanMethods = false)
 public class RedisTemplateConfig {
 
     /**
-     * 构建并初始化 RedisTemplate，配置序列化器。
+     * 声明 RedisTemplate 实例。
+     * <p>
+     * 该模板面向 Redis 对象化访问场景，使用字符串序列化器处理 Key 与 HashKey，
+     * 使用存储场景专用 Jackson 序列化器处理 Value 与 HashValue。
+     * </p>
      *
      * @param redisConnectionFactory Redis 连接工厂
      * @return RedisTemplate 实例
      */
-    @Bean
+    @Bean(name = "redisTemplate")
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
-        // 创建 RedisTemplate 实例
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        log.info("初始化 RedisTemplate 序列化配置");
 
-        // 设置 Redis 连接工厂
-        template.setConnectionFactory(redisConnectionFactory);
+        RedisTemplate<String, Object> redisTemplate = new RedisTemplate<>();
+        redisTemplate.setConnectionFactory(redisConnectionFactory);
 
-        // 创建字符串序列化器（用于 Key）
-        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+        RedisSerializer<String> keySerializer = new StringRedisSerializer();
+        RedisSerializer<Object> valueSerializer = redisValueSerializer();
 
-        // 设置 Key 序列化器
-        template.setKeySerializer(stringRedisSerializer);
+        redisTemplate.setKeySerializer(keySerializer);
+        redisTemplate.setHashKeySerializer(keySerializer);
+        redisTemplate.setStringSerializer(keySerializer);
 
-        // 设置 Hash Key 序列化器
-        template.setHashKeySerializer(stringRedisSerializer);
+        redisTemplate.setValueSerializer(valueSerializer);
+        redisTemplate.setHashValueSerializer(valueSerializer);
+        redisTemplate.setDefaultSerializer(valueSerializer);
 
-        // 构建自定义 JsonMapper（统一 JSON 规则）
+        redisTemplate.afterPropertiesSet();
+        return redisTemplate;
+    }
+
+    /**
+     * 构建 Redis Value 序列化器。
+     * <p>
+     * 使用存储场景专用 jsonMapper 构建 JSON 序列化器，使 Redis 数据结构
+     * 与 HTTP API 响应模型保持序列化策略隔离。
+     * </p>
+     *
+     * @return Redis Value 序列化器
+     */
+    private RedisSerializer<Object> redisValueSerializer() {
         JsonMapper jsonMapper = JacksonJsonMapperFactory.buildStorageJsonMapper();
-
-        // 创建 Jackson 序列化器（用于 Value）
-        JacksonJsonRedisSerializer<Object> jacksonJsonRedisSerializer =
-                new JacksonJsonRedisSerializer<>(jsonMapper, Object.class);
-
-        // 设置 Value 序列化器
-        template.setValueSerializer(jacksonJsonRedisSerializer);
-
-        // 设置 Hash Value 序列化器
-        template.setHashValueSerializer(jacksonJsonRedisSerializer);
-
-        // 初始化 RedisTemplate
-        template.afterPropertiesSet();
-
-        // 返回配置完成的 RedisTemplate
-        return template;
+        return new GenericJacksonJsonRedisSerializer(jsonMapper);
     }
 
 }
