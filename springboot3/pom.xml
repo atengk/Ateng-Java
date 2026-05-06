@@ -39,5 +39,10 @@
         <module>xss</module>
         <module>crypto</module>
         <module>serialize-jackson3</module>
+        <module>boot3-thymeleaf</module>
+        <module>boot3-freemarker</module>
+        <module>boot3-beetl</module>
+        <module>i18n</module>
+        <module>springdoc-openapi</module>
     </modules>
 </project>
