@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 
 /**
  * 邮件服务接口。
@@ -42,6 +43,12 @@ public class MailController {
      */
     @Qualifier("mailTaskExecutor")
     private final Executor mailTaskExecutor;
+
+    /**
+     * 邮件发送虚拟线程执行器。
+     */
+    @Qualifier("mailVirtualThreadExecutor")
+    private final ExecutorService mailVirtualThreadExecutor;
 
     /**
      * 高优先级邮件异步线程池，可选注入。

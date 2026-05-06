@@ -6,10 +6,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * 邮件异步线程池配置。
+ * 邮件异步配置。
  *
  * @author Ateng
  * @since 2026-05-06
@@ -56,4 +58,30 @@ public class MailAsyncConfig {
 
         return executor;
     }
+
+    /**
+     * 邮件发送虚拟线程执行器。
+     *
+     * <p>
+     * 使用 JDK 21 虚拟线程，每个邮件发送任务独立分配一个虚拟线程。
+     * 适用于 SMTP、HTTP、数据库等阻塞 IO 型邮件发送场景。
+     * </p>
+     *
+     * @return 邮件虚拟线程执行器
+     */
+    @Bean(value = "mailVirtualThreadExecutor", destroyMethod = "close")
+    public ExecutorService mailVirtualThreadExecutor() {
+        java.util.concurrent.ThreadFactory threadFactory = Thread.ofVirtual()
+                .name("mail-virtual-", 0)
+                .uncaughtExceptionHandler((thread, throwable) ->
+                        log.error("邮件虚拟线程执行异常，thread={}", thread.getName(), throwable))
+                .factory();
+
+        ExecutorService executorService = Executors.newThreadPerTaskExecutor(threadFactory);
+
+        log.info("邮件虚拟线程执行器初始化完成，threadNamePrefix=mail-virtual-，mode=virtual-thread-per-task");
+
+        return executorService;
+    }
+
 }
