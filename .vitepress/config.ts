@@ -688,8 +688,8 @@ export default defineConfig({
                             { text: 'Spring Cloud Sentinel（AI生成）', link: '/distributed/spring-cloud-sentinel/README_AI' },
                             { text: 'Spring Cloud Seata', link: '/distributed/spring-cloud-seata/README' },
                             { text: 'Spring Cloud Seata（AI生成）', link: '/distributed/spring-cloud-seata/README_AI' },
-                            { text: 'Spring Cloud Stream', link: '/distributed/spring-cloud-stream/README' }
-                            { text: 'Spring Cloud Stream（AI生成）', link: '/distributed/spring-cloud-stream/README_AI' }
+                            { text: 'Spring Cloud Stream', link: '/distributed/spring-cloud-stream/README' },
+                            { text: 'Spring Cloud Stream（AI生成）', link: '/distributed/spring-cloud-stream/README_AI' },
                         ]
                     },
                     {
