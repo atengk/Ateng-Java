@@ -207,6 +207,7 @@ export default defineConfig({
                   text: '集成与扩展',
                   items: [
                     { text: 'Email邮箱', link: '/springboot3/email/README' },
+                    { text: 'Email邮箱（AI生成）', link: '/springboot3/email/README_AI' },
                     { text: 'Jasypt配置加密', link: '/springboot3/jasypt/README' },
                     { text: 'Docker插件', link: '/springboot3/docker/README' }
                   ]
