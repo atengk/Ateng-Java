@@ -590,9 +590,12 @@ export default defineConfig({
                         text: 'Spring 体系',
                         items: [
                             { text: 'RestTemplate', link: '/http/rest-template/README' },
+                            { text: 'RestTemplate（AI生成）', link: '/http/rest-template/README_AI' },
                             { text: 'RestTemplate JDK8', link: '/http/rest-template-jdk8/README' },
                             { text: 'WebClient', link: '/http/web-client/README' },
-                            { text: 'RestClient', link: '/http/rest-client/README' }
+                            { text: 'WebClient（AI生成）', link: '/http/web-client/README_AI' },
+                            { text: 'RestClient', link: '/http/rest-client/README' },
+                            { text: 'RestClient（AI生成）', link: '/http/rest-client/README_AI' },
                         ]
                     },
                     {
