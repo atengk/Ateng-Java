@@ -157,29 +157,45 @@ export default defineConfig({
                   text: '基础能力',
                   items: [
                     { text: '配置文件', link: '/springboot3/config/README' },
+                    { text: '配置文件（AI生成）', link: '/springboot3/config/README_AI' },
                     { text: 'Banner', link: '/springboot3/banner/README' },
+                    { text: 'Banner（AI生成）', link: '/springboot3/banner/README_AI' },
                     { text: '应用启动', link: '/springboot3/startup/README' },
-                    { text: '虚拟线程', link: '/springboot3/virtual/README' }
+                    { text: '应用启动（AI生成）', link: '/springboot3/startup/README_AI' },
+                    { text: '虚拟线程', link: '/springboot3/virtual/README' },
+                    { text: '虚拟线程（AI生成）', link: '/springboot3/virtual/README_AI' },
                   ]
                 },
                 {
                   text: 'Web 开发',
                   items: [
                     { text: 'HTTP接口', link: '/springboot3/http-interface/README' },
+                    { text: 'HTTP接口（AI生成）', link: '/springboot3/http-interface/README_AI' },
                     { text: '参数效验', link: '/springboot3/validator/README' },
+                    { text: '参数效验（AI生成）', link: '/springboot3/validator/README_AI' },
                     { text: '异常处理', link: '/springboot3/exception/README' },
+                    { text: '异常处理（AI生成）', link: '/springboot3/exception/README_AI' },
                     { text: 'AOP切面', link: '/springboot3/aop/README' },
+                    { text: 'AOP切面（AI生成）', link: '/springboot3/aop/README_AI' },
                     { text: '拦截器', link: '/springboot3/boot3-interceptor/README' },
+                    { text: '拦截器（AI生成）', link: '/springboot3/boot3-interceptor/README_AI' },
                     { text: '过滤器', link: '/springboot3/boot3-filter/README' },
+                    { text: '过滤器（AI生成）', link: '/springboot3/boot3-filter/README_AI' },
                     { text: 'XSS', link: '/springboot3/xss/README' },
+                    { text: 'XSS（AI生成）', link: '/springboot3/xss/README_AI' },
                     { text: '接口加密解密', link: '/springboot3/crypto/README' },
+                    { text: '接口加密解密（AI生成）', link: '/springboot3/crypto/README_AI' },
+                    { text: '国际化 i18n', link: '/springboot3/crypto/README' },
+                    { text: 'springdoc-openapi 接口文档', link: '/springboot3/springdoc-openapi/README' },
                   ]
                 },
                 {
                   text: '可观测性',
                   items: [
                     { text: '日志管理', link: '/springboot3/log/README' },
+                    { text: '日志管理（AI生成）', link: '/springboot3/log/README_AI' },
                     { text: 'Actuator', link: '/springboot3/actuator/README' },
+                    { text: 'Actuator（AI生成）', link: '/springboot3/actuator/README_AI' },
                     {
                       text: 'Admin 监控',
                       items: [
@@ -196,6 +212,7 @@ export default defineConfig({
                       text: '序列化和反序列化',
                       items: [
                         { text: 'Jackson', link: '/springboot3/serialize-jackson/README' },
+                        { text: 'Jackson（AI生成）', link: '/springboot3/serialize-jackson/README_AI' },
                         { text: 'Jackson3', link: '/springboot3/serialize-jackson3/README' },
                         { text: 'Fastjson', link: '/springboot3/serialize-fastjson/README' },
                         { text: 'Fastjson2', link: '/springboot3/serialize-fastjson2/README' }
@@ -209,7 +226,16 @@ export default defineConfig({
                     { text: 'Email邮箱', link: '/springboot3/email/README' },
                     { text: 'Email邮箱（AI生成）', link: '/springboot3/email/README_AI' },
                     { text: 'Jasypt配置加密', link: '/springboot3/jasypt/README' },
+                    { text: 'Jasypt配置加密（AI生成）', link: '/springboot3/jasypt/README_AI' },
                     { text: 'Docker插件', link: '/springboot3/docker/README' }
+                  ]
+                },
+                {
+                  text: '模版引擎',
+                  items: [
+                    { text: 'Thymeleaf', link: '/springboot3/boot3-thymeleaf/README' },
+                    { text: 'FreeMarker', link: '/springboot3/boot3-freemarker/README' },
+                    { text: 'Beetl', link: '/springboot3/boot3-beetl/README' },
                   ]
                 },
                 {
@@ -304,10 +330,12 @@ export default defineConfig({
                         items: [
                             { text: 'Hutool', link: '/tools/hutool/README' },
                             { text: 'Lombok', link: '/tools/lombok/README' },
+                            { text: 'Lombok（AI生成）', link: '/tools/lombok/README_AI' },
                             { text: 'QLExpress 规则引擎', link: '/tools/qlexpress4/README' },
                             { text: 'Drools 规则引擎', link: '/tools/drools/README' },
                             { text: 'Warm Flow 工作流', link: '/tools/warm-flow/README' },
                             { text: 'ip2region 离线IP管理', link: '/tools/ip2region/README' },
+                            { text: 'ip2region 离线IP管理（AI生成）', link: '/tools/ip2region/README_AI' },
                             { text: 'SQL 格式化工具', link: '/tools/sql-formatter/README' },
                         ]
                     },
@@ -315,20 +343,23 @@ export default defineConfig({
                         text: '数据处理',
                         items: [
                             { text: 'Stream', link: '/tools/stream/README' },
-                            { text: 'MapStructPlus', link: '/tools/mapstruct-plus/README' }
+                            { text: 'MapStructPlus', link: '/tools/mapstruct-plus/README' },
+                            { text: 'MapStructPlus（AI生成）', link: '/tools/mapstruct-plus/README_AI' },
                         ]
                     },
                     {
                         text: '并发与异步',
                         items: [
                             { text: '异步编程', link: '/tools/async/README' },
-                            { text: '线程池', link: '/tools/thread-pool/README' }
+                            { text: '线程池', link: '/tools/thread-pool/README' },
+                            { text: '线程池（AI生成）', link: '/tools/thread-pool/README_AI' },
                         ]
                     },
                     {
                         text: '文件与文档',
                         items: [
                             { text: 'Apache Tika', link: '/tools/apache-tika/README' },
+                            { text: 'Apache Tika（AI生成）', link: '/tools/apache-tika/README_AI' },
                             { text: 'OnlyOffice', link: '/tools/onlyoffice/README' }
                         ]
                     },
@@ -360,14 +391,17 @@ export default defineConfig({
                                 text: 'MyBatis 体系',
                                 items: [
                                     { text: 'MyBatis-Flex', link: '/database/mybatis-flex/README' },
+                                    { text: 'MyBatis-Flex（AI生成）', link: '/database/mybatis-flex/README_AI' },
                                     { text: 'MyBatis Plus', link: '/database/mybatis-plus/README' },
+                                    { text: 'MyBatis Plus（AI生成）', link: '/database/mybatis-plus/README_AI' },
                                     { text: 'MyBatis Plus JDK8', link: '/database/mybatis-plus-jdk8/README' }
                                 ]
                             },
                             {
                                 text: 'JPA 体系',
                                 items: [
-                                    { text: 'JPA', link: '/database/spring-jpa/README' }
+                                    { text: 'JPA', link: '/database/spring-jpa/README' },
+                                    { text: 'JPA（AI生成）', link: '/database/spring-jpa/README_AI' },
                                 ]
                             },
                             {
@@ -380,6 +414,7 @@ export default defineConfig({
                                 text: '增强工具',
                                 items: [
                                     { text: 'JdbcTemplate', link: '/database/jdbc-template/README' },
+                                    { text: 'JdbcTemplate（AI生成）', link: '/database/jdbc-template/README_AI' },
                                     { text: 'AutoTable', link: '/database/autotable/README' },
                                     { text: 'Beetl', link: '/database/beetl/README' }
                                 ]
@@ -430,8 +465,10 @@ export default defineConfig({
                         text: 'Redis',
                         items: [
                             { text: 'RedisTemplate', link: '/cache/redis-template/README' },
+                            { text: 'RedisTemplate（AI生成）', link: '/cache/redis-template/README_AI' },
                             { text: 'RedisTemplate-JDK8', link: '/cache/redis-template-jdk8/README' },
                             { text: 'Redisson', link: '/cache/redisson/README' },
+                            { text: 'Redisson（AI生成）', link: '/cache/redisson/README_AI' },
                             { text: 'Redisson-JDK8', link: '/cache/redisson-jdk8/README' },
                             { text: 'Redisson 项目实战案例', link: '/cache/redisson-example/README' },
                         ]
@@ -440,13 +477,16 @@ export default defineConfig({
                         text: '缓存框架',
                         items: [
                             { text: 'SpringCache', link: '/cache/spring-cache/README' },
-                            { text: 'JetCache', link: '/cache/jetcache/README' }
+                            { text: 'SpringCache（AI生成）', link: '/cache/spring-cache/README_AI' },
+                            { text: 'JetCache', link: '/cache/jetcache/README' },
+                            { text: 'JetCache（AI生成）', link: '/cache/jetcache/README_AI' },
                         ]
                     },
                     {
                         text: '本地缓存',
                         items: [
-                            { text: 'Caffeine', link: '/cache/caffeine/README' }
+                            { text: 'Caffeine', link: '/cache/caffeine/README' },
+                            { text: 'Caffeine（AI生成）', link: '/cache/caffeine/README_AI' },
                         ]
                     }
                 ]
@@ -460,13 +500,16 @@ export default defineConfig({
                         text: '权限认证',
                         items: [
                             {text: 'Sa-Token', link: '/auth/sa-token/README'},
-                            {text: 'Spring Security', link: '/auth/spring-security/README'}
+                            {text: 'Sa-Token（AI生成）', link: '/auth/sa-token/README_AI'},
+                            {text: 'Spring Security', link: '/auth/spring-security/README'},
+                            {text: 'Spring Security（AI生成）', link: '/auth/spring-security/README_AI'},
                         ]
                     },
                     {
                         text: 'License 授权',
                         items: [
                             {text: 'License 授权', link: '/auth/license/README'},
+                            {text: 'License 授权（AI生成）', link: '/auth/license/README_AI'},
                         ]
                     }
                 ]
@@ -595,9 +638,13 @@ export default defineConfig({
                         text: '实时通信协议',
                         items: [
                             { text: 'WebSocket', link: '/realtime/websocket/README' },
+                            { text: 'WebSocket（AI生成）', link: '/realtime/websocket/README_AI' },
                             { text: 'STOMP', link: '/realtime/stomp/README' },
+                            { text: 'STOMP（AI生成）', link: '/realtime/stomp/README_AI' },
                             { text: 'SSE', link: '/realtime/sse/README' },
-                            { text: 'MQTT', link: '/realtime/mqtt/README' }
+                            { text: 'SSE（AI生成）', link: '/realtime/sse/README_AI' },
+                            { text: 'MQTT', link: '/realtime/mqtt/README' },
+                            { text: 'MQTT（AI生成）', link: '/realtime/mqtt/README_AI' },
                         ]
                     },
                     {
@@ -605,13 +652,14 @@ export default defineConfig({
                         items: [
                             { text: 'WebSocket Single', link: '/realtime/websocket-single/README' },
                             { text: 'WebSocket Cluster', link: '/realtime/websocket-cluster/README' },
-                            { text: 'STOMP Cluster', link: '/realtime/stomp-cluster/README' }
+                            { text: 'STOMP Cluster', link: '/realtime/stomp-cluster/README' },
                         ]
                     },
                     {
                         text: '底层网络',
                         items: [
-                            { text: 'Netty', link: '/realtime/netty/README' }
+                            { text: 'Netty', link: '/realtime/netty/README' },
+                            { text: 'Netty（AI生成）', link: '/realtime/netty/README_AI' },
                         ]
                     }
                 ]
@@ -631,18 +679,26 @@ export default defineConfig({
                         text: '服务治理（Spring Cloud）',
                         items: [
                             { text: 'Nacos', link: '/distributed/spring-cloud-nacos/README' },
+                            { text: 'Nacos（AI生成）', link: '/distributed/spring-cloud-nacos/README_AI' },
                             { text: 'Spring Cloud Gateway', link: '/distributed/spring-cloud-gateway/README' },
+                            { text: 'Spring Cloud Gateway（AI生成）', link: '/distributed/spring-cloud-gateway/README_AI' },
                             { text: 'Spring Cloud OpenFeign', link: '/distributed/spring-cloud-openfeign/README' },
+                            { text: 'Spring Cloud OpenFeign（AI生成）', link: '/distributed/spring-cloud-openfeign/README_AI' },
                             { text: 'Spring Cloud Sentinel', link: '/distributed/spring-cloud-sentinel/README' },
+                            { text: 'Spring Cloud Sentinel（AI生成）', link: '/distributed/spring-cloud-sentinel/README_AI' },
                             { text: 'Spring Cloud Seata', link: '/distributed/spring-cloud-seata/README' },
+                            { text: 'Spring Cloud Seata（AI生成）', link: '/distributed/spring-cloud-seata/README_AI' },
                             { text: 'Spring Cloud Stream', link: '/distributed/spring-cloud-stream/README' }
+                            { text: 'Spring Cloud Stream（AI生成）', link: '/distributed/spring-cloud-stream/README_AI' }
                         ]
                     },
                     {
                         text: 'RPC 通信',
                         items: [
                             { text: 'Apache Dubbo', link: '/distributed/spring-cloud-dubbo-provider/README' },
-                            { text: 'Spring gRPC', link: '/distributed/spring-grpc/README' }
+                            { text: 'Apache Dubbo（AI生成）', link: '/distributed/spring-cloud-dubbo-provider/README_AI' },
+                            { text: 'Spring gRPC', link: '/distributed/spring-grpc/README' },
+                            { text: 'Spring gRPC（AI生成）', link: '/distributed/spring-grpc/README_AI' },
                         ]
                     },
                     {
