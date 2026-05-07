@@ -18,5 +18,6 @@
          <module>snail-job</module>
          <module>power-job</module>
          <module>database-job</module>
+         <module>xxl-job</module>
     </modules>
 </project>

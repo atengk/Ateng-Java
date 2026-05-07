@@ -21,5 +21,6 @@
         <module>spark-standalone</module>
         <module>spark-cluster</module>
         <module>zookeeper</module>
+        <module>hdfs</module>
     </modules>
 </project>

@@ -347,6 +347,7 @@ export default defineConfig({
                         text: '数据处理',
                         items: [
                             { text: 'Stream', link: '/tools/stream/README' },
+                            { text: 'Stream（AI生成）', link: '/tools/stream/README_AI' },
                             { text: 'MapStructPlus', link: '/tools/mapstruct-plus/README' },
                             { text: 'MapStructPlus（AI生成）', link: '/tools/mapstruct-plus/README_AI' },
                         ]
@@ -628,14 +629,19 @@ export default defineConfig({
                     {
                         text: '本地任务',
                         items: [
-                            { text: 'Scheduled', link: '/task/scheduled/README' }
+                            { text: 'Scheduled', link: '/task/scheduled/README' },
+                            { text: 'Scheduled（AI生成）', link: '/task/scheduled/README_AI' },
                         ]
                     },
                     {
                         text: '分布式调度',
                         items: [
                             { text: 'PowerJob', link: '/task/power-job/README' },
-                            { text: 'Snail Job', link: '/task/snail-job/README' }
+                            { text: 'PowerJob（AI生成）', link: '/task/power-job/README_AI' },
+                            { text: 'Snail Job', link: '/task/snail-job/README' },
+                            { text: 'Snail Job（AI生成）', link: '/task/snail-job/README_AI' },
+                            { text: 'XXXL-JOB', link: '/task/snail-job/README' },
+                            { text: 'XXXL-JOB（AI生成）', link: '/task/snail-job/README_AI' },
                         ]
                     },
                     {
@@ -759,7 +765,15 @@ export default defineConfig({
                     {
                         text: 'Zookeeper',
                         items: [
-                            {text: '使用文档', link: '/bigdata/zookeeper/README'}
+                            {text: '使用文档', link: '/bigdata/zookeeper/README'},
+                            {text: '使用文档（AI生成）', link: '/bigdata/zookeeper/README_AI'},
+                        ]
+                    },
+                    {
+                        text: 'Apache HDFS',
+                        items: [
+                            {text: '使用文档', link: '/bigdata/hdfs/README'},
+                            {text: '使用文档（AI生成）', link: '/bigdata/hdfs/README_AI'},
                         ]
                     }
                 ]
