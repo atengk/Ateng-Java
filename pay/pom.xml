@@ -17,5 +17,6 @@
     <modules>
         <module>alipay</module>
         <module>IJPay</module>
+        <module>wechatpay</module>
     </modules>
 </project>

@@ -225,9 +225,13 @@ export default defineConfig({
                   items: [
                     { text: 'Email邮箱', link: '/springboot3/email/README' },
                     { text: 'Email邮箱（AI生成）', link: '/springboot3/email/README_AI' },
+                    { text: '钉钉开发', link: '/springboot3/dingtalk/README' },
+                    { text: '钉钉开发（AI生成）', link: '/springboot3/dingtalk/README_AI' },
+                    { text: '飞书开发', link: '/springboot3/feishu/README' },
+                    { text: '飞书开发（AI生成）', link: '/springboot3/feishu/README_AI' },
                     { text: 'Jasypt配置加密', link: '/springboot3/jasypt/README' },
                     { text: 'Jasypt配置加密（AI生成）', link: '/springboot3/jasypt/README_AI' },
-                    { text: 'Docker插件', link: '/springboot3/docker/README' }
+                    { text: 'Docker插件', link: '/springboot3/docker/README' },
                   ]
                 },
                 {
@@ -368,6 +372,7 @@ export default defineConfig({
                         items: [
                             { text: 'SSHJ', link: '/tools/sshj/README' },
                             { text: 'Apache MINA SSHD', link: '/tools/apache-mina-sshd/README' },
+                            { text: 'Apache MINA SSHD（AI生成）', link: '/tools/apache-mina-sshd/README_AI' },
                         ]
                     },
                     {
@@ -450,6 +455,7 @@ export default defineConfig({
                         text: '向量数据库',
                         items: [
                             { text: 'Milvus', link: '/database/milvus/README' },
+                            { text: 'Milvus（AI生成）', link: '/database/milvus/README_AI' },
                             { text: 'MilvusPlus', link: '/database/milvus-plus/README' },
                             { text: 'pgvector sql', link: '/database/pgvector/SQL' },
                         ]
@@ -523,7 +529,10 @@ export default defineConfig({
                         text: '支付',
                         items: [
                             {text: '支付宝支付', link: '/pay/alipay/README'},
-                            {text: 'IJPay聚合支付', link: '/pay/IJPay/README'}
+                            {text: '支付宝支付（AI生成）', link: '/pay/alipay/README_AI'},
+                            {text: '微信支付', link: '/pay/wechatpay/README'},
+                            {text: '微信支付（AI生成）', link: '/pay/wechatpay/README_AI'},
+                            {text: 'IJPay聚合支付', link: '/pay/IJPay/README'},
                         ]
                     }
                 ]
@@ -539,6 +548,11 @@ export default defineConfig({
                             {text: 'X File Storage', link: '/storage/x-file-storage/README'},
                             {text: 'AWS S3 JDK8', link: '/storage/aws-s3-jdk8/README'},
                             {text: 'AWS S3', link: '/storage/aws-s3/README'},
+                            {text: 'AWS S3（AI生成）', link: '/storage/aws-s3/README_AI'},
+                            {text: 'FTP', link: '/storage/ftp/README'},
+                            {text: 'FTP（AI生成）', link: '/storage/ftp/README_AI'},
+                            {text: 'SFTP', link: '/storage/sftp/README'},
+                            {text: 'SFTP（AI生成）', link: '/storage/sftp/README_AI'},
                         ]
                     }
                 ]

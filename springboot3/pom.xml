@@ -44,5 +44,7 @@
         <module>boot3-beetl</module>
         <module>i18n</module>
         <module>springdoc-openapi</module>
+        <module>dingtalk</module>
+        <module>feishu</module>
     </modules>
 </project>

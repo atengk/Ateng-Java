@@ -17,5 +17,7 @@
         <module>x-file-storage</module>
         <module>aws-s3-jdk8</module>
         <module>aws-s3</module>
+        <module>ftp</module>
+        <module>sftp</module>
     </modules>
 </project>
