@@ -770,7 +770,14 @@ export default defineConfig({
                         ]
                     },
                     {
-                        text: 'Apache HDFS',
+                        text: 'HBase',
+                        items: [
+                            {text: '使用文档', link: '/bigdata/hbase/README'},
+                            {text: '使用文档（AI生成）', link: '/bigdata/hbase/README_AI'},
+                        ]
+                    },
+                    {
+                        text: 'HDFS',
                         items: [
                             {text: '使用文档', link: '/bigdata/hdfs/README'},
                             {text: '使用文档（AI生成）', link: '/bigdata/hdfs/README_AI'},
