@@ -649,6 +649,30 @@ public final class FastJson2Util {
     }
 
     /**
+     * 对象转 JSON 字符串，使用安全数字序列化规则。
+     *
+     * <p>输出 null 字段，基于字段序列化，Long 转字符串，BigDecimal 使用普通数字格式输出。</p>
+     *
+     * @param obj 源对象
+     * @return JSON 字符串，失败返回 null
+     */
+    public static String toJsonStringWithSafeNumber(Object obj) {
+        return toJsonString(
+                obj,
+                // 序列化时输出 null 字段
+                JSONWriter.Feature.WriteNulls,
+                // 基于字段访问进行序列化，而不是通过 Getter 方法
+                JSONWriter.Feature.FieldBased,
+                // 序列化时输出 Map 中的 null 值
+                JSONWriter.Feature.WriteMapNullValue,
+                // 把 Long 类型转为字符串，避免前端精度丢失
+                JSONWriter.Feature.WriteLongAsString,
+                // BigDecimal 使用普通数字格式输出，避免科学计数法
+                JSONWriter.Feature.WriteBigDecimalAsPlain
+        );
+    }
+
+    /**
      * 对象转 JSON 字节数组。
      *
      * @param obj 源对象

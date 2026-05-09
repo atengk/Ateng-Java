@@ -89,8 +89,6 @@ public final class FastJsonUtil {
             SerializerFeature.WriteMapNullValue,
             // 禁用循环引用检测，避免出现 "$ref" 结构
             SerializerFeature.DisableCircularReferenceDetect,
-            // BigDecimal 输出为纯字符串（不使用科学计数法）
-            SerializerFeature.WriteBigDecimalAsPlain,
     };
 
     /**
@@ -173,6 +171,30 @@ public final class FastJsonUtil {
             log.warn("对象转 JSON 失败: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 对象转 JSON 字符串，使用安全数字序列化规则。
+     *
+     * <p>输出 null 字段，Long 转字符串，BigDecimal 使用普通数字格式输出。</p>
+     *
+     * @param obj 源对象
+     * @return JSON 字符串，失败返回 null
+     */
+    public static String toJsonStringWithSafeNumber(Object obj) {
+        return toJsonString(
+                obj,
+                // 输出为 null 的字段，否则默认会被忽略
+                SerializerFeature.WriteMapNullValue,
+                // 禁用循环引用检测，避免出现 "$ref" 结构
+                SerializerFeature.DisableCircularReferenceDetect,
+                // 序列化时输出 null 字段，包括普通对象字段和 Map 中的 null 值
+                SerializerFeature.WriteMapNullValue,
+                // BigDecimal 使用普通数字格式输出，避免科学计数法
+                SerializerFeature.WriteBigDecimalAsPlain,
+                // 浏览器安全输出（防止前端注入）
+                SerializerFeature.BrowserCompatible
+        );
     }
 
     /**

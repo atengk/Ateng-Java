@@ -1,17 +1,25 @@
 package local.ateng.java.customutils.utils;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import local.ateng.java.customutils.config.JacksonObjectMapperFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.*;
 
 /**
@@ -57,6 +65,67 @@ public final class JsonUtil {
             log.warn("对象转 JSON 失败: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 对象转 JSON 字符串，并支持指定写入器。
+     *
+     * @param obj          待序列化的对象
+     * @param objectWriter JSON 写入器
+     * @return JSON 字符串，失败时返回 null
+     */
+    public static String toJsonString(Object obj, ObjectWriter objectWriter) {
+        if (obj == null) {
+            return null;
+        }
+        try {
+            ObjectWriter writer = objectWriter == null ? OBJECT_MAPPER.writer() : objectWriter;
+            return writer.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            log.warn("对象转 JSON 失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 对象转 JSON 字符串，使用安全数字序列化规则。
+     *
+     * <p>输出 null 字段，基于字段序列化，Long 和 BigInteger 转字符串，BigDecimal 使用普通数字格式输出。</p>
+     *
+     * @param obj 待序列化的对象
+     * @return JSON 字符串，失败时返回 null
+     */
+    public static String toJsonStringWithSafeNumber(Object obj) {
+        return toJsonString(obj, buildSafeNumberObjectWriter());
+    }
+
+    /**
+     * 构建安全数字序列化写入器。
+     *
+     * @return JSON 写入器
+     */
+    private static ObjectWriter buildSafeNumberObjectWriter() {
+        ObjectMapper objectMapper = OBJECT_MAPPER.copy();
+
+        // 输出 null 字段，Jackson 默认会输出 null，这里显式声明，便于统一规则
+        objectMapper.setSerializationInclusion(JsonInclude.Include.ALWAYS);
+
+        // 基于字段访问进行序列化，不依赖 Getter 方法
+        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE);
+        objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+
+        SimpleModule simpleModule = new SimpleModule();
+        // Long 包装类型转字符串，避免前端精度丢失
+        simpleModule.addSerializer(Long.class, ToStringSerializer.instance);
+        // long 基本类型转字符串，避免前端精度丢失
+        simpleModule.addSerializer(Long.TYPE, ToStringSerializer.instance);
+        // BigInteger 大整数转字符串，避免前端精度丢失
+        simpleModule.addSerializer(BigInteger.class, ToStringSerializer.instance);
+        objectMapper.registerModule(simpleModule);
+
+        // BigDecimal 使用普通数字格式输出，避免科学计数法
+        return objectMapper.writer()
+                .with(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN);
     }
 
     /**
