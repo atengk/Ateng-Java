@@ -156,6 +156,8 @@ export default defineConfig({
                 {
                   text: '基础能力',
                   items: [
+                    { text: 'SpringBoot3 基础使用', link: '/springboot3/boot3-web/README' },
+                    { text: 'SpringBoot3 基础使用（AI生成）', link: '/springboot3/boot3-web/README_AI' },
                     { text: '配置文件', link: '/springboot3/config/README' },
                     { text: '配置文件（AI生成）', link: '/springboot3/config/README_AI' },
                     { text: 'Banner', link: '/springboot3/banner/README' },
@@ -336,8 +338,15 @@ export default defineConfig({
                             { text: 'Lombok', link: '/tools/lombok/README' },
                             { text: 'Lombok（AI生成）', link: '/tools/lombok/README_AI' },
                             { text: 'QLExpress 规则引擎', link: '/tools/qlexpress4/README' },
+                            { text: 'QLExpress 规则引擎（AI生成）', link: '/tools/qlexpress4/README_AI' },
                             { text: 'Drools 规则引擎', link: '/tools/drools/README' },
+                            { text: 'Drools 规则引擎（AI生成）', link: '/tools/drools/README_AI' },
                             { text: 'Warm Flow 工作流', link: '/tools/warm-flow/README' },
+                            { text: 'Warm Flow 工作流（AI生成）', link: '/tools/warm-flow/README_AI' },
+                            { text: 'LiteFlow 流程编排', link: '/tools/lite-flow/README' },
+                            { text: 'LiteFlow 流程编排（AI生成）', link: '/tools/lite-flow/README_AI' },
+                            { text: 'Flowable 工作流', link: '/tools/flowable/README' },
+                            { text: 'Flowable 工作流（AI生成）', link: '/tools/flowable/README_AI' },
                             { text: 'ip2region 离线IP管理', link: '/tools/ip2region/README' },
                             { text: 'ip2region 离线IP管理（AI生成）', link: '/tools/ip2region/README_AI' },
                             { text: 'SQL 格式化工具', link: '/tools/sql-formatter/README' },
@@ -356,6 +365,7 @@ export default defineConfig({
                         text: '并发与异步',
                         items: [
                             { text: '异步编程', link: '/tools/async/README' },
+                            { text: '异步编程（AI生成）', link: '/tools/async/README_AI' },
                             { text: '线程池', link: '/tools/thread-pool/README' },
                             { text: '线程池（AI生成）', link: '/tools/thread-pool/README_AI' },
                         ]

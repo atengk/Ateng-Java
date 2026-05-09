@@ -40,5 +40,7 @@
         <module>sql-formatter</module>
         <module>custom-utils-jdk21</module>
         <module>apache-mina-sshd</module>
+        <module>lite-flow</module>
+        <module>flowable</module>
     </modules>
 </project>
