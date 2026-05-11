@@ -1001,6 +1001,7 @@ export default defineConfig({
     ignoreDeadLinks: true,
     vite: {
         build: {
+            sourcemap: false,
             reportCompressedSize: false,
             chunkSizeWarningLimit: 1500
         }
