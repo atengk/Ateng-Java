@@ -316,9 +316,13 @@ export default defineConfig({
                         text: 'JSON 处理',
                         items: [
                             { text: 'Jackson', link: '/tools/jackson/README' },
+                            { text: 'Jackson（AI生成）', link: '/tools/jackson/README_AI' },
                             { text: 'Jackson3', link: '/tools/jackson3/README' },
+                            { text: 'Jackson3（AI生成）', link: '/tools/jackson3/README_AI' },
                             { text: 'FastJson', link: '/tools/fastjson1/README' },
-                            { text: 'FastJson2', link: '/tools/fastjson2/README' }
+                            { text: 'FastJson（AI生成）', link: '/tools/fastjson1/README_AI' },
+                            { text: 'FastJson2', link: '/tools/fastjson2/README' },
+                            { text: 'FastJson2（AI生成）', link: '/tools/fastjson2/README_AI' },
                         ]
                     },
                     {
@@ -335,6 +339,7 @@ export default defineConfig({
                         text: '工具库',
                         items: [
                             { text: 'Hutool', link: '/tools/hutool/README' },
+                            { text: 'Hutool（AI生成）', link: '/tools/hutool/README_AI' },
                             { text: 'Lombok', link: '/tools/lombok/README' },
                             { text: 'Lombok（AI生成）', link: '/tools/lombok/README_AI' },
                             { text: 'QLExpress 规则引擎', link: '/tools/qlexpress4/README' },
@@ -375,13 +380,15 @@ export default defineConfig({
                         items: [
                             { text: 'Apache Tika', link: '/tools/apache-tika/README' },
                             { text: 'Apache Tika（AI生成）', link: '/tools/apache-tika/README_AI' },
-                            { text: 'OnlyOffice', link: '/tools/onlyoffice/README' }
+                            { text: 'OnlyOffice', link: '/tools/onlyoffice/README' },
+                            { text: 'OnlyOffice（AI生成）', link: '/tools/onlyoffice/README_AI' },
                         ]
                     },
                     {
                         text: '网络与远程',
                         items: [
                             { text: 'SSHJ', link: '/tools/sshj/README' },
+                            { text: 'SSHJ（AI生成）', link: '/tools/sshj/README_AI' },
                             { text: 'Apache MINA SSHD', link: '/tools/apache-mina-sshd/README' },
                             { text: 'Apache MINA SSHD（AI生成）', link: '/tools/apache-mina-sshd/README_AI' },
                         ]
@@ -470,7 +477,27 @@ export default defineConfig({
                             { text: 'MilvusPlus', link: '/database/milvus-plus/README' },
                             { text: 'pgvector sql', link: '/database/pgvector/SQL' },
                         ]
-                    }
+                    },
+                    {
+                        text: '数据库使用文档',
+                        items: [
+                            {
+                                text: 'MySQL',
+                                items: [
+                                    { text: '使用文档', link: '/database/mysql/README' },
+                                    { text: '使用文档（AI生成）', link: '/database/mysql/README_AI' },
+                                    { text: '常用业务建模模型', link: '/database/mysql/modeling' },
+                                ]
+                            },
+                            {
+                                text: 'PostgreSQL',
+                                items: [
+                                    { text: '使用文档', link: '/database/postgresql/README' },
+                                    { text: '使用文档（AI生成）', link: '/database/postgresql/README_AI' },
+                                ]
+                            },
+                        ]
+                    },
                 ]
             },
 
