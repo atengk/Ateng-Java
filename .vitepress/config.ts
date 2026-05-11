@@ -792,6 +792,7 @@ export default defineConfig({
                         text: 'Flink',
                         items: [
                             {text: '使用文档', link: '/bigdata/flink-examples/README'},
+                            {text: '使用文档（AI生成）', link: '/bigdata/flink-examples/README_AI'},
                             {text: '单机运行', link: '/bigdata/flink-standalone/README'},
                             {text: '集群运行', link: '/bigdata/flink-cluster/README'}
                         ]
@@ -800,6 +801,7 @@ export default defineConfig({
                         text: 'Spark',
                         items: [
                             {text: '使用文档', link: '/bigdata/spark-examples/README'},
+                            {text: '使用文档（AI生成）', link: '/bigdata/spark-examples/README_AI'},
                             {text: '单机运行', link: '/bigdata/spark-standalone/README'},
                             {text: '集群运行', link: '/bigdata/spark-cluster/README'}
                         ]
