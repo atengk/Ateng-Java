@@ -999,4 +999,10 @@ export default defineConfig({
     },
     // 死链处理策略
     ignoreDeadLinks: true,
+    vite: {
+        build: {
+            reportCompressedSize: false,
+            chunkSizeWarningLimit: 1500
+        }
+    },
 })

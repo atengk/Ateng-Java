@@ -48,7 +48,7 @@ jobs:
       # 构建
       - name: Build VitePress
         env:
-          NODE_OPTIONS: --max-old-space-size=14336
+          NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm docs:build
 
       - name: Upload artifact
