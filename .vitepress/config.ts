@@ -609,6 +609,7 @@ export default defineConfig({
                         text: 'Kafka',
                         items: [
                             { text: '开发使用文档', link: '/mq/kafka/README' },
+                            { text: '开发使用文档（AI生成）', link: '/mq/kafka/README_AI' },
                             { text: '生产者', link: '/mq/kafka-provider/README' },
                             { text: '消费者', link: '/mq/kafka-consumer/README' }
                         ]
@@ -617,6 +618,7 @@ export default defineConfig({
                         text: 'RabbitMQ',
                         items: [
                             { text: '开发使用文档', link: '/mq/rabbitmq/README' },
+                            { text: '开发使用文档（AI生成）', link: '/mq/rabbitmq/README_AI' },
                             { text: '生产者', link: '/mq/rabbitmq-provider/README' },
                             { text: '消费者', link: '/mq/rabbitmq-consumer/README' }
                         ]
