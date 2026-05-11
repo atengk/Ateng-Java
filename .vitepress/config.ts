@@ -288,21 +288,26 @@ export default defineConfig({
                         text: 'Spring AI',
                         items: [
                             { text: 'Spring AI 1', link: '/ai/spring-ai1/README' },
-                            { text: 'Spring AI 2', link: '/ai/spring-ai2/README' }
+                            { text: 'Spring AI 1（AI生成）', link: '/ai/spring-ai1/README_AI' },
+                            { text: 'Spring AI 2', link: '/ai/spring-ai2/README' },
+                            { text: 'Spring AI 2（AI生成）', link: '/ai/spring-ai2/README_AI' },
                         ]
                     },
                     {
                         text: 'MCP Server',
                         items: [
+                            { text: 'Spring AI 1 MCP Server（AI生成）', link: '/ai/spring-ai1-mcp-server/README_AI' },
                             { text: 'Spring AI 1 MCP Server', link: '/ai/spring-ai1-mcp-server/README' },
                             { text: 'Spring AI 2 MCP Server', link: '/ai/spring-ai2-mcp-server/README' },
+                            { text: 'Spring AI 2 MCP Server（AI生成）', link: '/ai/spring-ai2-mcp-server/README_AI' },
                         ]
                     },
                     {
                         text: 'Spring AI Alibaba',
                         items: [
                             { text: 'Spring AI Alibaba 1', link: '/ai/spring-ai-alibaba1/README' },
-                            { text: 'Spring AI Alibaba 2', link: '/ai/spring-ai-alibaba2/README' }
+                            { text: 'Spring AI Alibaba 1（AI生成）', link: '/ai/spring-ai-alibaba1/README_AI' },
+                            { text: 'Spring AI Alibaba 2（未发布）', link: '/ai/spring-ai-alibaba2/README' }
                         ]
                     }
                 ]
