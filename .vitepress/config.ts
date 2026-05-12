@@ -700,7 +700,8 @@ export default defineConfig({
                     {
                         text: '任务模型',
                         items: [
-                            { text: '数据库驱动的任务执行模型', link: '/task/database-job/README' }
+                            { text: '数据库驱动的任务执行模型', link: '/task/database-job/README' },
+                            { text: '数据库驱动的任务执行模型（AI生成）', link: '/task/database-job/README_AI' },
                         ]
                     }
                 ]
