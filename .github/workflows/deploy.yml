@@ -47,6 +47,7 @@ jobs:
 
       # 构建
       - name: Build VitePress
+        timeout-minutes: 100
         env:
           NODE_OPTIONS: --max-old-space-size=15360
         run: pnpm docs:build
