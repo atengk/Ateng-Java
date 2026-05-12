@@ -20,7 +20,7 @@ jobs:
   build:
     name: Build VitePress
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 100
 
     permissions:
       contents: read
@@ -62,6 +62,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Expand swap
+        run: |
+          # 使用磁盘临时扩展 swap，缓解大量 Markdown 构建时的 OOM
+          sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=16384 status=progress
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+
+          echo "Swap status:"
+          swapon --show
+
+          echo "Memory status:"
+          free -h
 
       # 构建
       - name: Build VitePress
