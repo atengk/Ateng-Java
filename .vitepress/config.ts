@@ -952,28 +952,28 @@ export default defineConfig({
             level: 'deep',
             label: '目录'
         },
-        //search: {
-        //    provider: 'local',
-        //    options: {
-        //        detailedView: true,
-        //        disableQueryPersistence: false,
-        //        translations: {
-        //            button: {
-        //                buttonText: '搜索',
-        //                buttonAriaLabel: '搜索文档'
-        //            },
-        //            modal: {
-        //                noResultsText: '未找到结果',
-        //                resetButtonTitle: '清除查询',
-        //                footer: {
-        //                    selectText: '选择',
-        //                    navigateText: '切换',
-        //                    closeText: '关闭'
-        //                }
-        //            }
-        //        }
-        //    }
-        //},
+        search: {
+           provider: 'local',
+           options: {
+               detailedView: true,
+               disableQueryPersistence: false,
+               translations: {
+                   button: {
+                       buttonText: '搜索',
+                       buttonAriaLabel: '搜索文档'
+                   },
+                   modal: {
+                       noResultsText: '未找到结果',
+                       resetButtonTitle: '清除查询',
+                       footer: {
+                           selectText: '选择',
+                           navigateText: '切换',
+                           closeText: '关闭'
+                       }
+                   }
+               }
+           }
+        },
         lastUpdated: {
             text: '🕒 最后更新',
             formatOptions: {
