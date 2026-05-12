@@ -21,5 +21,6 @@
         <module>spring-ai2</module>
         <module>spring-ai-alibaba1</module>
         <module>spring-ai-alibaba2</module>
+        <module>langchain4j</module>
     </modules>
 </project>

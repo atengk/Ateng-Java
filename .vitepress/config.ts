@@ -309,6 +309,13 @@ export default defineConfig({
                             { text: 'Spring AI Alibaba 1（AI生成）', link: '/ai/spring-ai-alibaba1/README_AI' },
                             { text: 'Spring AI Alibaba 2（未发布）', link: '/ai/spring-ai-alibaba2/README' }
                         ]
+                    },
+                    {
+                        text: 'LangChain4j',
+                        items: [
+                            { text: 'LangChain4j', link: '/ai/langchain4j/README' },
+                            { text: 'LangChain4j（AI生成）', link: '/ai/langchain4j/README_AI' },
+                        ]
                     }
                 ]
             },
@@ -552,6 +559,8 @@ export default defineConfig({
                             {text: 'Sa-Token（AI生成）', link: '/auth/sa-token/README_AI'},
                             {text: 'Spring Security', link: '/auth/spring-security/README'},
                             {text: 'Spring Security（AI生成）', link: '/auth/spring-security/README_AI'},
+                            {text: 'Apache Shiro 2', link: '/auth/shiro/README'},
+                            {text: 'Apache Shiro 2（AI生成）', link: '/auth/shiro/README_AI'},
                         ]
                     },
                     {
