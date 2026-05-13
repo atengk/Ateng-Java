@@ -1,38 +1,42 @@
-# 设计模式：构建者模式
+# 构建者模式
 
-构建者模式用于把复杂对象的创建过程拆分出来，通过一步一步设置参数，最终构建出一个完整对象。在 JDK21 和 Spring Boot 3 项目中，构建者模式常用于复杂 DTO、查询条件、导出配置、第三方请求参数、聚合响应对象、订单创建命令、消息发送命令等场景。
-
-需要注意：构建者模式关注的是“复杂对象如何创建”。如果只是创建简单对象，直接构造方法或 `record` 即可；如果对象字段较多、可选参数较多、构造过程需要校验或默认值，构建者模式更合适。
+构建者模式属于创建型模式，用于分步骤构建复杂对象。它适合对象字段较多、部分字段可选、创建过程需要校验、对象构建过程不希望散落在业务代码中的场景。在当前 29 个设计模式文档体系中，构建者模式属于 GoF 创建型模式，模块名为 `builder`。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 JDK 21、Spring Boot 3、Maven、Hutool、Lombok 编写。示例场景是“订单提交上下文构建”。订单提交时需要组合用户、商品明细、收货地址、优惠券、请求来源、备注、幂等请求号等信息，这类对象字段较多，并且存在必填校验和默认值处理，适合使用构建者模式。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证构建者模式行为 -->
+    <!-- Spring Boot Web，用于提供订单提交接口 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、集合、ID、金额等通用处理 -->
+    <!-- Spring Boot Validation，用于请求参数校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool 工具类，用于字符串、集合、ID、日期、JSON 等常用处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.36</version>
     </dependency>
 
-    <!-- Lombok，提供 @Builder、@Getter、@Slf4j 等能力 -->
+    <!-- Lombok，用于减少 getter、setter、构造方法和日志样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- Spring Boot 测试依赖，用于验证构建者模式 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -41,452 +45,85 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+文件位置：`src/main/resources/application.yml`
 
-## 核心概念
+```yaml
+server:
+  port: 8080
 
-构建者模式的核心目标是把复杂对象的构造过程从业务代码中抽离出来，让调用方通过清晰的链式 API 构建对象。
+demo:
+  builder:
+    # 默认订单来源
+    default-source: WEB
+    # 默认超时时间，单位分钟
+    default-timeout-minutes: 30
+    # 是否允许提交空备注
+    allow-empty-remark: true
+```
 
-常见角色如下：
+## 模式说明
 
-| 角色            | 说明                                   |
-| --------------- | -------------------------------------- |
-| Product         | 被构建的复杂对象                       |
-| Builder         | 抽象构建者，定义构建步骤               |
-| ConcreteBuilder | 具体构建者，负责设置字段、默认值和校验 |
-| Director        | 指挥者，负责按固定顺序组织构建过程     |
-| Client          | 调用方，使用构建者创建对象             |
+构建者模式解决的是“复杂对象如何清晰创建”的问题。它把对象创建过程从业务代码中抽离出来，通过链式方法一步一步设置字段，最后通过 `build()` 方法生成目标对象。
 
-常见实现方式如下：
-
-| 实现方式          | 是否推荐           | 适用场景                                 |
-| ----------------- | ------------------ | ---------------------------------------- |
-| 手写 Builder      | 推荐用于理解原理   | 需要自定义校验、默认值、不可变对象       |
-| Lombok `@Builder` | 强烈推荐           | Spring Boot 项目中 DTO、Command、VO 构建 |
-| 静态工厂方法      | 推荐用于简单对象   | 参数少、构造逻辑简单                     |
-| 构造方法重载      | 不推荐用于复杂对象 | 字段多时可读性差                         |
-| JavaBean Setter   | 谨慎使用           | 可变对象，可能出现半初始化状态           |
-
-在 Spring Boot 项目中，常见优先级通常是：
+在 Spring Boot 项目中，构建者模式常见于：
 
 ```text
-Lombok @Builder > 手写 Builder > 多构造方法重载
+创建复杂请求上下文
+创建第三方接口请求对象
+创建导出任务参数
+创建消息发送对象
+创建订单提交命令
+创建查询条件对象
+创建测试数据对象
+创建不可变业务对象
 ```
 
-构建者模式尤其适合字段较多的对象。如果构造方法参数太长，调用方很难看出每个参数的含义。
-
-不推荐写法：
-
-```java
-new ExportConfig("order", "订单报表", true, 1000, List.of("orderNo", "amount"));
-```
-
-推荐写法：
-
-```java
-ExportConfig.builder()
-        .fileName("order")
-        .sheetName("订单报表")
-        .includeHeader(true)
-        .pageSize(1000)
-        .fields(List.of("orderNo", "amount"))
-        .build();
-```
-
-## 普通 Java 构建者
-
-普通 Java 构建者适合不依赖 Lombok 的对象创建场景。下面以报表导出配置为例，导出配置包含文件名、Sheet 名称、分页大小、导出字段、是否包含表头等多个参数。
-
-如果使用长构造方法，参数顺序很容易写错。使用构建者模式后，每个字段含义更清晰，并且可以在 `build` 阶段统一做默认值和参数校验。
-
-### 文件结构
+如果不用构建者模式，复杂对象通常会出现以下问题：
 
 ```text
-src/main/java/io/github/atengk/design/builder/simple/
-└── ReportExportConfig.java
+构造方法参数过多，可读性差
+多个构造方法重载，维护困难
+setter 到处调用，创建过程散落
+必填字段和默认值缺少统一校验
+对象创建完成后仍可被任意修改
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/builder/simple/ReportExportConfig.java`
+构建者模式适合字段较多且创建过程有规则的对象。对于只有两三个字段的简单 DTO，没有必要强行使用。
 
-下面是手写 Builder 示例。该对象构建完成后不可变，适合在多线程环境中安全传递。
+## 项目结构
 
-```java
-package io.github.atengk.design.builder.simple;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
-/**
- * 报表导出配置
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public class ReportExportConfig {
-
-    private final String fileName;
-    private final String sheetName;
-    private final Boolean includeHeader;
-    private final Integer pageSize;
-    private final List<String> fields;
-    private final LocalDateTime createTime;
-
-    private ReportExportConfig(Builder builder) {
-        this.fileName = builder.fileName;
-        this.sheetName = builder.sheetName;
-        this.includeHeader = builder.includeHeader;
-        this.pageSize = builder.pageSize;
-        this.fields = List.copyOf(builder.fields);
-        this.createTime = builder.createTime;
-    }
-
-    /**
-     * 创建构建器
-     *
-     * @return 报表导出配置构建器
-     */
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    /**
-     * 获取文件名
-     *
-     * @return 文件名
-     */
-    public String getFileName() {
-        return fileName;
-    }
-
-    /**
-     * 获取Sheet名称
-     *
-     * @return Sheet名称
-     */
-    public String getSheetName() {
-        return sheetName;
-    }
-
-    /**
-     * 是否包含表头
-     *
-     * @return true 表示包含表头，false 表示不包含
-     */
-    public Boolean getIncludeHeader() {
-        return includeHeader;
-    }
-
-    /**
-     * 获取分页大小
-     *
-     * @return 分页大小
-     */
-    public Integer getPageSize() {
-        return pageSize;
-    }
-
-    /**
-     * 获取导出字段
-     *
-     * @return 导出字段
-     */
-    public List<String> getFields() {
-        return fields;
-    }
-
-    /**
-     * 获取创建时间
-     *
-     * @return 创建时间
-     */
-    public LocalDateTime getCreateTime() {
-        return createTime;
-    }
-
-    /**
-     * 报表导出配置构建器
-     *
-     * @author Ateng
-     * @since 2026-04-30
-     */
-    public static class Builder {
-
-        private String fileName;
-        private String sheetName;
-        private Boolean includeHeader = true;
-        private Integer pageSize = 1000;
-        private List<String> fields = List.of();
-        private LocalDateTime createTime = LocalDateTime.now();
-
-        /**
-         * 设置文件名
-         *
-         * @param fileName 文件名
-         * @return 构建器
-         */
-        public Builder fileName(String fileName) {
-            this.fileName = fileName;
-            return this;
-        }
-
-        /**
-         * 设置Sheet名称
-         *
-         * @param sheetName Sheet名称
-         * @return 构建器
-         */
-        public Builder sheetName(String sheetName) {
-            this.sheetName = sheetName;
-            return this;
-        }
-
-        /**
-         * 设置是否包含表头
-         *
-         * @param includeHeader true 表示包含表头，false 表示不包含
-         * @return 构建器
-         */
-        public Builder includeHeader(Boolean includeHeader) {
-            this.includeHeader = includeHeader;
-            return this;
-        }
-
-        /**
-         * 设置分页大小
-         *
-         * @param pageSize 分页大小
-         * @return 构建器
-         */
-        public Builder pageSize(Integer pageSize) {
-            this.pageSize = pageSize;
-            return this;
-        }
-
-        /**
-         * 设置导出字段
-         *
-         * @param fields 导出字段
-         * @return 构建器
-         */
-        public Builder fields(List<String> fields) {
-            this.fields = fields;
-            return this;
-        }
-
-        /**
-         * 设置创建时间
-         *
-         * @param createTime 创建时间
-         * @return 构建器
-         */
-        public Builder createTime(LocalDateTime createTime) {
-            this.createTime = createTime;
-            return this;
-        }
-
-        /**
-         * 构建报表导出配置
-         *
-         * @return 报表导出配置
-         */
-        public ReportExportConfig build() {
-            validate();
-            return new ReportExportConfig(this);
-        }
-
-        /**
-         * 校验构建参数
-         */
-        private void validate() {
-            if (StrUtil.isBlank(fileName)) {
-                throw new IllegalArgumentException("文件名不能为空");
-            }
-
-            if (StrUtil.isBlank(sheetName)) {
-                throw new IllegalArgumentException("Sheet名称不能为空");
-            }
-
-            if (pageSize == null || pageSize <= 0) {
-                throw new IllegalArgumentException("分页大小必须大于0");
-            }
-
-            if (CollUtil.isEmpty(fields)) {
-                throw new IllegalArgumentException("导出字段不能为空");
-            }
-
-            if (includeHeader == null) {
-                includeHeader = true;
-            }
-
-            if (createTime == null) {
-                createTime = LocalDateTime.now();
-            }
-        }
-    }
-}
-```
-
-使用方式：
-
-```java
-ReportExportConfig config = ReportExportConfig.builder()
-        .fileName("order-report")
-        .sheetName("订单报表")
-        .includeHeader(true)
-        .pageSize(1000)
-        .fields(List.of("orderNo", "amount", "status", "createTime"))
-        .build();
-```
-
-手写 Builder 的优点是可控性强，可以在 `build` 方法中处理默认值、参数校验、不可变拷贝等逻辑。缺点是样板代码较多，字段多时维护成本较高。
-
-## Lombok 构建者
-
-Spring Boot 项目中更常见的写法是使用 Lombok `@Builder`。它可以自动生成构建器，减少大量样板代码。
-
-下面以订单创建命令为例。订单创建命令通常由 Controller 请求参数、用户上下文、商品信息、优惠计算结果等多个来源组装而来，非常适合使用构建者模式。
-
-### 文件结构
+本示例使用手写 Builder 来体现模式结构，同时补充 Lombok `@Builder` 的轻量写法。核心类是 `OrderSubmitContext`，它表示订单提交过程中的不可变业务上下文。
 
 ```text
-src/main/java/io/github/atengk/design/builder/lombok/
-├── OrderCreateCommand.java
-└── OrderCreateResult.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/builder/lombok/OrderCreateCommand.java`
-
-下面是使用 Lombok `@Builder` 的订单创建命令对象。
-
-```java
-package io.github.atengk.design.builder.lombok;
-
-import lombok.Builder;
-import lombok.Getter;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-/**
- * 订单创建命令
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-@Builder
-public class OrderCreateCommand {
-
-    private final Long userId;
-    private final Long productId;
-    private final String productName;
-    private final Integer quantity;
-    private final BigDecimal unitPrice;
-    private final BigDecimal discountAmount;
-    private final BigDecimal totalAmount;
-    private final String source;
-    private final LocalDateTime createTime;
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/builder/lombok/OrderCreateResult.java`
-
-下面是使用 Lombok `@Builder` 的订单创建结果对象。
-
-```java
-package io.github.atengk.design.builder.lombok;
-
-import lombok.Builder;
-import lombok.Getter;
-
-import java.math.BigDecimal;
-
-/**
- * 订单创建结果
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-@Builder
-public class OrderCreateResult {
-
-    private final String orderNo;
-    private final Long userId;
-    private final String productName;
-    private final Integer quantity;
-    private final BigDecimal totalAmount;
-    private final String message;
-}
-```
-
-使用方式：
-
-```java
-OrderCreateCommand command = OrderCreateCommand.builder()
-        .userId(10001L)
-        .productId(20001L)
-        .productName("键盘")
-        .quantity(2)
-        .unitPrice(BigDecimal.valueOf(199))
-        .discountAmount(BigDecimal.valueOf(20))
-        .totalAmount(BigDecimal.valueOf(378))
-        .source("APP")
-        .createTime(LocalDateTime.now())
-        .build();
-
-OrderCreateResult result = OrderCreateResult.builder()
-        .orderNo("ORDER10001")
-        .userId(command.getUserId())
-        .productName(command.getProductName())
-        .quantity(command.getQuantity())
-        .totalAmount(command.getTotalAmount())
-        .message("创建成功")
-        .build();
-```
-
-Lombok `@Builder` 的优点是代码简洁，适合 DTO、Command、VO、复杂查询条件等对象。缺点是默认不会自动做业务校验，如果需要强校验，可以在外层 Assembler、Factory 或 Service 中处理。
-
-## Spring Boot 构建者
-
-Spring Boot 项目中，构建者模式通常不会单独存在，而是和 DTO、Command、Assembler、Service 配合使用。下面以订单创建为例，Controller 接收简单请求，Assembler 负责构建复杂命令对象，Service 负责执行业务。
-
-整体流程如下：
-
-```text
-Controller 接收请求 -> Assembler 构建命令对象 -> Service 创建订单 -> Builder 构建响应对象
-```
-
-这种写法可以避免 Controller 和 Service 中堆积大量对象组装代码。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/pattern/builder
 ├── BuilderApplication.java
-├── assembler/
-│   └── OrderCreateAssembler.java
-├── controller/
-│   └── OrderCreateController.java
-├── dto/
-│   ├── OrderCreateRequest.java
-│   ├── OrderCreateCommand.java
-│   └── OrderCreateResponse.java
-└── service/
-    ├── OrderCreateService.java
-    └── impl/
-        └── OrderCreateServiceImpl.java
+├── config
+│   └── BuilderDemoProperties.java
+├── controller
+│   └── OrderSubmitController.java
+├── domain
+│   └── OrderSubmitContext.java
+├── dto
+│   ├── OrderAddressDTO.java
+│   ├── OrderItemDTO.java
+│   └── OrderSubmitDTO.java
+├── enums
+│   └── OrderSourceEnum.java
+├── service
+│   ├── OrderSubmitService.java
+│   └── OrderSubmitServiceImpl.java
+└── vo
+    └── OrderSubmitVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/BuilderApplication.java`
+## 核心代码
 
-下面是 Spring Boot 启动类。
+这一部分给出构建者模式的完整核心代码。重点是 `OrderSubmitContext`，它通过内部静态类 `Builder` 分步骤构建订单提交上下文，并在 `build()` 方法中完成统一校验、默认值处理和不可变对象创建。
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/BuilderApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.builder;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -495,671 +132,1098 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 构建者模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class BuilderApplication {
 
     /**
-     * 应用启动入口
+     * 启动构建者模式示例应用
      *
      * @param args 启动参数
      */
     public static void main(String[] args) {
         SpringApplication.run(BuilderApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateRequest.java`
-
-下面是订单创建请求对象。请求对象字段尽量保持和接口入参一致，不承载复杂业务组装逻辑。
+文件位置：`src/main/java/io/github/atengk/pattern/builder/config/BuilderDemoProperties.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.builder.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+/**
+ * 构建者模式示例配置
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Component
+@ConfigurationProperties(prefix = "demo.builder")
+public class BuilderDemoProperties {
+
+    /**
+     * 默认订单来源
+     */
+    private String defaultSource = "WEB";
+
+    /**
+     * 默认超时时间，单位分钟
+     */
+    private Integer defaultTimeoutMinutes = 30;
+
+    /**
+     * 是否允许空备注
+     */
+    private Boolean allowEmptyRemark = true;
+
+}
+```
+
+下面的枚举用于定义订单来源，避免在业务代码中散落魔法字符串。
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/enums/OrderSourceEnum.java`
+
+```java
+package io.github.atengk.pattern.builder.enums;
+
+import cn.hutool.core.util.StrUtil;
+import lombok.Getter;
+
+import java.util.Arrays;
+
+/**
+ * 订单来源枚举
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Getter
+public enum OrderSourceEnum {
+
+    WEB("WEB", "网页端"),
+
+    APP("APP", "移动端"),
+
+    MINI_PROGRAM("MINI_PROGRAM", "小程序"),
+
+    ADMIN("ADMIN", "管理后台");
+
+    private final String code;
+
+    private final String description;
+
+    OrderSourceEnum(String code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+
+    /**
+     * 根据编码解析订单来源
+     *
+     * @param code 来源编码
+     * @return 订单来源
+     */
+    public static OrderSourceEnum parse(String code) {
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.getCode(), code))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的订单来源：{}", code)));
+    }
+
+}
+```
+
+## DTO 和 VO
+
+这一部分定义接口请求对象和响应对象。DTO 用于接收前端请求，真正进入业务流程前，会被转换成不可变的 `OrderSubmitContext`。
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/dto/OrderItemDTO.java`
+
+```java
+package io.github.atengk.pattern.builder.dto;
+
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单创建请求
+ * 订单商品明细请求对象
  *
- * @param userId      用户ID
- * @param productId   商品ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param unitPrice   商品单价
- * @param source      来源渠道
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderCreateRequest(
-        Long userId,
-        Long productId,
-        String productName,
-        Integer quantity,
-        BigDecimal unitPrice,
-        String source
+@Data
+public class OrderItemDTO {
+
+    /**
+     * 商品编号
+     */
+    @NotBlank(message = "商品编号不能为空")
+    private String skuId;
+
+    /**
+     * 商品名称
+     */
+    @NotBlank(message = "商品名称不能为空")
+    private String skuName;
+
+    /**
+     * 购买数量
+     */
+    @NotNull(message = "购买数量不能为空")
+    @Min(value = 1, message = "购买数量必须大于0")
+    private Integer quantity;
+
+    /**
+     * 商品单价
+     */
+    @NotNull(message = "商品单价不能为空")
+    private BigDecimal price;
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/dto/OrderAddressDTO.java`
+
+```java
+package io.github.atengk.pattern.builder.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+/**
+ * 订单收货地址请求对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class OrderAddressDTO {
+
+    /**
+     * 收货人姓名
+     */
+    @NotBlank(message = "收货人姓名不能为空")
+    private String receiverName;
+
+    /**
+     * 收货人手机号
+     */
+    @NotBlank(message = "收货人手机号不能为空")
+    private String receiverPhone;
+
+    /**
+     * 省份
+     */
+    @NotBlank(message = "省份不能为空")
+    private String province;
+
+    /**
+     * 城市
+     */
+    @NotBlank(message = "城市不能为空")
+    private String city;
+
+    /**
+     * 详细地址
+     */
+    @NotBlank(message = "详细地址不能为空")
+    private String detailAddress;
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/dto/OrderSubmitDTO.java`
+
+```java
+package io.github.atengk.pattern.builder.dto;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import lombok.Data;
+
+import java.util.List;
+
+/**
+ * 订单提交请求对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class OrderSubmitDTO {
+
+    /**
+     * 用户编号
+     */
+    @NotBlank(message = "用户编号不能为空")
+    private String userId;
+
+    /**
+     * 订单来源：WEB、APP、MINI_PROGRAM、ADMIN
+     */
+    private String source;
+
+    /**
+     * 幂等请求号
+     */
+    private String requestNo;
+
+    /**
+     * 优惠券编号
+     */
+    private String couponId;
+
+    /**
+     * 订单备注
+     */
+    private String remark;
+
+    /**
+     * 收货地址
+     */
+    @Valid
+    private OrderAddressDTO address;
+
+    /**
+     * 商品明细
+     */
+    @Valid
+    @NotEmpty(message = "商品明细不能为空")
+    private List<OrderItemDTO> items;
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/vo/OrderSubmitVO.java`
+
+```java
+package io.github.atengk.pattern.builder.vo;
+
+import java.math.BigDecimal;
+
+/**
+ * 订单提交响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public record OrderSubmitVO(
+        String orderNo,
+        String userId,
+        String source,
+        String requestNo,
+        BigDecimal totalAmount,
+        Integer totalQuantity,
+        Boolean success,
+        String message,
+        String submitTime
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateCommand.java`
+## 手写构建者实现
 
-下面是订单创建命令对象。它由 Assembler 统一构建，供 Service 使用。
+这一部分是构建者模式的核心。`OrderSubmitContext` 的构造方法私有化，外部不能直接 `new`，只能通过 `OrderSubmitContext.builder()` 获取构建器并逐步设置参数。
 
-```java
-package io.github.atengk.design.dto;
+`build()` 方法负责完成以下工作：
 
-import lombok.Builder;
-import lombok.Getter;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-/**
- * 订单创建命令
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-@Builder
-public class OrderCreateCommand {
-
-    private final Long userId;
-    private final Long productId;
-    private final String productName;
-    private final Integer quantity;
-    private final BigDecimal unitPrice;
-    private final BigDecimal originalAmount;
-    private final BigDecimal discountAmount;
-    private final BigDecimal totalAmount;
-    private final String source;
-    private final String requestNo;
-    private final LocalDateTime createTime;
-}
+```text
+校验必填字段
+处理默认值
+计算订单总金额
+计算商品总数量
+复制集合防止外部修改
+创建不可变业务上下文对象
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateResponse.java`
-
-下面是订单创建响应对象，通过 Builder 构建统一响应。
+文件位置：`src/main/java/io/github/atengk/pattern/builder/domain/OrderSubmitContext.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.builder.domain;
 
-import lombok.Builder;
-import lombok.Getter;
-
-import java.math.BigDecimal;
-
-/**
- * 订单创建响应
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-@Builder
-public class OrderCreateResponse {
-
-    private final String orderNo;
-    private final String requestNo;
-    private final Long userId;
-    private final String productName;
-    private final Integer quantity;
-    private final BigDecimal originalAmount;
-    private final BigDecimal discountAmount;
-    private final BigDecimal totalAmount;
-    private final String message;
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/assembler/OrderCreateAssembler.java`
-
-下面是订单创建装配器。它负责把接口请求转换成业务命令对象，并统一处理金额计算、默认值、请求流水号等组装逻辑。
-
-```java
-package io.github.atengk.design.assembler;
-
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderCreateCommand;
-import io.github.atengk.design.dto.OrderCreateRequest;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import io.github.atengk.pattern.builder.dto.OrderAddressDTO;
+import io.github.atengk.pattern.builder.dto.OrderItemDTO;
+import io.github.atengk.pattern.builder.enums.OrderSourceEnum;
+import lombok.Getter;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
- * 订单创建装配器
+ * 订单提交上下文
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Component
-public class OrderCreateAssembler {
+@Getter
+public class OrderSubmitContext {
 
-    private static final BigDecimal DISCOUNT_THRESHOLD_AMOUNT = BigDecimal.valueOf(100);
-    private static final BigDecimal DISCOUNT_AMOUNT = BigDecimal.valueOf(20);
-    private static final String DEFAULT_SOURCE = "UNKNOWN";
+    private final String orderNo;
 
-    /**
-     * 构建订单创建命令
-     *
-     * @param request 订单创建请求
-     * @return 订单创建命令
-     */
-    public OrderCreateCommand buildCommand(OrderCreateRequest request) {
-        validateRequest(request);
+    private final String userId;
 
-        BigDecimal originalAmount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()))
-                .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal discountAmount = calculateDiscountAmount(originalAmount);
-        BigDecimal totalAmount = NumberUtil.sub(originalAmount, discountAmount)
-                .setScale(2, RoundingMode.HALF_UP);
+    private final OrderSourceEnum source;
 
-        String requestNo = "REQ" + IdUtil.getSnowflakeNextId();
-        String source = StrUtil.blankToDefault(request.source(), DEFAULT_SOURCE);
+    private final String requestNo;
 
-        log.info("构建订单创建命令，用户ID：{}，商品ID：{}，原始金额：{}，优惠金额：{}，应付金额：{}",
-                request.userId(), request.productId(), originalAmount, discountAmount, totalAmount);
+    private final String couponId;
 
-        return OrderCreateCommand.builder()
-                .userId(request.userId())
-                .productId(request.productId())
-                .productName(request.productName())
-                .quantity(request.quantity())
-                .unitPrice(request.unitPrice())
-                .originalAmount(originalAmount)
-                .discountAmount(discountAmount)
-                .totalAmount(totalAmount)
-                .source(source)
-                .requestNo(requestNo)
-                .createTime(LocalDateTime.now())
-                .build();
+    private final String remark;
+
+    private final OrderAddressDTO address;
+
+    private final List<OrderItemDTO> items;
+
+    private final BigDecimal totalAmount;
+
+    private final Integer totalQuantity;
+
+    private final Integer timeoutMinutes;
+
+    private OrderSubmitContext(Builder builder) {
+        this.orderNo = builder.orderNo;
+        this.userId = builder.userId;
+        this.source = builder.source;
+        this.requestNo = builder.requestNo;
+        this.couponId = builder.couponId;
+        this.remark = builder.remark;
+        this.address = builder.address;
+        this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
+        this.totalAmount = builder.totalAmount;
+        this.totalQuantity = builder.totalQuantity;
+        this.timeoutMinutes = builder.timeoutMinutes;
     }
 
     /**
-     * 计算优惠金额
+     * 创建订单提交上下文构建器
      *
-     * @param originalAmount 原始金额
-     * @return 优惠金额
+     * @return 构建器
      */
-    private BigDecimal calculateDiscountAmount(BigDecimal originalAmount) {
-        if (originalAmount.compareTo(DISCOUNT_THRESHOLD_AMOUNT) >= 0) {
-            return DISCOUNT_AMOUNT;
-        }
-
-        return BigDecimal.ZERO;
+    public static Builder builder() {
+        return new Builder();
     }
 
     /**
-     * 校验订单创建请求
+     * 订单提交上下文构建器
      *
-     * @param request 订单创建请求
+     * @author Ateng
+     * @since 2026-05-13
      */
-    private void validateRequest(OrderCreateRequest request) {
-        if (request == null) {
-            log.warn("构建订单创建命令失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
+    public static class Builder {
+
+        private String orderNo;
+
+        private String userId;
+
+        private OrderSourceEnum source;
+
+        private String requestNo;
+
+        private String couponId;
+
+        private String remark;
+
+        private OrderAddressDTO address;
+
+        private List<OrderItemDTO> items = new ArrayList<>();
+
+        private BigDecimal totalAmount = BigDecimal.ZERO;
+
+        private Integer totalQuantity = 0;
+
+        private Integer timeoutMinutes = 30;
+
+        private Boolean allowEmptyRemark = true;
+
+        /**
+         * 设置订单号
+         *
+         * @param orderNo 订单号
+         * @return 构建器
+         */
+        public Builder orderNo(String orderNo) {
+            this.orderNo = orderNo;
+            return this;
         }
 
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("构建订单创建命令失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
+        /**
+         * 设置用户编号
+         *
+         * @param userId 用户编号
+         * @return 构建器
+         */
+        public Builder userId(String userId) {
+            this.userId = userId;
+            return this;
         }
 
-        if (request.productId() == null || request.productId() <= 0) {
-            log.warn("构建订单创建命令失败，商品ID不合法，商品ID：{}", request.productId());
-            throw new IllegalArgumentException("商品ID必须大于0");
+        /**
+         * 设置订单来源
+         *
+         * @param source 订单来源
+         * @return 构建器
+         */
+        public Builder source(OrderSourceEnum source) {
+            this.source = source;
+            return this;
         }
 
-        if (StrUtil.isBlank(request.productName())) {
-            log.warn("构建订单创建命令失败，商品名称为空");
-            throw new IllegalArgumentException("商品名称不能为空");
+        /**
+         * 设置幂等请求号
+         *
+         * @param requestNo 幂等请求号
+         * @return 构建器
+         */
+        public Builder requestNo(String requestNo) {
+            this.requestNo = requestNo;
+            return this;
         }
 
-        if (request.quantity() == null || request.quantity() <= 0) {
-            log.warn("构建订单创建命令失败，购买数量不合法，购买数量：{}", request.quantity());
-            throw new IllegalArgumentException("购买数量必须大于0");
+        /**
+         * 设置优惠券编号
+         *
+         * @param couponId 优惠券编号
+         * @return 构建器
+         */
+        public Builder couponId(String couponId) {
+            this.couponId = couponId;
+            return this;
         }
 
-        if (request.unitPrice() == null || request.unitPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("构建订单创建命令失败，商品单价不合法，商品单价：{}", request.unitPrice());
-            throw new IllegalArgumentException("商品单价必须大于0");
+        /**
+         * 设置订单备注
+         *
+         * @param remark 订单备注
+         * @return 构建器
+         */
+        public Builder remark(String remark) {
+            this.remark = remark;
+            return this;
         }
+
+        /**
+         * 设置收货地址
+         *
+         * @param address 收货地址
+         * @return 构建器
+         */
+        public Builder address(OrderAddressDTO address) {
+            this.address = address;
+            return this;
+        }
+
+        /**
+         * 设置商品明细
+         *
+         * @param items 商品明细
+         * @return 构建器
+         */
+        public Builder items(List<OrderItemDTO> items) {
+            this.items = CollUtil.isEmpty(items) ? new ArrayList<>() : new ArrayList<>(items);
+            return this;
+        }
+
+        /**
+         * 设置订单超时时间
+         *
+         * @param timeoutMinutes 超时时间，单位分钟
+         * @return 构建器
+         */
+        public Builder timeoutMinutes(Integer timeoutMinutes) {
+            if (timeoutMinutes != null) {
+                this.timeoutMinutes = timeoutMinutes;
+            }
+            return this;
+        }
+
+        /**
+         * 设置是否允许空备注
+         *
+         * @param allowEmptyRemark 是否允许空备注
+         * @return 构建器
+         */
+        public Builder allowEmptyRemark(Boolean allowEmptyRemark) {
+            if (allowEmptyRemark != null) {
+                this.allowEmptyRemark = allowEmptyRemark;
+            }
+            return this;
+        }
+
+        /**
+         * 构建订单提交上下文
+         *
+         * @return 订单提交上下文
+         */
+        public OrderSubmitContext build() {
+            fillDefaultValue();
+            checkRequiredValue();
+            calculateOrderAmount();
+
+            return new OrderSubmitContext(this);
+        }
+
+        /**
+         * 填充默认值
+         */
+        private void fillDefaultValue() {
+            if (StrUtil.isBlank(orderNo)) {
+                this.orderNo = StrUtil.format("ORDER_{}", IdUtil.fastSimpleUUID());
+            }
+
+            if (StrUtil.isBlank(requestNo)) {
+                this.requestNo = StrUtil.format("REQ_{}", IdUtil.fastSimpleUUID());
+            }
+
+            if (source == null) {
+                this.source = OrderSourceEnum.WEB;
+            }
+
+            if (remark == null) {
+                this.remark = "";
+            }
+        }
+
+        /**
+         * 校验必填字段
+         */
+        private void checkRequiredValue() {
+            if (StrUtil.isBlank(userId)) {
+                throw new IllegalArgumentException("用户编号不能为空");
+            }
+
+            if (address == null) {
+                throw new IllegalArgumentException("收货地址不能为空");
+            }
+
+            if (CollUtil.isEmpty(items)) {
+                throw new IllegalArgumentException("商品明细不能为空");
+            }
+
+            if (!Boolean.TRUE.equals(allowEmptyRemark) && StrUtil.isBlank(remark)) {
+                throw new IllegalArgumentException("订单备注不能为空");
+            }
+        }
+
+        /**
+         * 计算订单金额和商品数量
+         */
+        private void calculateOrderAmount() {
+            BigDecimal amount = BigDecimal.ZERO;
+            int quantity = 0;
+
+            for (OrderItemDTO item : items) {
+                BigDecimal itemAmount = NumberUtil.mul(item.getPrice(), item.getQuantity());
+                amount = NumberUtil.add(amount, itemAmount);
+                quantity += item.getQuantity();
+            }
+
+            this.totalAmount = amount;
+            this.totalQuantity = quantity;
+        }
+
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/OrderCreateService.java`
+## 业务层调用
 
-下面是订单创建服务接口。
+业务层通过构建者把接口请求 DTO 转换成订单提交上下文。这样订单号生成、来源默认值、幂等请求号生成、订单金额计算等逻辑不会散落在 Service 各处。
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/service/OrderSubmitService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.builder.service;
 
-import io.github.atengk.design.dto.OrderCreateCommand;
-import io.github.atengk.design.dto.OrderCreateResponse;
+import io.github.atengk.pattern.builder.dto.OrderSubmitDTO;
+import io.github.atengk.pattern.builder.vo.OrderSubmitVO;
 
 /**
- * 订单创建服务
+ * 订单提交服务接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface OrderCreateService {
+public interface OrderSubmitService {
 
     /**
-     * 创建订单
+     * 提交订单
      *
-     * @param command 订单创建命令
-     * @return 订单创建响应
+     * @param submitDTO 订单提交请求
+     * @return 订单提交结果
      */
-    OrderCreateResponse createOrder(OrderCreateCommand command);
+    OrderSubmitVO submit(OrderSubmitDTO submitDTO);
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderCreateServiceImpl.java`
-
-下面是订单创建服务实现。它接收构建好的命令对象，执行业务逻辑，并通过 Builder 构建响应对象。
+文件位置：`src/main/java/io/github/atengk/pattern/builder/service/OrderSubmitServiceImpl.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.builder.service;
 
-import cn.hutool.core.util.IdUtil;
-import io.github.atengk.design.dto.OrderCreateCommand;
-import io.github.atengk.design.dto.OrderCreateResponse;
-import io.github.atengk.design.service.OrderCreateService;
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
+import io.github.atengk.pattern.builder.config.BuilderDemoProperties;
+import io.github.atengk.pattern.builder.domain.OrderSubmitContext;
+import io.github.atengk.pattern.builder.dto.OrderSubmitDTO;
+import io.github.atengk.pattern.builder.enums.OrderSourceEnum;
+import io.github.atengk.pattern.builder.vo.OrderSubmitVO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * 订单创建服务实现
+ * 订单提交服务实现
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
-public class OrderCreateServiceImpl implements OrderCreateService {
+@RequiredArgsConstructor
+public class OrderSubmitServiceImpl implements OrderSubmitService {
+
+    private final BuilderDemoProperties properties;
 
     /**
-     * 创建订单
+     * 提交订单
      *
-     * @param command 订单创建命令
-     * @return 订单创建响应
+     * @param submitDTO 订单提交请求
+     * @return 订单提交结果
      */
     @Override
-    public OrderCreateResponse createOrder(OrderCreateCommand command) {
-        String orderNo = "ORDER" + IdUtil.getSnowflakeNextId();
+    public OrderSubmitVO submit(OrderSubmitDTO submitDTO) {
+        log.info("准备提交订单，请求参数：{}", JSONUtil.toJsonStr(submitDTO));
 
-        log.info("创建订单成功，订单号：{}，请求流水号：{}，用户ID：{}，商品ID：{}，应付金额：{}",
-                orderNo, command.getRequestNo(), command.getUserId(), command.getProductId(), command.getTotalAmount());
+        OrderSourceEnum source = StrUtil.isBlank(submitDTO.getSource())
+                ? OrderSourceEnum.parse(properties.getDefaultSource())
+                : OrderSourceEnum.parse(submitDTO.getSource());
 
-        return OrderCreateResponse.builder()
-                .orderNo(orderNo)
-                .requestNo(command.getRequestNo())
-                .userId(command.getUserId())
-                .productName(command.getProductName())
-                .quantity(command.getQuantity())
-                .originalAmount(command.getOriginalAmount())
-                .discountAmount(command.getDiscountAmount())
-                .totalAmount(command.getTotalAmount())
-                .message("创建成功")
+        OrderSubmitContext context = OrderSubmitContext.builder()
+                .userId(submitDTO.getUserId())
+                .source(source)
+                .requestNo(submitDTO.getRequestNo())
+                .couponId(submitDTO.getCouponId())
+                .remark(submitDTO.getRemark())
+                .address(submitDTO.getAddress())
+                .items(submitDTO.getItems())
+                .timeoutMinutes(properties.getDefaultTimeoutMinutes())
+                .allowEmptyRemark(properties.getAllowEmptyRemark())
                 .build();
+
+        log.info("订单上下文构建完成，orderNo：{}，requestNo：{}，totalAmount：{}",
+                context.getOrderNo(), context.getRequestNo(), context.getTotalAmount());
+
+        return new OrderSubmitVO(
+                context.getOrderNo(),
+                context.getUserId(),
+                context.getSource().getCode(),
+                context.getRequestNo(),
+                context.getTotalAmount(),
+                context.getTotalQuantity(),
+                true,
+                "订单提交成功",
+                DateUtil.now()
+        );
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderCreateController.java`
-
-下面是订单创建接口。Controller 只负责接收参数和调用装配器，不直接拼装复杂命令对象。
+文件位置：`src/main/java/io/github/atengk/pattern/builder/controller/OrderSubmitController.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.builder.controller;
 
-import io.github.atengk.design.assembler.OrderCreateAssembler;
-import io.github.atengk.design.dto.OrderCreateCommand;
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-import io.github.atengk.design.service.OrderCreateService;
+import io.github.atengk.pattern.builder.dto.OrderSubmitDTO;
+import io.github.atengk.pattern.builder.service.OrderSubmitService;
+import io.github.atengk.pattern.builder.vo.OrderSubmitVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-
 /**
- * 订单创建控制器
+ * 订单提交接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/api/patterns/builder/orders")
 @RequiredArgsConstructor
-@RequestMapping("/builder/order")
-public class OrderCreateController {
+public class OrderSubmitController {
 
-    private final OrderCreateAssembler orderCreateAssembler;
-    private final OrderCreateService orderCreateService;
+    private final OrderSubmitService orderSubmitService;
 
     /**
-     * 创建订单
+     * 提交订单
      *
-     * @param userId      用户ID
-     * @param productId   商品ID
-     * @param productName 商品名称
-     * @param quantity    购买数量
-     * @param unitPrice   商品单价
-     * @param source      来源渠道
-     * @return 订单创建响应
+     * @param submitDTO 订单提交请求
+     * @return 订单提交结果
      */
-    @PostMapping("/create")
-    public OrderCreateResponse createOrder(@RequestParam Long userId,
-                                           @RequestParam Long productId,
-                                           @RequestParam String productName,
-                                           @RequestParam Integer quantity,
-                                           @RequestParam BigDecimal unitPrice,
-                                           @RequestParam(required = false) String source) {
-        OrderCreateRequest request = new OrderCreateRequest(
-                userId,
-                productId,
-                productName,
-                quantity,
-                unitPrice,
-                source
-        );
-
-        OrderCreateCommand command = orderCreateAssembler.buildCommand(request);
-        return orderCreateService.createOrder(command);
+    @PostMapping("/submit")
+    public OrderSubmitVO submit(@Valid @RequestBody OrderSubmitDTO submitDTO) {
+        return orderSubmitService.submit(submitDTO);
     }
+
 }
 ```
 
-接口调用示例：
+## 使用方式
 
-```bash
-curl -X POST "http://localhost:8080/builder/order/create?userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00&source=APP"
+启动项目后，通过订单提交接口传入复杂订单参数。Service 内部会使用构建者创建订单提交上下文，并返回计算后的订单金额、商品数量和订单号。
+
+接口地址：
+
+```text
+POST /api/patterns/builder/orders/submit
 ```
 
-可能返回：
+完整请求示例：
+
+```bash
+curl -X POST "http://localhost:8080/api/patterns/builder/orders/submit" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "USER_001",
+    "source": "APP",
+    "requestNo": "REQ_202605130001",
+    "couponId": "COUPON_10001",
+    "remark": "工作日白天配送",
+    "address": {
+      "receiverName": "张三",
+      "receiverPhone": "13800000000",
+      "province": "广东省",
+      "city": "深圳市",
+      "detailAddress": "南山区科技园 1 号"
+    },
+    "items": [
+      {
+        "skuId": "SKU_10001",
+        "skuName": "机械键盘",
+        "quantity": 2,
+        "price": 299.00
+      },
+      {
+        "skuId": "SKU_10002",
+        "skuName": "无线鼠标",
+        "quantity": 1,
+        "price": 129.00
+      }
+    ]
+  }'
+```
+
+响应示例：
 
 ```json
 {
-  "orderNo": "ORDER2019776866538487808",
-  "requestNo": "REQ2019776866538487807",
-  "userId": 10001,
-  "productName": "键盘",
-  "quantity": 2,
-  "originalAmount": 398.00,
-  "discountAmount": 20,
-  "totalAmount": 378.00,
-  "message": "创建成功"
+  "orderNo": "ORDER_f2cf372f78494c34a12d7c56db3b9a33",
+  "userId": "USER_001",
+  "source": "APP",
+  "requestNo": "REQ_202605130001",
+  "totalAmount": 727.00,
+  "totalQuantity": 3,
+  "success": true,
+  "message": "订单提交成功",
+  "submitTime": "2026-05-13 14:20:30"
 }
 ```
 
-这种方式的优点是对象构建逻辑集中在 `OrderCreateAssembler` 中，Controller 和 Service 都更加干净。后续如果新增优惠字段、渠道字段、链路追踪字段，也可以集中调整构建过程。
+最小请求示例：
 
-## 扩展复杂查询条件
+```bash
+curl -X POST "http://localhost:8080/api/patterns/builder/orders/submit" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "USER_002",
+    "address": {
+      "receiverName": "李四",
+      "receiverPhone": "13900000000",
+      "province": "浙江省",
+      "city": "杭州市",
+      "detailAddress": "西湖区文三路 2 号"
+    },
+    "items": [
+      {
+        "skuId": "SKU_20001",
+        "skuName": "显示器",
+        "quantity": 1,
+        "price": 899.00
+      }
+    ]
+  }'
+```
 
-构建者模式也很适合复杂查询条件。下面以订单查询条件为例，查询条件通常有很多可选字段，如果使用构造方法会非常混乱。
+这个请求没有传 `source`、`requestNo`、`couponId`、`remark`。构建器会自动处理默认来源、生成幂等请求号、忽略空优惠券，并把备注处理为空字符串。
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderQueryCondition.java`
+## Lombok Builder 写法
 
-下面是订单查询条件对象，使用 Lombok `@Builder` 简化构建。
+在 Spring Boot 项目中，如果对象只是字段较多，但没有复杂校验、默认值处理、金额计算等构建过程，可以使用 Lombok 的 `@Builder` 简化代码。
+
+下面示例适合普通查询条件对象。它没有复杂构建逻辑，只是为了让创建过程更清晰。
+
+文件位置：`src/main/java/io/github/atengk/pattern/builder/domain/OrderQueryCondition.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.builder.domain;
 
 import lombok.Builder;
 import lombok.Getter;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 订单查询条件
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Getter
 @Builder
 public class OrderQueryCondition {
 
-    private final Long userId;
-    private final Long productId;
-    private final String orderNo;
-    private final String orderStatus;
-    private final BigDecimal minAmount;
-    private final BigDecimal maxAmount;
+    /**
+     * 用户编号
+     */
+    private final String userId;
+
+    /**
+     * 订单来源
+     */
+    private final String source;
+
+    /**
+     * 开始时间
+     */
     private final LocalDateTime startTime;
+
+    /**
+     * 结束时间
+     */
     private final LocalDateTime endTime;
-    private final Integer pageNum;
-    private final Integer pageSize;
+
+    /**
+     * 最小金额
+     */
+    private final Integer minAmount;
+
+    /**
+     * 最大金额
+     */
+    private final Integer maxAmount;
+
 }
 ```
 
-使用方式：
+调用示例：
 
 ```java
 OrderQueryCondition condition = OrderQueryCondition.builder()
-        .userId(10001L)
-        .orderStatus("PAID")
-        .minAmount(BigDecimal.valueOf(100))
-        .maxAmount(BigDecimal.valueOf(1000))
-        .pageNum(1)
-        .pageSize(20)
+        .userId("USER_001")
+        .source("APP")
+        .minAmount(100)
+        .maxAmount(1000)
         .build();
 ```
 
-对于复杂查询条件，Builder 的优势非常明显：调用方只设置自己关心的字段，不需要传入大量 `null`。
-
-不推荐写法：
-
-```java
-new OrderQueryCondition(10001L, null, null, "PAID", BigDecimal.valueOf(100), BigDecimal.valueOf(1000), null, null, 1, 20);
-```
-
-这种构造方法参数过长，字段含义不清晰，也容易传错顺序。
-
-## 构建者模式和工厂模式的区别
-
-构建者模式和工厂模式都属于创建型设计模式，但关注点不同。
-
-| 对比项   | 构建者模式                 | 工厂模式                           |
-| -------- | -------------------------- | ---------------------------------- |
-| 核心目的 | 一步一步构建复杂对象       | 根据类型创建不同对象               |
-| 关注点   | 对象内部字段和构建过程     | 创建哪个具体实现类                 |
-| 适合对象 | 字段多、参数多、可选项多   | 多个子类、多种产品类型             |
-| 调用方式 | 链式设置字段后 `build`     | 传入类型后返回对象                 |
-| 典型场景 | DTO、Command、VO、查询条件 | 支付处理器、文件解析器、消息发送器 |
-
-简单理解：
-
-```text
-构建者模式：我知道要创建哪个对象，但这个对象参数很多。
-工厂模式：我不确定要创建哪个对象，需要根据类型决定。
-```
-
-创建订单命令、导出配置、查询条件，更适合构建者模式。根据支付渠道创建支付宝处理器、微信处理器，更适合工厂模式。
-
-## 构建者模式和 JavaBean Setter 的区别
-
-构建者模式和 JavaBean Setter 都能设置多个字段，但对象状态管理不同。
-
-| 对比项   | 构建者模式                   | JavaBean Setter                  |
-| -------- | ---------------------------- | -------------------------------- |
-| 对象状态 | 构建完成后可设计为不可变     | 通常是可变对象                   |
-| 参数校验 | 可集中在 `build` 阶段        | 分散在各个 Setter 或业务代码中   |
-| 可读性   | 链式调用，字段含义清晰       | 字段含义清晰，但对象可能半初始化 |
-| 线程安全 | 不可变对象更容易线程安全     | 可变对象需要额外控制             |
-| 适合场景 | 复杂 DTO、命令对象、配置对象 | 框架绑定对象、简单表单对象       |
-
-JavaBean Setter 的问题是对象可能处于半初始化状态。
-
-```java
-OrderCreateCommand command = new OrderCreateCommand();
-command.setUserId(10001L);
-// 此时 productId、quantity、amount 等字段可能还没设置，对象状态不完整
-```
-
-构建者模式则可以在最后统一校验：
-
-```java
-OrderCreateCommand command = OrderCreateCommand.builder()
-        .userId(10001L)
-        .productId(20001L)
-        .quantity(2)
-        .totalAmount(BigDecimal.valueOf(398))
-        .build();
-```
-
-如果使用手写 Builder，可以在 `build` 阶段确保必要字段完整。
+Lombok `@Builder` 更适合简单对象构建。对于需要复杂校验、默认值填充、字段联动计算、不可变集合复制的对象，建议手写 Builder，逻辑更可控。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
+可以通过单元测试验证构建器是否能正确生成默认值、计算金额，以及在必填字段缺失时抛出异常。
 
-```bash
-mvn spring-boot:run
-```
-
-执行订单创建接口：
-
-```bash
-curl -X POST "http://localhost:8080/builder/order/create?userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00&source=APP"
-```
-
-如果构建者模式流程正常，可以看到类似日志：
-
-```text
-构建订单创建命令，用户ID：10001，商品ID：20001，原始金额：398.00，优惠金额：20，应付金额：378.00
-创建订单成功，订单号：ORDER2019776866538487808，请求流水号：REQ2019776866538487807，用户ID：10001，商品ID：20001，应付金额：378.00
-```
-
-执行不传来源渠道的请求：
-
-```bash
-curl -X POST "http://localhost:8080/builder/order/create?userId=10001&productId=20001&productName=键盘&quantity=1&unitPrice=99.00"
-```
-
-此时 `OrderCreateAssembler` 会使用默认来源：
-
-```text
-UNKNOWN
-```
-
-执行异常请求：
-
-```bash
-curl -X POST "http://localhost:8080/builder/order/create?userId=10001&productId=20001&productName=键盘&quantity=0&unitPrice=199.00&source=APP"
-```
-
-异常日志示例：
-
-```text
-构建订单创建命令失败，购买数量不合法，购买数量：0
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
-
-## 注意事项
-
-构建者模式适合复杂对象，但不建议所有对象都使用 Builder。字段很少、语义清晰的对象，直接使用 `record` 或构造方法即可。
-
-适合使用 Builder 的对象：
-
-```text
-字段数量较多
-可选参数较多
-构建过程需要默认值
-构建过程需要参数校验
-对象希望设计为不可变
-对象由多个来源的数据组装而成
-```
-
-不太适合使用 Builder 的对象：
-
-```text
-只有一两个字段的简单对象
-纯数据库实体 Entity
-需要被框架频繁反射赋值的表单对象
-生命周期很短且构造简单的临时对象
-```
-
-不推荐滥用 Builder：
+文件位置：`src/test/java/io/github/atengk/pattern/builder/OrderSubmitContextTest.java`
 
 ```java
-UserId userId = UserId.builder()
-        .value(10001L)
-        .build();
-```
+package io.github.atengk.pattern.builder;
 
-这种对象只有一个字段，使用 Builder 反而增加复杂度。
+import io.github.atengk.pattern.builder.domain.OrderSubmitContext;
+import io.github.atengk.pattern.builder.dto.OrderAddressDTO;
+import io.github.atengk.pattern.builder.dto.OrderItemDTO;
+import io.github.atengk.pattern.builder.enums.OrderSourceEnum;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-对于 Lombok `@Builder`，需要注意默认值问题。字段直接赋默认值不会自动进入 Builder，应该使用 `@Builder.Default`。
+import java.math.BigDecimal;
+import java.util.List;
 
-示例：
+/**
+ * 订单提交上下文构建器测试
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+class OrderSubmitContextTest {
 
-```java
-@Getter
-@Builder
-public class ExportTask {
+    /**
+     * 验证构建器能够正确构建订单提交上下文
+     */
+    @Test
+    void shouldBuildOrderSubmitContext() {
+        OrderSubmitContext context = OrderSubmitContext.builder()
+                .userId("USER_001")
+                .source(OrderSourceEnum.APP)
+                .address(buildAddress())
+                .items(buildItems())
+                .build();
 
-    @Builder.Default
-    private final Integer pageSize = 1000;
+        log.info("订单号：{}，请求号：{}，总金额：{}，总数量：{}",
+                context.getOrderNo(), context.getRequestNo(), context.getTotalAmount(), context.getTotalQuantity());
+
+        Assertions.assertNotNull(context.getOrderNo());
+        Assertions.assertNotNull(context.getRequestNo());
+        Assertions.assertEquals(OrderSourceEnum.APP, context.getSource());
+        Assertions.assertEquals(new BigDecimal("727.00"), context.getTotalAmount());
+        Assertions.assertEquals(3, context.getTotalQuantity());
+    }
+
+    /**
+     * 验证缺少用户编号时构建失败
+     */
+    @Test
+    void shouldThrowExceptionWhenUserIdBlank() {
+        IllegalArgumentException exception = Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> OrderSubmitContext.builder()
+                        .address(buildAddress())
+                        .items(buildItems())
+                        .build()
+        );
+
+        log.info("构建失败异常信息：{}", exception.getMessage());
+        Assertions.assertTrue(exception.getMessage().contains("用户编号不能为空"));
+    }
+
+    /**
+     * 构建测试收货地址
+     *
+     * @return 收货地址
+     */
+    private OrderAddressDTO buildAddress() {
+        OrderAddressDTO address = new OrderAddressDTO();
+        address.setReceiverName("张三");
+        address.setReceiverPhone("13800000000");
+        address.setProvince("广东省");
+        address.setCity("深圳市");
+        address.setDetailAddress("南山区科技园 1 号");
+        return address;
+    }
+
+    /**
+     * 构建测试商品明细
+     *
+     * @return 商品明细
+     */
+    private List<OrderItemDTO> buildItems() {
+        OrderItemDTO keyboard = new OrderItemDTO();
+        keyboard.setSkuId("SKU_10001");
+        keyboard.setSkuName("机械键盘");
+        keyboard.setQuantity(2);
+        keyboard.setPrice(new BigDecimal("299.00"));
+
+        OrderItemDTO mouse = new OrderItemDTO();
+        mouse.setSkuId("SKU_10002");
+        mouse.setSkuName("无线鼠标");
+        mouse.setQuantity(1);
+        mouse.setPrice(new BigDecimal("129.00"));
+
+        return List.of(keyboard, mouse);
+    }
+
 }
 ```
 
-如果不加 `@Builder.Default`，通过 Builder 构建时 `pageSize` 可能是 `null`。
+执行测试：
 
-对于集合字段，建议避免外部集合被修改后影响对象内部状态。手写 Builder 时可以使用不可变拷贝：
-
-```java
-this.fields = List.copyOf(builder.fields);
+```bash
+mvn test -Dtest=OrderSubmitContextTest
 ```
 
-如果 Builder 构建的是业务命令对象，建议在 Assembler 或 Factory 中集中构建，不要让 Controller 直接写大量 Builder 链式代码。
+命令说明：`-Dtest=OrderSubmitContextTest` 表示只运行当前构建者模式测试类，用于快速验证对象构建、默认值处理和异常校验逻辑。
 
-不推荐写法：
+## 和工厂模式的区别
 
-```java
-@PostMapping("/create")
-public OrderCreateResponse create(...) {
-    OrderCreateCommand command = OrderCreateCommand.builder()
-            .userId(userId)
-            .productId(productId)
-            .productName(productName)
-            .quantity(quantity)
-            .unitPrice(unitPrice)
-            .originalAmount(...)
-            .discountAmount(...)
-            .totalAmount(...)
-            .build();
+构建者模式、简单工厂模式、工厂方法模式、抽象工厂模式都属于创建型模式，但关注点不同。
 
-    return orderCreateService.createOrder(command);
-}
+```text
+简单工厂模式：根据类型获取一个对象
+工厂方法模式：由具体工厂创建一个对象
+抽象工厂模式：由具体工厂创建一组相关对象
+构建者模式：分步骤构建一个复杂对象
 ```
 
-推荐写法：
+如果问题是“根据类型选择哪个实现类”，通常是工厂相关模式。如果问题是“一个对象字段很多，创建步骤复杂”，通常是构建者模式。
 
-```java
-OrderCreateRequest request = new OrderCreateRequest(userId, productId, productName, quantity, unitPrice, source);
-OrderCreateCommand command = orderCreateAssembler.buildCommand(request);
-return orderCreateService.createOrder(command);
+在订单提交场景中：
+
+```text
+选择支付宝还是微信支付：适合工厂方法或抽象工厂
+构建订单提交上下文：适合构建者模式
+根据订单类型选择处理器：适合简单工厂或策略模式
 ```
 
-这样可以让 Controller 保持轻量，对象构建规则也更容易复用。
+## 开发建议
+
+在 Spring Boot 项目中使用构建者模式时，建议遵循以下原则：
+
+```text
+字段较多且部分字段可选时，可以考虑构建者模式
+创建过程包含默认值、校验、计算、转换时，优先手写 Builder
+简单对象可以使用 Lombok @Builder
+构建后的对象尽量设计为不可变对象
+集合字段在 build 时要复制，避免外部修改影响对象状态
+不要把复杂业务流程塞进 Builder，Builder 只负责构建对象
+Controller DTO 不一定需要 Builder，业务上下文对象更适合 Builder
+```
+
+需要注意的是，构建者模式不是为了减少代码量。手写 Builder 的代码量通常会增加，但它能换来更清晰的创建过程、更集中的校验逻辑和更稳定的不可变对象。
+
+## 常见问题
+
+构建者模式和 Lombok `@Builder` 不是一回事。Lombok `@Builder` 是一种生成构建器代码的工具，构建者模式是一种对象创建思想。对于简单对象，`@Builder` 足够；对于复杂对象，手写 Builder 更适合。
+
+构建者模式不应该替代所有构造方法。对于简单值对象，例如只有 `id` 和 `name` 两个字段的对象，直接构造方法或 record 更清晰。
+
+构建者模式也不应该承载过多业务逻辑。例如库存校验、优惠券核销、订单落库、发消息等操作不应该写进 `build()` 方法，这些应该放在 Service、领域服务或应用服务中。`build()` 只适合做对象构建相关的校验、默认值、字段计算和格式转换。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，构建者模式的实践重点是让复杂对象创建过程更清晰、更安全、更易维护。
+构建者模式用于分步骤构建复杂对象。它适合字段较多、参数可选、默认值较多、创建过程需要统一校验或计算的对象。
 
-普通 Java 手写 Builder 适合需要严格控制默认值、校验和不可变性的场景。Lombok `@Builder` 适合 Spring Boot 项目中的 DTO、Command、VO、查询条件等对象。对于复杂业务对象，推荐使用“Request 接收参数，Assembler 使用 Builder 构建 Command，Service 执行业务并使用 Builder 构建 Response”的结构。
+本示例的核心流程可以概括为：
 
-构建者模式不是为了替代所有构造方法，而是为了处理字段多、参数多、可选项多、构建逻辑复杂的对象。合理使用可以显著提升代码可读性，减少长参数构造方法和对象半初始化问题。
+```text
+Controller 接收订单提交 DTO
+Service 解析订单来源和配置
+通过 OrderSubmitContext.builder() 创建构建器
+链式设置用户、地址、商品、优惠券、备注等信息
+build() 内部处理默认值、校验和金额计算
+返回不可变订单提交上下文
+Service 使用上下文完成后续业务处理
+```
+
+在真实 Spring Boot 项目中，构建者模式常用于订单上下文、支付请求、导出任务、消息发送请求、复杂查询条件、第三方 API 请求对象等场景。它的核心价值是让复杂对象创建过程集中、清晰、可校验，并减少业务代码中的参数混乱。

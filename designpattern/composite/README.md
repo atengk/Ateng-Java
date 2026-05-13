@@ -1,38 +1,66 @@
-# 设计模式：组合模式
+# 组合模式
 
-组合模式用于把对象组织成树形结构，让调用方可以用统一方式处理单个对象和对象集合。在 JDK21 和 Spring Boot 3 项目中，组合模式常用于菜单树、权限树、组织架构树、分类树、文件目录树、区域层级、部门员工结构、规则节点树等场景。
+组合模式属于结构型模式，核心作用是用统一方式处理树形结构中的叶子节点和容器节点。在当前设计模式文档体系中，组合模式位于结构型模式分类下，适合菜单树、部门树、权限树、分类树、组织架构、文件目录等业务场景。
 
-需要注意：组合模式关注的是“整体和部分统一处理”。如果只是简化多个子系统调用，更适合外观模式；如果是给对象增强能力，更适合装饰器模式；如果是树形结构中叶子节点和容器节点需要统一对外行为，组合模式更合适。
+本文以 **JDK21 + Spring Boot 3** 后端项目为背景，通过“后台权限资源树”的示例，说明组合模式在真实项目中的落地方式。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例模拟一个后台管理系统的权限资源模块。系统中存在三类权限资源：
 
-文件位置：`pom.xml`
+```text
+目录：可以包含菜单或子目录
+菜单：可以包含按钮权限
+按钮：叶子节点，不能再包含子节点
+```
+
+如果不用组合模式，代码中通常会出现大量类型判断：
+
+```java
+if (resourceType == CATALOG) {
+    // 处理目录
+} else if (resourceType == MENU) {
+    // 处理菜单
+} else if (resourceType == BUTTON) {
+    // 处理按钮
+}
+```
+
+当树形结构越来越复杂时，新增节点类型、统计权限编码、构建前端菜单树、校验节点关系都会变得混乱。
+
+组合模式的处理方式是：把目录、菜单、按钮都抽象成统一的 `AuthResourceComponent`，调用方只面向统一接口处理，不直接关心当前节点是容器节点还是叶子节点。
+
+本示例需要以下依赖。
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证组合模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、集合、ID 等通用处理 -->
+    <!-- 参数校验：用于校验接口请求参数 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：用于集合、字符串、对象判断等常用处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>${hutool.version}</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、Getter、构造方法等样板代码 -->
+    <!-- Lombok：减少 DTO、VO、构造器等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- 测试依赖：用于单元测试和接口测试 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -41,388 +69,104 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+示例项目配置如下。
 
-## 核心概念
+```yaml
+server:
+  port: 8080 # 示例服务端口
+```
 
-组合模式的核心目标是让叶子对象和容器对象实现同一个接口，使调用方不需要区分“单个对象”和“对象集合”。
-
-常见角色如下：
-
-| 角色      | 说明                                                         |
-| --------- | ------------------------------------------------------------ |
-| Component | 抽象组件，定义叶子节点和组合节点的统一行为                   |
-| Leaf      | 叶子节点，不能再包含子节点                                   |
-| Composite | 组合节点，可以包含多个子节点                                 |
-| Client    | 调用方，面向 Component 编程，不关心具体是 Leaf 还是 Composite |
-
-常见实现方式如下：
-
-| 实现方式             | 是否推荐 | 适用场景                                                     |
-| -------------------- | -------- | ------------------------------------------------------------ |
-| 透明组合模式         | 谨慎使用 | Component 中统一定义 `add`、`remove`，叶子节点不支持时抛异常 |
-| 安全组合模式         | 推荐     | 只有组合节点暴露子节点管理方法                               |
-| Spring Boot 树构建   | 强烈推荐 | 菜单树、权限树、部门树、分类树                               |
-| 直接嵌套 List DTO    | 可用     | 只做数据展示，不需要统一行为                                 |
-| 大量递归散落在业务层 | 不推荐   | 递归逻辑分散，维护成本高                                     |
-
-在 Spring Boot 项目中，常见优先级通常是：
+本示例的核心文件结构如下。
 
 ```text
-Spring Boot 树组件组合 > 安全组合模式 > 透明组合模式 > 手写分散递归
-```
-
-组合模式特别适合树形结构。如果业务对象天然存在父子关系，并且父节点和子节点有一部分相同行为，就可以考虑组合模式。
-
-## 普通 Java 组合模式
-
-普通 Java 组合模式适合不依赖 Spring 容器的树结构处理。下面以文件系统为例，文件是叶子节点，目录是组合节点，文件和目录都可以统一计算大小、打印结构。
-
-整体结构如下：
-
-```text
-目录
-├── 文件
-├── 文件
-└── 子目录
-    ├── 文件
-    └── 文件
-```
-
-调用方只面向 `FileSystemComponent`，不需要区分当前对象是文件还是目录。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/composite/simple/
-├── FileSystemComponent.java
-├── FileNode.java
-└── DirectoryNode.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/composite/simple/FileSystemComponent.java`
-
-下面是文件系统组件接口，文件和目录都实现该接口。
-
-```java
-package io.github.atengk.design.composite.simple;
-
-/**
- * 文件系统组件
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface FileSystemComponent {
-
-    /**
-     * 获取名称
-     *
-     * @return 名称
-     */
-    String name();
-
-    /**
-     * 计算大小
-     *
-     * @return 大小，单位：字节
-     */
-    long size();
-
-    /**
-     * 打印树形结构
-     *
-     * @param indent 缩进
-     * @return 树形结构文本
-     */
-    String print(String indent);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/composite/simple/FileNode.java`
-
-下面是文件节点，也就是叶子节点。它没有子节点，只返回自身大小。
-
-```java
-package io.github.atengk.design.composite.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 文件节点
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class FileNode implements FileSystemComponent {
-
-    private final String name;
-    private final long size;
-
-    /**
-     * 创建文件节点
-     *
-     * @param name 文件名
-     * @param size 文件大小
-     */
-    public FileNode(String name, long size) {
-        if (StrUtil.isBlank(name)) {
-            log.warn("创建文件节点失败，文件名为空");
-            throw new IllegalArgumentException("文件名不能为空");
-        }
-
-        if (size < 0) {
-            log.warn("创建文件节点失败，文件大小不合法，文件名：{}，大小：{}", name, size);
-            throw new IllegalArgumentException("文件大小不能小于0");
-        }
-
-        this.name = name;
-        this.size = size;
-    }
-
-    /**
-     * 获取名称
-     *
-     * @return 名称
-     */
-    @Override
-    public String name() {
-        return name;
-    }
-
-    /**
-     * 计算大小
-     *
-     * @return 文件大小
-     */
-    @Override
-    public long size() {
-        return size;
-    }
-
-    /**
-     * 打印树形结构
-     *
-     * @param indent 缩进
-     * @return 树形结构文本
-     */
-    @Override
-    public String print(String indent) {
-        return StrUtil.format("{}- {} ({} bytes)", indent, name, size);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/composite/simple/DirectoryNode.java`
-
-下面是目录节点，也就是组合节点。它可以包含文件节点或其他目录节点。
-
-```java
-package io.github.atengk.design.composite.simple;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * 目录节点
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class DirectoryNode implements FileSystemComponent {
-
-    private final String name;
-    private final List<FileSystemComponent> children = new ArrayList<>();
-
-    /**
-     * 创建目录节点
-     *
-     * @param name 目录名
-     */
-    public DirectoryNode(String name) {
-        if (StrUtil.isBlank(name)) {
-            log.warn("创建目录节点失败，目录名为空");
-            throw new IllegalArgumentException("目录名不能为空");
-        }
-
-        this.name = name;
-    }
-
-    /**
-     * 添加子节点
-     *
-     * @param component 文件系统组件
-     */
-    public void add(FileSystemComponent component) {
-        if (component == null) {
-            log.warn("添加目录子节点失败，子节点为空，目录：{}", name);
-            throw new IllegalArgumentException("子节点不能为空");
-        }
-
-        children.add(component);
-        log.info("添加目录子节点成功，目录：{}，子节点：{}，子节点数量：{}", name, component.name(), children.size());
-    }
-
-    /**
-     * 移除子节点
-     *
-     * @param component 文件系统组件
-     */
-    public void remove(FileSystemComponent component) {
-        if (component == null) {
-            return;
-        }
-
-        children.remove(component);
-        log.info("移除目录子节点成功，目录：{}，子节点：{}，子节点数量：{}", name, component.name(), children.size());
-    }
-
-    /**
-     * 获取名称
-     *
-     * @return 名称
-     */
-    @Override
-    public String name() {
-        return name;
-    }
-
-    /**
-     * 计算大小
-     *
-     * @return 目录总大小
-     */
-    @Override
-    public long size() {
-        if (CollUtil.isEmpty(children)) {
-            return 0L;
-        }
-
-        return children.stream()
-                .mapToLong(FileSystemComponent::size)
-                .sum();
-    }
-
-    /**
-     * 打印树形结构
-     *
-     * @param indent 缩进
-     * @return 树形结构文本
-     */
-    @Override
-    public String print(String indent) {
-        StringBuilder builder = new StringBuilder();
-        builder.append(StrUtil.format("{}+ {} ({} bytes)", indent, name, size()));
-
-        for (FileSystemComponent child : children) {
-            builder.append(System.lineSeparator())
-                    .append(child.print(indent + "  "));
-        }
-
-        return builder.toString();
-    }
-}
-```
-
-使用方式：
-
-```java
-DirectoryNode root = new DirectoryNode("project");
-
-root.add(new FileNode("pom.xml", 2048));
-root.add(new FileNode("README.md", 1024));
-
-DirectoryNode src = new DirectoryNode("src");
-src.add(new FileNode("Application.java", 4096));
-src.add(new FileNode("UserController.java", 8192));
-
-root.add(src);
-
-long totalSize = root.size();
-String treeText = root.print("");
-```
-
-可能输出：
-
-```text
-+ project (15360 bytes)
-  - pom.xml (2048 bytes)
-  - README.md (1024 bytes)
-  + src (12288 bytes)
-    - Application.java (4096 bytes)
-    - UserController.java (8192 bytes)
-```
-
-这里的 `root`、`src`、`FileNode` 都可以通过 `FileSystemComponent` 统一处理。调用方不需要关心当前对象是单个文件还是目录。
-
-## Spring Boot 组合模式
-
-Spring Boot 项目中更常见的组合模式，是把数据库中的扁平数据组装成树形结构，并对叶子节点和组合节点提供统一处理能力。下面以权限资源树为例，目录和菜单可以包含子资源，按钮是叶子资源。
-
-资源类型如下：
-
-```text
-DIRECTORY 目录
-MENU      菜单
-BUTTON    按钮
-```
-
-权限资源树示例：
-
-```text
-系统管理
-├── 用户管理
-│   ├── 新增用户
-│   └── 删除用户
-└── 角色管理
-    ├── 新增角色
-    └── 分配权限
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/designpattern/composite
 ├── CompositeApplication.java
-├── component/
-│   ├── PermissionComponent.java
-│   ├── PermissionComposite.java
-│   └── PermissionLeaf.java
-├── controller/
-│   └── PermissionController.java
-├── dto/
-│   ├── PermissionResourceDefinition.java
-│   └── PermissionResourceResponse.java
-├── enums/
-│   └── PermissionResourceType.java
-└── service/
-    ├── PermissionTreeService.java
-    └── impl/
-        └── PermissionTreeServiceImpl.java
+├── controller
+│   └── AuthResourceController.java
+├── dto
+│   └── AuthResourceCreateRequest.java
+├── enums
+│   └── AuthResourceType.java
+├── composite
+│   ├── AuthResourceComponent.java
+│   ├── AbstractAuthResourceComponent.java
+│   ├── AuthResourceComposite.java
+│   ├── AuthResourceLeaf.java
+│   └── AuthResourceTreeFactory.java
+├── repository
+│   └── AuthResourceMemoryRepository.java
+├── service
+│   ├── AuthResourceService.java
+│   └── AuthResourceServiceImpl.java
+├── vo
+│   ├── ApiResult.java
+│   └── AuthResourceTreeVO.java
+└── web
+    └── GlobalExceptionHandler.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/CompositeApplication.java`
+## 模式设计
 
-下面是 Spring Boot 启动类。
+组合模式适合处理“整体和部分具有一致操作”的树形结构。在权限资源场景中，后台系统可能需要对整棵权限树做这些操作：
+
+```text
+构建权限树
+统计所有权限编码
+查找某个资源节点
+计算节点总数
+转换成前端树结构
+```
+
+无论当前节点是目录、菜单还是按钮，调用方都希望用统一方式处理。
+
+本示例中的角色分工如下。
+
+| 角色       | 示例类                          | 说明                           |
+| ---------- | ------------------------------- | ------------------------------ |
+| 抽象组件   | `AuthResourceComponent`         | 定义目录、菜单、按钮的统一操作 |
+| 抽象基础类 | `AbstractAuthResourceComponent` | 保存节点公共属性和通用逻辑     |
+| 容器节点   | `AuthResourceComposite`         | 表示目录或菜单，可以包含子节点 |
+| 叶子节点   | `AuthResourceLeaf`              | 表示按钮权限，不能包含子节点   |
+| 构建工厂   | `AuthResourceTreeFactory`       | 把扁平数据转换成组合树         |
+| 调用方     | `AuthResourceServiceImpl`       | 面向统一组件接口处理树形结构   |
+
+核心流程如下。
+
+```text
+Controller
+    ↓
+AuthResourceService
+    ↓
+AuthResourceMemoryRepository 查询扁平权限数据
+    ↓
+AuthResourceTreeFactory 构建组合树
+    ↓
+AuthResourceComponent 统一处理目录、菜单、按钮
+    ↓
+返回前端树结构或权限编码列表
+```
+
+组合模式的关键不是“递归”本身，而是让递归处理时不再散落大量节点类型判断。
+
+## 核心代码
+
+下面给出组合模式在 Spring Boot 项目中的关键实现。示例使用内存仓储模拟数据库数据，真实项目中可以替换为 MyBatis-Plus、JPA 或远程权限中心。
+
+项目启动类负责启动 Spring Boot 应用。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/CompositeApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.designpattern.composite;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * 组合模式示例启动类
+ * 组合模式示例应用启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class CompositeApplication {
@@ -438,977 +182,1639 @@ public class CompositeApplication {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/enums/PermissionResourceType.java`
+权限资源类型枚举用于区分目录、菜单和按钮，并提供字符串解析能力。
 
-下面是权限资源类型枚举。
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/enums/AuthResourceType.java`
 
 ```java
-package io.github.atengk.design.enums;
+package io.github.atengk.designpattern.composite.enums;
+
+import cn.hutool.core.util.StrUtil;
+
+import java.util.Arrays;
 
 /**
  * 权限资源类型
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public enum PermissionResourceType {
+public enum AuthResourceType {
 
     /**
-     * 目录
+     * 目录节点，可以包含目录或菜单
      */
-    DIRECTORY,
+    CATALOG,
 
     /**
-     * 菜单
+     * 菜单节点，可以包含按钮权限
      */
     MENU,
 
     /**
-     * 按钮
+     * 按钮节点，叶子节点
      */
-    BUTTON
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/PermissionResourceDefinition.java`
-
-下面是权限资源定义对象，用于模拟数据库中的扁平权限数据。
-
-```java
-package io.github.atengk.design.dto;
-
-import io.github.atengk.design.enums.PermissionResourceType;
-
-/**
- * 权限资源定义
- *
- * @param code       资源编码
- * @param parentCode 父资源编码
- * @param name       资源名称
- * @param type       资源类型
- * @param sortNo     排序号
- * @author Ateng
- * @since 2026-04-30
- */
-public record PermissionResourceDefinition(
-        String code,
-        String parentCode,
-        String name,
-        PermissionResourceType type,
-        Integer sortNo
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/PermissionResourceResponse.java`
-
-下面是权限资源响应对象，用于返回树形结构。
-
-```java
-package io.github.atengk.design.dto;
-
-import io.github.atengk.design.enums.PermissionResourceType;
-
-import java.util.List;
-
-/**
- * 权限资源响应
- *
- * @param code     资源编码
- * @param name     资源名称
- * @param type     资源类型
- * @param sortNo   排序号
- * @param children 子资源列表
- * @author Ateng
- * @since 2026-04-30
- */
-public record PermissionResourceResponse(
-        String code,
-        String name,
-        PermissionResourceType type,
-        Integer sortNo,
-        List<PermissionResourceResponse> children
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/component/PermissionComponent.java`
-
-下面是权限组件接口。目录、菜单、按钮都通过该接口统一处理。
-
-```java
-package io.github.atengk.design.component;
-
-import io.github.atengk.design.dto.PermissionResourceResponse;
-import io.github.atengk.design.enums.PermissionResourceType;
-
-import java.util.List;
-import java.util.Set;
-
-/**
- * 权限组件
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface PermissionComponent {
+    BUTTON;
 
     /**
-     * 获取资源编码
+     * 根据类型编码解析资源类型
      *
-     * @return 资源编码
+     * @param type 类型编码
+     * @return 权限资源类型
      */
-    String code();
+    public static AuthResourceType parse(String type) {
+        if (StrUtil.isBlank(type)) {
+            throw new IllegalArgumentException("权限资源类型不能为空");
+        }
+
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.name(), type))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的权限资源类型：{}", type)));
+    }
+
+    /**
+     * 判断是否为叶子节点
+     *
+     * @return 是否为叶子节点
+     */
+    public boolean isLeaf() {
+        return this == BUTTON;
+    }
+}
+```
+
+创建权限资源请求 DTO 用于模拟新增权限节点。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/dto/AuthResourceCreateRequest.java`
+
+```java
+package io.github.atengk.designpattern.composite.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+/**
+ * 创建权限资源请求
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class AuthResourceCreateRequest {
+
+    /**
+     * 资源名称
+     */
+    @NotBlank(message = "资源名称不能为空")
+    private String name;
+
+    /**
+     * 资源类型：CATALOG、MENU、BUTTON
+     */
+    @NotBlank(message = "资源类型不能为空")
+    private String type;
+
+    /**
+     * 父级资源 ID，根节点可为空
+     */
+    private String parentId;
+
+    /**
+     * 权限编码，按钮节点通常必填
+     */
+    private String permissionCode;
+
+    /**
+     * 排序值
+     */
+    @NotNull(message = "排序值不能为空")
+    private Integer sort;
+}
+```
+
+权限树返回 VO 用于向前端返回统一树结构。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/vo/AuthResourceTreeVO.java`
+
+```java
+package io.github.atengk.designpattern.composite.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.util.List;
+
+/**
+ * 权限资源树节点返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class AuthResourceTreeVO {
+
+    /**
+     * 资源 ID
+     */
+    private String id;
+
+    /**
+     * 父级资源 ID
+     */
+    private String parentId;
+
+    /**
+     * 资源名称
+     */
+    private String name;
+
+    /**
+     * 资源类型
+     */
+    private String type;
+
+    /**
+     * 权限编码
+     */
+    private String permissionCode;
+
+    /**
+     * 排序值
+     */
+    private Integer sort;
+
+    /**
+     * 子节点
+     */
+    private List<AuthResourceTreeVO> children;
+}
+```
+
+统一 API 返回对象用于包装接口响应。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/vo/ApiResult.java`
+
+```java
+package io.github.atengk.designpattern.composite.vo;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * API 统一返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    /**
+     * 业务状态码
+     */
+    private Integer code;
+
+    /**
+     * 返回消息
+     */
+    private String message;
+
+    /**
+     * 返回数据
+     */
+    private T data;
+
+    /**
+     * 成功返回
+     *
+     * @param data 返回数据
+     * @return API 返回对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return ApiResult.<T>builder()
+                .code(200)
+                .message("操作成功")
+                .data(data)
+                .build();
+    }
+
+    /**
+     * 失败返回
+     *
+     * @param message 失败消息
+     * @return API 返回对象
+     */
+    public static ApiResult<Void> fail(String message) {
+        return ApiResult.<Void>builder()
+                .code(500)
+                .message(message)
+                .build();
+    }
+}
+```
+
+`AuthResourceComponent` 是组合模式中的抽象组件，目录、菜单、按钮都实现这一套统一接口。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/composite/AuthResourceComponent.java`
+
+```java
+package io.github.atengk.designpattern.composite.composite;
+
+import io.github.atengk.designpattern.composite.enums.AuthResourceType;
+import io.github.atengk.designpattern.composite.vo.AuthResourceTreeVO;
+
+import java.util.List;
+
+/**
+ * 权限资源组件接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface AuthResourceComponent {
+
+    /**
+     * 获取资源 ID
+     *
+     * @return 资源 ID
+     */
+    String getId();
+
+    /**
+     * 获取父级资源 ID
+     *
+     * @return 父级资源 ID
+     */
+    String getParentId();
 
     /**
      * 获取资源名称
      *
      * @return 资源名称
      */
-    String name();
+    String getName();
 
     /**
      * 获取资源类型
      *
      * @return 资源类型
      */
-    PermissionResourceType type();
+    AuthResourceType getType();
 
     /**
-     * 获取排序号
+     * 获取权限编码
      *
-     * @return 排序号
+     * @return 权限编码
      */
-    Integer sortNo();
+    String getPermissionCode();
 
     /**
-     * 采集权限编码
+     * 获取排序值
      *
-     * @return 权限编码集合
+     * @return 排序值
      */
-    Set<String> collectCodes();
+    Integer getSort();
 
     /**
-     * 转换为响应对象
+     * 添加子节点
      *
-     * @return 权限资源响应
+     * @param child 子节点
      */
-    PermissionResourceResponse toResponse();
+    void addChild(AuthResourceComponent child);
 
     /**
-     * 获取子节点
+     * 移除子节点
+     *
+     * @param childId 子节点 ID
+     */
+    void removeChild(String childId);
+
+    /**
+     * 获取子节点列表
      *
      * @return 子节点列表
      */
-    default List<PermissionComponent> children() {
-        return List.of();
-    }
+    List<AuthResourceComponent> getChildren();
+
+    /**
+     * 获取当前节点及子节点中的所有权限编码
+     *
+     * @return 权限编码列表
+     */
+    List<String> getPermissionCodes();
+
+    /**
+     * 统计当前节点及子节点总数
+     *
+     * @return 节点总数
+     */
+    int count();
+
+    /**
+     * 转换成前端树节点
+     *
+     * @return 权限资源树节点
+     */
+    AuthResourceTreeVO toTreeVO();
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/component/PermissionLeaf.java`
+抽象基础类保存公共字段，并提供通用的节点信息。
 
-下面是权限叶子节点。按钮通常是叶子节点，不再包含子资源。
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/composite/AbstractAuthResourceComponent.java`
 
 ```java
-package io.github.atengk.design.component;
+package io.github.atengk.designpattern.composite.composite;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.PermissionResourceResponse;
-import io.github.atengk.design.enums.PermissionResourceType;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Set;
+import io.github.atengk.designpattern.composite.enums.AuthResourceType;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 /**
- * 权限叶子节点
+ * 权限资源抽象组件
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-public class PermissionLeaf implements PermissionComponent {
+@Getter
+@RequiredArgsConstructor
+public abstract class AbstractAuthResourceComponent implements AuthResourceComponent {
 
-    private final String code;
+    /**
+     * 资源 ID
+     */
+    private final String id;
+
+    /**
+     * 父级资源 ID
+     */
+    private final String parentId;
+
+    /**
+     * 资源名称
+     */
     private final String name;
-    private final PermissionResourceType type;
-    private final Integer sortNo;
 
     /**
-     * 创建权限叶子节点
-     *
-     * @param code   资源编码
-     * @param name   资源名称
-     * @param type   资源类型
-     * @param sortNo 排序号
+     * 资源类型
      */
-    public PermissionLeaf(String code, String name, PermissionResourceType type, Integer sortNo) {
-        if (StrUtil.hasBlank(code, name)) {
-            log.warn("创建权限叶子节点失败，资源编码或名称为空");
-            throw new IllegalArgumentException("资源编码和名称不能为空");
-        }
-
-        this.code = code;
-        this.name = name;
-        this.type = type;
-        this.sortNo = sortNo == null ? 0 : sortNo;
-    }
+    private final AuthResourceType type;
 
     /**
-     * 获取资源编码
-     *
-     * @return 资源编码
+     * 权限编码
      */
-    @Override
-    public String code() {
-        return code;
-    }
+    private final String permissionCode;
 
     /**
-     * 获取资源名称
-     *
-     * @return 资源名称
+     * 排序值
      */
-    @Override
-    public String name() {
-        return name;
-    }
-
-    /**
-     * 获取资源类型
-     *
-     * @return 资源类型
-     */
-    @Override
-    public PermissionResourceType type() {
-        return type;
-    }
-
-    /**
-     * 获取排序号
-     *
-     * @return 排序号
-     */
-    @Override
-    public Integer sortNo() {
-        return sortNo;
-    }
-
-    /**
-     * 采集权限编码
-     *
-     * @return 权限编码集合
-     */
-    @Override
-    public Set<String> collectCodes() {
-        return Set.of(code);
-    }
-
-    /**
-     * 转换为响应对象
-     *
-     * @return 权限资源响应
-     */
-    @Override
-    public PermissionResourceResponse toResponse() {
-        return new PermissionResourceResponse(code, name, type, sortNo, List.of());
-    }
+    private final Integer sort;
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/component/PermissionComposite.java`
+容器节点表示目录或菜单，可以包含子节点。目录下面可以挂目录或菜单，菜单下面可以挂按钮。
 
-下面是权限组合节点。目录和菜单可以包含子节点，并且可以递归采集子节点权限编码。
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/composite/AuthResourceComposite.java`
 
 ```java
-package io.github.atengk.design.component;
+package io.github.atengk.designpattern.composite.composite;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.PermissionResourceResponse;
-import io.github.atengk.design.enums.PermissionResourceType;
+import io.github.atengk.designpattern.composite.enums.AuthResourceType;
+import io.github.atengk.designpattern.composite.vo.AuthResourceTreeVO;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 权限组合节点
+ * 权限资源容器节点
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
-public class PermissionComposite implements PermissionComponent {
+public class AuthResourceComposite extends AbstractAuthResourceComponent {
 
-    private final String code;
-    private final String name;
-    private final PermissionResourceType type;
-    private final Integer sortNo;
-    private final List<PermissionComponent> children = new CopyOnWriteArrayList<>();
+    private final List<AuthResourceComponent> children = new ArrayList<>();
 
     /**
-     * 创建权限组合节点
+     * 创建权限资源容器节点
      *
-     * @param code   资源编码
-     * @param name   资源名称
-     * @param type   资源类型
-     * @param sortNo 排序号
+     * @param id             资源 ID
+     * @param parentId       父级资源 ID
+     * @param name           资源名称
+     * @param type           资源类型
+     * @param permissionCode 权限编码
+     * @param sort           排序值
      */
-    public PermissionComposite(String code, String name, PermissionResourceType type, Integer sortNo) {
-        if (StrUtil.hasBlank(code, name)) {
-            log.warn("创建权限组合节点失败，资源编码或名称为空");
-            throw new IllegalArgumentException("资源编码和名称不能为空");
+    public AuthResourceComposite(String id, String parentId, String name, AuthResourceType type, String permissionCode, Integer sort) {
+        super(id, parentId, name, type, permissionCode, sort);
+        if (type.isLeaf()) {
+            throw new IllegalArgumentException("容器节点不能使用叶子类型：" + type);
         }
-
-        this.code = code;
-        this.name = name;
-        this.type = type;
-        this.sortNo = sortNo == null ? 0 : sortNo;
     }
 
     /**
      * 添加子节点
      *
-     * @param component 权限组件
+     * @param child 子节点
      */
-    public void add(PermissionComponent component) {
-        if (component == null) {
-            log.warn("添加权限子节点失败，子节点为空，父节点：{}", code);
+    @Override
+    public void addChild(AuthResourceComponent child) {
+        if (child == null) {
             throw new IllegalArgumentException("子节点不能为空");
         }
 
-        children.add(component);
-        log.info("添加权限子节点成功，父节点：{}，子节点：{}", code, component.code());
+        children.add(child);
+        children.sort(Comparator.comparing(AuthResourceComponent::getSort));
+        log.info("权限资源节点添加成功，parentId={}，childId={}，childName={}", getId(), child.getId(), child.getName());
     }
 
     /**
-     * 获取资源编码
+     * 移除子节点
      *
-     * @return 资源编码
+     * @param childId 子节点 ID
      */
     @Override
-    public String code() {
-        return code;
+    public void removeChild(String childId) {
+        if (StrUtil.isBlank(childId)) {
+            throw new IllegalArgumentException("子节点 ID 不能为空");
+        }
+
+        boolean removed = children.removeIf(child -> StrUtil.equals(child.getId(), childId));
+        log.info("权限资源节点移除结果，parentId={}，childId={}，removed={}", getId(), childId, removed);
     }
 
     /**
-     * 获取资源名称
-     *
-     * @return 资源名称
-     */
-    @Override
-    public String name() {
-        return name;
-    }
-
-    /**
-     * 获取资源类型
-     *
-     * @return 资源类型
-     */
-    @Override
-    public PermissionResourceType type() {
-        return type;
-    }
-
-    /**
-     * 获取排序号
-     *
-     * @return 排序号
-     */
-    @Override
-    public Integer sortNo() {
-        return sortNo;
-    }
-
-    /**
-     * 获取子节点
+     * 获取子节点列表
      *
      * @return 子节点列表
      */
     @Override
-    public List<PermissionComponent> children() {
-        return children.stream()
-                .sorted(Comparator.comparing(PermissionComponent::sortNo))
-                .toList();
+    public List<AuthResourceComponent> getChildren() {
+        return List.copyOf(children);
     }
 
     /**
-     * 采集权限编码
+     * 获取当前节点及子节点中的所有权限编码
      *
-     * @return 权限编码集合
+     * @return 权限编码列表
      */
     @Override
-    public Set<String> collectCodes() {
-        Set<String> codes = new LinkedHashSet<>();
-        codes.add(code);
+    public List<String> getPermissionCodes() {
+        List<String> permissionCodes = new ArrayList<>();
 
-        if (CollUtil.isNotEmpty(children)) {
-            for (PermissionComponent child : children()) {
-                codes.addAll(child.collectCodes());
-            }
+        if (StrUtil.isNotBlank(getPermissionCode())) {
+            permissionCodes.add(getPermissionCode());
         }
 
-        return codes;
+        for (AuthResourceComponent child : children) {
+            permissionCodes.addAll(child.getPermissionCodes());
+        }
+
+        return permissionCodes;
     }
 
     /**
-     * 转换为响应对象
+     * 统计当前节点及子节点总数
      *
-     * @return 权限资源响应
+     * @return 节点总数
      */
     @Override
-    public PermissionResourceResponse toResponse() {
-        List<PermissionResourceResponse> childResponses = children().stream()
-                .map(PermissionComponent::toResponse)
+    public int count() {
+        int total = 1;
+        for (AuthResourceComponent child : children) {
+            total += child.count();
+        }
+        return total;
+    }
+
+    /**
+     * 转换成前端树节点
+     *
+     * @return 权限资源树节点
+     */
+    @Override
+    public AuthResourceTreeVO toTreeVO() {
+        List<AuthResourceTreeVO> childVOList = children.stream()
+                .sorted(Comparator.comparing(AuthResourceComponent::getSort))
+                .map(AuthResourceComponent::toTreeVO)
                 .toList();
 
-        return new PermissionResourceResponse(code, name, type, sortNo, childResponses);
+        return AuthResourceTreeVO.builder()
+                .id(getId())
+                .parentId(getParentId())
+                .name(getName())
+                .type(getType().name())
+                .permissionCode(getPermissionCode())
+                .sort(getSort())
+                .children(CollUtil.emptyIfNull(childVOList))
+                .build();
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/PermissionTreeService.java`
+叶子节点表示按钮权限，不能继续添加子节点。对叶子节点调用 `addChild()` 会直接抛出异常，避免错误树结构进入系统。
 
-下面是权限树服务接口。
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/composite/AuthResourceLeaf.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.designpattern.composite.composite;
 
-import io.github.atengk.design.dto.PermissionResourceResponse;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.composite.enums.AuthResourceType;
+import io.github.atengk.designpattern.composite.vo.AuthResourceTreeVO;
 
 import java.util.List;
-import java.util.Set;
 
 /**
- * 权限树服务
+ * 权限资源叶子节点
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface PermissionTreeService {
+public class AuthResourceLeaf extends AbstractAuthResourceComponent {
 
     /**
-     * 获取权限资源树
+     * 创建权限资源叶子节点
      *
-     * @return 权限资源树
+     * @param id             资源 ID
+     * @param parentId       父级资源 ID
+     * @param name           资源名称
+     * @param permissionCode 权限编码
+     * @param sort           排序值
      */
-    List<PermissionResourceResponse> listTree();
+    public AuthResourceLeaf(String id, String parentId, String name, String permissionCode, Integer sort) {
+        super(id, parentId, name, AuthResourceType.BUTTON, permissionCode, sort);
+        if (StrUtil.isBlank(permissionCode)) {
+            throw new IllegalArgumentException("按钮权限节点必须配置权限编码");
+        }
+    }
 
     /**
-     * 获取全部权限编码
+     * 添加子节点
      *
-     * @return 权限编码集合
+     * @param child 子节点
      */
-    Set<String> listPermissionCodes();
+    @Override
+    public void addChild(AuthResourceComponent child) {
+        throw new UnsupportedOperationException("叶子节点不支持添加子节点");
+    }
+
+    /**
+     * 移除子节点
+     *
+     * @param childId 子节点 ID
+     */
+    @Override
+    public void removeChild(String childId) {
+        throw new UnsupportedOperationException("叶子节点不支持移除子节点");
+    }
+
+    /**
+     * 获取子节点列表
+     *
+     * @return 子节点列表
+     */
+    @Override
+    public List<AuthResourceComponent> getChildren() {
+        return List.of();
+    }
+
+    /**
+     * 获取当前节点中的权限编码
+     *
+     * @return 权限编码列表
+     */
+    @Override
+    public List<String> getPermissionCodes() {
+        return List.of(getPermissionCode());
+    }
+
+    /**
+     * 统计当前节点总数
+     *
+     * @return 节点总数
+     */
+    @Override
+    public int count() {
+        return 1;
+    }
+
+    /**
+     * 转换成前端树节点
+     *
+     * @return 权限资源树节点
+     */
+    @Override
+    public AuthResourceTreeVO toTreeVO() {
+        return AuthResourceTreeVO.builder()
+                .id(getId())
+                .parentId(getParentId())
+                .name(getName())
+                .type(getType().name())
+                .permissionCode(getPermissionCode())
+                .sort(getSort())
+                .children(List.of())
+                .build();
+    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/PermissionTreeServiceImpl.java`
+树工厂负责把扁平权限资源数据转换成组合树。真实项目中，扁平数据通常来自数据库。
 
-下面是权限树服务实现。它先模拟一组扁平权限资源，再组装成组合树。
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/composite/AuthResourceTreeFactory.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.designpattern.composite.composite;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.component.PermissionComponent;
-import io.github.atengk.design.component.PermissionComposite;
-import io.github.atengk.design.component.PermissionLeaf;
-import io.github.atengk.design.dto.PermissionResourceDefinition;
-import io.github.atengk.design.dto.PermissionResourceResponse;
-import io.github.atengk.design.enums.PermissionResourceType;
-import io.github.atengk.design.service.PermissionTreeService;
+import io.github.atengk.designpattern.composite.dto.AuthResourceCreateRequest;
+import io.github.atengk.designpattern.composite.enums.AuthResourceType;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 权限树服务实现
+ * 权限资源树工厂
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
-@Service
-public class PermissionTreeServiceImpl implements PermissionTreeService {
+@Component
+@RequiredArgsConstructor
+public class AuthResourceTreeFactory {
 
     /**
-     * 获取权限资源树
+     * 根据扁平权限资源构建组合树
      *
-     * @return 权限资源树
+     * @param resources 扁平权限资源列表
+     * @return 权限资源根节点列表
      */
-    @Override
-    public List<PermissionResourceResponse> listTree() {
-        List<PermissionComponent> rootComponents = buildPermissionTree();
-
-        List<PermissionResourceResponse> responses = rootComponents.stream()
-                .map(PermissionComponent::toResponse)
-                .toList();
-
-        log.info("获取权限资源树成功，根节点数量：{}", responses.size());
-        return responses;
-    }
-
-    /**
-     * 获取全部权限编码
-     *
-     * @return 权限编码集合
-     */
-    @Override
-    public Set<String> listPermissionCodes() {
-        Set<String> codes = new LinkedHashSet<>();
-
-        for (PermissionComponent component : buildPermissionTree()) {
-            codes.addAll(component.collectCodes());
+    public List<AuthResourceComponent> buildTree(List<AuthResourceCreateRequest> resources) {
+        if (CollUtil.isEmpty(resources)) {
+            return List.of();
         }
 
-        log.info("采集权限编码成功，权限数量：{}", codes.size());
-        return codes;
-    }
+        Map<String, AuthResourceComponent> componentMap = resources.stream()
+                .map(this::createComponent)
+                .collect(Collectors.toMap(AuthResourceComponent::getId, Function.identity()));
 
-    /**
-     * 构建权限树
-     *
-     * @return 权限组件根节点列表
-     */
-    private List<PermissionComponent> buildPermissionTree() {
-        List<PermissionResourceDefinition> definitions = mockDefinitions();
-
-        Map<String, PermissionComponent> componentMap = definitions.stream()
-                .collect(Collectors.toMap(
-                        PermissionResourceDefinition::code,
-                        this::createComponent,
-                        (first, second) -> first
-                ));
-
-        for (PermissionResourceDefinition definition : definitions) {
-            if (StrUtil.isBlank(definition.parentCode())) {
+        for (AuthResourceComponent component : componentMap.values()) {
+            String parentId = component.getParentId();
+            if (StrUtil.isBlank(parentId)) {
                 continue;
             }
 
-            PermissionComponent parent = componentMap.get(definition.parentCode());
-            PermissionComponent current = componentMap.get(definition.code());
-
-            if (parent instanceof PermissionComposite composite) {
-                composite.add(current);
-            } else {
-                log.warn("权限树构建异常，父节点不是组合节点，父节点：{}，当前节点：{}",
-                        definition.parentCode(), definition.code());
+            AuthResourceComponent parent = componentMap.get(parentId);
+            if (parent == null) {
+                log.warn("权限资源父节点不存在，childId={}，parentId={}", component.getId(), parentId);
+                continue;
             }
+
+            parent.addChild(component);
         }
 
-        List<PermissionComponent> roots = definitions.stream()
-                .filter(definition -> StrUtil.isBlank(definition.parentCode()))
-                .map(definition -> componentMap.get(definition.code()))
-                .sorted(Comparator.comparing(PermissionComponent::sortNo))
+        return componentMap.values()
+                .stream()
+                .filter(component -> StrUtil.isBlank(component.getParentId()))
+                .sorted(Comparator.comparing(AuthResourceComponent::getSort))
                 .toList();
-
-        if (CollUtil.isEmpty(roots)) {
-            log.warn("权限树根节点为空");
-        }
-
-        return roots;
     }
 
     /**
-     * 创建权限组件
+     * 根据请求对象创建组件节点
      *
-     * @param definition 权限资源定义
-     * @return 权限组件
+     * @param request 权限资源请求
+     * @return 权限资源组件
      */
-    private PermissionComponent createComponent(PermissionResourceDefinition definition) {
-        if (definition.type() == PermissionResourceType.BUTTON) {
-            return new PermissionLeaf(definition.code(), definition.name(), definition.type(), definition.sortNo());
+    private AuthResourceComponent createComponent(AuthResourceCreateRequest request) {
+        AuthResourceType type = AuthResourceType.parse(request.getType());
+
+        if (type.isLeaf()) {
+            return new AuthResourceLeaf(
+                    request.getName(),
+                    request.getParentId(),
+                    request.getName(),
+                    request.getPermissionCode(),
+                    request.getSort()
+            );
         }
 
-        return new PermissionComposite(definition.code(), definition.name(), definition.type(), definition.sortNo());
-    }
-
-    /**
-     * 模拟权限资源定义
-     *
-     * @return 权限资源定义列表
-     */
-    private List<PermissionResourceDefinition> mockDefinitions() {
-        return List.of(
-                new PermissionResourceDefinition("system", null, "系统管理", PermissionResourceType.DIRECTORY, 100),
-                new PermissionResourceDefinition("system:user", "system", "用户管理", PermissionResourceType.MENU, 110),
-                new PermissionResourceDefinition("system:user:add", "system:user", "新增用户", PermissionResourceType.BUTTON, 111),
-                new PermissionResourceDefinition("system:user:delete", "system:user", "删除用户", PermissionResourceType.BUTTON, 112),
-                new PermissionResourceDefinition("system:role", "system", "角色管理", PermissionResourceType.MENU, 120),
-                new PermissionResourceDefinition("system:role:add", "system:role", "新增角色", PermissionResourceType.BUTTON, 121),
-                new PermissionResourceDefinition("system:role:assign", "system:role", "分配权限", PermissionResourceType.BUTTON, 122),
-                new PermissionResourceDefinition("monitor", null, "系统监控", PermissionResourceType.DIRECTORY, 200),
-                new PermissionResourceDefinition("monitor:log", "monitor", "日志管理", PermissionResourceType.MENU, 210),
-                new PermissionResourceDefinition("monitor:log:query", "monitor:log", "查询日志", PermissionResourceType.BUTTON, 211)
+        return new AuthResourceComposite(
+                request.getName(),
+                request.getParentId(),
+                request.getName(),
+                type,
+                request.getPermissionCode(),
+                request.getSort()
         );
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/PermissionController.java`
+上面的 `createComponent()` 为了示例简洁，暂时用 `name` 作为资源 ID。真实项目中应该使用数据库主键、雪花 ID 或 UUID。下面的内存仓储会给每条资源生成稳定 ID，因此实际构建树时建议使用仓储实体。为了避免 DTO 同时承载 ID 和创建请求，可以在仓储层使用内部记录对象。
 
-下面是权限资源接口，用于验证组合模式构建树和采集权限编码的效果。
+内存仓储模拟权限资源表，并提供查询和新增能力。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/repository/AuthResourceMemoryRepository.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.designpattern.composite.repository;
 
-import io.github.atengk.design.dto.PermissionResourceResponse;
-import io.github.atengk.design.service.PermissionTreeService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.composite.enums.AuthResourceType;
+import lombok.Builder;
+import lombok.Data;
+import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 权限资源控制器
+ * 权限资源内存仓储
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/composite/permission")
-public class PermissionController {
+@Repository
+public class AuthResourceMemoryRepository {
 
-    private final PermissionTreeService permissionTreeService;
+    private final List<AuthResourceRecord> records = new CopyOnWriteArrayList<>();
 
     /**
-     * 获取权限资源树
-     *
-     * @return 权限资源树
+     * 初始化示例权限资源数据
      */
-    @GetMapping("/tree")
-    public List<PermissionResourceResponse> listTree() {
-        return permissionTreeService.listTree();
+    public AuthResourceMemoryRepository() {
+        records.add(AuthResourceRecord.builder()
+                .id("system")
+                .parentId(null)
+                .name("系统管理")
+                .type(AuthResourceType.CATALOG)
+                .permissionCode(null)
+                .sort(1)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("user")
+                .parentId("system")
+                .name("用户管理")
+                .type(AuthResourceType.MENU)
+                .permissionCode("system:user:view")
+                .sort(1)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("user-create")
+                .parentId("user")
+                .name("新增用户")
+                .type(AuthResourceType.BUTTON)
+                .permissionCode("system:user:create")
+                .sort(1)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("user-delete")
+                .parentId("user")
+                .name("删除用户")
+                .type(AuthResourceType.BUTTON)
+                .permissionCode("system:user:delete")
+                .sort(2)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("role")
+                .parentId("system")
+                .name("角色管理")
+                .type(AuthResourceType.MENU)
+                .permissionCode("system:role:view")
+                .sort(2)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("role-grant")
+                .parentId("role")
+                .name("分配权限")
+                .type(AuthResourceType.BUTTON)
+                .permissionCode("system:role:grant")
+                .sort(1)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("order")
+                .parentId(null)
+                .name("订单管理")
+                .type(AuthResourceType.CATALOG)
+                .permissionCode(null)
+                .sort(2)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("order-list")
+                .parentId("order")
+                .name("订单列表")
+                .type(AuthResourceType.MENU)
+                .permissionCode("order:list:view")
+                .sort(1)
+                .build());
+
+        records.add(AuthResourceRecord.builder()
+                .id("order-export")
+                .parentId("order-list")
+                .name("导出订单")
+                .type(AuthResourceType.BUTTON)
+                .permissionCode("order:list:export")
+                .sort(1)
+                .build());
     }
 
     /**
-     * 获取全部权限编码
+     * 查询全部权限资源
      *
-     * @return 权限编码集合
+     * @return 权限资源记录列表
      */
-    @GetMapping("/codes")
-    public Set<String> listPermissionCodes() {
-        return permissionTreeService.listPermissionCodes();
+    public List<AuthResourceRecord> listAll() {
+        return records.stream()
+                .sorted(Comparator.comparing(AuthResourceRecord::getSort))
+                .toList();
+    }
+
+    /**
+     * 新增权限资源
+     *
+     * @param parentId       父级资源 ID
+     * @param name           资源名称
+     * @param type           资源类型
+     * @param permissionCode 权限编码
+     * @param sort           排序值
+     * @return 新增后的权限资源记录
+     */
+    public AuthResourceRecord save(String parentId, String name, AuthResourceType type, String permissionCode, Integer sort) {
+        String id = StrUtil.lowerFirst(type.name()) + "-" + IdUtil.fastSimpleUUID();
+
+        AuthResourceRecord record = AuthResourceRecord.builder()
+                .id(id)
+                .parentId(parentId)
+                .name(name)
+                .type(type)
+                .permissionCode(permissionCode)
+                .sort(sort)
+                .build();
+
+        records.add(record);
+        return record;
+    }
+
+    /**
+     * 判断资源是否存在
+     *
+     * @param id 资源 ID
+     * @return 是否存在
+     */
+    public boolean existsById(String id) {
+        return records.stream().anyMatch(record -> StrUtil.equals(record.getId(), id));
+    }
+
+    /**
+     * 权限资源记录
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    @Builder
+    public static class AuthResourceRecord {
+
+        /**
+         * 资源 ID
+         */
+        private String id;
+
+        /**
+         * 父级资源 ID
+         */
+        private String parentId;
+
+        /**
+         * 资源名称
+         */
+        private String name;
+
+        /**
+         * 资源类型
+         */
+        private AuthResourceType type;
+
+        /**
+         * 权限编码
+         */
+        private String permissionCode;
+
+        /**
+         * 排序值
+         */
+        private Integer sort;
     }
 }
 ```
 
-接口调用示例：
+为了让树工厂直接使用仓储记录，需要将前面的 `AuthResourceTreeFactory` 调整为基于 `AuthResourceRecord` 构建。实际项目建议使用这一版。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/composite/AuthResourceTreeFactory.java`
+
+```java
+package io.github.atengk.designpattern.composite.composite;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.composite.repository.AuthResourceMemoryRepository.AuthResourceRecord;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ * 权限资源树工厂
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class AuthResourceTreeFactory {
+
+    /**
+     * 根据扁平权限资源构建组合树
+     *
+     * @param records 扁平权限资源记录列表
+     * @return 权限资源根节点列表
+     */
+    public List<AuthResourceComponent> buildTree(List<AuthResourceRecord> records) {
+        if (CollUtil.isEmpty(records)) {
+            return List.of();
+        }
+
+        Map<String, AuthResourceComponent> componentMap = records.stream()
+                .map(this::createComponent)
+                .collect(Collectors.toMap(AuthResourceComponent::getId, Function.identity()));
+
+        for (AuthResourceComponent component : componentMap.values()) {
+            String parentId = component.getParentId();
+            if (StrUtil.isBlank(parentId)) {
+                continue;
+            }
+
+            AuthResourceComponent parent = componentMap.get(parentId);
+            if (parent == null) {
+                log.warn("权限资源父节点不存在，childId={}，parentId={}", component.getId(), parentId);
+                continue;
+            }
+
+            parent.addChild(component);
+        }
+
+        return componentMap.values()
+                .stream()
+                .filter(component -> StrUtil.isBlank(component.getParentId()))
+                .sorted(Comparator.comparing(AuthResourceComponent::getSort))
+                .toList();
+    }
+
+    /**
+     * 根据仓储记录创建组件节点
+     *
+     * @param record 权限资源记录
+     * @return 权限资源组件
+     */
+    private AuthResourceComponent createComponent(AuthResourceRecord record) {
+        if (record.getType().isLeaf()) {
+            return new AuthResourceLeaf(
+                    record.getId(),
+                    record.getParentId(),
+                    record.getName(),
+                    record.getPermissionCode(),
+                    record.getSort()
+            );
+        }
+
+        return new AuthResourceComposite(
+                record.getId(),
+                record.getParentId(),
+                record.getName(),
+                record.getType(),
+                record.getPermissionCode(),
+                record.getSort()
+        );
+    }
+}
+```
+
+权限资源服务接口定义业务操作入口。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/service/AuthResourceService.java`
+
+```java
+package io.github.atengk.designpattern.composite.service;
+
+import io.github.atengk.designpattern.composite.dto.AuthResourceCreateRequest;
+import io.github.atengk.designpattern.composite.vo.AuthResourceTreeVO;
+
+import java.util.List;
+
+/**
+ * 权限资源服务接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface AuthResourceService {
+
+    /**
+     * 查询权限资源树
+     *
+     * @return 权限资源树
+     */
+    List<AuthResourceTreeVO> listTree();
+
+    /**
+     * 查询所有权限编码
+     *
+     * @return 权限编码列表
+     */
+    List<String> listPermissionCodes();
+
+    /**
+     * 统计权限资源节点数量
+     *
+     * @return 节点数量
+     */
+    Integer countResources();
+
+    /**
+     * 创建权限资源
+     *
+     * @param request 创建权限资源请求
+     * @return 创建后的权限资源树节点
+     */
+    AuthResourceTreeVO create(AuthResourceCreateRequest request);
+}
+```
+
+服务实现类面向统一的 `AuthResourceComponent` 处理树，不需要单独判断目录、菜单和按钮的递归逻辑。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/service/AuthResourceServiceImpl.java`
+
+```java
+package io.github.atengk.designpattern.composite.service;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.composite.composite.AuthResourceComponent;
+import io.github.atengk.designpattern.composite.composite.AuthResourceTreeFactory;
+import io.github.atengk.designpattern.composite.dto.AuthResourceCreateRequest;
+import io.github.atengk.designpattern.composite.enums.AuthResourceType;
+import io.github.atengk.designpattern.composite.repository.AuthResourceMemoryRepository;
+import io.github.atengk.designpattern.composite.repository.AuthResourceMemoryRepository.AuthResourceRecord;
+import io.github.atengk.designpattern.composite.vo.AuthResourceTreeVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 权限资源服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuthResourceServiceImpl implements AuthResourceService {
+
+    private final AuthResourceMemoryRepository authResourceMemoryRepository;
+    private final AuthResourceTreeFactory authResourceTreeFactory;
+
+    /**
+     * 查询权限资源树
+     *
+     * @return 权限资源树
+     */
+    @Override
+    public List<AuthResourceTreeVO> listTree() {
+        List<AuthResourceComponent> roots = buildResourceTree();
+
+        log.info("查询权限资源树成功，rootSize={}", roots.size());
+        return roots.stream()
+                .map(AuthResourceComponent::toTreeVO)
+                .toList();
+    }
+
+    /**
+     * 查询所有权限编码
+     *
+     * @return 权限编码列表
+     */
+    @Override
+    public List<String> listPermissionCodes() {
+        List<AuthResourceComponent> roots = buildResourceTree();
+        List<String> permissionCodes = new ArrayList<>();
+
+        for (AuthResourceComponent root : roots) {
+            permissionCodes.addAll(root.getPermissionCodes());
+        }
+
+        log.info("查询权限编码成功，size={}", permissionCodes.size());
+        return permissionCodes;
+    }
+
+    /**
+     * 统计权限资源节点数量
+     *
+     * @return 节点数量
+     */
+    @Override
+    public Integer countResources() {
+        List<AuthResourceComponent> roots = buildResourceTree();
+        int total = roots.stream()
+                .mapToInt(AuthResourceComponent::count)
+                .sum();
+
+        log.info("统计权限资源节点成功，total={}", total);
+        return total;
+    }
+
+    /**
+     * 创建权限资源
+     *
+     * @param request 创建权限资源请求
+     * @return 创建后的权限资源树节点
+     */
+    @Override
+    public AuthResourceTreeVO create(AuthResourceCreateRequest request) {
+        AuthResourceType type = AuthResourceType.parse(request.getType());
+
+        if (StrUtil.isNotBlank(request.getParentId()) && !authResourceMemoryRepository.existsById(request.getParentId())) {
+            throw new IllegalArgumentException("父级资源不存在：" + request.getParentId());
+        }
+
+        if (type.isLeaf() && StrUtil.isBlank(request.getPermissionCode())) {
+            throw new IllegalArgumentException("按钮权限必须配置权限编码");
+        }
+
+        AuthResourceRecord record = authResourceMemoryRepository.save(
+                request.getParentId(),
+                request.getName(),
+                type,
+                request.getPermissionCode(),
+                request.getSort()
+        );
+
+        log.info("创建权限资源成功，id={}，name={}，type={}", record.getId(), record.getName(), record.getType());
+
+        return AuthResourceTreeVO.builder()
+                .id(record.getId())
+                .parentId(record.getParentId())
+                .name(record.getName())
+                .type(record.getType().name())
+                .permissionCode(record.getPermissionCode())
+                .sort(record.getSort())
+                .children(List.of())
+                .build();
+    }
+
+    /**
+     * 构建权限资源组合树
+     *
+     * @return 权限资源根节点列表
+     */
+    private List<AuthResourceComponent> buildResourceTree() {
+        List<AuthResourceRecord> records = authResourceMemoryRepository.listAll();
+        if (CollUtil.isEmpty(records)) {
+            return List.of();
+        }
+
+        return authResourceTreeFactory.buildTree(records);
+    }
+}
+```
+
+Controller 对外提供权限树查询、权限编码查询、节点统计和新增接口。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/controller/AuthResourceController.java`
+
+```java
+package io.github.atengk.designpattern.composite.controller;
+
+import io.github.atengk.designpattern.composite.dto.AuthResourceCreateRequest;
+import io.github.atengk.designpattern.composite.service.AuthResourceService;
+import io.github.atengk.designpattern.composite.vo.ApiResult;
+import io.github.atengk.designpattern.composite.vo.AuthResourceTreeVO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * 权限资源接口控制器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/auth/resources")
+public class AuthResourceController {
+
+    private final AuthResourceService authResourceService;
+
+    /**
+     * 查询权限资源树
+     *
+     * @return 权限资源树
+     */
+    @GetMapping("/tree")
+    public ApiResult<List<AuthResourceTreeVO>> listTree() {
+        return ApiResult.success(authResourceService.listTree());
+    }
+
+    /**
+     * 查询所有权限编码
+     *
+     * @return 权限编码列表
+     */
+    @GetMapping("/permission-codes")
+    public ApiResult<List<String>> listPermissionCodes() {
+        return ApiResult.success(authResourceService.listPermissionCodes());
+    }
+
+    /**
+     * 统计权限资源节点数量
+     *
+     * @return 节点数量
+     */
+    @GetMapping("/count")
+    public ApiResult<Integer> countResources() {
+        return ApiResult.success(authResourceService.countResources());
+    }
+
+    /**
+     * 创建权限资源
+     *
+     * @param request 创建权限资源请求
+     * @return 创建后的权限资源
+     */
+    @PostMapping
+    public ApiResult<AuthResourceTreeVO> create(@Valid @RequestBody AuthResourceCreateRequest request) {
+        return ApiResult.success(authResourceService.create(request));
+    }
+}
+```
+
+全局异常处理器用于统一处理参数校验异常、非法参数异常和不支持操作异常。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/composite/web/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.designpattern.composite.web;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.composite.vo.ApiResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ApiResult<Void> handleValidException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .findFirst()
+                .map(error -> StrUtil.format("{} {}", error.getField(), error.getDefaultMessage()))
+                .orElse("请求参数不合法");
+
+        log.warn("请求参数校验失败，message={}", message);
+        return ApiResult.fail(message);
+    }
+
+    /**
+     * 处理非法参数异常
+     *
+     * @param exception 非法参数异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ApiResult<Void> handleIllegalArgumentException(IllegalArgumentException exception) {
+        log.warn("请求参数错误，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理不支持操作异常
+     *
+     * @param exception 不支持操作异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(UnsupportedOperationException.class)
+    public ApiResult<Void> handleUnsupportedOperationException(UnsupportedOperationException exception) {
+        log.warn("不支持的资源操作，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+}
+```
+
+## 使用方式
+
+启动项目后，可以通过接口查看组合模式构建出来的权限树。
+
+查询权限资源树：
 
 ```bash
-curl "http://localhost:8080/composite/permission/tree"
-
-curl "http://localhost:8080/composite/permission/codes"
+curl -X GET 'http://localhost:8080/api/auth/resources/tree'
 ```
 
-权限树可能返回：
+返回示例：
 
 ```json
-[
-  {
-    "code": "system",
-    "name": "系统管理",
-    "type": "DIRECTORY",
-    "sortNo": 100,
-    "children": [
-      {
-        "code": "system:user",
-        "name": "用户管理",
-        "type": "MENU",
-        "sortNo": 110,
-        "children": [
-          {
-            "code": "system:user:add",
-            "name": "新增用户",
-            "type": "BUTTON",
-            "sortNo": 111,
-            "children": []
-          }
-        ]
-      }
-    ]
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": [
+    {
+      "id": "system",
+      "parentId": null,
+      "name": "系统管理",
+      "type": "CATALOG",
+      "permissionCode": null,
+      "sort": 1,
+      "children": [
+        {
+          "id": "user",
+          "parentId": "system",
+          "name": "用户管理",
+          "type": "MENU",
+          "permissionCode": "system:user:view",
+          "sort": 1,
+          "children": [
+            {
+              "id": "user-create",
+              "parentId": "user",
+              "name": "新增用户",
+              "type": "BUTTON",
+              "permissionCode": "system:user:create",
+              "sort": 1,
+              "children": []
+            },
+            {
+              "id": "user-delete",
+              "parentId": "user",
+              "name": "删除用户",
+              "type": "BUTTON",
+              "permissionCode": "system:user:delete",
+              "sort": 2,
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+查询所有权限编码：
+
+```bash
+curl -X GET 'http://localhost:8080/api/auth/resources/permission-codes'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": [
+    "system:user:view",
+    "system:user:create",
+    "system:user:delete",
+    "system:role:view",
+    "system:role:grant",
+    "order:list:view",
+    "order:list:export"
+  ]
+}
+```
+
+统计权限资源节点数量：
+
+```bash
+curl -X GET 'http://localhost:8080/api/auth/resources/count'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": 9
+}
+```
+
+新增按钮权限节点：
+
+```bash
+curl -X POST 'http://localhost:8080/api/auth/resources' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "编辑用户",
+    "type": "BUTTON",
+    "parentId": "user",
+    "permissionCode": "system:user:update",
+    "sort": 3
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "id": "button_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "parentId": "user",
+    "name": "编辑用户",
+    "type": "BUTTON",
+    "permissionCode": "system:user:update",
+    "sort": 3,
+    "children": []
   }
-]
+}
 ```
 
-权限编码接口会递归采集所有目录、菜单和按钮编码：
+## 验证方式
 
-```json
-[
-  "system",
-  "system:user",
-  "system:user:add",
-  "system:user:delete",
-  "system:role",
-  "system:role:add",
-  "system:role:assign",
-  "monitor",
-  "monitor:log",
-  "monitor:log:query"
-]
+可以从下面几个角度验证组合模式是否落地成功。
+
+第一，调用方统一面向 `AuthResourceComponent` 编程。`AuthResourceServiceImpl` 在统计权限编码、统计节点数量、转换前端树时，不需要分别处理目录、菜单、按钮。
+
+第二，容器节点和叶子节点有统一接口。`AuthResourceComposite` 和 `AuthResourceLeaf` 都实现了 `AuthResourceComponent`，调用方可以递归调用 `getPermissionCodes()`、`count()`、`toTreeVO()`。
+
+第三，叶子节点明确禁止添加子节点。对 `AuthResourceLeaf.addChild()` 的调用会抛出 `UnsupportedOperationException`，可以避免按钮下面继续挂子节点。
+
+第四，树结构操作被封装在组件内部。比如获取所有权限编码时，调用方不需要写递归，只需要调用根节点的 `getPermissionCodes()`。
+
+可以重点查看日志：
+
+```text
+权限资源节点添加成功，parentId=system，childId=user，childName=用户管理
+权限资源节点添加成功，parentId=user，childId=user-create，childName=新增用户
+查询权限编码成功，size=7
+统计权限资源节点成功，total=9
 ```
 
-## 扩展一个新节点类型
+## 扩展新节点类型
 
-在组合模式中，扩展新节点类型通常需要先确认它是否可以包含子节点。如果可以包含子节点，就实现为组合节点；如果不能包含子节点，就实现为叶子节点。
+如果后续要新增“接口权限”节点，例如 `API`，可以根据它是否允许包含子节点决定实现方式。
 
-例如新增 `API` 类型，用于表示后端接口权限。
-
-文件位置：`src/main/java/io/github/atengk/design/enums/PermissionResourceType.java`
-
-在枚举中新增：
+如果 `API` 是叶子节点，可以在 `AuthResourceType` 中新增：
 
 ```java
 API
 ```
 
-如果 `API` 是叶子节点，可以调整 `createComponent` 方法：
+并调整 `isLeaf()`：
 
 ```java
-private PermissionComponent createComponent(PermissionResourceDefinition definition) {
-    if (definition.type() == PermissionResourceType.BUTTON || definition.type() == PermissionResourceType.API) {
-        return new PermissionLeaf(definition.code(), definition.name(), definition.type(), definition.sortNo());
-    }
-
-    return new PermissionComposite(definition.code(), definition.name(), definition.type(), definition.sortNo());
+public boolean isLeaf() {
+    return this == BUTTON || this == API;
 }
 ```
 
-然后新增模拟数据：
+如果 `API` 仍然需要挂载子接口或操作权限，则可以让它作为容器节点，不加入 `isLeaf()` 判断。
 
-```java
-new PermissionResourceDefinition("system:user:api:list", "system:user", "用户分页接口", PermissionResourceType.API, 113)
-```
+组合模式的重点是：新增节点类型时，尽量不要修改调用方递归处理逻辑，而是让新节点继续遵守 `AuthResourceComponent` 的统一接口。
 
-如果未来 `API_GROUP` 可以包含多个 `API`，则 `API_GROUP` 应该使用 `PermissionComposite`，`API` 使用 `PermissionLeaf`。
+## 适用场景
 
-## 透明组合模式和安全组合模式
+组合模式适合处理明显的树形结构，并且整体和部分需要支持相同操作的场景。
 
-组合模式常见两种写法：透明组合模式和安全组合模式。二者主要区别在于 `add`、`remove` 等子节点管理方法放在哪里。
+常见 Spring Boot 项目场景如下。
 
-透明组合模式把子节点管理方法放在统一接口中。
+| 场景         | 容器节点             | 叶子节点                 |
+| ------------ | -------------------- | ------------------------ |
+| 权限资源树   | 目录、菜单           | 按钮、接口权限           |
+| 部门组织树   | 公司、部门、小组     | 员工                     |
+| 商品分类树   | 一级分类、二级分类   | 具体商品分类             |
+| 文件目录树   | 文件夹               | 文件                     |
+| 评论树       | 一级评论、回复评论   | 无子回复评论             |
+| 表单组件树   | 分组、容器、布局组件 | 输入框、选择器、日期组件 |
+| 工作流节点树 | 阶段、分组节点       | 审批节点、抄送节点       |
 
-```java
-public interface Component {
-    void add(Component component);
-    void remove(Component component);
-}
-```
-
-这种方式的优点是调用方完全统一，缺点是叶子节点也暴露了 `add`、`remove`，但叶子节点实际上不支持这些操作，通常只能抛异常。
-
-安全组合模式只在组合节点中提供 `add`、`remove`。
-
-```java
-public class PermissionComposite implements PermissionComponent {
-
-    public void add(PermissionComponent component) {
-        // 添加子节点
-    }
-}
-```
-
-这种方式类型更安全，叶子节点不会暴露无意义方法。本文示例采用的是安全组合模式。
-
-在 Spring Boot 业务项目中，更推荐安全组合模式。尤其是菜单、权限、组织架构这类业务树，叶子节点不应该暴露添加子节点的能力。
-
-## 组合模式和装饰器模式的区别
-
-组合模式和装饰器模式都可能包含对象引用，但目的不同。
-
-| 对比项   | 组合模式                       | 装饰器模式                     |
-| -------- | ------------------------------ | ------------------------------ |
-| 核心目的 | 表达整体和部分的树形关系       | 给对象叠加增强能力             |
-| 结构关系 | 一对多，父节点包含多个子节点   | 一对一，装饰器包装一个目标对象 |
-| 关注点   | 统一处理叶子节点和组合节点     | 保持接口不变并增强行为         |
-| 典型场景 | 菜单树、权限树、目录树、组织树 | 缓存增强、审计增强、限流增强   |
-| 是否递归 | 通常递归处理                   | 通常链式包装                   |
-
-简单理解：
+组合模式尤其适合以下情况：
 
 ```text
-组合模式：一个对象里面包含多个同类对象，形成树。
-装饰器模式：一个对象外面包一层增强对象。
+节点存在父子关系
+节点需要递归处理
+容器节点和叶子节点对外具有一致操作
+调用方不希望关心具体节点类型
+树结构未来可能扩展更多节点类型
 ```
 
-权限树、文件目录树适合组合模式。订单服务外面包审计、幂等、限流，适合装饰器模式。
+## 和其他模式的区别
 
-## 组合模式和外观模式的区别
+组合模式容易和迭代器模式、装饰器模式、桥接模式混淆。区分时重点看模式解决的问题。
 
-组合模式和外观模式都可以隐藏复杂性，但关注点不同。
+| 模式       | 关注点               | 和组合模式的区别                       |
+| ---------- | -------------------- | -------------------------------------- |
+| 组合模式   | 组织树形结构         | 重点是让容器节点和叶子节点统一处理     |
+| 迭代器模式 | 遍历集合或结构       | 重点是隐藏遍历方式，不一定组织树       |
+| 装饰器模式 | 动态增强对象能力     | 重点是给对象叠加功能，不是表达父子层级 |
+| 桥接模式   | 拆分两个独立变化维度 | 重点是避免组合类爆炸，不一定有树结构   |
+| 责任链模式 | 按顺序传递请求       | 重点是链式处理，不是整体和部分结构     |
 
-| 对比项           | 组合模式                       | 外观模式                     |
-| ---------------- | ------------------------------ | ---------------------------- |
-| 核心目的         | 统一处理树形结构中的整体和部分 | 简化多个子系统的调用         |
-| 对象结构         | 树形结构                       | 多个子系统组合调用           |
-| 调用方式         | 递归或统一接口处理节点         | 调用一个门面入口完成流程     |
-| 典型场景         | 菜单树、分类树、目录树         | 下单流程、报表导出、支付聚合 |
-| 是否强调父子关系 | 强调                           | 不强调                       |
-
-简单理解：
-
-```text
-组合模式：处理树。
-外观模式：包一层简单入口。
-```
-
-菜单、权限、组织架构这类父子结构适合组合模式。下单时统一调用用户、库存、订单、支付、通知多个子系统，更适合外观模式。
-
-## 验证方式
-
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行获取权限树接口：
-
-```bash
-curl "http://localhost:8080/composite/permission/tree"
-```
-
-执行获取权限编码接口：
-
-```bash
-curl "http://localhost:8080/composite/permission/codes"
-```
-
-如果组合模式正常，可以看到类似日志：
-
-```text
-添加权限子节点成功，父节点：system，子节点：system:user
-添加权限子节点成功，父节点：system:user，子节点：system:user:add
-添加权限子节点成功，父节点：system:user，子节点：system:user:delete
-添加权限子节点成功，父节点：system，子节点：system:role
-获取权限资源树成功，根节点数量：2
-采集权限编码成功，权限数量：10
-```
-
-如果模拟数据中出现父节点不存在，建议在构建树时记录异常数据。
-
-示例日志：
-
-```text
-权限树构建异常，父节点不存在，父节点：unknown，当前节点：system:user:add
-```
-
-实际项目中可以将这种数据作为脏数据处理，或者在后台管理保存权限资源时就校验父节点合法性。
+本示例中，权限资源天然具有树形结构，目录、菜单、按钮又需要统一转换、统计和提取权限编码，因此适合使用组合模式。
 
 ## 注意事项
 
-组合模式适合树形结构，但不建议为了使用设计模式强行把普通列表改造成树。如果业务对象没有稳定父子关系，组合模式反而会增加复杂度。
+组合模式不适合所有层级数据。如果只是简单的两级列表，直接用普通 DTO 组装可能更清晰。只有当树结构递归较多、节点类型较多、统一操作较多时，组合模式才有明显价值。
 
-适合使用组合模式的场景：
+叶子节点是否暴露 `addChild()` 方法要谨慎。透明式组合模式会让叶子节点也拥有 `addChild()` 方法，但运行时抛出异常。安全式组合模式会把子节点管理能力只放在容器节点上。本文示例采用透明式写法，优点是调用方统一，缺点是叶子节点存在不支持操作的方法。
 
-```text
-菜单树
-权限树
-部门树
-分类树
-目录树
-区域树
-规则节点树
-组织架构树
-```
+树构建时要处理脏数据。例如父节点不存在、循环引用、重复 ID、按钮节点挂子节点等。生产项目中建议在入库时做严格校验，避免每次构建树时才发现数据异常。
 
-不太适合使用组合模式的场景：
+树形结构不要无限递归。对于部门树、评论树、分类树等用户可配置数据，需要限制最大层级，防止异常数据导致栈溢出或接口响应过大。
 
-```text
-普通分页列表
-无父子关系的数据集合
-只需要简单分组的统计结果
-没有统一行为的对象集合
-```
-
-构建树时要注意循环引用问题。例如 A 的父节点是 B，B 的父节点又是 A，会导致递归异常或死循环。
-
-错误数据示例：
-
-```text
-A.parentCode = B
-B.parentCode = A
-```
-
-实际项目中建议在保存节点时校验：
-
-```text
-父节点必须存在
-父节点不能是自己
-不能形成祖先循环
-叶子节点不能添加子节点
-同一父节点下编码不能重复
-```
-
-组合节点中不要无限制递归。对于层级很深的树，递归可能带来性能问题或栈深度问题。业务上通常应限制最大层级。
-
-示例限制：
-
-```text
-菜单树最大 4 级
-部门树最大 10 级
-分类树最大 5 级
-```
-
-如果树数据来自数据库，生产环境中建议先查询扁平列表，再在内存中构建树，而不是每个节点递归查询数据库。
-
-不推荐：
-
-```java
-public List<Node> listChildren(String parentCode) {
-    // 每个节点都查一次数据库，层级深时会产生大量 SQL
-}
-```
-
-推荐：
-
-```java
-List<Node> allNodes = nodeMapper.selectList(...);
-Map<String, List<Node>> groupByParent = allNodes.stream()
-        .collect(Collectors.groupingBy(Node::getParentCode));
-```
-
-Spring Bean 默认是单例，不要在组件构建服务中保存请求级树数据到成员变量。
-
-错误示例：
-
-```java
-private List<PermissionComponent> currentTree;
-private Set<String> currentCodes;
-```
-
-推荐使用局部变量：
-
-```java
-public List<PermissionResourceResponse> listTree() {
-    List<PermissionComponent> rootComponents = buildPermissionTree();
-    return rootComponents.stream().map(PermissionComponent::toResponse).toList();
-}
-```
-
-如果树形结构需要频繁查询且数据变化不频繁，可以结合 Redis 或本地缓存。但需要在菜单、权限、分类变更时及时清理缓存。
+如果树数据来自数据库，建议一次性查询扁平列表后在内存中构建树，避免递归查询数据库产生 N+1 查询问题。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，组合模式的实践重点是用统一接口处理树形结构中的叶子节点和组合节点。
+组合模式的核心价值是让调用方用统一方式处理树形结构中的整体和部分。
 
-普通 Java 组合模式适合文件目录、规则节点、本地树结构处理。Spring Boot 项目中更常见的是菜单树、权限树、部门树、分类树等业务结构。推荐使用“组件接口 + 叶子节点 + 组合节点 + 树构建服务”的结构，让调用方统一处理节点，不直接关心节点是单个对象还是对象集合。
+在本示例中：
 
-组合模式不是为了替代所有列表处理，而是为了解决“整体和部分具有一致行为，并且对象天然形成树形结构”的问题。实际落地时，需要重点关注循环引用、层级深度、树构建性能、缓存一致性和节点职责边界。
+```text
+AuthResourceComponent 定义统一组件接口
+AuthResourceComposite 表示目录或菜单等容器节点
+AuthResourceLeaf 表示按钮等叶子节点
+AuthResourceTreeFactory 负责把扁平数据构建成组合树
+AuthResourceServiceImpl 面向统一组件完成查询、统计和转换
+```
+
+最终效果是：
+
+```text
+目录、菜单、按钮可以统一处理
+递归逻辑被封装在组件内部
+调用方不需要散落大量类型判断
+新增节点类型时影响范围更小
+权限树构建、统计、转换更清晰
+```

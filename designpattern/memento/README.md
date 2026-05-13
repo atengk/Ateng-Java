@@ -1,363 +1,281 @@
-# 设计模式：备忘录模式
+# 备忘录模式
 
-备忘录模式用于在不破坏对象封装性的前提下，保存对象某一时刻的内部状态，并在需要时恢复到之前状态。在 JDK21 和 Spring Boot 3 项目中，备忘录模式常用于草稿回滚、编辑器撤销、配置版本恢复、审批表单快照、规则配置回滚、订单操作前状态保存、流程设计器版本管理等场景。
+备忘录模式用于在不破坏对象封装性的前提下，保存对象某一时刻的内部状态，并在需要时恢复到该状态。
+在 Spring Boot 项目中，备忘录模式常用于草稿编辑、配置回滚、审批撤回、表单恢复、版本快照、流程状态回退、规则发布回滚等场景。
 
-需要注意：备忘录模式关注的是“保存状态并恢复状态”。如果只是记录操作日志，不一定是备忘录模式；如果只是复制模板对象，更适合原型模式；如果是把操作封装成可撤销动作，更适合命令模式；如果需要保存对象历史状态并支持回滚，备忘录模式更合适。
+本文以“订单草稿修改与回滚”为例。用户编辑订单草稿时，系统会在每次修改前自动保存一份快照。当用户发现修改错误时，可以选择某个历史快照进行恢复。
+
+## 适用场景
+
+备忘录模式适合处理“对象状态需要保存和恢复”的场景。
+
+在订单草稿业务中，常见操作包括：
+
+| 操作     | 说明                       |
+| -------- | -------------------------- |
+| 创建草稿 | 保存用户初始订单草稿       |
+| 修改草稿 | 修改商品、数量、备注等字段 |
+| 自动备份 | 每次修改前保存一份历史快照 |
+| 查询历史 | 查看草稿历史版本           |
+| 回滚草稿 | 把草稿恢复到某个历史快照   |
+
+如果直接把历史版本逻辑写在 Service 中，Service 需要了解草稿对象的所有字段，后续字段增加时也要修改大量备份代码。备忘录模式可以把“如何保存自身状态”和“如何恢复自身状态”交给业务对象自己处理，历史管理器只负责保存快照。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 Spring Boot 3，使用 Hutool、Lombok 和 Validation。Hutool 用于对象判断、字符串判断、集合处理和 ID 生成，Validation 用于接口参数基础校验。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证备忘录模式行为 -->
+    <!-- Spring Boot Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、时间等通用处理 -->
+    <!-- Spring Boot Validation：用于接口参数基础校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：提供对象、字符串、集合、ID生成等工具能力 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.29</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、Getter、构造方法等样板代码 -->
+    <!-- Lombok：简化 Getter、Setter、构造器、日志对象等代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
-
-## 核心概念
-
-备忘录模式的核心目标是把对象的历史状态保存到一个备忘录对象中，由管理者保存备忘录，需要回滚时再把备忘录交回原对象恢复状态。
-
-常见角色如下：
-
-| 角色       | 说明                                       |
-| ---------- | ------------------------------------------ |
-| Originator | 发起人，需要保存和恢复状态的业务对象       |
-| Memento    | 备忘录，保存发起人某一时刻的状态           |
-| Caretaker  | 管理者，负责保存备忘录，但不修改备忘录内容 |
-| Client     | 调用方，触发保存、修改、恢复等操作         |
-
-典型结构如下：
+建议目录结构如下：
 
 ```text
-调用方
-    -> Originator.createMemento()
-        -> Caretaker.save(memento)
-
-调用方
-    -> Caretaker.get(snapshotId)
-        -> Originator.restore(memento)
-```
-
-备忘录模式强调封装性。理论上，`Caretaker` 不应该直接理解或修改 `Memento` 内部状态，只负责保存和取出。实际 Java 项目中常用 `record`、不可变类或只读对象表示备忘录，避免被外部随意修改。
-
-备忘录模式和普通日志的区别在于：
-
-```text
-操作日志：记录发生了什么。
-备忘录：保存当时是什么状态，并允许恢复。
-```
-
-在 Spring Boot 项目中，常见优先级通常是：
-
-```text
-不可变 Memento + Caretaker 管理历史 > 直接暴露对象字段快照 > 手写大量回滚字段
-```
-
-备忘录模式适合需要版本恢复、撤销、回滚的场景。对于核心业务，需要结合数据库事务、版本号、操作审计和权限校验使用。
-
-## 普通 Java 备忘录模式
-
-普通 Java 备忘录模式适合不依赖 Spring 容器的本地状态保存和恢复。下面以文本编辑器为例，编辑器可以写入内容、保存快照、撤销到上一个快照。
-
-整体流程如下：
-
-```text
-创建编辑器 -> 编辑内容 -> 保存快照 -> 再次编辑 -> 保存快照 -> 撤销恢复
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/memento/simple/
-├── TextEditorMemento.java
-├── TextEditor.java
-└── TextEditorHistory.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/memento/simple/TextEditorMemento.java`
-
-下面是文本编辑器备忘录对象。它保存编辑器某一时刻的内容、光标位置和保存时间。
-
-```java
-package io.github.atengk.design.memento.simple;
-
-import java.time.LocalDateTime;
-
-/**
- * 文本编辑器备忘录
- *
- * @param content        文本内容
- * @param cursorPosition 光标位置
- * @param saveTime       保存时间
- * @author Ateng
- * @since 2026-04-30
- */
-public record TextEditorMemento(
-        String content,
-        Integer cursorPosition,
-        LocalDateTime saveTime
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/memento/simple/TextEditor.java`
-
-下面是文本编辑器对象，也就是备忘录模式中的发起人。它负责创建快照和恢复快照。
-
-```java
-package io.github.atengk.design.memento.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.time.LocalDateTime;
-
-/**
- * 文本编辑器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-public class TextEditor {
-
-    private String content = "";
-    private Integer cursorPosition = 0;
-
-    /**
-     * 写入文本
-     *
-     * @param text 文本内容
-     */
-    public void write(String text) {
-        if (text == null) {
-            log.warn("写入文本失败，文本内容为空");
-            throw new IllegalArgumentException("文本内容不能为空");
-        }
-
-        this.content = StrUtil.format("{}{}", this.content, text);
-        this.cursorPosition = this.content.length();
-
-        log.info("写入文本成功，当前长度：{}，光标位置：{}", this.content.length(), this.cursorPosition);
-    }
-
-    /**
-     * 替换全部文本
-     *
-     * @param content 新文本内容
-     */
-    public void replace(String content) {
-        if (content == null) {
-            log.warn("替换文本失败，文本内容为空");
-            throw new IllegalArgumentException("文本内容不能为空");
-        }
-
-        this.content = content;
-        this.cursorPosition = content.length();
-
-        log.info("替换文本成功，当前长度：{}，光标位置：{}", this.content.length(), this.cursorPosition);
-    }
-
-    /**
-     * 创建备忘录
-     *
-     * @return 文本编辑器备忘录
-     */
-    public TextEditorMemento createMemento() {
-        TextEditorMemento memento = new TextEditorMemento(
-                this.content,
-                this.cursorPosition,
-                LocalDateTime.now()
-        );
-
-        log.info("创建文本编辑器备忘录成功，内容长度：{}，光标位置：{}",
-                this.content.length(), this.cursorPosition);
-        return memento;
-    }
-
-    /**
-     * 从备忘录恢复状态
-     *
-     * @param memento 文本编辑器备忘录
-     */
-    public void restore(TextEditorMemento memento) {
-        if (memento == null) {
-            log.warn("恢复文本编辑器失败，备忘录为空");
-            throw new IllegalArgumentException("备忘录不能为空");
-        }
-
-        this.content = memento.content();
-        this.cursorPosition = memento.cursorPosition();
-
-        log.info("恢复文本编辑器成功，内容长度：{}，光标位置：{}，快照时间：{}",
-                this.content.length(), this.cursorPosition, memento.saveTime());
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/memento/simple/TextEditorHistory.java`
-
-下面是文本编辑器历史管理器，也就是备忘录模式中的管理者。它只负责保存和取出快照，不直接修改编辑器内容。
-
-```java
-package io.github.atengk.design.memento.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.ArrayDeque;
-import java.util.Deque;
-
-/**
- * 文本编辑器历史管理器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class TextEditorHistory {
-
-    private final Deque<TextEditorMemento> history = new ArrayDeque<>();
-
-    /**
-     * 保存快照
-     *
-     * @param memento 文本编辑器备忘录
-     */
-    public void save(TextEditorMemento memento) {
-        if (memento == null) {
-            log.warn("保存文本快照失败，备忘录为空");
-            throw new IllegalArgumentException("备忘录不能为空");
-        }
-
-        history.push(memento);
-        log.info("保存文本快照成功，历史数量：{}", history.size());
-    }
-
-    /**
-     * 获取最近一次快照
-     *
-     * @return 文本编辑器备忘录
-     */
-    public TextEditorMemento popLatest() {
-        if (history.isEmpty()) {
-            log.warn("获取文本快照失败，历史快照为空");
-            throw new IllegalStateException("没有可恢复的历史快照");
-        }
-
-        TextEditorMemento memento = history.pop();
-        log.info("获取最近文本快照成功，剩余历史数量：{}", history.size());
-        return memento;
-    }
-
-    /**
-     * 获取历史数量
-     *
-     * @return 历史数量
-     */
-    public int size() {
-        return history.size();
-    }
-}
-```
-
-使用方式：
-
-```java
-TextEditor editor = new TextEditor();
-TextEditorHistory history = new TextEditorHistory();
-
-editor.write("第一段内容");
-history.save(editor.createMemento());
-
-editor.write("，第二段内容");
-history.save(editor.createMemento());
-
-editor.write("，错误内容");
-
-editor.restore(history.popLatest());
-```
-
-执行后，编辑器会恢复到保存第二次快照时的状态。`TextEditorHistory` 不需要知道文本编辑器内部如何保存内容，它只负责管理 `TextEditorMemento`。
-
-## Spring Boot 备忘录模式
-
-Spring Boot 项目中，备忘录模式更常用于草稿、配置、规则、表单等业务对象的版本快照。下面以文档草稿为例，用户可以创建文档、编辑文档、保存快照、恢复到指定快照。
-
-整体流程如下：
-
-```text
-Controller
-    -> DocumentDraftService
-        -> DocumentStore 保存当前文档
-        -> DocumentSnapshotManager 保存历史快照
-        -> DocumentEditor 创建和恢复备忘录
-```
-
-示例中使用内存 Map 模拟数据库存储。实际项目中可以将当前文档保存到业务表，将快照保存到历史表。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/pattern/memento
 ├── MementoApplication.java
-├── controller/
-│   └── DocumentDraftController.java
-├── dto/
-│   ├── DocumentCreateRequest.java
-│   ├── DocumentEditRequest.java
-│   ├── DocumentRestoreRequest.java
-│   ├── DocumentResponse.java
-│   └── DocumentSnapshotResponse.java
-├── memento/
-│   ├── DocumentSnapshot.java
-│   ├── DocumentEditor.java
-│   └── DocumentSnapshotManager.java
-├── store/
-│   └── DocumentMemoryStore.java
-└── service/
-    ├── DocumentDraftService.java
-    └── impl/
-        └── DocumentDraftServiceImpl.java
+├── common
+│   ├── ApiResult.java
+│   ├── BizException.java
+│   └── GlobalExceptionHandler.java
+└── order
+    ├── controller
+    │   └── OrderDraftController.java
+    ├── dto
+    │   ├── OrderDraftCreateRequest.java
+    │   ├── OrderDraftUpdateRequest.java
+    │   └── OrderDraftRollbackRequest.java
+    ├── memento
+    │   └── OrderDraftMemento.java
+    ├── model
+    │   └── OrderDraftAggregate.java
+    ├── repository
+    │   ├── OrderDraftHistoryRepository.java
+    │   └── OrderDraftRepository.java
+    ├── service
+    │   ├── OrderDraftService.java
+    │   └── impl
+    │       └── OrderDraftServiceImpl.java
+    └── vo
+        ├── OrderDraftHistoryVO.java
+        └── OrderDraftVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/MementoApplication.java`
+## 核心设计
 
-下面是 Spring Boot 启动类。
+本示例把备忘录模式拆成三个核心角色：
+
+| 角色       | 项目中的类                    | 说明                                         |
+| ---------- | ----------------------------- | -------------------------------------------- |
+| Originator | `OrderDraftAggregate`         | 原发器，负责创建快照和从快照恢复             |
+| Memento    | `OrderDraftMemento`           | 备忘录，保存草稿某一时刻的状态               |
+| Caretaker  | `OrderDraftHistoryRepository` | 管理者，只负责保存和查询快照，不修改快照内容 |
+
+执行流程如下：
+
+```text
+创建草稿
+  -> OrderDraftAggregate
+
+修改草稿
+  -> OrderDraftAggregate.createMemento()
+  -> OrderDraftHistoryRepository.save()
+  -> OrderDraftAggregate.update()
+
+回滚草稿
+  -> OrderDraftHistoryRepository.get()
+  -> OrderDraftAggregate.restore()
+```
+
+备忘录模式的关键点是：历史管理器不直接读取和修改草稿对象内部状态，只保存 `OrderDraftMemento`。草稿对象如何生成快照、如何从快照恢复，由 `OrderDraftAggregate` 自己负责。
+
+## 公共代码
+
+公共响应对象、业务异常和全局异常处理用于统一接口返回。实际项目中可以复用已有基础包。
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/common/ApiResult.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.memento.common;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 统一接口响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    /**
+     * 返回成功结果
+     *
+     * @param data 响应数据
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(200, "操作成功", data);
+    }
+
+    /**
+     * 返回失败结果
+     *
+     * @param message 错误信息
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> fail(String message) {
+        return new ApiResult<>(500, message, null);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/common/BizException.java`
+
+```java
+package io.github.atengk.pattern.memento.common;
+
+/**
+ * 业务异常
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class BizException extends RuntimeException {
+
+    /**
+     * 创建业务异常
+     *
+     * @param message 异常信息
+     */
+    public BizException(String message) {
+        super(message);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/common/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.pattern.memento.common;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理业务异常
+     *
+     * @param exception 业务异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(BizException.class)
+    public ApiResult<Void> handleBizException(BizException exception) {
+        log.warn("业务处理失败：{}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ApiResult<Void> handleValidException(Exception exception) {
+        log.warn("接口参数校验失败：{}", exception.getMessage());
+        return ApiResult.fail("请求参数不合法");
+    }
+
+    /**
+     * 处理请求体解析异常
+     *
+     * @param exception 请求体解析异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResult<Void> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("请求体解析失败：{}", exception.getMessage());
+        return ApiResult.fail("请求体格式不正确");
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统异常", exception);
+        return ApiResult.fail("系统繁忙，请稍后重试");
+    }
+
+}
+```
+
+## 完整代码
+
+下面给出备忘录模式的核心代码。示例使用内存仓储模拟数据库，实际项目中可以把 `OrderDraftRepository` 和 `OrderDraftHistoryRepository` 替换为 MyBatis-Plus、JPA 或 Redis 存储。
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/MementoApplication.java`
+
+```java
+package io.github.atengk.pattern.memento;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -366,326 +284,466 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 备忘录模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class MementoApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(MementoApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/DocumentCreateRequest.java`
+## 请求对象和响应对象
 
-下面是文档创建请求对象。
+请求对象用于接收草稿创建、修改和回滚参数。响应对象用于返回当前草稿状态和历史快照信息。
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/dto/OrderDraftCreateRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.memento.order.dto;
+
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 /**
- * 文档创建请求
+ * 订单草稿创建请求参数
  *
- * @param title      文档标题
- * @param content    文档内容
- * @param operatorId 操作人ID
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record DocumentCreateRequest(
-        String title,
-        String content,
-        Long operatorId
-) {
+@Data
+public class OrderDraftCreateRequest {
+
+    @NotNull(message = "用户ID不能为空")
+    private Long userId;
+
+    @NotNull(message = "商品ID不能为空")
+    private Long productId;
+
+    @Min(value = 1, message = "购买数量必须大于0")
+    private Integer quantity;
+
+    private String remark;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/DocumentEditRequest.java`
-
-下面是文档编辑请求对象。
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/dto/OrderDraftUpdateRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.memento.order.dto;
+
+import jakarta.validation.constraints.Min;
+import lombok.Data;
 
 /**
- * 文档编辑请求
+ * 订单草稿修改请求参数
  *
- * @param documentId 文档ID
- * @param title      文档标题
- * @param content    文档内容
- * @param operatorId 操作人ID
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record DocumentEditRequest(
-        Long documentId,
-        String title,
-        String content,
-        Long operatorId
-) {
+@Data
+public class OrderDraftUpdateRequest {
+
+    private Long productId;
+
+    @Min(value = 1, message = "购买数量必须大于0")
+    private Integer quantity;
+
+    private String remark;
+
+    private String status;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/DocumentRestoreRequest.java`
-
-下面是文档恢复请求对象。
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/dto/OrderDraftRollbackRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.memento.order.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
 
 /**
- * 文档恢复请求
+ * 订单草稿回滚请求参数
  *
- * @param documentId 文档ID
- * @param snapshotId 快照ID
- * @param operatorId 操作人ID
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record DocumentRestoreRequest(
-        Long documentId,
-        String snapshotId,
-        Long operatorId
-) {
+@Data
+public class OrderDraftRollbackRequest {
+
+    @NotBlank(message = "快照ID不能为空")
+    private String snapshotId;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/DocumentResponse.java`
-
-下面是文档响应对象。
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/vo/OrderDraftVO.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.memento.order.vo;
 
-/**
- * 文档响应
- *
- * @param documentId 文档ID
- * @param title      文档标题
- * @param content    文档内容
- * @param version    文档版本
- * @param message    响应消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record DocumentResponse(
-        Long documentId,
-        String title,
-        String content,
-        Integer version,
-        String message
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/DocumentSnapshotResponse.java`
-
-下面是文档快照响应对象。
-
-```java
-package io.github.atengk.design.dto;
+import lombok.Builder;
+import lombok.Data;
 
 import java.time.LocalDateTime;
 
 /**
- * 文档快照响应
+ * 订单草稿展示对象
  *
- * @param snapshotId 快照ID
- * @param documentId 文档ID
- * @param title      快照标题
- * @param version    快照版本
- * @param operatorId 操作人ID
- * @param createTime 创建时间
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record DocumentSnapshotResponse(
-        String snapshotId,
-        Long documentId,
-        String title,
-        Integer version,
-        Long operatorId,
-        LocalDateTime createTime
-) {
+@Data
+@Builder
+public class OrderDraftVO {
+
+    private String draftId;
+
+    private Long userId;
+
+    private Long productId;
+
+    private Integer quantity;
+
+    private String remark;
+
+    private String status;
+
+    private Integer version;
+
+    private LocalDateTime updatedAt;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/memento/DocumentSnapshot.java`
-
-下面是文档快照对象，也就是备忘录。它使用 `record` 表示不可变快照，避免历史状态被修改。
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/vo/OrderDraftHistoryVO.java`
 
 ```java
-package io.github.atengk.design.memento;
+package io.github.atengk.pattern.memento.order.vo;
+
+import lombok.Builder;
+import lombok.Data;
 
 import java.time.LocalDateTime;
 
 /**
- * 文档快照备忘录
+ * 订单草稿历史快照展示对象
  *
- * @param snapshotId 快照ID
- * @param documentId 文档ID
- * @param title      文档标题
- * @param content    文档内容
- * @param version    文档版本
- * @param operatorId 操作人ID
- * @param createTime 创建时间
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record DocumentSnapshot(
-        String snapshotId,
-        Long documentId,
-        String title,
-        String content,
-        Integer version,
-        Long operatorId,
-        LocalDateTime createTime
-) {
+@Data
+@Builder
+public class OrderDraftHistoryVO {
+
+    private String snapshotId;
+
+    private String draftId;
+
+    private Integer snapshotVersion;
+
+    private String reason;
+
+    private Long productId;
+
+    private Integer quantity;
+
+    private String remark;
+
+    private String status;
+
+    private LocalDateTime createdAt;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/memento/DocumentEditor.java`
+## 备忘录对象
 
-下面是文档编辑器，也就是发起人。它负责创建快照和从快照恢复文档状态。
+备忘录对象保存订单草稿某一时刻的状态。这里使用 `@Getter` 和 `@Builder`，不提供 setter，避免外部随意修改历史快照。
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/memento/OrderDraftMemento.java`
 
 ```java
-package io.github.atengk.design.memento;
+package io.github.atengk.pattern.memento.order.memento;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.time.LocalDateTime;
+
+/**
+ * 订单草稿备忘录
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Getter
+@Builder
+public class OrderDraftMemento {
+
+    private final String snapshotId;
+
+    private final String draftId;
+
+    private final Long userId;
+
+    private final Long productId;
+
+    private final Integer quantity;
+
+    private final String remark;
+
+    private final String status;
+
+    private final Integer snapshotVersion;
+
+    private final String reason;
+
+    private final LocalDateTime createdAt;
+
+}
+```
+
+## 原发器对象
+
+`OrderDraftAggregate` 是备忘录模式中的原发器。它负责保存自身状态、创建快照、从快照恢复状态。外部对象不需要知道草稿内部字段如何复制。
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/model/OrderDraftAggregate.java`
+
+```java
+package io.github.atengk.pattern.memento.order.model;
 
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.memento.common.BizException;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftCreateRequest;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftUpdateRequest;
+import io.github.atengk.pattern.memento.order.memento.OrderDraftMemento;
+import io.github.atengk.pattern.memento.order.vo.OrderDraftVO;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 
 /**
- * 文档编辑器
+ * 订单草稿聚合对象
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Getter
-public class DocumentEditor {
+public class OrderDraftAggregate {
 
-    private final Long documentId;
-    private String title;
-    private String content;
+    private static final String DEFAULT_STATUS = "EDITING";
+
+    private String draftId;
+
+    private Long userId;
+
+    private Long productId;
+
+    private Integer quantity;
+
+    private String remark;
+
+    private String status;
+
     private Integer version;
 
+    private LocalDateTime updatedAt;
+
     /**
-     * 创建文档编辑器
+     * 根据创建请求构建订单草稿
      *
-     * @param documentId 文档ID
-     * @param title      文档标题
-     * @param content    文档内容
-     * @param version    文档版本
+     * @param request 订单草稿创建请求
+     * @return 订单草稿聚合对象
      */
-    public DocumentEditor(Long documentId, String title, String content, Integer version) {
-        if (documentId == null || documentId <= 0) {
-            throw new IllegalArgumentException("文档ID必须大于0");
-        }
+    public static OrderDraftAggregate create(OrderDraftCreateRequest request) {
+        OrderDraftAggregate aggregate = new OrderDraftAggregate();
+        aggregate.draftId = "DFT" + IdUtil.getSnowflakeNextIdStr();
+        aggregate.userId = request.getUserId();
+        aggregate.productId = request.getProductId();
+        aggregate.quantity = request.getQuantity();
+        aggregate.remark = StrUtil.blankToDefault(request.getRemark(), "");
+        aggregate.status = DEFAULT_STATUS;
+        aggregate.version = 1;
+        aggregate.updatedAt = LocalDateTime.now();
 
-        if (StrUtil.isBlank(title)) {
-            throw new IllegalArgumentException("文档标题不能为空");
-        }
-
-        this.documentId = documentId;
-        this.title = title;
-        this.content = StrUtil.nullToDefault(content, "");
-        this.version = version == null || version <= 0 ? 1 : version;
+        log.info("订单草稿创建完成，draftId：{}，userId：{}", aggregate.draftId, aggregate.userId);
+        return aggregate;
     }
 
     /**
-     * 编辑文档
+     * 修改订单草稿
      *
-     * @param title   文档标题
-     * @param content 文档内容
+     * @param request 订单草稿修改请求
      */
-    public void edit(String title, String content) {
-        if (StrUtil.isBlank(title)) {
-            log.warn("编辑文档失败，标题为空，文档ID：{}", documentId);
-            throw new IllegalArgumentException("文档标题不能为空");
+    public void update(OrderDraftUpdateRequest request) {
+        if (ObjectUtil.isNotNull(request.getProductId())) {
+            this.productId = request.getProductId();
         }
 
-        this.title = title;
-        this.content = StrUtil.nullToDefault(content, "");
-        this.version = this.version + 1;
+        if (ObjectUtil.isNotNull(request.getQuantity())) {
+            this.quantity = request.getQuantity();
+        }
 
-        log.info("编辑文档成功，文档ID：{}，版本：{}", documentId, version);
+        if (ObjectUtil.isNotNull(request.getRemark())) {
+            this.remark = request.getRemark();
+        }
+
+        if (StrUtil.isNotBlank(request.getStatus())) {
+            this.status = StrUtil.upperCase(request.getStatus());
+        }
+
+        this.version++;
+        this.updatedAt = LocalDateTime.now();
+
+        log.info("订单草稿修改完成，draftId：{}，version：{}", this.draftId, this.version);
     }
 
     /**
-     * 创建文档快照
+     * 创建当前状态的备忘录快照
      *
-     * @param operatorId 操作人ID
-     * @return 文档快照
+     * @param reason 快照原因
+     * @return 订单草稿备忘录
      */
-    public DocumentSnapshot createSnapshot(Long operatorId) {
-        if (operatorId == null || operatorId <= 0) {
-            log.warn("创建文档快照失败，操作人ID不合法，文档ID：{}，操作人ID：{}", documentId, operatorId);
-            throw new IllegalArgumentException("操作人ID必须大于0");
-        }
-
-        DocumentSnapshot snapshot = new DocumentSnapshot(
-                "SNAP" + IdUtil.getSnowflakeNextId(),
-                documentId,
-                title,
-                content,
-                version,
-                operatorId,
-                LocalDateTime.now()
-        );
-
-        log.info("创建文档快照成功，文档ID：{}，快照ID：{}，版本：{}",
-                documentId, snapshot.snapshotId(), version);
-        return snapshot;
+    public OrderDraftMemento createMemento(String reason) {
+        return OrderDraftMemento.builder()
+                .snapshotId("SNP" + IdUtil.getSnowflakeNextIdStr())
+                .draftId(this.draftId)
+                .userId(this.userId)
+                .productId(this.productId)
+                .quantity(this.quantity)
+                .remark(this.remark)
+                .status(this.status)
+                .snapshotVersion(this.version)
+                .reason(StrUtil.blankToDefault(reason, "系统自动备份"))
+                .createdAt(LocalDateTime.now())
+                .build();
     }
 
     /**
-     * 从文档快照恢复状态
+     * 从备忘录快照恢复状态
      *
-     * @param snapshot 文档快照
+     * @param memento 订单草稿备忘录
      */
-    public void restore(DocumentSnapshot snapshot) {
-        if (snapshot == null) {
-            log.warn("恢复文档失败，快照为空，文档ID：{}", documentId);
-            throw new IllegalArgumentException("文档快照不能为空");
+    public void restore(OrderDraftMemento memento) {
+        if (!StrUtil.equals(this.draftId, memento.getDraftId())) {
+            throw new BizException("快照不属于当前草稿，不能回滚");
         }
 
-        if (!documentId.equals(snapshot.documentId())) {
-            log.warn("恢复文档失败，快照文档ID不匹配，当前文档ID：{}，快照文档ID：{}",
-                    documentId, snapshot.documentId());
-            throw new IllegalArgumentException("快照不属于当前文档");
-        }
+        this.userId = memento.getUserId();
+        this.productId = memento.getProductId();
+        this.quantity = memento.getQuantity();
+        this.remark = memento.getRemark();
+        this.status = memento.getStatus();
+        this.version++;
+        this.updatedAt = LocalDateTime.now();
 
-        this.title = snapshot.title();
-        this.content = snapshot.content();
-        this.version = snapshot.version();
-
-        log.info("恢复文档成功，文档ID：{}，快照ID：{}，恢复版本：{}",
-                documentId, snapshot.snapshotId(), snapshot.version());
+        log.info("订单草稿回滚完成，draftId：{}，snapshotId：{}，currentVersion：{}",
+                this.draftId, memento.getSnapshotId(), this.version);
     }
+
+    /**
+     * 转换为展示对象
+     *
+     * @return 订单草稿展示对象
+     */
+    public OrderDraftVO toVO() {
+        return OrderDraftVO.builder()
+                .draftId(this.draftId)
+                .userId(this.userId)
+                .productId(this.productId)
+                .quantity(this.quantity)
+                .remark(this.remark)
+                .status(this.status)
+                .version(this.version)
+                .updatedAt(this.updatedAt)
+                .build();
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/memento/DocumentSnapshotManager.java`
+## 仓储对象
 
-下面是文档快照管理器，也就是管理者。它只负责保存和查询快照，不修改快照内容。
+草稿仓储负责保存当前草稿状态，历史仓储负责保存备忘录快照。二者职责分离，避免当前状态和历史状态混在一起。
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/repository/OrderDraftRepository.java`
 
 ```java
-package io.github.atengk.design.memento;
+package io.github.atengk.pattern.memento.order.repository;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.memento.common.BizException;
+import io.github.atengk.pattern.memento.order.model.OrderDraftAggregate;
+import org.springframework.stereotype.Repository;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 订单草稿仓储
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Repository
+public class OrderDraftRepository {
+
+    private final Map<String, OrderDraftAggregate> draftStorage = new ConcurrentHashMap<>();
+
+    /**
+     * 保存订单草稿
+     *
+     * @param aggregate 订单草稿聚合对象
+     */
+    public void save(OrderDraftAggregate aggregate) {
+        draftStorage.put(aggregate.getDraftId(), aggregate);
+    }
+
+    /**
+     * 查询必须存在的订单草稿
+     *
+     * @param draftId 草稿ID
+     * @return 订单草稿聚合对象
+     */
+    public OrderDraftAggregate getRequired(String draftId) {
+        if (StrUtil.isBlank(draftId)) {
+            throw new BizException("草稿ID不能为空");
+        }
+
+        OrderDraftAggregate aggregate = draftStorage.get(draftId);
+        if (aggregate == null) {
+            throw new BizException("订单草稿不存在");
+        }
+
+        return aggregate;
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/repository/OrderDraftHistoryRepository.java`
+
+```java
+package io.github.atengk.pattern.memento.order.repository;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.memento.common.BizException;
+import io.github.atengk.pattern.memento.order.memento.OrderDraftMemento;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -694,251 +752,155 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 文档快照管理器
+ * 订单草稿历史快照仓储
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
-@Component
-public class DocumentSnapshotManager {
+@Repository
+public class OrderDraftHistoryRepository {
 
-    private final Map<Long, List<DocumentSnapshot>> snapshotMap = new ConcurrentHashMap<>();
+    private final Map<String, List<OrderDraftMemento>> historyStorage = new ConcurrentHashMap<>();
 
     /**
-     * 保存文档快照
+     * 保存草稿历史快照
      *
-     * @param snapshot 文档快照
+     * @param memento 订单草稿备忘录
      */
-    public void save(DocumentSnapshot snapshot) {
-        if (snapshot == null) {
-            log.warn("保存文档快照失败，快照为空");
-            throw new IllegalArgumentException("文档快照不能为空");
-        }
-
-        snapshotMap.computeIfAbsent(snapshot.documentId(), key -> new ArrayList<>()).add(snapshot);
-        log.info("保存文档快照成功，文档ID：{}，快照ID：{}，当前快照数量：{}",
-                snapshot.documentId(), snapshot.snapshotId(), count(snapshot.documentId()));
+    public void save(OrderDraftMemento memento) {
+        historyStorage.computeIfAbsent(memento.getDraftId(), key -> new ArrayList<>()).add(memento);
+        log.info("订单草稿快照保存完成，draftId：{}，snapshotId：{}，snapshotVersion：{}",
+                memento.getDraftId(), memento.getSnapshotId(), memento.getSnapshotVersion());
     }
 
     /**
-     * 查询文档快照列表
+     * 查询草稿历史快照列表
      *
-     * @param documentId 文档ID
-     * @return 文档快照列表
+     * @param draftId 草稿ID
+     * @return 历史快照列表
      */
-    public List<DocumentSnapshot> list(Long documentId) {
-        if (documentId == null || documentId <= 0) {
-            log.warn("查询文档快照失败，文档ID不合法，文档ID：{}", documentId);
-            throw new IllegalArgumentException("文档ID必须大于0");
+    public List<OrderDraftMemento> listByDraftId(String draftId) {
+        if (StrUtil.isBlank(draftId)) {
+            throw new BizException("草稿ID不能为空");
         }
 
-        return CollUtil.emptyIfNull(snapshotMap.get(documentId)).stream()
-                .sorted(Comparator.comparing(DocumentSnapshot::createTime).reversed())
+        List<OrderDraftMemento> mementos = historyStorage.get(draftId);
+        if (CollUtil.isEmpty(mementos)) {
+            return new ArrayList<>();
+        }
+
+        return mementos.stream()
+                .sorted(Comparator.comparing(OrderDraftMemento::getCreatedAt).reversed())
                 .toList();
     }
 
     /**
-     * 获取指定文档快照
+     * 查询必须存在的草稿快照
      *
-     * @param documentId 文档ID
+     * @param draftId 草稿ID
      * @param snapshotId 快照ID
-     * @return 文档快照
+     * @return 草稿快照
      */
-    public DocumentSnapshot get(Long documentId, String snapshotId) {
-        if (documentId == null || documentId <= 0) {
-            log.warn("获取文档快照失败，文档ID不合法，文档ID：{}", documentId);
-            throw new IllegalArgumentException("文档ID必须大于0");
-        }
-
-        if (StrUtil.isBlank(snapshotId)) {
-            log.warn("获取文档快照失败，快照ID为空，文档ID：{}", documentId);
-            throw new IllegalArgumentException("快照ID不能为空");
-        }
-
-        return list(documentId).stream()
-                .filter(snapshot -> snapshot.snapshotId().equals(snapshotId))
+    public OrderDraftMemento getRequired(String draftId, String snapshotId) {
+        return listByDraftId(draftId)
+                .stream()
+                .filter(memento -> StrUtil.equals(memento.getSnapshotId(), snapshotId))
                 .findFirst()
-                .orElseThrow(() -> {
-                    log.warn("获取文档快照失败，快照不存在，文档ID：{}，快照ID：{}", documentId, snapshotId);
-                    return new IllegalArgumentException("文档快照不存在：" + snapshotId);
-                });
+                .orElseThrow(() -> new BizException("订单草稿快照不存在"));
     }
 
-    /**
-     * 获取文档快照数量
-     *
-     * @param documentId 文档ID
-     * @return 快照数量
-     */
-    public int count(Long documentId) {
-        return CollUtil.size(snapshotMap.get(documentId));
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/store/DocumentMemoryStore.java`
+## 业务服务
 
-下面是文档内存存储组件，用于模拟当前文档持久化。生产环境中可以替换为数据库表。
+业务服务负责组织用例流程：创建草稿、修改草稿、查询草稿、查询历史、回滚草稿。
+需要注意的是，Service 不直接复制草稿字段，而是调用 `createMemento()` 和 `restore()` 完成状态保存与恢复。
 
-```java
-package io.github.atengk.design.store;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.memento.DocumentEditor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * 文档内存存储
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class DocumentMemoryStore {
-
-    private final Map<Long, DocumentEditor> documentMap = new ConcurrentHashMap<>();
-
-    /**
-     * 创建文档
-     *
-     * @param title   文档标题
-     * @param content 文档内容
-     * @return 文档编辑器
-     */
-    public DocumentEditor create(String title, String content) {
-        if (StrUtil.isBlank(title)) {
-            log.warn("创建文档失败，标题为空");
-            throw new IllegalArgumentException("文档标题不能为空");
-        }
-
-        Long documentId = IdUtil.getSnowflakeNextId();
-        DocumentEditor editor = new DocumentEditor(documentId, title, content, 1);
-        documentMap.put(documentId, editor);
-
-        log.info("创建文档成功，文档ID：{}，标题：{}", documentId, title);
-        return editor;
-    }
-
-    /**
-     * 保存文档
-     *
-     * @param editor 文档编辑器
-     */
-    public void save(DocumentEditor editor) {
-        if (editor == null) {
-            log.warn("保存文档失败，文档为空");
-            throw new IllegalArgumentException("文档不能为空");
-        }
-
-        documentMap.put(editor.getDocumentId(), editor);
-        log.info("保存文档成功，文档ID：{}，版本：{}", editor.getDocumentId(), editor.getVersion());
-    }
-
-    /**
-     * 获取文档
-     *
-     * @param documentId 文档ID
-     * @return 文档编辑器
-     */
-    public DocumentEditor get(Long documentId) {
-        if (documentId == null || documentId <= 0) {
-            log.warn("获取文档失败，文档ID不合法，文档ID：{}", documentId);
-            throw new IllegalArgumentException("文档ID必须大于0");
-        }
-
-        DocumentEditor editor = documentMap.get(documentId);
-        if (editor == null) {
-            log.warn("获取文档失败，文档不存在，文档ID：{}", documentId);
-            throw new IllegalArgumentException("文档不存在：" + documentId);
-        }
-
-        return editor;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/DocumentDraftService.java`
-
-下面是文档草稿服务接口。
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/service/OrderDraftService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.memento.order.service;
 
-import io.github.atengk.design.dto.DocumentCreateRequest;
-import io.github.atengk.design.dto.DocumentEditRequest;
-import io.github.atengk.design.dto.DocumentResponse;
-import io.github.atengk.design.dto.DocumentRestoreRequest;
-import io.github.atengk.design.dto.DocumentSnapshotResponse;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftCreateRequest;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftRollbackRequest;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftUpdateRequest;
+import io.github.atengk.pattern.memento.order.vo.OrderDraftHistoryVO;
+import io.github.atengk.pattern.memento.order.vo.OrderDraftVO;
 
 import java.util.List;
 
 /**
- * 文档草稿服务
+ * 订单草稿服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface DocumentDraftService {
+public interface OrderDraftService {
 
     /**
-     * 创建文档
+     * 创建订单草稿
      *
-     * @param request 文档创建请求
-     * @return 文档响应
+     * @param request 创建请求
+     * @return 订单草稿
      */
-    DocumentResponse create(DocumentCreateRequest request);
+    OrderDraftVO createDraft(OrderDraftCreateRequest request);
 
     /**
-     * 编辑文档并保存编辑前快照
+     * 修改订单草稿
      *
-     * @param request 文档编辑请求
-     * @return 文档响应
+     * @param draftId 草稿ID
+     * @param request 修改请求
+     * @return 订单草稿
      */
-    DocumentResponse edit(DocumentEditRequest request);
+    OrderDraftVO updateDraft(String draftId, OrderDraftUpdateRequest request);
 
     /**
-     * 恢复文档到指定快照
+     * 查询订单草稿
      *
-     * @param request 文档恢复请求
-     * @return 文档响应
+     * @param draftId 草稿ID
+     * @return 订单草稿
      */
-    DocumentResponse restore(DocumentRestoreRequest request);
+    OrderDraftVO getDraft(String draftId);
 
     /**
-     * 查询文档快照列表
+     * 查询订单草稿历史快照
      *
-     * @param documentId 文档ID
-     * @return 快照列表
+     * @param draftId 草稿ID
+     * @return 历史快照列表
      */
-    List<DocumentSnapshotResponse> listSnapshots(Long documentId);
+    List<OrderDraftHistoryVO> listHistory(String draftId);
+
+    /**
+     * 回滚订单草稿
+     *
+     * @param draftId 草稿ID
+     * @param request 回滚请求
+     * @return 回滚后的订单草稿
+     */
+    OrderDraftVO rollbackDraft(String draftId, OrderDraftRollbackRequest request);
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/DocumentDraftServiceImpl.java`
+Service 实现类在修改前保存快照，在回滚前也保存一次当前状态，避免回滚操作本身不可撤销。
 
-下面是文档草稿服务实现。编辑前会先创建快照，恢复时会从快照管理器取出快照并恢复文档状态。
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/service/impl/OrderDraftServiceImpl.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.memento.order.service.impl;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.DocumentCreateRequest;
-import io.github.atengk.design.dto.DocumentEditRequest;
-import io.github.atengk.design.dto.DocumentResponse;
-import io.github.atengk.design.dto.DocumentRestoreRequest;
-import io.github.atengk.design.dto.DocumentSnapshotResponse;
-import io.github.atengk.design.memento.DocumentEditor;
-import io.github.atengk.design.memento.DocumentSnapshot;
-import io.github.atengk.design.memento.DocumentSnapshotManager;
-import io.github.atengk.design.service.DocumentDraftService;
-import io.github.atengk.design.store.DocumentMemoryStore;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftCreateRequest;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftRollbackRequest;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftUpdateRequest;
+import io.github.atengk.pattern.memento.order.memento.OrderDraftMemento;
+import io.github.atengk.pattern.memento.order.model.OrderDraftAggregate;
+import io.github.atengk.pattern.memento.order.repository.OrderDraftHistoryRepository;
+import io.github.atengk.pattern.memento.order.repository.OrderDraftRepository;
+import io.github.atengk.pattern.memento.order.service.OrderDraftService;
+import io.github.atengk.pattern.memento.order.vo.OrderDraftHistoryVO;
+import io.github.atengk.pattern.memento.order.vo.OrderDraftVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -946,679 +908,508 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * 文档草稿服务实现
+ * 订单草稿服务实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DocumentDraftServiceImpl implements DocumentDraftService {
+public class OrderDraftServiceImpl implements OrderDraftService {
 
-    private final DocumentMemoryStore documentMemoryStore;
-    private final DocumentSnapshotManager documentSnapshotManager;
+    private final OrderDraftRepository orderDraftRepository;
+
+    private final OrderDraftHistoryRepository orderDraftHistoryRepository;
 
     /**
-     * 创建文档
+     * 创建订单草稿
      *
-     * @param request 文档创建请求
-     * @return 文档响应
+     * @param request 创建请求
+     * @return 订单草稿
      */
     @Override
-    public DocumentResponse create(DocumentCreateRequest request) {
-        validateCreateRequest(request);
+    public OrderDraftVO createDraft(OrderDraftCreateRequest request) {
+        OrderDraftAggregate aggregate = OrderDraftAggregate.create(request);
+        orderDraftRepository.save(aggregate);
 
-        DocumentEditor editor = documentMemoryStore.create(request.title(), request.content());
-        DocumentSnapshot snapshot = editor.createSnapshot(request.operatorId());
-        documentSnapshotManager.save(snapshot);
-
-        log.info("创建文档并保存初始快照完成，文档ID：{}，快照ID：{}",
-                editor.getDocumentId(), snapshot.snapshotId());
-
-        return toResponse(editor, "创建成功");
+        log.info("订单草稿保存成功，draftId：{}", aggregate.getDraftId());
+        return aggregate.toVO();
     }
 
     /**
-     * 编辑文档并保存编辑前快照
+     * 修改订单草稿
      *
-     * @param request 文档编辑请求
-     * @return 文档响应
+     * @param draftId 草稿ID
+     * @param request 修改请求
+     * @return 订单草稿
      */
     @Override
-    public DocumentResponse edit(DocumentEditRequest request) {
-        validateEditRequest(request);
+    public OrderDraftVO updateDraft(String draftId, OrderDraftUpdateRequest request) {
+        OrderDraftAggregate aggregate = orderDraftRepository.getRequired(draftId);
 
-        DocumentEditor editor = documentMemoryStore.get(request.documentId());
+        OrderDraftMemento beforeUpdateMemento = aggregate.createMemento("修改前自动备份");
+        orderDraftHistoryRepository.save(beforeUpdateMemento);
 
-        DocumentSnapshot beforeSnapshot = editor.createSnapshot(request.operatorId());
-        documentSnapshotManager.save(beforeSnapshot);
+        aggregate.update(request);
+        orderDraftRepository.save(aggregate);
 
-        editor.edit(request.title(), request.content());
-        documentMemoryStore.save(editor);
+        log.info("订单草稿修改并备份完成，draftId：{}，snapshotId：{}",
+                draftId, beforeUpdateMemento.getSnapshotId());
 
-        log.info("编辑文档完成，文档ID：{}，编辑前快照ID：{}，当前版本：{}",
-                editor.getDocumentId(), beforeSnapshot.snapshotId(), editor.getVersion());
-
-        return toResponse(editor, "编辑成功");
+        return aggregate.toVO();
     }
 
     /**
-     * 恢复文档到指定快照
+     * 查询订单草稿
      *
-     * @param request 文档恢复请求
-     * @return 文档响应
+     * @param draftId 草稿ID
+     * @return 订单草稿
      */
     @Override
-    public DocumentResponse restore(DocumentRestoreRequest request) {
-        validateRestoreRequest(request);
-
-        DocumentEditor editor = documentMemoryStore.get(request.documentId());
-
-        DocumentSnapshot beforeRestoreSnapshot = editor.createSnapshot(request.operatorId());
-        documentSnapshotManager.save(beforeRestoreSnapshot);
-
-        DocumentSnapshot targetSnapshot = documentSnapshotManager.get(request.documentId(), request.snapshotId());
-        editor.restore(targetSnapshot);
-        documentMemoryStore.save(editor);
-
-        log.info("恢复文档完成，文档ID：{}，目标快照ID：{}，恢复前快照ID：{}",
-                request.documentId(), request.snapshotId(), beforeRestoreSnapshot.snapshotId());
-
-        return toResponse(editor, "恢复成功");
+    public OrderDraftVO getDraft(String draftId) {
+        return orderDraftRepository.getRequired(draftId).toVO();
     }
 
     /**
-     * 查询文档快照列表
+     * 查询订单草稿历史快照
      *
-     * @param documentId 文档ID
-     * @return 快照列表
+     * @param draftId 草稿ID
+     * @return 历史快照列表
      */
     @Override
-    public List<DocumentSnapshotResponse> listSnapshots(Long documentId) {
-        return documentSnapshotManager.list(documentId).stream()
-                .map(snapshot -> new DocumentSnapshotResponse(
-                        snapshot.snapshotId(),
-                        snapshot.documentId(),
-                        snapshot.title(),
-                        snapshot.version(),
-                        snapshot.operatorId(),
-                        snapshot.createTime()
-                ))
+    public List<OrderDraftHistoryVO> listHistory(String draftId) {
+        return orderDraftHistoryRepository.listByDraftId(draftId)
+                .stream()
+                .map(this::toHistoryVO)
                 .toList();
     }
 
     /**
-     * 转换为文档响应
+     * 回滚订单草稿
      *
-     * @param editor  文档编辑器
-     * @param message 响应消息
-     * @return 文档响应
+     * @param draftId 草稿ID
+     * @param request 回滚请求
+     * @return 回滚后的订单草稿
      */
-    private DocumentResponse toResponse(DocumentEditor editor, String message) {
-        return new DocumentResponse(
-                editor.getDocumentId(),
-                editor.getTitle(),
-                editor.getContent(),
-                editor.getVersion(),
-                message
-        );
+    @Override
+    public OrderDraftVO rollbackDraft(String draftId, OrderDraftRollbackRequest request) {
+        OrderDraftAggregate aggregate = orderDraftRepository.getRequired(draftId);
+
+        OrderDraftMemento beforeRollbackMemento = aggregate.createMemento("回滚前自动备份");
+        orderDraftHistoryRepository.save(beforeRollbackMemento);
+
+        OrderDraftMemento targetMemento = orderDraftHistoryRepository.getRequired(draftId, request.getSnapshotId());
+        aggregate.restore(targetMemento);
+        orderDraftRepository.save(aggregate);
+
+        log.info("订单草稿回滚成功，draftId：{}，targetSnapshotId：{}，backupSnapshotId：{}",
+                draftId, targetMemento.getSnapshotId(), beforeRollbackMemento.getSnapshotId());
+
+        return aggregate.toVO();
     }
 
     /**
-     * 校验文档创建请求
+     * 转换历史快照展示对象
      *
-     * @param request 文档创建请求
+     * @param memento 订单草稿备忘录
+     * @return 历史快照展示对象
      */
-    private void validateCreateRequest(DocumentCreateRequest request) {
-        if (request == null) {
-            log.warn("创建文档失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.title())) {
-            log.warn("创建文档失败，标题为空");
-            throw new IllegalArgumentException("文档标题不能为空");
-        }
-
-        validateOperatorId(request.operatorId());
+    private OrderDraftHistoryVO toHistoryVO(OrderDraftMemento memento) {
+        return OrderDraftHistoryVO.builder()
+                .snapshotId(memento.getSnapshotId())
+                .draftId(memento.getDraftId())
+                .snapshotVersion(memento.getSnapshotVersion())
+                .reason(memento.getReason())
+                .productId(memento.getProductId())
+                .quantity(memento.getQuantity())
+                .remark(memento.getRemark())
+                .status(memento.getStatus())
+                .createdAt(memento.getCreatedAt())
+                .build();
     }
 
-    /**
-     * 校验文档编辑请求
-     *
-     * @param request 文档编辑请求
-     */
-    private void validateEditRequest(DocumentEditRequest request) {
-        if (request == null) {
-            log.warn("编辑文档失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (request.documentId() == null || request.documentId() <= 0) {
-            log.warn("编辑文档失败，文档ID不合法，文档ID：{}", request.documentId());
-            throw new IllegalArgumentException("文档ID必须大于0");
-        }
-
-        if (StrUtil.isBlank(request.title())) {
-            log.warn("编辑文档失败，标题为空，文档ID：{}", request.documentId());
-            throw new IllegalArgumentException("文档标题不能为空");
-        }
-
-        validateOperatorId(request.operatorId());
-    }
-
-    /**
-     * 校验文档恢复请求
-     *
-     * @param request 文档恢复请求
-     */
-    private void validateRestoreRequest(DocumentRestoreRequest request) {
-        if (request == null) {
-            log.warn("恢复文档失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (request.documentId() == null || request.documentId() <= 0) {
-            log.warn("恢复文档失败，文档ID不合法，文档ID：{}", request.documentId());
-            throw new IllegalArgumentException("文档ID必须大于0");
-        }
-
-        if (StrUtil.isBlank(request.snapshotId())) {
-            log.warn("恢复文档失败，快照ID为空，文档ID：{}", request.documentId());
-            throw new IllegalArgumentException("快照ID不能为空");
-        }
-
-        validateOperatorId(request.operatorId());
-    }
-
-    /**
-     * 校验操作人ID
-     *
-     * @param operatorId 操作人ID
-     */
-    private void validateOperatorId(Long operatorId) {
-        if (operatorId == null || operatorId <= 0) {
-            log.warn("文档操作失败，操作人ID不合法，操作人ID：{}", operatorId);
-            throw new IllegalArgumentException("操作人ID必须大于0");
-        }
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/DocumentDraftController.java`
+## 控制器接口
 
-下面是文档草稿接口，用于验证备忘录模式的保存快照和恢复快照能力。
+控制器提供订单草稿创建、修改、查询历史和回滚接口。调用方不需要知道备忘录对象如何创建和恢复。
+
+文件位置：`src/main/java/io/github/atengk/pattern/memento/order/controller/OrderDraftController.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.memento.order.controller;
 
-import io.github.atengk.design.dto.DocumentCreateRequest;
-import io.github.atengk.design.dto.DocumentEditRequest;
-import io.github.atengk.design.dto.DocumentResponse;
-import io.github.atengk.design.dto.DocumentRestoreRequest;
-import io.github.atengk.design.dto.DocumentSnapshotResponse;
-import io.github.atengk.design.service.DocumentDraftService;
+import io.github.atengk.pattern.memento.common.ApiResult;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftCreateRequest;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftRollbackRequest;
+import io.github.atengk.pattern.memento.order.dto.OrderDraftUpdateRequest;
+import io.github.atengk.pattern.memento.order.service.OrderDraftService;
+import io.github.atengk.pattern.memento.order.vo.OrderDraftHistoryVO;
+import io.github.atengk.pattern.memento.order.vo.OrderDraftVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
- * 文档草稿控制器
+ * 订单草稿接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/order-drafts")
 @RequiredArgsConstructor
-@RequestMapping("/memento/document")
-public class DocumentDraftController {
+public class OrderDraftController {
 
-    private final DocumentDraftService documentDraftService;
+    private final OrderDraftService orderDraftService;
 
     /**
-     * 创建文档
+     * 创建订单草稿
      *
-     * @param title      文档标题
-     * @param content    文档内容
-     * @param operatorId 操作人ID
-     * @return 文档响应
+     * @param request 创建请求
+     * @return 订单草稿
      */
-    @PostMapping("/create")
-    public DocumentResponse create(@RequestParam String title,
-                                   @RequestParam String content,
-                                   @RequestParam Long operatorId) {
-        DocumentCreateRequest request = new DocumentCreateRequest(title, content, operatorId);
-        return documentDraftService.create(request);
+    @PostMapping
+    public ApiResult<OrderDraftVO> createDraft(@Valid @RequestBody OrderDraftCreateRequest request) {
+        return ApiResult.success(orderDraftService.createDraft(request));
     }
 
     /**
-     * 编辑文档
+     * 修改订单草稿
      *
-     * @param documentId 文档ID
-     * @param title      文档标题
-     * @param content    文档内容
-     * @param operatorId 操作人ID
-     * @return 文档响应
+     * @param draftId 草稿ID
+     * @param request 修改请求
+     * @return 订单草稿
      */
-    @PostMapping("/edit")
-    public DocumentResponse edit(@RequestParam Long documentId,
-                                 @RequestParam String title,
-                                 @RequestParam String content,
-                                 @RequestParam Long operatorId) {
-        DocumentEditRequest request = new DocumentEditRequest(documentId, title, content, operatorId);
-        return documentDraftService.edit(request);
+    @PutMapping("/{draftId}")
+    public ApiResult<OrderDraftVO> updateDraft(@PathVariable String draftId,
+                                               @Valid @RequestBody OrderDraftUpdateRequest request) {
+        return ApiResult.success(orderDraftService.updateDraft(draftId, request));
     }
 
     /**
-     * 恢复文档
+     * 查询订单草稿
      *
-     * @param documentId 文档ID
-     * @param snapshotId 快照ID
-     * @param operatorId 操作人ID
-     * @return 文档响应
+     * @param draftId 草稿ID
+     * @return 订单草稿
      */
-    @PostMapping("/restore")
-    public DocumentResponse restore(@RequestParam Long documentId,
-                                    @RequestParam String snapshotId,
-                                    @RequestParam Long operatorId) {
-        DocumentRestoreRequest request = new DocumentRestoreRequest(documentId, snapshotId, operatorId);
-        return documentDraftService.restore(request);
+    @GetMapping("/{draftId}")
+    public ApiResult<OrderDraftVO> getDraft(@PathVariable String draftId) {
+        return ApiResult.success(orderDraftService.getDraft(draftId));
     }
 
     /**
-     * 查询文档快照列表
+     * 查询订单草稿历史快照
      *
-     * @param documentId 文档ID
-     * @return 文档快照列表
+     * @param draftId 草稿ID
+     * @return 历史快照列表
      */
-    @GetMapping("/snapshots")
-    public List<DocumentSnapshotResponse> listSnapshots(@RequestParam Long documentId) {
-        return documentDraftService.listSnapshots(documentId);
+    @GetMapping("/{draftId}/histories")
+    public ApiResult<List<OrderDraftHistoryVO>> listHistory(@PathVariable String draftId) {
+        return ApiResult.success(orderDraftService.listHistory(draftId));
     }
+
+    /**
+     * 回滚订单草稿
+     *
+     * @param draftId 草稿ID
+     * @param request 回滚请求
+     * @return 回滚后的订单草稿
+     */
+    @PostMapping("/{draftId}/rollback")
+    public ApiResult<OrderDraftVO> rollbackDraft(@PathVariable String draftId,
+                                                 @Valid @RequestBody OrderDraftRollbackRequest request) {
+        return ApiResult.success(orderDraftService.rollbackDraft(draftId, request));
+    }
+
 }
 ```
 
-接口调用示例：
+## 使用方式
+
+启动项目后，先创建订单草稿，再修改草稿，系统会在每次修改前保存快照。之后可以查询历史快照并回滚到指定快照。
+
+创建订单草稿：
 
 ```bash
-curl -X POST "http://localhost:8080/memento/document/create?title=设计模式笔记&content=初始内容&operatorId=10001"
-
-curl -X POST "http://localhost:8080/memento/document/edit?documentId=2019776866538487808&title=设计模式笔记&content=增加备忘录模式内容&operatorId=10001"
-
-curl "http://localhost:8080/memento/document/snapshots?documentId=2019776866538487808"
-
-curl -X POST "http://localhost:8080/memento/document/restore?documentId=2019776866538487808&snapshotId=SNAP2019776866538487809&operatorId=10001"
+curl -X POST "http://localhost:8080/order-drafts" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 1,
+    "remark": "初始草稿"
+  }'
 ```
 
-创建文档可能返回：
+返回示例：
 
 ```json
 {
-  "documentId": 2019776866538487808,
-  "title": "设计模式笔记",
-  "content": "初始内容",
-  "version": 1,
-  "message": "创建成功"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "draftId": "DFT1998948715737427968",
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 1,
+    "remark": "初始草稿",
+    "status": "EDITING",
+    "version": 1,
+    "updatedAt": "2026-05-13T10:00:00"
+  }
 }
 ```
 
-快照列表可能返回：
+第一次修改草稿：
+
+```bash
+curl -X PUT "http://localhost:8080/order-drafts/DFT1998948715737427968" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": 20002,
+    "quantity": 2,
+    "remark": "第一次修改商品和数量"
+  }'
+```
+
+第二次修改草稿：
+
+```bash
+curl -X PUT "http://localhost:8080/order-drafts/DFT1998948715737427968" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "quantity": 5,
+    "remark": "第二次修改数量"
+  }'
+```
+
+查询历史快照：
+
+```bash
+curl -X GET "http://localhost:8080/order-drafts/DFT1998948715737427968/histories"
+```
+
+返回示例：
 
 ```json
-[
-  {
-    "snapshotId": "SNAP2019776866538487809",
-    "documentId": 2019776866538487808,
-    "title": "设计模式笔记",
-    "version": 1,
-    "operatorId": 10001,
-    "createTime": "2026-04-30T10:20:30"
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": [
+    {
+      "snapshotId": "SNP1998948991737427970",
+      "draftId": "DFT1998948715737427968",
+      "snapshotVersion": 2,
+      "reason": "修改前自动备份",
+      "productId": 20002,
+      "quantity": 2,
+      "remark": "第一次修改商品和数量",
+      "status": "EDITING",
+      "createdAt": "2026-05-13T10:02:00"
+    },
+    {
+      "snapshotId": "SNP1998948881737427969",
+      "draftId": "DFT1998948715737427968",
+      "snapshotVersion": 1,
+      "reason": "修改前自动备份",
+      "productId": 20001,
+      "quantity": 1,
+      "remark": "初始草稿",
+      "status": "EDITING",
+      "createdAt": "2026-05-13T10:01:00"
+    }
+  ]
+}
+```
+
+回滚到第一次快照：
+
+```bash
+curl -X POST "http://localhost:8080/order-drafts/DFT1998948715737427968/rollback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "snapshotId": "SNP1998948881737427969"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "draftId": "DFT1998948715737427968",
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 1,
+    "remark": "初始草稿",
+    "status": "EDITING",
+    "version": 4,
+    "updatedAt": "2026-05-13T10:03:00"
   }
-]
+}
 ```
-
-这种方式的核心是：编辑前先保存旧状态，恢复前也保存当前状态。这样恢复本身也可以被追溯，甚至可以再次恢复到恢复前状态。
-
-## 数据库落地方式
-
-实际 Spring Boot 项目中，文档当前状态和历史快照通常会拆成两张表。当前状态放业务表，历史状态放快照表。备忘录模式中的 `Memento` 对应历史快照记录，`Caretaker` 对应快照管理服务。
-
-示例表结构如下：
-
-```sql
--- 文档当前状态表
-CREATE TABLE document_draft (
-    id BIGINT PRIMARY KEY COMMENT '文档ID',
-    title VARCHAR(200) NOT NULL COMMENT '文档标题',
-    content TEXT COMMENT '文档内容',
-    version INT NOT NULL DEFAULT 1 COMMENT '当前版本',
-    create_time DATETIME NOT NULL COMMENT '创建时间',
-    update_time DATETIME NOT NULL COMMENT '更新时间'
-) COMMENT='文档草稿表';
-
--- 文档快照表
-CREATE TABLE document_snapshot (
-    id BIGINT PRIMARY KEY COMMENT '主键ID',
-    snapshot_id VARCHAR(64) NOT NULL COMMENT '快照ID',
-    document_id BIGINT NOT NULL COMMENT '文档ID',
-    title VARCHAR(200) NOT NULL COMMENT '快照标题',
-    content TEXT COMMENT '快照内容',
-    version INT NOT NULL COMMENT '快照版本',
-    operator_id BIGINT NOT NULL COMMENT '操作人ID',
-    create_time DATETIME NOT NULL COMMENT '创建时间',
-    UNIQUE KEY uk_snapshot_id (snapshot_id),
-    KEY idx_document_id (document_id)
-) COMMENT='文档快照表';
-```
-
-如果使用 MyBatis-Plus，可以将 `DocumentSnapshot` 对应到 `document_snapshot` 表，将 `DocumentEditor` 当前状态对应到 `document_draft` 表。编辑时推荐在事务中完成：
-
-```text
-查询当前文档
-保存当前快照
-更新文档内容和版本
-提交事务
-```
-
-恢复时推荐在事务中完成：
-
-```text
-查询当前文档
-保存恢复前快照
-查询目标快照
-用目标快照覆盖当前文档
-提交事务
-```
-
-对于核心业务，不建议只保存在内存中。本文使用内存存储只是为了让示例更聚焦于备忘录模式结构。
-
-## 扩展自动保存快照
-
-在实际项目中，快照保存不一定只发生在用户手动操作时。对于文档、规则、配置类系统，常见做法是编辑前自动保存快照，或者定时保存草稿快照。
-
-可以在 Service 中增加自动快照策略：
-
-```text
-每次编辑前保存快照
-每隔指定时间保存快照
-内容变化超过指定长度保存快照
-用户点击发布前保存快照
-重要字段变更前保存快照
-```
-
-示例中 `edit` 方法采用的是“编辑前保存快照”：
-
-```java
-DocumentSnapshot beforeSnapshot = editor.createSnapshot(request.operatorId());
-documentSnapshotManager.save(beforeSnapshot);
-
-editor.edit(request.title(), request.content());
-documentMemoryStore.save(editor);
-```
-
-这种方式可以保证编辑失败之前已有旧状态可恢复。生产环境中还需要结合事务，避免“快照保存成功但文档更新失败”导致历史状态混乱。
-
-如果快照很多，需要增加清理策略：
-
-```text
-每个文档最多保留最近 50 个快照
-只保留最近 30 天快照
-发布版本永久保留
-普通自动保存快照定期清理
-```
-
-## 备忘录模式和命令模式的区别
-
-备忘录模式和命令模式都可以支持撤销，但关注点不同。
-
-| 对比项   | 备忘录模式                   | 命令模式                       |
-| -------- | ---------------------------- | ------------------------------ |
-| 核心目的 | 保存对象状态并恢复           | 封装操作并支持执行、撤销       |
-| 撤销方式 | 恢复到历史快照               | 执行反向操作或补偿操作         |
-| 保存内容 | 对象状态                     | 操作本身和操作参数             |
-| 适合场景 | 文档恢复、配置回滚、表单快照 | 编辑器命令、菜单动作、任务调度 |
-| 风险点   | 快照过多占用存储             | undo 语义不一定可靠            |
-
-简单理解：
-
-```text
-备忘录模式：回到之前的状态。
-命令模式：撤销之前的动作。
-```
-
-文本编辑器中，保存完整文本快照并恢复，适合备忘录模式。把“插入文字”“删除文字”封装为命令，再执行反向操作，适合命令模式。
-
-实际项目中二者可以组合使用：
-
-```text
-命令模式：封装编辑动作
-备忘录模式：在执行命令前保存快照
-```
-
-这样既能记录操作，也能恢复状态。
-
-## 备忘录模式和原型模式的区别
-
-备忘录模式和原型模式都可能涉及对象状态复制，但目的不同。
-
-| 对比项   | 备忘录模式               | 原型模式               |
-| -------- | ------------------------ | ---------------------- |
-| 核心目的 | 保存历史状态并恢复       | 复制已有对象创建新对象 |
-| 时间维度 | 强调历史版本             | 不强调历史版本         |
-| 使用对象 | 快照对象通常由管理者保存 | 新对象由调用方使用     |
-| 典型场景 | 配置回滚、草稿恢复       | 模板复制、审批流复制   |
-| 关注点   | 恢复原对象状态           | 创建相似新对象         |
-
-简单理解：
-
-```text
-备忘录模式：保存过去的自己，未来可以恢复。
-原型模式：复制一个新的自己，后续独立使用。
-```
-
-配置变更前保存旧配置并支持回滚，适合备忘录模式。基于一个审批流程模板复制出新流程，适合原型模式。
-
-## 备忘录模式和快照表
-
-业务系统中常见的历史表、版本表、快照表，本质上经常体现备忘录模式思想。但不是所有历史表都等于备忘录模式。
-
-符合备忘录模式的快照表通常具备：
-
-```text
-保存对象完整或关键状态
-可以根据快照恢复业务对象
-快照由管理者保存和查询
-快照不被业务随意修改
-```
-
-普通流水表通常只记录操作过程，不一定能恢复状态：
-
-```text
-谁在什么时候执行了什么动作
-请求参数是什么
-结果成功还是失败
-错误信息是什么
-```
-
-如果历史记录无法还原对象状态，它更像操作日志，而不是备忘录。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-创建文档：
-
-```bash
-curl -X POST "http://localhost:8080/memento/document/create?title=设计模式笔记&content=初始内容&operatorId=10001"
-```
-
-编辑文档：
-
-```bash
-curl -X POST "http://localhost:8080/memento/document/edit?documentId=2019776866538487808&title=设计模式笔记&content=增加备忘录模式内容&operatorId=10001"
-```
-
-查询快照：
-
-```bash
-curl "http://localhost:8080/memento/document/snapshots?documentId=2019776866538487808"
-```
-
-恢复快照：
-
-```bash
-curl -X POST "http://localhost:8080/memento/document/restore?documentId=2019776866538487808&snapshotId=SNAP2019776866538487809&operatorId=10001"
-```
-
-如果备忘录模式正常，可以看到类似日志：
+正常修改草稿时，可以通过日志看到快照保存和草稿修改过程：
 
 ```text
-创建文档成功，文档ID：2019776866538487808，标题：设计模式笔记
-创建文档快照成功，文档ID：2019776866538487808，快照ID：SNAP2019776866538487809，版本：1
-保存文档快照成功，文档ID：2019776866538487808，快照ID：SNAP2019776866538487809，当前快照数量：1
-编辑文档成功，文档ID：2019776866538487808，版本：2
-恢复文档成功，文档ID：2019776866538487808，快照ID：SNAP2019776866538487809，恢复版本：1
+订单草稿创建完成，draftId：DFT1998948715737427968，userId：10001
+订单草稿保存成功，draftId：DFT1998948715737427968
+订单草稿快照保存完成，draftId：DFT1998948715737427968，snapshotId：SNP1998948881737427969，snapshotVersion：1
+订单草稿修改完成，draftId：DFT1998948715737427968，version：2
+订单草稿修改并备份完成，draftId：DFT1998948715737427968，snapshotId：SNP1998948881737427969
 ```
 
-执行不存在的快照恢复：
+正常回滚草稿时，可以看到回滚前自动备份和目标快照恢复过程：
+
+```text
+订单草稿快照保存完成，draftId：DFT1998948715737427968，snapshotId：SNP1998949101737427971，snapshotVersion：3
+订单草稿回滚完成，draftId：DFT1998948715737427968，snapshotId：SNP1998948881737427969，currentVersion：4
+订单草稿回滚成功，draftId：DFT1998948715737427968，targetSnapshotId：SNP1998948881737427969，backupSnapshotId：SNP1998949101737427971
+```
+
+如果回滚不存在的快照：
 
 ```bash
-curl -X POST "http://localhost:8080/memento/document/restore?documentId=2019776866538487808&snapshotId=UNKNOWN&operatorId=10001"
+curl -X POST "http://localhost:8080/order-drafts/DFT1998948715737427968/rollback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "snapshotId": "SNP_NOT_EXIST"
+  }'
 ```
 
-异常日志示例：
+返回示例：
 
-```text
-获取文档快照失败，快照不存在，文档ID：2019776866538487808，快照ID：UNKNOWN
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
-
-## 注意事项
-
-备忘录模式适合保存和恢复对象状态，但不要滥用完整快照。对象内容很大、变更很频繁时，完整快照会带来明显存储压力。
-
-适合使用备忘录模式的场景：
-
-```text
-文档草稿恢复
-配置版本回滚
-规则发布前快照
-审批表单历史版本
-流程设计器版本恢复
-页面设计器撤销恢复
-重要业务对象变更前留档
-```
-
-不太适合使用备忘录模式的场景：
-
-```text
-对象状态很大且变化频繁
-只需要记录操作日志
-只需要审计谁做了什么
-对象状态无法安全恢复
-恢复动作会破坏业务一致性
-```
-
-不要让 `Caretaker` 修改 `Memento`。备忘录对象最好设计为不可变对象。
-
-推荐写法：
-
-```java
-public record DocumentSnapshot(...) {
+```json
+{
+  "code": 500,
+  "message": "订单草稿快照不存在",
+  "data": null
 }
 ```
 
-不推荐写法：
+## 替换为数据库表
+
+实际项目中，当前草稿和历史快照通常使用两张表保存。
+
+订单草稿表：
+
+```sql
+-- 订单草稿当前状态表
+CREATE TABLE t_order_draft (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    draft_id VARCHAR(64) NOT NULL COMMENT '草稿ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    product_id BIGINT NOT NULL COMMENT '商品ID',
+    quantity INT NOT NULL COMMENT '购买数量',
+    remark VARCHAR(500) DEFAULT '' COMMENT '备注',
+    status VARCHAR(32) NOT NULL COMMENT '草稿状态',
+    version INT NOT NULL COMMENT '版本号',
+    updated_at DATETIME NOT NULL COMMENT '更新时间',
+    UNIQUE KEY uk_draft_id (draft_id)
+) COMMENT='订单草稿当前状态表';
+```
+
+订单草稿历史快照表：
+
+```sql
+-- 订单草稿历史快照表
+CREATE TABLE t_order_draft_snapshot (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    snapshot_id VARCHAR(64) NOT NULL COMMENT '快照ID',
+    draft_id VARCHAR(64) NOT NULL COMMENT '草稿ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    product_id BIGINT NOT NULL COMMENT '商品ID',
+    quantity INT NOT NULL COMMENT '购买数量',
+    remark VARCHAR(500) DEFAULT '' COMMENT '备注',
+    status VARCHAR(32) NOT NULL COMMENT '草稿状态',
+    snapshot_version INT NOT NULL COMMENT '快照版本号',
+    reason VARCHAR(128) NOT NULL COMMENT '快照原因',
+    created_at DATETIME NOT NULL COMMENT '创建时间',
+    UNIQUE KEY uk_snapshot_id (snapshot_id),
+    KEY idx_draft_id_created_at (draft_id, created_at)
+) COMMENT='订单草稿历史快照表';
+```
+
+落库时需要注意：修改草稿和保存修改前快照应放在同一个事务中。回滚时也应先保存回滚前快照，再恢复目标快照，避免回滚操作本身无法撤销。
+
+## 扩展方式
+
+如果需要支持“最多保留最近 20 个快照”，可以在保存快照后清理旧版本。核心逻辑可以放在历史仓储中。
+
+示例逻辑：
 
 ```java
-public class DocumentSnapshot {
+private static final int MAX_HISTORY_SIZE = 20;
 
-    private String content;
-
-    public void setContent(String content) {
-        this.content = content;
+/**
+ * 清理超过限制的历史快照
+ *
+ * @param draftId 草稿ID
+ */
+private void cleanExpiredSnapshots(String draftId) {
+    List<OrderDraftMemento> mementos = historyStorage.get(draftId);
+    if (CollUtil.isEmpty(mementos) || mementos.size() <= MAX_HISTORY_SIZE) {
+        return;
     }
+
+    List<OrderDraftMemento> retained = mementos.stream()
+            .sorted(Comparator.comparing(OrderDraftMemento::getCreatedAt).reversed())
+            .limit(MAX_HISTORY_SIZE)
+            .toList();
+
+    historyStorage.put(draftId, new ArrayList<>(retained));
+    log.info("订单草稿历史快照清理完成，draftId：{}，retainedSize：{}", draftId, retained.size());
 }
 ```
 
-如果备忘录中包含敏感信息，例如手机号、身份证号、密钥、合同内容，需要考虑加密、脱敏、访问权限和审计日志。
+如果需要支持“对比两个快照差异”，可以查询两个 `OrderDraftMemento`，逐字段比较并返回差异项。这个能力不应放在备忘录对象里，建议放在独立的 `OrderDraftSnapshotCompareService` 中。
 
-常见处理方式：
+## 优点和注意事项
 
-```text
-敏感字段加密存储
-快照访问需要权限校验
-恢复操作记录审计日志
-快照下载需要水印或审批
-快照数据设置保留周期
-```
+备忘录模式的核心价值是保存和恢复对象状态，同时尽量不破坏对象封装性。
 
-恢复状态不是简单覆盖字段。对于订单、支付、库存、账户余额等核心业务对象，恢复历史状态可能引发严重一致性问题。
+| 注意事项             | 说明                                           |
+| -------------------- | ---------------------------------------------- |
+| 快照对象尽量不可变   | 备忘录应避免提供 setter，防止历史状态被修改    |
+| 不要暴露过多内部细节 | 外部管理器只保存快照，不直接修改原发器内部字段 |
+| 注意快照体积         | 如果对象字段很多，频繁保存快照会带来存储压力   |
+| 注意事务一致性       | 保存快照和修改当前对象应处于同一事务边界       |
+| 注意历史清理         | 高频编辑场景需要限制快照数量或设置过期时间     |
+| 回滚前建议再备份     | 回滚操作本身也可能误操作，应保留回滚前状态     |
 
-不建议直接快照恢复的对象：
+## 和命令模式的区别
 
-```text
-支付单状态
-库存数量
-账户余额
-订单履约状态
-已对外发送的通知状态
-已提交第三方系统的业务状态
-```
+备忘录模式和命令模式都可能用于撤销操作，但关注点不同。
 
-这些场景通常需要补偿流程，而不是简单恢复旧状态。例如支付成功后不能恢复成未支付，应该走退款、冲正或人工处理流程。
+| 模式       | 关注点                                         | 典型场景                              |
+| ---------- | ---------------------------------------------- | ------------------------------------- |
+| 备忘录模式 | 保存对象状态，并恢复到某个历史状态             | 草稿回滚、配置版本恢复、表单恢复      |
+| 命令模式   | 把操作封装成命令对象，可执行、排队、记录或撤销 | 操作中心、任务调度、MQ 消费、撤销重做 |
 
-如果快照保存和业务更新必须保持一致，需要放在同一个事务中：
+如果撤销逻辑主要是“恢复历史状态”，优先考虑备忘录模式。
+如果撤销逻辑主要是“执行一个反向操作”，例如扣库存对应补库存、支付对应退款，优先考虑命令模式或命令模式结合补偿事务。
 
-```text
-保存编辑前快照
-更新当前业务对象
-提交事务
-```
+## 和原型模式的区别
 
-如果快照保存失败，是否允许继续更新业务对象，要根据业务要求决定。配置管理系统通常不允许；普通草稿系统可以允许但需要提示。
+备忘录模式和原型模式都可能涉及对象复制，但目的不同。
 
-快照数量需要控制。常见策略包括：
+| 模式       | 关注点                 | 典型场景                             |
+| ---------- | ---------------------- | ------------------------------------ |
+| 备忘录模式 | 保存历史状态并支持恢复 | 配置回滚、草稿恢复、审批撤回         |
+| 原型模式   | 通过复制快速创建新对象 | 模板复制、对象克隆、批量创建相似对象 |
 
-```text
-只保留最近 N 个快照
-只保留最近 N 天快照
-发布版本永久保留
-自动保存快照定期清理
-手动保存快照优先保留
-```
+备忘录模式强调“历史状态管理”，原型模式强调“对象创建”。
 
-Spring Bean 默认是单例，发起人对象如果有请求级状态，不建议直接做成单例 Bean。本文中的 `DocumentEditor` 是普通对象，由存储组件管理；如果做成 Spring Bean，必须避免成员变量保存当前请求状态。
+## 小结
 
-错误示例：
-
-```java
-@Component
-public class DocumentEditor {
-
-    private Long currentDocumentId;
-    private String currentContent;
-}
-```
-
-推荐使用普通对象或方法局部变量承载状态：
-
-```java
-DocumentEditor editor = documentMemoryStore.get(documentId);
-DocumentSnapshot snapshot = editor.createSnapshot(operatorId);
-```
-
-## 总结
-
-在 JDK21 和 Spring Boot 3 项目中，备忘录模式的实践重点是在不破坏对象封装的前提下保存历史状态，并在需要时恢复到指定历史状态。
-
-普通 Java 备忘录模式适合理解编辑器撤销、状态保存和恢复。Spring Boot 项目中更推荐使用“发起人对象 + 不可变快照 + 快照管理器 + 业务服务协调”的结构。对于文档草稿、配置管理、规则发布、流程设计器、表单编辑器等场景，备忘录模式可以提供清晰的版本保存和回滚能力。
-
-备忘录模式不是操作日志，也不是普通缓存。它最适合处理“对象状态需要被保存，并且未来可能恢复”的场景。实际落地时，需要重点关注快照大小、存储周期、恢复权限、事务一致性、敏感信息保护和业务对象是否允许被历史状态覆盖。
+备忘录模式在 Spring Boot 项目中的常见落地方式是：由业务对象自己创建快照和恢复快照，历史管理器只负责保存和查询快照。
+在订单草稿、营销配置、审批流程、规则发布、表单编辑等需要历史版本和回滚能力的场景中，备忘录模式可以使状态恢复逻辑更清晰，并减少外部代码对对象内部状态的直接依赖。

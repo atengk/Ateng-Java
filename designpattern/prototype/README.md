@@ -1,38 +1,42 @@
-# 设计模式：原型模式
+# 原型模式
 
-原型模式用于通过复制已有对象来创建新对象，而不是每次都从零开始构造。在 JDK21 和 Spring Boot 3 项目中，原型模式常用于复杂配置复制、模板对象复制、导出任务复制、审批流程复制、消息模板复制、表单模板复制、查询条件复制等场景。
-
-需要注意：原型模式关注的是“复制已有对象”。如果对象创建过程复杂且需要一步步组装，更适合构建者模式；如果根据类型创建不同对象，更适合工厂模式；如果需要从一个已有模板快速生成相似对象，原型模式更合适。
+原型模式属于创建型模式，用于通过复制已有对象来创建新对象。它适合对象创建成本较高、初始化字段较多、对象结构相似、需要基于模板快速生成新对象的场景。在当前 29 个设计模式文档体系中，原型模式属于 GoF 创建型模式，模块名为 `prototype`。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 JDK 21、Spring Boot 3、Maven、Hutool、Lombok 编写。示例场景是“审批流程模板复制”。系统中预置多个审批流程模板，例如采购审批、报销审批、合同审批。用户创建业务审批单时，不需要重新组装审批节点，而是从已有模板复制一份流程实例，再填充业务单号、申请人、实例名称等信息。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证原型模式行为 -->
+    <!-- Spring Boot Web，用于提供原型模式验证接口 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于对象拷贝、JSON深拷贝、字符串、ID 等通用处理 -->
+    <!-- Spring Boot Validation，用于请求参数校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool 工具类，用于字符串、集合、日期、ID、JSON 等常用处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.36</version>
     </dependency>
 
-    <!-- Lombok，简化 Getter、Setter、Builder、日志等样板代码 -->
+    <!-- Lombok，用于减少 getter、setter、构造方法和日志样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- Spring Boot 测试依赖，用于验证原型复制逻辑 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -41,501 +45,83 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+文件位置：`src/main/resources/application.yml`
 
-## 核心概念
+```yaml
+server:
+  port: 8080
 
-原型模式的核心目标是复用已有对象的状态，通过复制快速创建新对象，避免重复初始化复杂字段。
+demo:
+  prototype:
+    # 默认租户编号
+    default-tenant-id: TENANT_10001
+    # 默认审批实例过期天数
+    default-expire-days: 7
+```
 
-常见角色如下：
+## 模式说明
 
-| 角色              | 说明                                          |
-| ----------------- | --------------------------------------------- |
-| Prototype         | 原型接口，定义复制方法                        |
-| ConcretePrototype | 具体原型对象，实现复制逻辑                    |
-| PrototypeRegistry | 原型注册表，缓存多个模板对象                  |
-| Client            | 调用方，从原型对象复制出新对象                |
-| Clone Context     | 复制后的上下文调整，例如新 ID、新名称、新时间 |
+原型模式解决的是“如何基于已有对象快速创建相似对象”的问题。它不是从零开始 `new` 一个对象，而是复制一个已有对象，然后修改少量字段。
 
-常见实现方式如下：
-
-| 实现方式                         | 是否推荐         | 适用场景                                  |
-| -------------------------------- | ---------------- | ----------------------------------------- |
-| 拷贝构造方法                     | 推荐             | 字段明确、复制逻辑可控                    |
-| 手写 `copy` 方法                 | 推荐             | 需要定制复制逻辑                          |
-| Hutool `BeanUtil.copyProperties` | 推荐             | 普通 Bean 浅拷贝                          |
-| JSON 序列化深拷贝                | 可用             | 简单对象图深拷贝                          |
-| `Cloneable` + `clone`            | 谨慎使用         | Java 原生机制较旧，可读性一般             |
-| Spring `prototype` scope         | 不是典型原型模式 | 每次从容器获取新 Bean，不等于复制已有对象 |
-
-在 Spring Boot 项目中，常见优先级通常是：
+在 Spring Boot 项目中，原型模式常见于：
 
 ```text
-手写 copy 方法 > 拷贝构造方法 > Hutool BeanUtil 浅拷贝 > JSON 深拷贝 > Cloneable
+复制审批流程模板生成审批实例
+复制报表配置生成用户自定义报表
+复制活动模板生成营销活动
+复制问卷模板生成新问卷
+复制规则模板生成业务规则
+复制导出任务模板生成导出任务
+复制复杂请求对象生成批量任务参数
 ```
 
-浅拷贝和深拷贝是原型模式的重点区别。
+原型模式需要重点区分浅拷贝和深拷贝。
 
 ```text
-浅拷贝：复制对象本身，引用类型字段仍然指向同一个对象。
-深拷贝：复制对象本身，也复制引用类型字段指向的对象。
+浅拷贝：只复制对象本身，引用类型字段仍然指向同一个对象
+深拷贝：对象本身和内部引用对象都会复制，新旧对象互不影响
 ```
 
-如果对象中包含 `List`、`Map`、自定义对象等引用类型字段，就必须明确是否需要深拷贝。
+在实际业务中，如果对象中包含 `List`、`Map`、子对象等引用类型，通常需要深拷贝。审批流程模板中包含多个审批节点，如果只做浅拷贝，新生成的审批实例修改节点状态时，可能会污染原始模板。
 
-## 普通 Java 原型
+## 项目结构
 
-普通 Java 原型适合不依赖 Spring 容器的模板复制场景。下面以导出任务模板为例，不同用户可以基于同一个导出模板快速生成自己的导出任务。
-
-整体流程如下：
+本示例按照 Spring Boot 常规分层组织。核心类是 `ApprovalFlowPrototype`，它表示可以被复制的审批流程原型对象。
 
 ```text
-创建导出任务模板 -> 复制模板 -> 修改任务ID、操作人、创建时间 -> 得到新的导出任务
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/prototype/simple/
-├── ExportField.java
-└── ExportTask.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/prototype/simple/ExportField.java`
-
-下面是导出字段对象，用于描述导出文件中的字段配置。
-
-```java
-package io.github.atengk.design.prototype.simple;
-
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
-
-/**
- * 导出字段
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-@Setter
-@AllArgsConstructor
-public class ExportField {
-
-    private String fieldName;
-    private String title;
-    private Integer width;
-
-    /**
-     * 复制导出字段
-     *
-     * @return 新的导出字段
-     */
-    public ExportField copy() {
-        return new ExportField(this.fieldName, this.title, this.width);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/prototype/simple/ExportTask.java`
-
-下面是导出任务原型对象。`copyAsNewTask` 会深拷贝字段列表，并重置任务 ID、操作人和创建时间。
-
-```java
-package io.github.atengk.design.prototype.simple;
-
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
-/**
- * 导出任务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-@Setter
-@AllArgsConstructor
-public class ExportTask {
-
-    private String taskId;
-    private String taskName;
-    private String reportType;
-    private Long operatorId;
-    private List<ExportField> fields;
-    private LocalDateTime createTime;
-
-    /**
-     * 基于当前任务复制一个新任务
-     *
-     * @param newTaskName   新任务名称
-     * @param newOperatorId 新操作人ID
-     * @return 新导出任务
-     */
-    public ExportTask copyAsNewTask(String newTaskName, Long newOperatorId) {
-        if (StrUtil.isBlank(newTaskName)) {
-            log.warn("复制导出任务失败，新任务名称为空");
-            throw new IllegalArgumentException("新任务名称不能为空");
-        }
-
-        if (newOperatorId == null || newOperatorId <= 0) {
-            log.warn("复制导出任务失败，新操作人ID不合法，操作人ID：{}", newOperatorId);
-            throw new IllegalArgumentException("新操作人ID必须大于0");
-        }
-
-        List<ExportField> copiedFields = this.fields.stream()
-                .map(ExportField::copy)
-                .toList();
-
-        ExportTask copiedTask = new ExportTask(
-                "TASK" + IdUtil.getSnowflakeNextId(),
-                newTaskName,
-                this.reportType,
-                newOperatorId,
-                copiedFields,
-                DateUtil.date().toLocalDateTime()
-        );
-
-        log.info("复制导出任务成功，原任务ID：{}，新任务ID：{}，创建时间：{}",
-                this.taskId, copiedTask.getTaskId(), copiedTask.getCreateTime());
-
-        return copiedTask;
-    }
-}
-```
-
-使用方式：
-
-```java
-ExportTask templateTask = new ExportTask(
-        "TASK_TEMPLATE",
-        "订单报表模板",
-        "order",
-        10001L,
-        List.of(
-                new ExportField("orderNo", "订单号", 180),
-                new ExportField("amount", "订单金额", 120),
-                new ExportField("status", "订单状态", 100)
-        ),
-        LocalDateTime.now()
-);
-
-ExportTask newTask = templateTask.copyAsNewTask("订单报表导出-20260430", 20001L);
-```
-
-这里的 `fields` 使用了深拷贝。复制后的新任务修改字段标题或宽度，不会影响原模板任务。
-
-## 浅拷贝和深拷贝
-
-原型模式最容易出问题的地方是引用类型字段。浅拷贝会导致两个对象共享同一个引用对象，后续修改可能互相影响。
-
-下面通过导出任务字段列表说明差异。
-
-浅拷贝示例：
-
-```java
-ExportTask copiedTask = new ExportTask(
-        "TASK_NEW",
-        this.taskName,
-        this.reportType,
-        newOperatorId,
-        this.fields,
-        LocalDateTime.now()
-);
-```
-
-这种写法中，`copiedTask.fields` 和 `this.fields` 指向同一个列表。只要其中一个对象修改字段列表，另一个对象也会受到影响。
-
-深拷贝示例：
-
-```java
-List<ExportField> copiedFields = this.fields.stream()
-        .map(ExportField::copy)
-        .toList();
-```
-
-这种写法会为每个字段创建新对象，复制后的任务和原任务互不影响。
-
-在业务项目中可以按字段类型选择复制方式：
-
-| 字段类型                               | 推荐复制方式                       |
-| -------------------------------------- | ---------------------------------- |
-| `String`、包装类型、`BigDecimal`、枚举 | 可直接赋值                         |
-| `LocalDateTime`、`LocalDate`           | 通常可直接赋值，因为对象不可变     |
-| `List<T>`                              | 新建列表，必要时复制元素           |
-| `Map<K, V>`                            | 新建 Map，必要时复制 value         |
-| 自定义可变对象                         | 提供 `copy` 方法或使用深拷贝       |
-| Entity 对象                            | 谨慎复制，避免复制主键和持久化状态 |
-
-## Hutool 对象复制
-
-在 Spring Boot 项目中，如果对象是普通 JavaBean，可以使用 Hutool `BeanUtil.copyProperties` 快速做浅拷贝。它适合字段简单、引用类型不需要深拷贝的对象。
-
-下面以消息模板复制为例。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/prototype/hutool/
-└── MessageTemplate.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/prototype/hutool/MessageTemplate.java`
-
-下面是消息模板对象，使用 Hutool 复制字段，并重置模板 ID 和创建人。
-
-```java
-package io.github.atengk.design.prototype.hutool;
-
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.time.LocalDateTime;
-
-/**
- * 消息模板
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-@Setter
-public class MessageTemplate {
-
-    private String templateId;
-    private String templateCode;
-    private String title;
-    private String content;
-    private Long creatorId;
-    private LocalDateTime createTime;
-
-    /**
-     * 复制为新消息模板
-     *
-     * @param newTemplateCode 新模板编码
-     * @param newCreatorId    新创建人ID
-     * @return 新消息模板
-     */
-    public MessageTemplate copyAsNewTemplate(String newTemplateCode, Long newCreatorId) {
-        if (StrUtil.isBlank(newTemplateCode)) {
-            log.warn("复制消息模板失败，新模板编码为空");
-            throw new IllegalArgumentException("新模板编码不能为空");
-        }
-
-        if (newCreatorId == null || newCreatorId <= 0) {
-            log.warn("复制消息模板失败，新创建人ID不合法，创建人ID：{}", newCreatorId);
-            throw new IllegalArgumentException("新创建人ID必须大于0");
-        }
-
-        MessageTemplate copiedTemplate = BeanUtil.copyProperties(this, MessageTemplate.class);
-        copiedTemplate.setTemplateId("TPL" + IdUtil.getSnowflakeNextId());
-        copiedTemplate.setTemplateCode(newTemplateCode);
-        copiedTemplate.setCreatorId(newCreatorId);
-        copiedTemplate.setCreateTime(DateUtil.date().toLocalDateTime());
-
-        log.info("复制消息模板成功，原模板ID：{}，新模板ID：{}", this.templateId, copiedTemplate.getTemplateId());
-        return copiedTemplate;
-    }
-}
-```
-
-使用方式：
-
-```java
-MessageTemplate template = new MessageTemplate();
-template.setTemplateId("TPL_TEMPLATE");
-template.setTemplateCode("ORDER_PAY_SUCCESS");
-template.setTitle("订单支付成功");
-template.setContent("你的订单 ${orderNo} 已支付成功");
-template.setCreatorId(10001L);
-template.setCreateTime(LocalDateTime.now());
-
-MessageTemplate copiedTemplate = template.copyAsNewTemplate("ORDER_PAY_SUCCESS_COPY", 20001L);
-```
-
-这种方式代码简洁，但它是浅拷贝。如果对象中包含可变集合或嵌套对象，需要额外处理。
-
-## JSON 深拷贝
-
-对于简单对象图，可以使用 JSON 序列化和反序列化实现深拷贝。Hutool 的 `JSONUtil` 可以完成这种复制方式。
-
-这种方式适合对象结构不复杂、字段都能正常 JSON 序列化的场景。它不适合复制包含文件流、线程、数据库连接、Lambda、代理对象、循环引用的复杂对象。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/prototype/deepcopy/
-├── WorkflowNode.java
-└── WorkflowTemplate.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/prototype/deepcopy/WorkflowNode.java`
-
-下面是审批流程节点对象。
-
-```java
-package io.github.atengk.design.prototype.deepcopy;
-
-import lombok.Getter;
-import lombok.Setter;
-
-/**
- * 审批流程节点
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-@Setter
-public class WorkflowNode {
-
-    private String nodeCode;
-    private String nodeName;
-    private Integer sortNo;
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/prototype/deepcopy/WorkflowTemplate.java`
-
-下面是审批流程模板对象，通过 JSON 深拷贝复制流程节点列表。
-
-```java
-package io.github.atengk.design.prototype.deepcopy;
-
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
-/**
- * 审批流程模板
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-@Setter
-public class WorkflowTemplate {
-
-    private String templateId;
-    private String templateName;
-    private String bizType;
-    private List<WorkflowNode> nodes;
-    private Long creatorId;
-    private LocalDateTime createTime;
-
-    /**
-     * 复制为新审批流程模板
-     *
-     * @param newTemplateName 新模板名称
-     * @param newCreatorId    新创建人ID
-     * @return 新审批流程模板
-     */
-    public WorkflowTemplate copyAsNewTemplate(String newTemplateName, Long newCreatorId) {
-        if (StrUtil.isBlank(newTemplateName)) {
-            log.warn("复制审批流程模板失败，新模板名称为空");
-            throw new IllegalArgumentException("新模板名称不能为空");
-        }
-
-        WorkflowTemplate copiedTemplate = JSONUtil.toBean(JSONUtil.toJsonStr(this), WorkflowTemplate.class);
-        copiedTemplate.setTemplateId("WF" + IdUtil.getSnowflakeNextId());
-        copiedTemplate.setTemplateName(newTemplateName);
-        copiedTemplate.setCreatorId(newCreatorId);
-        copiedTemplate.setCreateTime(DateUtil.date().toLocalDateTime());
-
-        log.info("复制审批流程模板成功，原模板ID：{}，新模板ID：{}",
-                this.templateId, copiedTemplate.getTemplateId());
-
-        return copiedTemplate;
-    }
-}
-```
-
-使用方式：
-
-```java
-WorkflowNode firstNode = new WorkflowNode();
-firstNode.setNodeCode("SUBMIT");
-firstNode.setNodeName("提交申请");
-firstNode.setSortNo(1);
-
-WorkflowNode secondNode = new WorkflowNode();
-secondNode.setNodeCode("APPROVE");
-secondNode.setNodeName("主管审批");
-secondNode.setSortNo(2);
-
-WorkflowTemplate template = new WorkflowTemplate();
-template.setTemplateId("WF_TEMPLATE");
-template.setTemplateName("请假审批模板");
-template.setBizType("leave");
-template.setNodes(List.of(firstNode, secondNode));
-template.setCreatorId(10001L);
-template.setCreateTime(LocalDateTime.now());
-
-WorkflowTemplate copiedTemplate = template.copyAsNewTemplate("请假审批模板副本", 20001L);
-```
-
-JSON 深拷贝写法简单，但会带来序列化成本，并且要求字段能正确被序列化和反序列化。对性能敏感或对象结构复杂的场景，建议手写复制逻辑。
-
-## Spring Boot 原型注册表
-
-Spring Boot 项目中可以使用原型注册表统一管理多个模板对象，调用方根据模板编码获取副本，而不是每次重新构造模板。
-
-下面以通知模板为例，系统内置多个通知模板，业务调用时按模板编码复制一个新模板，然后填充实际参数。
-
-整体流程如下：
-
-```text
-启动时注册模板 -> 根据模板编码获取副本 -> 填充业务参数 -> 返回渲染结果
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/pattern/prototype
 ├── PrototypeApplication.java
-├── controller/
-│   └── NoticeTemplateController.java
-├── dto/
-│   ├── NoticeTemplate.java
-│   └── NoticeRenderResponse.java
-├── registry/
-│   └── NoticeTemplateRegistry.java
-└── service/
-    ├── NoticeRenderService.java
-    └── impl/
-        └── NoticeRenderServiceImpl.java
+├── config
+│   └── PrototypeDemoProperties.java
+├── controller
+│   └── ApprovalFlowController.java
+├── domain
+│   ├── ApprovalFlowPrototype.java
+│   └── ApprovalStep.java
+├── dto
+│   └── ApprovalFlowCopyDTO.java
+├── enums
+│   ├── ApprovalStepStatusEnum.java
+│   └── ApprovalTemplateEnum.java
+├── prototype
+│   └── BusinessPrototype.java
+├── registry
+│   └── ApprovalFlowPrototypeRegistry.java
+├── service
+│   ├── ApprovalFlowService.java
+│   └── ApprovalFlowServiceImpl.java
+└── vo
+    └── ApprovalFlowInstanceVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/PrototypeApplication.java`
+## 核心代码
 
-下面是 Spring Boot 启动类。
+这一部分给出原型模式的完整核心代码。重点是 `BusinessPrototype<T>` 接口和 `ApprovalFlowPrototype.copy()` 方法。这里不使用 `Object.clone()`，而是手写深拷贝逻辑，使复制行为更清晰、更可控。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/PrototypeApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.prototype;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -544,590 +130,1074 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 原型模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class PrototypeApplication {
 
     /**
-     * 应用启动入口
+     * 启动原型模式示例应用
      *
      * @param args 启动参数
      */
     public static void main(String[] args) {
         SpringApplication.run(PrototypeApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/NoticeTemplate.java`
-
-下面是通知模板原型对象。`copy` 方法用于复制模板，避免调用方直接修改注册表中的模板对象。
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/config/PrototypeDemoProperties.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.prototype.config;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.IdUtil;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.time.LocalDateTime;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 /**
- * 通知模板
+ * 原型模式示例配置
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Getter
-@Setter
-public class NoticeTemplate {
-
-    private String templateId;
-    private String templateCode;
-    private String title;
-    private String content;
-    private String channel;
-    private LocalDateTime createTime;
+@Data
+@Component
+@ConfigurationProperties(prefix = "demo.prototype")
+public class PrototypeDemoProperties {
 
     /**
-     * 复制通知模板
-     *
-     * @return 新通知模板
+     * 默认租户编号
      */
-    public NoticeTemplate copy() {
-        NoticeTemplate copiedTemplate = BeanUtil.copyProperties(this, NoticeTemplate.class);
-        copiedTemplate.setTemplateId("NT" + IdUtil.getSnowflakeNextId());
-        copiedTemplate.setCreateTime(DateUtil.date().toLocalDateTime());
+    private String defaultTenantId = "TENANT_10001";
 
-        log.debug("复制通知模板，模板编码：{}，新模板ID：{}", this.templateCode, copiedTemplate.getTemplateId());
-        return copiedTemplate;
-    }
+    /**
+     * 默认审批实例过期天数
+     */
+    private Integer defaultExpireDays = 7;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/NoticeRenderResponse.java`
+## 枚举定义
 
-下面是通知模板渲染响应对象。
+这一部分定义审批模板类型和审批节点状态。模板类型用于选择要复制的原型对象，节点状态用于区分模板节点和实例节点的处理状态。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/enums/ApprovalTemplateEnum.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.prototype.enums;
+
+import cn.hutool.core.util.StrUtil;
+import lombok.Getter;
+
+import java.util.Arrays;
 
 /**
- * 通知渲染响应
+ * 审批模板枚举
  *
- * @param templateCode 模板编码
- * @param channel      通知渠道
- * @param title        渲染后标题
- * @param content      渲染后内容
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record NoticeRenderResponse(
-        String templateCode,
-        String channel,
-        String title,
-        String content
-) {
+@Getter
+public enum ApprovalTemplateEnum {
+
+    PURCHASE("PURCHASE", "采购审批模板"),
+
+    REIMBURSEMENT("REIMBURSEMENT", "报销审批模板"),
+
+    CONTRACT("CONTRACT", "合同审批模板");
+
+    private final String code;
+
+    private final String description;
+
+    ApprovalTemplateEnum(String code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+
+    /**
+     * 根据编码解析审批模板
+     *
+     * @param code 模板编码
+     * @return 审批模板
+     */
+    public static ApprovalTemplateEnum parse(String code) {
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.getCode(), code))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的审批模板：{}", code)));
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/registry/NoticeTemplateRegistry.java`
-
-下面是通知模板注册表。它在初始化时注册几个模板原型，并在获取模板时返回副本。
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/enums/ApprovalStepStatusEnum.java`
 
 ```java
-package io.github.atengk.design.registry;
+package io.github.atengk.pattern.prototype.enums;
 
-import cn.hutool.core.date.DateUtil;
+import lombok.Getter;
+
+/**
+ * 审批节点状态枚举
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Getter
+public enum ApprovalStepStatusEnum {
+
+    WAITING("WAITING", "待审批"),
+
+    APPROVED("APPROVED", "已通过"),
+
+    REJECTED("REJECTED", "已拒绝");
+
+    private final String code;
+
+    private final String description;
+
+    ApprovalStepStatusEnum(String code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+
+}
+```
+
+## 原型接口和领域对象
+
+这一部分是原型模式的核心。`BusinessPrototype<T>` 定义统一复制方法，具体原型对象实现自己的复制逻辑。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/prototype/BusinessPrototype.java`
+
+```java
+package io.github.atengk.pattern.prototype.prototype;
+
+/**
+ * 业务原型接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface BusinessPrototype<T> {
+
+    /**
+     * 复制当前对象
+     *
+     * @return 新对象
+     */
+    T copy();
+
+}
+```
+
+下面的 `ApprovalStep` 表示审批节点。它也提供 `copy()` 方法，用于支持审批流程的深拷贝。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/domain/ApprovalStep.java`
+
+```java
+package io.github.atengk.pattern.prototype.domain;
+
+import io.github.atengk.pattern.prototype.enums.ApprovalStepStatusEnum;
+import io.github.atengk.pattern.prototype.prototype.BusinessPrototype;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 审批节点
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApprovalStep implements BusinessPrototype<ApprovalStep> {
+
+    /**
+     * 节点序号
+     */
+    private Integer stepNo;
+
+    /**
+     * 节点名称
+     */
+    private String stepName;
+
+    /**
+     * 审批人角色
+     */
+    private String approverRole;
+
+    /**
+     * 审批状态
+     */
+    private ApprovalStepStatusEnum status;
+
+    /**
+     * 复制审批节点
+     *
+     * @return 新审批节点
+     */
+    @Override
+    public ApprovalStep copy() {
+        return new ApprovalStep(
+                this.stepNo,
+                this.stepName,
+                this.approverRole,
+                this.status
+        );
+    }
+
+}
+```
+
+下面的 `ApprovalFlowPrototype` 表示审批流程原型对象。它内部包含审批节点列表，因此 `copy()` 方法必须复制每一个节点，不能只复制 `List` 引用。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/domain/ApprovalFlowPrototype.java`
+
+```java
+package io.github.atengk.pattern.prototype.domain;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.IdUtil;
+import io.github.atengk.pattern.prototype.prototype.BusinessPrototype;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 审批流程原型对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Getter
+@Setter
+public class ApprovalFlowPrototype implements BusinessPrototype<ApprovalFlowPrototype> {
+
+    /**
+     * 流程实例编号
+     */
+    private String flowId;
+
+    /**
+     * 模板编码
+     */
+    private String templateCode;
+
+    /**
+     * 流程名称
+     */
+    private String flowName;
+
+    /**
+     * 租户编号
+     */
+    private String tenantId;
+
+    /**
+     * 业务单号
+     */
+    private String businessNo;
+
+    /**
+     * 申请人编号
+     */
+    private String applicantId;
+
+    /**
+     * 过期天数
+     */
+    private Integer expireDays;
+
+    /**
+     * 审批节点列表
+     */
+    private List<ApprovalStep> steps = new ArrayList<>();
+
+    /**
+     * 复制审批流程原型对象
+     *
+     * @return 新审批流程对象
+     */
+    @Override
+    public ApprovalFlowPrototype copy() {
+        ApprovalFlowPrototype target = new ApprovalFlowPrototype();
+        target.setFlowId(IdUtil.fastSimpleUUID());
+        target.setTemplateCode(this.templateCode);
+        target.setFlowName(this.flowName);
+        target.setTenantId(this.tenantId);
+        target.setBusinessNo(this.businessNo);
+        target.setApplicantId(this.applicantId);
+        target.setExpireDays(this.expireDays);
+
+        if (CollUtil.isNotEmpty(this.steps)) {
+            List<ApprovalStep> copiedSteps = this.steps.stream()
+                    .map(ApprovalStep::copy)
+                    .toList();
+            target.setSteps(new ArrayList<>(copiedSteps));
+        }
+
+        return target;
+    }
+
+}
+```
+
+## DTO 和 VO
+
+这一部分定义接口请求对象和响应对象。调用方只需要指定模板编码、业务单号和申请人，系统会基于模板复制出新的审批流程实例。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/dto/ApprovalFlowCopyDTO.java`
+
+```java
+package io.github.atengk.pattern.prototype.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+/**
+ * 审批流程复制请求对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class ApprovalFlowCopyDTO {
+
+    /**
+     * 模板编码：PURCHASE、REIMBURSEMENT、CONTRACT
+     */
+    @NotBlank(message = "模板编码不能为空")
+    private String templateCode;
+
+    /**
+     * 业务单号
+     */
+    @NotBlank(message = "业务单号不能为空")
+    private String businessNo;
+
+    /**
+     * 申请人编号
+     */
+    @NotBlank(message = "申请人编号不能为空")
+    private String applicantId;
+
+    /**
+     * 自定义流程名称
+     */
+    private String customFlowName;
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/vo/ApprovalFlowInstanceVO.java`
+
+```java
+package io.github.atengk.pattern.prototype.vo;
+
+import java.util.List;
+
+/**
+ * 审批流程实例响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public record ApprovalFlowInstanceVO(
+        String flowId,
+        String templateCode,
+        String flowName,
+        String tenantId,
+        String businessNo,
+        String applicantId,
+        Integer expireDays,
+        List<ApprovalStepVO> steps,
+        String createTime
+) {
+
+    /**
+     * 审批节点响应对象
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    public record ApprovalStepVO(
+            Integer stepNo,
+            String stepName,
+            String approverRole,
+            String status
+    ) {
+    }
+
+}
+```
+
+## 原型注册表
+
+原型注册表用于保存系统预置的审批流程模板。真实项目中，这些模板可以来自数据库、配置中心、缓存或后台配置页面。本示例为了突出原型模式，使用内存初始化模板。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/registry/ApprovalFlowPrototypeRegistry.java`
+
+```java
+package io.github.atengk.pattern.prototype.registry;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NoticeTemplate;
-import jakarta.annotation.PostConstruct;
+import io.github.atengk.pattern.prototype.config.PrototypeDemoProperties;
+import io.github.atengk.pattern.prototype.domain.ApprovalFlowPrototype;
+import io.github.atengk.pattern.prototype.domain.ApprovalStep;
+import io.github.atengk.pattern.prototype.enums.ApprovalStepStatusEnum;
+import io.github.atengk.pattern.prototype.enums.ApprovalTemplateEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 通知模板注册表
+ * 审批流程原型注册表
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class NoticeTemplateRegistry {
+public class ApprovalFlowPrototypeRegistry {
 
-    private final Map<String, NoticeTemplate> templateMap = new ConcurrentHashMap<>();
+    private final Map<ApprovalTemplateEnum, ApprovalFlowPrototype> prototypeMap;
 
     /**
-     * 初始化通知模板原型
+     * 初始化审批流程原型注册表
+     *
+     * @param properties 原型模式示例配置
      */
-    @PostConstruct
-    public void init() {
-        registerTemplate(buildTemplate(
-                "ORDER_PAY_SUCCESS",
-                "订单支付成功",
-                "你的订单 ${orderNo} 已支付成功，支付金额 ${amount} 元。",
-                "sms"
-        ));
+    public ApprovalFlowPrototypeRegistry(PrototypeDemoProperties properties) {
+        Map<ApprovalTemplateEnum, ApprovalFlowPrototype> tempPrototypeMap = new EnumMap<>(ApprovalTemplateEnum.class);
 
-        registerTemplate(buildTemplate(
-                "ORDER_SHIPPED",
-                "订单已发货",
-                "你的订单 ${orderNo} 已发货，物流单号 ${expressNo}。",
-                "sms"
-        ));
+        tempPrototypeMap.put(ApprovalTemplateEnum.PURCHASE, createPurchasePrototype(properties));
+        tempPrototypeMap.put(ApprovalTemplateEnum.REIMBURSEMENT, createReimbursementPrototype(properties));
+        tempPrototypeMap.put(ApprovalTemplateEnum.CONTRACT, createContractPrototype(properties));
 
-        log.info("初始化通知模板注册表完成，模板数量：{}", templateMap.size());
+        this.prototypeMap = Collections.unmodifiableMap(tempPrototypeMap);
+        log.info("初始化审批流程原型注册表完成，模板数量：{}", MapUtil.size(prototypeMap));
     }
 
     /**
-     * 根据模板编码获取模板副本
+     * 根据模板编码获取审批流程原型副本
      *
      * @param templateCode 模板编码
-     * @return 通知模板副本
+     * @return 审批流程原型副本
      */
-    public NoticeTemplate getTemplateCopy(String templateCode) {
-        if (StrUtil.isBlank(templateCode)) {
-            log.warn("获取通知模板失败，模板编码为空");
-            throw new IllegalArgumentException("模板编码不能为空");
+    public ApprovalFlowPrototype copyByTemplateCode(String templateCode) {
+        ApprovalTemplateEnum template = ApprovalTemplateEnum.parse(templateCode);
+        ApprovalFlowPrototype prototype = prototypeMap.get(template);
+
+        if (prototype == null) {
+            throw new IllegalArgumentException(StrUtil.format("审批流程原型不存在：{}", templateCode));
         }
 
-        NoticeTemplate template = templateMap.get(templateCode);
-        if (template == null) {
-            log.warn("获取通知模板失败，模板不存在，模板编码：{}", templateCode);
-            throw new IllegalArgumentException("模板不存在：" + templateCode);
-        }
-
-        return template.copy();
+        ApprovalFlowPrototype copiedPrototype = prototype.copy();
+        log.info("复制审批流程原型，templateCode：{}，newFlowId：{}", template.getCode(), copiedPrototype.getFlowId());
+        return copiedPrototype;
     }
 
     /**
-     * 注册通知模板
+     * 获取已注册原型数量
      *
-     * @param template 通知模板
+     * @return 已注册原型数量
      */
-    private void registerTemplate(NoticeTemplate template) {
-        templateMap.put(template.getTemplateCode(), template);
-        log.info("注册通知模板，模板编码：{}", template.getTemplateCode());
+    public int registeredCount() {
+        return MapUtil.size(prototypeMap);
     }
 
     /**
-     * 构建通知模板
+     * 创建采购审批流程原型
      *
-     * @param templateCode 模板编码
-     * @param title        标题
-     * @param content      内容
-     * @param channel      通知渠道
-     * @return 通知模板
+     * @param properties 示例配置
+     * @return 采购审批流程原型
      */
-    private NoticeTemplate buildTemplate(String templateCode, String title, String content, String channel) {
-        NoticeTemplate template = new NoticeTemplate();
-        template.setTemplateId("TEMPLATE_" + templateCode);
-        template.setTemplateCode(templateCode);
-        template.setTitle(title);
-        template.setContent(content);
-        template.setChannel(channel);
-        template.setCreateTime(DateUtil.date().toLocalDateTime());
-        return template;
+    private ApprovalFlowPrototype createPurchasePrototype(PrototypeDemoProperties properties) {
+        ApprovalFlowPrototype prototype = createBasePrototype(
+                ApprovalTemplateEnum.PURCHASE,
+                "采购审批流程模板",
+                properties
+        );
+
+        prototype.setSteps(CollUtil.newArrayList(
+                new ApprovalStep(1, "部门主管审批", "DEPARTMENT_MANAGER", ApprovalStepStatusEnum.WAITING),
+                new ApprovalStep(2, "采购经理审批", "PURCHASE_MANAGER", ApprovalStepStatusEnum.WAITING),
+                new ApprovalStep(3, "财务审批", "FINANCE_MANAGER", ApprovalStepStatusEnum.WAITING)
+        ));
+
+        return prototype;
     }
+
+    /**
+     * 创建报销审批流程原型
+     *
+     * @param properties 示例配置
+     * @return 报销审批流程原型
+     */
+    private ApprovalFlowPrototype createReimbursementPrototype(PrototypeDemoProperties properties) {
+        ApprovalFlowPrototype prototype = createBasePrototype(
+                ApprovalTemplateEnum.REIMBURSEMENT,
+                "报销审批流程模板",
+                properties
+        );
+
+        prototype.setSteps(CollUtil.newArrayList(
+                new ApprovalStep(1, "直属主管审批", "DIRECT_MANAGER", ApprovalStepStatusEnum.WAITING),
+                new ApprovalStep(2, "财务复核", "FINANCE_AUDITOR", ApprovalStepStatusEnum.WAITING)
+        ));
+
+        return prototype;
+    }
+
+    /**
+     * 创建合同审批流程原型
+     *
+     * @param properties 示例配置
+     * @return 合同审批流程原型
+     */
+    private ApprovalFlowPrototype createContractPrototype(PrototypeDemoProperties properties) {
+        ApprovalFlowPrototype prototype = createBasePrototype(
+                ApprovalTemplateEnum.CONTRACT,
+                "合同审批流程模板",
+                properties
+        );
+
+        prototype.setSteps(CollUtil.newArrayList(
+                new ApprovalStep(1, "业务负责人审批", "BUSINESS_OWNER", ApprovalStepStatusEnum.WAITING),
+                new ApprovalStep(2, "法务审批", "LEGAL_MANAGER", ApprovalStepStatusEnum.WAITING),
+                new ApprovalStep(3, "财务审批", "FINANCE_MANAGER", ApprovalStepStatusEnum.WAITING),
+                new ApprovalStep(4, "总经理审批", "GENERAL_MANAGER", ApprovalStepStatusEnum.WAITING)
+        ));
+
+        return prototype;
+    }
+
+    /**
+     * 创建基础审批流程原型
+     *
+     * @param template   模板枚举
+     * @param flowName   流程名称
+     * @param properties 示例配置
+     * @return 基础审批流程原型
+     */
+    private ApprovalFlowPrototype createBasePrototype(ApprovalTemplateEnum template,
+                                                      String flowName,
+                                                      PrototypeDemoProperties properties) {
+        ApprovalFlowPrototype prototype = new ApprovalFlowPrototype();
+        prototype.setTemplateCode(template.getCode());
+        prototype.setFlowName(flowName);
+        prototype.setTenantId(properties.getDefaultTenantId());
+        prototype.setExpireDays(properties.getDefaultExpireDays());
+        return prototype;
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/NoticeRenderService.java`
+## 业务层调用
 
-下面是通知模板渲染服务接口。
+业务层通过原型注册表复制模板，然后填充当前业务实例字段。这样创建审批实例时不需要重复组装审批节点，模板变更和实例创建逻辑也更容易维护。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/service/ApprovalFlowService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.prototype.service;
 
-import io.github.atengk.design.dto.NoticeRenderResponse;
+import io.github.atengk.pattern.prototype.dto.ApprovalFlowCopyDTO;
+import io.github.atengk.pattern.prototype.vo.ApprovalFlowInstanceVO;
 
 /**
- * 通知渲染服务
+ * 审批流程服务接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface NoticeRenderService {
+public interface ApprovalFlowService {
 
     /**
-     * 渲染通知模板
+     * 复制审批流程模板并创建实例
      *
-     * @param templateCode 模板编码
-     * @param orderNo      订单号
-     * @param amount       金额
-     * @return 通知渲染响应
+     * @param copyDTO 复制请求
+     * @return 审批流程实例
      */
-    NoticeRenderResponse renderPaySuccessNotice(String templateCode, String orderNo, String amount);
+    ApprovalFlowInstanceVO copyFromTemplate(ApprovalFlowCopyDTO copyDTO);
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/NoticeRenderServiceImpl.java`
-
-下面是通知模板渲染服务实现。它从注册表获取模板副本，然后替换模板变量。
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/service/ApprovalFlowServiceImpl.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.prototype.service;
 
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NoticeRenderResponse;
-import io.github.atengk.design.dto.NoticeTemplate;
-import io.github.atengk.design.registry.NoticeTemplateRegistry;
-import io.github.atengk.design.service.NoticeRenderService;
+import cn.hutool.json.JSONUtil;
+import io.github.atengk.pattern.prototype.domain.ApprovalFlowPrototype;
+import io.github.atengk.pattern.prototype.dto.ApprovalFlowCopyDTO;
+import io.github.atengk.pattern.prototype.registry.ApprovalFlowPrototypeRegistry;
+import io.github.atengk.pattern.prototype.vo.ApprovalFlowInstanceVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 /**
- * 通知渲染服务实现
+ * 审批流程服务实现
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class NoticeRenderServiceImpl implements NoticeRenderService {
+public class ApprovalFlowServiceImpl implements ApprovalFlowService {
 
-    private final NoticeTemplateRegistry noticeTemplateRegistry;
+    private final ApprovalFlowPrototypeRegistry prototypeRegistry;
 
     /**
-     * 渲染通知模板
+     * 复制审批流程模板并创建实例
      *
-     * @param templateCode 模板编码
-     * @param orderNo      订单号
-     * @param amount       金额
-     * @return 通知渲染响应
+     * @param copyDTO 复制请求
+     * @return 审批流程实例
      */
     @Override
-    public NoticeRenderResponse renderPaySuccessNotice(String templateCode, String orderNo, String amount) {
-        if (StrUtil.hasBlank(templateCode, orderNo, amount)) {
-            log.warn("渲染通知模板失败，模板编码、订单号或金额为空");
-            throw new IllegalArgumentException("模板编码、订单号和金额不能为空");
+    public ApprovalFlowInstanceVO copyFromTemplate(ApprovalFlowCopyDTO copyDTO) {
+        log.info("准备复制审批流程模板，请求参数：{}", JSONUtil.toJsonStr(copyDTO));
+
+        ApprovalFlowPrototype flowInstance = prototypeRegistry.copyByTemplateCode(copyDTO.getTemplateCode());
+        flowInstance.setBusinessNo(copyDTO.getBusinessNo());
+        flowInstance.setApplicantId(copyDTO.getApplicantId());
+
+        if (StrUtil.isNotBlank(copyDTO.getCustomFlowName())) {
+            flowInstance.setFlowName(copyDTO.getCustomFlowName());
         }
 
-        NoticeTemplate template = noticeTemplateRegistry.getTemplateCopy(templateCode);
+        ApprovalFlowInstanceVO result = convertToVO(flowInstance);
+        log.info("审批流程实例创建完成，flowId：{}，businessNo：{}", result.flowId(), result.businessNo());
+        return result;
+    }
 
-        String renderedContent = template.getContent()
-                .replace("${orderNo}", orderNo)
-                .replace("${amount}", amount);
+    /**
+     * 转换为响应对象
+     *
+     * @param flowInstance 审批流程实例
+     * @return 响应对象
+     */
+    private ApprovalFlowInstanceVO convertToVO(ApprovalFlowPrototype flowInstance) {
+        List<ApprovalFlowInstanceVO.ApprovalStepVO> stepVOList = flowInstance.getSteps().stream()
+                .map(step -> new ApprovalFlowInstanceVO.ApprovalStepVO(
+                        step.getStepNo(),
+                        step.getStepName(),
+                        step.getApproverRole(),
+                        step.getStatus().getCode()
+                ))
+                .toList();
 
-        log.info("渲染通知模板成功，模板编码：{}，订单号：{}", templateCode, orderNo);
-
-        return new NoticeRenderResponse(
-                template.getTemplateCode(),
-                template.getChannel(),
-                template.getTitle(),
-                renderedContent
+        return new ApprovalFlowInstanceVO(
+                flowInstance.getFlowId(),
+                flowInstance.getTemplateCode(),
+                flowInstance.getFlowName(),
+                flowInstance.getTenantId(),
+                flowInstance.getBusinessNo(),
+                flowInstance.getApplicantId(),
+                flowInstance.getExpireDays(),
+                stepVOList,
+                DateUtil.now()
         );
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/NoticeTemplateController.java`
-
-下面是通知模板接口，用于验证原型注册表和模板复制效果。
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/controller/ApprovalFlowController.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.prototype.controller;
 
-import io.github.atengk.design.dto.NoticeRenderResponse;
-import io.github.atengk.design.service.NoticeRenderService;
+import io.github.atengk.pattern.prototype.dto.ApprovalFlowCopyDTO;
+import io.github.atengk.pattern.prototype.service.ApprovalFlowService;
+import io.github.atengk.pattern.prototype.vo.ApprovalFlowInstanceVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 通知模板控制器
+ * 审批流程接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/api/patterns/prototype/approval-flows")
 @RequiredArgsConstructor
-@RequestMapping("/prototype/notice-template")
-public class NoticeTemplateController {
+public class ApprovalFlowController {
 
-    private final NoticeRenderService noticeRenderService;
+    private final ApprovalFlowService approvalFlowService;
 
     /**
-     * 渲染订单支付成功通知
+     * 根据模板复制审批流程实例
      *
-     * @param templateCode 模板编码
-     * @param orderNo      订单号
-     * @param amount       金额
-     * @return 通知渲染响应
+     * @param copyDTO 复制请求
+     * @return 审批流程实例
      */
-    @GetMapping("/render-pay-success")
-    public NoticeRenderResponse renderPaySuccess(@RequestParam String templateCode,
-                                                 @RequestParam String orderNo,
-                                                 @RequestParam String amount) {
-        return noticeRenderService.renderPaySuccessNotice(templateCode, orderNo, amount);
+    @PostMapping("/copy")
+    public ApprovalFlowInstanceVO copy(@Valid @RequestBody ApprovalFlowCopyDTO copyDTO) {
+        return approvalFlowService.copyFromTemplate(copyDTO);
     }
+
 }
 ```
 
-接口调用示例：
+## 使用方式
 
-```bash
-curl "http://localhost:8080/prototype/notice-template/render-pay-success?templateCode=ORDER_PAY_SUCCESS&orderNo=ORDER10001&amount=99.90"
+启动项目后，通过接口传入模板编码和业务信息，系统会基于预置模板复制出新的审批流程实例。
+
+接口地址：
+
+```text
+POST /api/patterns/prototype/approval-flows/copy
 ```
 
-可能返回：
+采购审批复制请求：
+
+```bash
+curl -X POST "http://localhost:8080/api/patterns/prototype/approval-flows/copy" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "templateCode": "PURCHASE",
+    "businessNo": "PURCHASE_ORDER_10001",
+    "applicantId": "USER_001",
+    "customFlowName": "办公设备采购审批"
+  }'
+```
+
+响应示例：
 
 ```json
 {
-  "templateCode": "ORDER_PAY_SUCCESS",
-  "channel": "sms",
-  "title": "订单支付成功",
-  "content": "你的订单 ORDER10001 已支付成功，支付金额 99.90 元。"
-}
-```
-
-这种方式的优点是模板原型只初始化一次，后续使用时都从注册表复制副本。调用方修改副本不会污染注册表中的原型对象。
-
-## Spring 原型作用域
-
-Spring 的 `prototype` 作用域和设计模式中的原型模式名字相似，但含义不同。
-
-Spring `prototype` 表示每次从容器获取 Bean 时，Spring 都创建一个新的 Bean 实例。
-
-文件位置：`src/main/java/io/github/atengk/design/component/TaskContext.java`
-
-下面是一个 Spring 原型作用域 Bean 示例。
-
-```java
-package io.github.atengk.design.component;
-
-import cn.hutool.core.util.IdUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Scope;
-import org.springframework.stereotype.Component;
-
-/**
- * 任务上下文
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-@Component
-@Scope("prototype")
-public class TaskContext {
-
-    private final String contextId = IdUtil.fastSimpleUUID();
-
-    /**
-     * 创建任务上下文
-     */
-    public TaskContext() {
-        log.info("创建任务上下文，contextId：{}", contextId);
+  "flowId": "9ef8c0d6238e4af5acaa0f48c5de9c62",
+  "templateCode": "PURCHASE",
+  "flowName": "办公设备采购审批",
+  "tenantId": "TENANT_10001",
+  "businessNo": "PURCHASE_ORDER_10001",
+  "applicantId": "USER_001",
+  "expireDays": 7,
+  "steps": [
+    {
+      "stepNo": 1,
+      "stepName": "部门主管审批",
+      "approverRole": "DEPARTMENT_MANAGER",
+      "status": "WAITING"
+    },
+    {
+      "stepNo": 2,
+      "stepName": "采购经理审批",
+      "approverRole": "PURCHASE_MANAGER",
+      "status": "WAITING"
+    },
+    {
+      "stepNo": 3,
+      "stepName": "财务审批",
+      "approverRole": "FINANCE_MANAGER",
+      "status": "WAITING"
     }
+  ],
+  "createTime": "2026-05-13 15:20:30"
 }
 ```
 
-如果每次通过 `ApplicationContext.getBean(TaskContext.class)` 获取 Bean，都会得到新实例。
-
-```java
-TaskContext firstContext = applicationContext.getBean(TaskContext.class);
-TaskContext secondContext = applicationContext.getBean(TaskContext.class);
-```
-
-但这不是典型原型模式，因为它不是从一个已有对象复制出新对象，而是由 Spring 每次重新创建一个新对象。
-
-简单区别如下：
-
-| 对比项               | 设计模式中的原型模式         | Spring prototype 作用域 |
-| -------------------- | ---------------------------- | ----------------------- |
-| 创建方式             | 复制已有对象                 | 容器每次创建新 Bean     |
-| 是否依赖已有对象状态 | 是                           | 不一定                  |
-| 典型用途             | 模板复制、配置复制、任务复制 | 每次获取独立 Bean 实例  |
-| 是否等价             | 不等价                       | 不等价                  |
-
-## 原型模式和构建者模式的区别
-
-原型模式和构建者模式都属于创建型设计模式，但关注点不同。
-
-| 对比项   | 原型模式                     | 构建者模式                |
-| -------- | ---------------------------- | ------------------------- |
-| 核心目的 | 复制已有对象创建新对象       | 一步步组装复杂对象        |
-| 依赖对象 | 依赖已有原型对象             | 不依赖已有对象            |
-| 适合场景 | 模板复制、配置复制、流程复制 | 字段多、参数多、可选项多  |
-| 创建方式 | `copy`、`clone`、深拷贝      | `builder().xxx().build()` |
-| 风险点   | 浅拷贝导致共享引用           | 默认值和必填字段校验      |
-
-简单理解：
-
-```text
-原型模式：已经有一个差不多的对象，我复制一份再改。
-构建者模式：我要从零开始清晰地组装一个复杂对象。
-```
-
-如果系统中有订单导出模板、审批流模板、消息模板，基于模板生成副本更适合原型模式。如果是创建订单命令、复杂查询条件、导出配置，更适合构建者模式。
-
-## 原型模式和工厂模式的区别
-
-原型模式和工厂模式都可以创建对象，但创建依据不同。
-
-| 对比项             | 原型模式               | 工厂模式               |
-| ------------------ | ---------------------- | ---------------------- |
-| 核心目的           | 复制已有对象           | 根据类型创建对象       |
-| 对象来源           | 原型对象副本           | 工厂方法或具体实现类   |
-| 是否保留原对象状态 | 通常保留大部分状态     | 通常重新初始化         |
-| 典型场景           | 模板任务复制、流程复制 | 支付处理器、文件解析器 |
-| 扩展方式           | 注册新原型             | 新增产品类或工厂逻辑   |
-
-简单理解：
-
-```text
-原型模式：根据已有模板复制一份。
-工厂模式：根据类型决定创建哪一种对象。
-```
-
-如果要根据 `alipay` 创建支付宝处理器，使用工厂模式。如果要基于“订单导出模板”复制出一个新的导出任务，使用原型模式。
-
-## 验证方式
-
-启动 Spring Boot 项目：
+报销审批复制请求：
 
 ```bash
-mvn spring-boot:run
+curl -X POST "http://localhost:8080/api/patterns/prototype/approval-flows/copy" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "templateCode": "REIMBURSEMENT",
+    "businessNo": "REIMBURSEMENT_20001",
+    "applicantId": "USER_002"
+  }'
 ```
 
-执行通知模板渲染接口：
+响应示例：
 
-```bash
-curl "http://localhost:8080/prototype/notice-template/render-pay-success?templateCode=ORDER_PAY_SUCCESS&orderNo=ORDER10001&amount=99.90"
-```
-
-如果原型注册表正常，可以看到类似日志：
-
-```text
-注册通知模板，模板编码：ORDER_PAY_SUCCESS
-注册通知模板，模板编码：ORDER_SHIPPED
-初始化通知模板注册表完成，模板数量：2
-渲染通知模板成功，模板编码：ORDER_PAY_SUCCESS，订单号：ORDER10001
-```
-
-执行不存在的模板编码：
-
-```bash
-curl "http://localhost:8080/prototype/notice-template/render-pay-success?templateCode=UNKNOWN&orderNo=ORDER10001&amount=99.90"
-```
-
-异常日志示例：
-
-```text
-获取通知模板失败，模板不存在，模板编码：UNKNOWN
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
-
-如果要验证深拷贝，可以复制导出任务后修改新任务字段：
-
-```java
-ExportTask copiedTask = templateTask.copyAsNewTask("订单报表导出", 20001L);
-copiedTask.getFields().get(0).setTitle("新订单号");
-```
-
-如果原模板字段标题没有变化，说明字段列表复制是安全的深拷贝。
-
-## 注意事项
-
-原型模式最重要的问题是明确浅拷贝和深拷贝边界。只要对象中有集合、Map、自定义可变对象，就不能简单认为复制是安全的。
-
-不推荐在包含可变引用字段时直接浅拷贝：
-
-```java
-copiedTask.setFields(this.fields);
-```
-
-推荐复制集合本身，并在必要时复制集合元素：
-
-```java
-List<ExportField> copiedFields = this.fields.stream()
-        .map(ExportField::copy)
-        .toList();
-```
-
-不要盲目使用 `Cloneable`。Java 原生 `clone` 机制可读性差，默认也是浅拷贝，并且容易遗漏引用字段处理。
-
-不推荐写法：
-
-```java
-@Override
-protected Object clone() throws CloneNotSupportedException {
-    return super.clone();
+```json
+{
+  "flowId": "cb2d4f0d2ec94bdb8a79c7050f7f9054",
+  "templateCode": "REIMBURSEMENT",
+  "flowName": "报销审批流程模板",
+  "tenantId": "TENANT_10001",
+  "businessNo": "REIMBURSEMENT_20001",
+  "applicantId": "USER_002",
+  "expireDays": 7,
+  "steps": [
+    {
+      "stepNo": 1,
+      "stepName": "直属主管审批",
+      "approverRole": "DIRECT_MANAGER",
+      "status": "WAITING"
+    },
+    {
+      "stepNo": 2,
+      "stepName": "财务复核",
+      "approverRole": "FINANCE_AUDITOR",
+      "status": "WAITING"
+    }
+  ],
+  "createTime": "2026-05-13 15:21:06"
 }
 ```
 
-如果确实使用 `clone`，也要在方法中显式处理引用类型字段。但在业务项目中，通常更推荐手写 `copy` 方法。
+## 深拷贝和浅拷贝对比
 
-原型对象如果放在注册表中，应避免被外部直接修改。注册表应该返回副本，而不是返回原型对象本身。
+原型模式最容易出问题的地方是引用类型字段。审批流程对象中有 `List<ApprovalStep>`，如果只是简单复制列表引用，新旧流程会共享同一批节点。
 
 错误示例：
 
 ```java
-public NoticeTemplate getTemplate(String templateCode) {
-    return templateMap.get(templateCode);
+ApprovalFlowPrototype target = new ApprovalFlowPrototype();
+target.setSteps(this.steps);
+```
+
+这种写法是浅拷贝。复制后的流程实例和模板对象共享同一个 `steps` 列表。只要实例修改了节点状态，模板中的节点也会被修改。
+
+正确示例：
+
+```java
+List<ApprovalStep> copiedSteps = this.steps.stream()
+        .map(ApprovalStep::copy)
+        .toList();
+
+target.setSteps(new ArrayList<>(copiedSteps));
+```
+
+这种写法是深拷贝。新的流程对象拥有新的节点列表，每个节点也是新对象。实例节点状态变化不会影响模板节点。
+
+## 使用 Hutool JSON 做深拷贝
+
+如果对象结构比较规整，也可以使用 Hutool 的 JSON 序列化方式进行深拷贝。它适合简单 POJO，但不适合包含复杂泛型、多态对象、非标准构造逻辑、敏感字段或不可序列化资源的对象。
+
+下面示例用于说明思路，不建议替代所有手写复制逻辑。
+
+文件位置：`src/main/java/io/github/atengk/pattern/prototype/util/PrototypeCopyUtil.java`
+
+```java
+package io.github.atengk.pattern.prototype.util;
+
+import cn.hutool.json.JSONUtil;
+
+/**
+ * 原型复制工具类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public final class PrototypeCopyUtil {
+
+    private PrototypeCopyUtil() {
+    }
+
+    /**
+     * 通过 JSON 序列化实现深拷贝
+     *
+     * @param source 原始对象
+     * @param targetClass 目标类型
+     * @return 深拷贝对象
+     * @param <T> 对象类型
+     */
+    public static <T> T copyByJson(T source, Class<T> targetClass) {
+        if (source == null) {
+            return null;
+        }
+
+        String json = JSONUtil.toJsonStr(source);
+        return JSONUtil.toBean(json, targetClass);
+    }
+
 }
 ```
 
-推荐写法：
+调用示例：
 
 ```java
-public NoticeTemplate getTemplateCopy(String templateCode) {
-    return templateMap.get(templateCode).copy();
+ApprovalFlowPrototype copied = PrototypeCopyUtil.copyByJson(source, ApprovalFlowPrototype.class);
+```
+
+手写 `copy()` 的优点是复制规则明确，可以排除不应复制的字段，例如数据库主键、创建时间、审批状态、锁版本号等。JSON 深拷贝的优点是代码少，但复制规则不够显式。业务对象较复杂时，建议手写复制逻辑。
+
+## 验证方式
+
+可以通过单元测试验证原型复制出的对象是否是新对象，并确认内部节点列表也被深拷贝。
+
+文件位置：`src/test/java/io/github/atengk/pattern/prototype/ApprovalFlowPrototypeRegistryTest.java`
+
+```java
+package io.github.atengk.pattern.prototype;
+
+import io.github.atengk.pattern.prototype.domain.ApprovalFlowPrototype;
+import io.github.atengk.pattern.prototype.registry.ApprovalFlowPrototypeRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+/**
+ * 审批流程原型注册表测试
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@SpringBootTest
+class ApprovalFlowPrototypeRegistryTest {
+
+    private final ApprovalFlowPrototypeRegistry prototypeRegistry;
+
+    ApprovalFlowPrototypeRegistryTest(ApprovalFlowPrototypeRegistry prototypeRegistry) {
+        this.prototypeRegistry = prototypeRegistry;
+    }
+
+    /**
+     * 验证同一模板复制出的流程实例是不同对象
+     */
+    @Test
+    void shouldCopyDifferentFlowInstanceFromSameTemplate() {
+        ApprovalFlowPrototype firstFlow = prototypeRegistry.copyByTemplateCode("PURCHASE");
+        ApprovalFlowPrototype secondFlow = prototypeRegistry.copyByTemplateCode("PURCHASE");
+
+        log.info("第一次复制流程编号：{}", firstFlow.getFlowId());
+        log.info("第二次复制流程编号：{}", secondFlow.getFlowId());
+
+        Assertions.assertNotSame(firstFlow, secondFlow);
+        Assertions.assertNotEquals(firstFlow.getFlowId(), secondFlow.getFlowId());
+        Assertions.assertEquals(firstFlow.getTemplateCode(), secondFlow.getTemplateCode());
+    }
+
+    /**
+     * 验证审批节点列表已经深拷贝
+     */
+    @Test
+    void shouldDeepCopyApprovalSteps() {
+        ApprovalFlowPrototype firstFlow = prototypeRegistry.copyByTemplateCode("CONTRACT");
+        ApprovalFlowPrototype secondFlow = prototypeRegistry.copyByTemplateCode("CONTRACT");
+
+        log.info("第一个流程节点数量：{}", firstFlow.getSteps().size());
+        log.info("第二个流程节点数量：{}", secondFlow.getSteps().size());
+
+        Assertions.assertNotSame(firstFlow.getSteps(), secondFlow.getSteps());
+        Assertions.assertNotSame(firstFlow.getSteps().get(0), secondFlow.getSteps().get(0));
+        Assertions.assertEquals(firstFlow.getSteps().get(0).getStepName(), secondFlow.getSteps().get(0).getStepName());
+    }
+
+    /**
+     * 验证不支持的模板编码会抛出异常
+     */
+    @Test
+    void shouldThrowExceptionWhenTemplateUnsupported() {
+        IllegalArgumentException exception = Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> prototypeRegistry.copyByTemplateCode("UNKNOWN")
+        );
+
+        log.info("不支持模板异常信息：{}", exception.getMessage());
+        Assertions.assertTrue(exception.getMessage().contains("不支持的审批模板"));
+    }
+
 }
 ```
 
-复制 Entity 对象时要特别谨慎。不要把数据库主键、版本号、创建时间、持久化状态直接复制到新对象中。
+执行测试：
 
-常见需要重置的字段：
+```bash
+mvn test -Dtest=ApprovalFlowPrototypeRegistryTest
+```
+
+命令说明：`-Dtest=ApprovalFlowPrototypeRegistryTest` 表示只运行当前原型模式测试类，用于快速验证原型复制、深拷贝和异常分支逻辑。
+
+## 和其他创建型模式的区别
+
+原型模式、构建者模式、工厂方法模式都可以创建对象，但它们解决的问题不同。
 
 ```text
-id
-version
-createTime
-createBy
-updateTime
-updateBy
-status
-bizNo
-traceId
+工厂方法模式：由具体工厂创建对象，关注创建职责分配
+抽象工厂模式：创建一组相关对象，关注产品族一致性
+构建者模式：分步骤构建复杂对象，关注构建过程清晰
+原型模式：复制已有对象生成新对象，关注对象复用和复制
 ```
 
-推荐复制业务配置字段，重置身份字段：
-
-```java
-copiedEntity.setId(null);
-copiedEntity.setCreateTime(LocalDateTime.now());
-copiedEntity.setStatus("DRAFT");
-```
-
-如果对象非常复杂，包含循环引用、延迟加载代理、文件流、线程池、数据库连接等资源，不建议使用通用深拷贝。应该手写明确的复制逻辑，只复制业务需要的字段。
-
-生产环境中，原型模式常和注册表、工厂、构建者组合使用：
+可以按下面的方式判断是否适合使用原型模式：
 
 ```text
-原型注册表：保存多个模板对象
-原型复制：从模板生成副本
-构建者模式：补充新对象的差异字段
-工厂模式：根据模板类型选择原型
+对象大部分字段来自已有模板：适合原型模式
+对象字段很多且需要逐步设置：适合构建者模式
+对象需要根据类型选择具体实现：适合工厂相关模式
+对象需要创建一整套相关产品：适合抽象工厂模式
 ```
+
+在审批场景中：
+
+```text
+复制采购审批模板生成采购审批实例：原型模式
+构建订单提交上下文：构建者模式
+根据支付渠道创建支付客户端：工厂方法模式
+创建某个平台下的支付、退款、查询客户端：抽象工厂模式
+```
+
+## 开发建议
+
+在 Spring Boot 项目中使用原型模式时，建议遵循以下原则：
+
+```text
+模板对象和实例对象字段高度相似时，再考虑原型模式
+包含集合、Map、子对象时，优先实现深拷贝
+不要直接复制数据库主键、版本号、创建时间等实例唯一字段
+复制后应重新生成业务实例编号
+原型注册表可以来自数据库、缓存、配置中心或 Spring Bean
+复制规则复杂时，优先手写 copy()，不要完全依赖通用工具
+原型对象尽量不要持有数据库连接、线程池、文件句柄等资源对象
+```
+
+如果业务模板需要持久化，可以把原型模板存储在数据库中，启动时加载到缓存，或者每次从数据库查询后复制。是否缓存取决于模板变更频率和读取压力。
+
+## 常见问题
+
+原型模式不是简单的 `BeanUtils.copyProperties()`。`BeanUtils.copyProperties()` 通常更偏字段复制，且对深拷贝、字段排除、业务默认值处理不够显式。原型模式强调的是“基于已有原型对象创建新对象”，复制规则是业务设计的一部分。
+
+Spring 的 `@Scope("prototype")` 和 GoF 原型模式不是一回事。`@Scope("prototype")` 表示 Spring 容器每次获取 Bean 时创建一个新 Bean；GoF 原型模式表示对象自己具备复制能力，可以从已有对象复制出新对象。二者都和“多实例”有关，但使用场景不同。
+
+原型模式不适合所有对象。对于简单 DTO、简单实体、只有两三个字段的对象，直接构造或使用构建者即可。只有当对象创建依赖已有模板、初始化复杂、复制价值明显时，原型模式才有意义。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，原型模式的实践重点是基于已有对象快速创建相似对象，同时明确浅拷贝和深拷贝边界。
+原型模式用于通过复制已有对象来创建新对象。它适合模板复制、配置复制、流程复制、规则复制等场景，能够减少重复初始化逻辑，并让对象创建过程更高效、更集中。
 
-普通 Java 原型适合导出任务、审批流程、消息模板等对象复制。Hutool `BeanUtil.copyProperties` 适合简单 Bean 浅拷贝。JSON 深拷贝适合简单对象图复制。Spring Boot 项目中，可以使用“原型对象 + 原型注册表 + copy 方法”的结构统一管理模板对象。
+本示例的核心流程可以概括为：
 
-原型模式不是为了替代构造方法，也不是为了替代 Spring `prototype` 作用域。它最适合处理“已经有一个模板对象，需要快速复制出一个相似对象并修改少量字段”的场景。
+```text
+系统启动时初始化审批流程原型注册表
+每个审批模板保存一份原型对象
+调用方传入模板编码和业务信息
+注册表根据模板编码找到原型对象
+调用 copy() 复制出新的流程实例
+业务层填充业务单号、申请人和自定义名称
+接口返回新的审批流程实例
+```
+
+在真实 Spring Boot 项目中，原型模式常用于审批流、报表模板、营销活动模板、问卷模板、规则模板、导出任务模板等模块。它的核心价值是复用已有对象结构，并通过深拷贝避免模板和实例之间相互污染。

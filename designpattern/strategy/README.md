@@ -1,400 +1,279 @@
-# 设计模式：策略模式
+# 策略模式
 
-策略模式用于把一组可替换的算法、规则或业务处理逻辑封装成独立策略类，让调用方通过统一接口调用不同实现。在 JDK21 和 Spring Boot 3 项目中，策略模式常用于优惠计算、支付分发、物流计费、文件解析、导入校验、风控规则、消息发送、订单状态处理等场景。
+策略模式用于定义一组可替换的算法或业务处理方式，并在运行时根据条件选择其中一种执行。
+在 Spring Boot 项目中，策略模式常用于支付渠道、优惠计算、运费计算、登录方式、文件导出、消息发送、数据同步、风控规则、订单结算等场景。
 
-需要注意：策略模式解决的是“不同算法或业务规则的可替换问题”。在 Spring Boot 项目中，策略模式通常会结合 Spring 容器使用，通过接口多实现、`List<T>` 注入、`Map<String, T>` 缓存和工厂分发完成策略选择。
+本文以“订单结算优惠计算”为例。系统支持普通结算、会员折扣、满减优惠、秒杀价结算等多种计算方式。每种计算方式独立成一个策略类，业务服务只根据策略编码选择并执行对应策略。
+
+## 适用场景
+
+策略模式适合处理“同一类业务有多种处理算法，并且需要按类型动态选择”的场景。
+
+订单结算中常见优惠策略如下：
+
+| 策略编码         | 策略名称 | 说明                       |
+| ---------------- | -------- | -------------------------- |
+| `NORMAL`         | 普通结算 | 不使用优惠，原价支付       |
+| `VIP_DISCOUNT`   | 会员折扣 | VIP 用户享受折扣           |
+| `FULL_REDUCTION` | 满减优惠 | 满指定金额后减免           |
+| `FLASH_SALE`     | 秒杀价   | 按秒杀单价重新计算应付金额 |
+
+如果在 Service 中使用大量 `if-else` 判断策略类型，后续新增优惠策略时会不断修改主业务代码。策略模式可以把每种优惠计算逻辑拆成独立策略类，新增策略时只新增类，不修改原有结算主流程。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 Spring Boot 3，使用 Hutool、Lombok 和 Validation。Hutool 用于字符串判断、集合判断、金额计算和格式化，Validation 用于接口参数基础校验。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证策略模式行为 -->
+    <!-- Spring Boot Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、集合、金额计算、ID 等通用处理 -->
+    <!-- Spring Boot Validation：用于接口参数基础校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：提供字符串、集合、金额计算等常用工具 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.29</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok：简化 Getter、Setter、构造器、日志对象等代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
-
-## 核心概念
-
-策略模式的核心目标是把变化的算法独立出来，使调用方只依赖策略接口，不直接依赖具体策略实现。
-
-常见实现方式如下：
-
-| 实现方式        | 是否推荐         | 适用场景                         |
-| --------------- | ---------------- | -------------------------------- |
-| 普通 Java 策略  | 推荐用于简单场景 | 无 Spring 依赖的算法封装         |
-| Spring 策略分发 | 强烈推荐         | Spring Boot 项目中的业务策略选择 |
-| 枚举策略        | 适合轻量规则     | 简单、固定、无依赖的规则         |
-| 策略 + 工厂     | 推荐             | 根据业务类型选择不同策略         |
-| 大量 `if else`  | 不推荐           | 策略增多后维护成本高             |
-
-在 Spring Boot 项目中，常见优先级通常是：
+建议目录结构如下：
 
 ```text
-Spring 策略分发 > 普通 Java 策略 > 枚举策略 > 大量 if else
-```
-
-策略模式和工厂模式经常一起使用。工厂模式负责“找到哪个策略”，策略模式负责“具体怎么执行”。
-
-## 普通 Java 策略
-
-普通 Java 策略适合不依赖 Spring 容器的算法场景。下面以运费计算为例，不同物流方式对应不同计费策略。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/strategy/simple/
-├── DeliveryType.java
-├── DeliveryFeeStrategy.java
-├── ExpressDeliveryFeeStrategy.java
-├── ColdChainDeliveryFeeStrategy.java
-├── DeliveryFeeContext.java
-└── DeliveryFeeCalculator.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/strategy/simple/DeliveryType.java`
-
-下面的枚举用于定义配送类型。
-
-```java
-package io.github.atengk.design.strategy.simple;
-
-/**
- * 配送类型
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public enum DeliveryType {
-
-    /**
-     * 普通快递
-     */
-    EXPRESS,
-
-    /**
-     * 冷链配送
-     */
-    COLD_CHAIN
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/strategy/simple/DeliveryFeeContext.java`
-
-下面是运费计算上下文，用于传递策略执行需要的参数。
-
-```java
-package io.github.atengk.design.strategy.simple;
-
-import java.math.BigDecimal;
-
-/**
- * 运费计算上下文
- *
- * @param deliveryType 配送类型
- * @param distance     配送距离，单位：公里
- * @param weight       包裹重量，单位：千克
- * @author Ateng
- * @since 2026-04-30
- */
-public record DeliveryFeeContext(DeliveryType deliveryType, BigDecimal distance, BigDecimal weight) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/strategy/simple/DeliveryFeeStrategy.java`
-
-下面是运费计算策略接口，不同配送方式实现该接口。
-
-```java
-package io.github.atengk.design.strategy.simple;
-
-import java.math.BigDecimal;
-
-/**
- * 运费计算策略
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface DeliveryFeeStrategy {
-
-    /**
-     * 获取支持的配送类型
-     *
-     * @return 配送类型
-     */
-    DeliveryType supportType();
-
-    /**
-     * 计算运费
-     *
-     * @param context 运费计算上下文
-     * @return 运费
-     */
-    BigDecimal calculate(DeliveryFeeContext context);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/strategy/simple/ExpressDeliveryFeeStrategy.java`
-
-下面是普通快递运费策略，按基础费用、距离和重量计算。
-
-```java
-package io.github.atengk.design.strategy.simple;
-
-import cn.hutool.core.util.NumberUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
-/**
- * 普通快递运费策略
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class ExpressDeliveryFeeStrategy implements DeliveryFeeStrategy {
-
-    private static final BigDecimal BASE_FEE = BigDecimal.valueOf(5);
-    private static final BigDecimal DISTANCE_RATE = BigDecimal.valueOf(0.8);
-    private static final BigDecimal WEIGHT_RATE = BigDecimal.valueOf(1.5);
-
-    /**
-     * 获取支持的配送类型
-     *
-     * @return 配送类型
-     */
-    @Override
-    public DeliveryType supportType() {
-        return DeliveryType.EXPRESS;
-    }
-
-    /**
-     * 计算运费
-     *
-     * @param context 运费计算上下文
-     * @return 运费
-     */
-    @Override
-    public BigDecimal calculate(DeliveryFeeContext context) {
-        BigDecimal distanceFee = NumberUtil.mul(context.distance(), DISTANCE_RATE);
-        BigDecimal weightFee = NumberUtil.mul(context.weight(), WEIGHT_RATE);
-        BigDecimal fee = NumberUtil.add(BASE_FEE, distanceFee, weightFee).setScale(2, RoundingMode.HALF_UP);
-
-        log.info("普通快递运费计算完成，距离：{}，重量：{}，运费：{}", context.distance(), context.weight(), fee);
-        return fee;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/strategy/simple/ColdChainDeliveryFeeStrategy.java`
-
-下面是冷链配送运费策略，冷链配送通常基础费用和重量费用更高。
-
-```java
-package io.github.atengk.design.strategy.simple;
-
-import cn.hutool.core.util.NumberUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
-/**
- * 冷链配送运费策略
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class ColdChainDeliveryFeeStrategy implements DeliveryFeeStrategy {
-
-    private static final BigDecimal BASE_FEE = BigDecimal.valueOf(12);
-    private static final BigDecimal DISTANCE_RATE = BigDecimal.valueOf(1.2);
-    private static final BigDecimal WEIGHT_RATE = BigDecimal.valueOf(3.5);
-
-    /**
-     * 获取支持的配送类型
-     *
-     * @return 配送类型
-     */
-    @Override
-    public DeliveryType supportType() {
-        return DeliveryType.COLD_CHAIN;
-    }
-
-    /**
-     * 计算运费
-     *
-     * @param context 运费计算上下文
-     * @return 运费
-     */
-    @Override
-    public BigDecimal calculate(DeliveryFeeContext context) {
-        BigDecimal distanceFee = NumberUtil.mul(context.distance(), DISTANCE_RATE);
-        BigDecimal weightFee = NumberUtil.mul(context.weight(), WEIGHT_RATE);
-        BigDecimal fee = NumberUtil.add(BASE_FEE, distanceFee, weightFee).setScale(2, RoundingMode.HALF_UP);
-
-        log.info("冷链配送运费计算完成，距离：{}，重量：{}，运费：{}", context.distance(), context.weight(), fee);
-        return fee;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/strategy/simple/DeliveryFeeCalculator.java`
-
-下面是普通 Java 策略选择器，根据配送类型选择对应策略。
-
-```java
-package io.github.atengk.design.strategy.simple;
-
-import cn.hutool.core.collection.CollUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
-
-/**
- * 运费计算器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class DeliveryFeeCalculator {
-
-    private final Map<DeliveryType, DeliveryFeeStrategy> strategyMap = new EnumMap<>(DeliveryType.class);
-
-    /**
-     * 创建运费计算器
-     *
-     * @param strategies 运费计算策略列表
-     */
-    public DeliveryFeeCalculator(List<DeliveryFeeStrategy> strategies) {
-        if (CollUtil.isEmpty(strategies)) {
-            log.warn("运费计算策略列表为空");
-            return;
-        }
-
-        for (DeliveryFeeStrategy strategy : strategies) {
-            strategyMap.put(strategy.supportType(), strategy);
-        }
-
-        log.info("初始化运费计算器，支持配送类型：{}", strategyMap.keySet());
-    }
-
-    /**
-     * 计算运费
-     *
-     * @param context 运费计算上下文
-     * @return 运费
-     */
-    public BigDecimal calculate(DeliveryFeeContext context) {
-        DeliveryFeeStrategy strategy = strategyMap.get(context.deliveryType());
-
-        if (strategy == null) {
-            log.warn("计算运费失败，不支持的配送类型：{}", context.deliveryType());
-            throw new IllegalArgumentException("不支持的配送类型：" + context.deliveryType());
-        }
-
-        return strategy.calculate(context);
-    }
-}
-```
-
-使用方式：
-
-```java
-DeliveryFeeCalculator calculator = new DeliveryFeeCalculator(List.of(
-        new ExpressDeliveryFeeStrategy(),
-        new ColdChainDeliveryFeeStrategy()
-));
-
-BigDecimal expressFee = calculator.calculate(new DeliveryFeeContext(
-        DeliveryType.EXPRESS,
-        BigDecimal.valueOf(10),
-        BigDecimal.valueOf(2)
-));
-
-BigDecimal coldChainFee = calculator.calculate(new DeliveryFeeContext(
-        DeliveryType.COLD_CHAIN,
-        BigDecimal.valueOf(10),
-        BigDecimal.valueOf(2)
-));
-```
-
-普通 Java 策略的优点是简单直接，不依赖 Spring。缺点是策略对象需要手动创建，不适合依赖数据库、Redis、配置中心、第三方客户端等 Spring Bean 的业务场景。
-
-## Spring Boot 策略分发
-
-Spring Boot 项目中最常用的策略模式，是将每个策略实现注册为 Spring Bean，再通过统一上下文或工厂类根据业务类型选择策略。
-
-下面以订单优惠计算为例，实现三种优惠策略：
-
-```text
-none            无优惠
-full_reduction  满减优惠
-percentage      折扣优惠
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/pattern/strategy
 ├── StrategyApplication.java
-├── controller/
-│   └── OrderDiscountController.java
-├── dto/
-│   ├── OrderDiscountRequest.java
-│   └── OrderDiscountResponse.java
-├── strategy/
-│   ├── OrderDiscountStrategy.java
-│   ├── NoneDiscountStrategy.java
-│   ├── FullReductionDiscountStrategy.java
-│   └── PercentageDiscountStrategy.java
-└── context/
-    └── OrderDiscountContext.java
+├── common
+│   ├── ApiResult.java
+│   ├── BizException.java
+│   └── GlobalExceptionHandler.java
+└── order
+    ├── controller
+    │   └── OrderSettlementController.java
+    ├── dto
+    │   └── OrderSettlementRequest.java
+    ├── service
+    │   ├── OrderSettlementService.java
+    │   └── impl
+    │       └── OrderSettlementServiceImpl.java
+    ├── strategy
+    │   ├── AbstractOrderDiscountStrategy.java
+    │   ├── OrderDiscountStrategy.java
+    │   ├── OrderDiscountStrategyExecutor.java
+    │   ├── OrderDiscountStrategyCodes.java
+    │   └── impl
+    │       ├── FlashSaleDiscountStrategy.java
+    │       ├── FullReductionDiscountStrategy.java
+    │       ├── NormalDiscountStrategy.java
+    │       └── VipDiscountStrategy.java
+    └── vo
+        └── OrderSettlementResultVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/StrategyApplication.java`
+## 核心设计
 
-下面是 Spring Boot 启动类。
+本示例把策略模式拆成四个核心角色：
+
+| 角色               | 项目中的类                      | 说明                       |
+| ------------------ | ------------------------------- | -------------------------- |
+| Strategy           | `OrderDiscountStrategy`         | 统一策略接口               |
+| ConcreteStrategy   | `NormalDiscountStrategy` 等     | 具体优惠计算策略           |
+| Context / Executor | `OrderDiscountStrategyExecutor` | 根据策略编码选择并执行策略 |
+| Client             | `OrderSettlementServiceImpl`    | 订单结算业务服务           |
+
+执行流程如下：
+
+```text
+Controller
+  -> OrderSettlementService
+    -> OrderDiscountStrategyExecutor
+      -> 根据 strategyCode 选择具体策略
+        -> NormalDiscountStrategy
+        -> VipDiscountStrategy
+        -> FullReductionDiscountStrategy
+        -> FlashSaleDiscountStrategy
+    -> 返回结算结果
+```
+
+策略模式的重点是：结算服务不关心每种优惠如何计算，只关心使用哪个策略编码完成结算。
+
+## 公共代码
+
+公共响应对象、业务异常和全局异常处理用于统一接口返回。实际项目中可以复用已有基础包。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/common/ApiResult.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.strategy.common;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 统一接口响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    /**
+     * 返回成功结果
+     *
+     * @param data 响应数据
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(200, "操作成功", data);
+    }
+
+    /**
+     * 返回失败结果
+     *
+     * @param message 错误信息
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> fail(String message) {
+        return new ApiResult<>(500, message, null);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/common/BizException.java`
+
+```java
+package io.github.atengk.pattern.strategy.common;
+
+/**
+ * 业务异常
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class BizException extends RuntimeException {
+
+    /**
+     * 创建业务异常
+     *
+     * @param message 异常信息
+     */
+    public BizException(String message) {
+        super(message);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/common/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.pattern.strategy.common;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理业务异常
+     *
+     * @param exception 业务异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(BizException.class)
+    public ApiResult<Void> handleBizException(BizException exception) {
+        log.warn("业务处理失败：{}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ApiResult<Void> handleValidException(Exception exception) {
+        log.warn("接口参数校验失败：{}", exception.getMessage());
+        return ApiResult.fail("请求参数不合法");
+    }
+
+    /**
+     * 处理请求体解析异常
+     *
+     * @param exception 请求体解析异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResult<Void> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("请求体解析失败：{}", exception.getMessage());
+        return ApiResult.fail("请求体格式不正确");
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统异常", exception);
+        return ApiResult.fail("系统繁忙，请稍后重试");
+    }
+
+}
+```
+
+## 完整代码
+
+下面给出策略模式的核心实现。示例使用接口请求中的策略编码选择优惠计算策略，实际项目中策略编码通常来自商品活动、优惠券规则、会员权益、运营配置或订单上下文。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/StrategyApplication.java`
+
+```java
+package io.github.atengk.pattern.strategy;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -403,731 +282,1146 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 策略模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class StrategyApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(StrategyApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderDiscountRequest.java`
+## 请求对象和响应对象
 
-下面是订单优惠计算请求参数。
+请求对象用于接收订单结算参数。不同策略可能使用不同字段，例如会员折扣使用 `userLevel`，秒杀价使用 `flashSaleUnitPrice`。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/dto/OrderSettlementRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.strategy.order.dto;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单优惠计算请求
+ * 订单结算请求参数
  *
- * @param strategyType 优惠策略类型
- * @param orderNo      订单号
- * @param orderAmount  订单原始金额
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderDiscountRequest(String strategyType, String orderNo, BigDecimal orderAmount) {
+@Data
+public class OrderSettlementRequest {
+
+    @NotNull(message = "用户ID不能为空")
+    private Long userId;
+
+    @NotNull(message = "商品ID不能为空")
+    private Long productId;
+
+    @Min(value = 1, message = "购买数量必须大于0")
+    private Integer quantity;
+
+    @NotNull(message = "订单原始金额不能为空")
+    @DecimalMin(value = "0.01", message = "订单原始金额必须大于0")
+    private BigDecimal originalAmount;
+
+    @NotBlank(message = "优惠策略编码不能为空")
+    private String strategyCode;
+
+    private String userLevel;
+
+    private BigDecimal flashSaleUnitPrice;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderDiscountResponse.java`
-
-下面是订单优惠计算响应结果。
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/vo/OrderSettlementResultVO.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.strategy.order.vo;
+
+import lombok.Builder;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单优惠计算响应
+ * 订单结算结果
  *
- * @param orderNo        订单号
- * @param strategyType   优惠策略类型
- * @param originalAmount 原始金额
- * @param discountAmount 优惠金额
- * @param payableAmount  应付金额
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderDiscountResponse(
-        String orderNo,
-        String strategyType,
-        BigDecimal originalAmount,
-        BigDecimal discountAmount,
-        BigDecimal payableAmount
-) {
+@Data
+@Builder
+public class OrderSettlementResultVO {
+
+    private Long userId;
+
+    private Long productId;
+
+    private Integer quantity;
+
+    private String strategyCode;
+
+    private String strategyName;
+
+    private BigDecimal originalAmount;
+
+    private BigDecimal discountAmount;
+
+    private BigDecimal payableAmount;
+
+    private String message;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/strategy/OrderDiscountStrategy.java`
+## 策略接口
 
-下面是订单优惠策略接口，所有优惠策略都实现该接口。
+策略接口定义所有优惠策略必须实现的行为。每个策略都需要提供策略编码、策略名称和计算方法。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/OrderDiscountStrategy.java`
 
 ```java
-package io.github.atengk.design.strategy;
+package io.github.atengk.pattern.strategy.order.strategy;
 
-import io.github.atengk.design.dto.OrderDiscountRequest;
-import io.github.atengk.design.dto.OrderDiscountResponse;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
 
 /**
- * 订单优惠策略
+ * 订单优惠策略接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 public interface OrderDiscountStrategy {
 
     /**
-     * 获取支持的优惠策略类型
+     * 返回策略编码
      *
-     * @return 优惠策略类型
+     * @return 策略编码
      */
-    String supportType();
+    String strategyCode();
 
     /**
-     * 计算订单优惠
+     * 返回策略名称
      *
-     * @param request 订单优惠计算请求
-     * @return 订单优惠计算响应
+     * @return 策略名称
      */
-    OrderDiscountResponse calculate(OrderDiscountRequest request);
+    String strategyName();
+
+    /**
+     * 计算订单结算金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
+    OrderSettlementResultVO calculate(OrderSettlementRequest request);
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/strategy/NoneDiscountStrategy.java`
-
-下面是无优惠策略，订单应付金额等于原始金额。
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/OrderDiscountStrategyCodes.java`
 
 ```java
-package io.github.atengk.design.strategy;
+package io.github.atengk.pattern.strategy.order.strategy;
 
+/**
+ * 订单优惠策略编码常量
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public final class OrderDiscountStrategyCodes {
+
+    public static final String NORMAL = "NORMAL";
+
+    public static final String VIP_DISCOUNT = "VIP_DISCOUNT";
+
+    public static final String FULL_REDUCTION = "FULL_REDUCTION";
+
+    public static final String FLASH_SALE = "FLASH_SALE";
+
+    private OrderDiscountStrategyCodes() {
+    }
+
+}
+```
+
+## 抽象策略基类
+
+抽象策略基类封装通用金额处理逻辑，例如金额保底、折扣金额计算和结果对象构建。具体策略只关注自己的算法。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/AbstractOrderDiscountStrategy.java`
+
+```java
+package io.github.atengk.pattern.strategy.order.strategy;
+
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+/**
+ * 订单优惠策略抽象基类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public abstract class AbstractOrderDiscountStrategy implements OrderDiscountStrategy {
+
+    private static final BigDecimal MIN_PAYABLE_AMOUNT = BigDecimal.valueOf(0.01);
+
+    /**
+     * 构建订单结算结果
+     *
+     * @param request 订单结算请求
+     * @param payableAmount 应付金额
+     * @param message 结算说明
+     * @return 订单结算结果
+     */
+    protected OrderSettlementResultVO buildResult(OrderSettlementRequest request,
+                                                  BigDecimal payableAmount,
+                                                  String message) {
+        BigDecimal safePayableAmount = ensurePayableAmount(payableAmount);
+        BigDecimal discountAmount = NumberUtil.sub(request.getOriginalAmount(), safePayableAmount);
+
+        if (NumberUtil.isLess(discountAmount, BigDecimal.ZERO)) {
+            discountAmount = BigDecimal.ZERO;
+        }
+
+        return OrderSettlementResultVO.builder()
+                .userId(request.getUserId())
+                .productId(request.getProductId())
+                .quantity(request.getQuantity())
+                .strategyCode(strategyCode())
+                .strategyName(strategyName())
+                .originalAmount(scaleAmount(request.getOriginalAmount()))
+                .discountAmount(scaleAmount(discountAmount))
+                .payableAmount(scaleAmount(safePayableAmount))
+                .message(message)
+                .build();
+    }
+
+    /**
+     * 保证应付金额合法
+     *
+     * @param payableAmount 应付金额
+     * @return 合法应付金额
+     */
+    protected BigDecimal ensurePayableAmount(BigDecimal payableAmount) {
+        if (NumberUtil.isLessOrEqual(payableAmount, BigDecimal.ZERO)) {
+            return MIN_PAYABLE_AMOUNT;
+        }
+        return payableAmount;
+    }
+
+    /**
+     * 金额保留两位小数
+     *
+     * @param amount 金额
+     * @return 格式化后的金额
+     */
+    protected BigDecimal scaleAmount(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+}
+```
+
+## 具体策略实现
+
+每个具体策略类只实现自己的优惠计算逻辑。新增策略时，只需要新增一个实现类并交给 Spring 管理。
+
+普通结算策略不做优惠，原价支付。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/impl/NormalDiscountStrategy.java`
+
+```java
+package io.github.atengk.pattern.strategy.order.strategy.impl;
+
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.strategy.AbstractOrderDiscountStrategy;
+import io.github.atengk.pattern.strategy.order.strategy.OrderDiscountStrategyCodes;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+/**
+ * 普通结算策略
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class NormalDiscountStrategy extends AbstractOrderDiscountStrategy {
+
+    /**
+     * 返回策略编码
+     *
+     * @return 策略编码
+     */
+    @Override
+    public String strategyCode() {
+        return OrderDiscountStrategyCodes.NORMAL;
+    }
+
+    /**
+     * 返回策略名称
+     *
+     * @return 策略名称
+     */
+    @Override
+    public String strategyName() {
+        return "普通结算";
+    }
+
+    /**
+     * 计算普通结算金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
+    @Override
+    public OrderSettlementResultVO calculate(OrderSettlementRequest request) {
+        log.info("执行普通结算策略，userId：{}，productId：{}，originalAmount：{}",
+                request.getUserId(), request.getProductId(), request.getOriginalAmount());
+
+        return buildResult(request, request.getOriginalAmount(), "普通结算，无优惠");
+    }
+
+}
+```
+
+会员折扣策略根据用户等级计算折扣价。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/impl/VipDiscountStrategy.java`
+
+```java
+package io.github.atengk.pattern.strategy.order.strategy.impl;
+
+import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderDiscountRequest;
-import io.github.atengk.design.dto.OrderDiscountResponse;
+import io.github.atengk.pattern.strategy.common.BizException;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.strategy.AbstractOrderDiscountStrategy;
+import io.github.atengk.pattern.strategy.order.strategy.OrderDiscountStrategyCodes;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
 /**
- * 无优惠策略
+ * 会员折扣策略
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class NoneDiscountStrategy implements OrderDiscountStrategy {
+public class VipDiscountStrategy extends AbstractOrderDiscountStrategy {
+
+    private static final String VIP_LEVEL = "VIP";
+
+    private static final BigDecimal VIP_DISCOUNT_RATE = BigDecimal.valueOf(0.90);
 
     /**
-     * 获取支持的优惠策略类型
+     * 返回策略编码
      *
-     * @return 优惠策略类型
+     * @return 策略编码
      */
     @Override
-    public String supportType() {
-        return "none";
+    public String strategyCode() {
+        return OrderDiscountStrategyCodes.VIP_DISCOUNT;
     }
 
     /**
-     * 计算订单优惠
+     * 返回策略名称
      *
-     * @param request 订单优惠计算请求
-     * @return 订单优惠计算响应
+     * @return 策略名称
      */
     @Override
-    public OrderDiscountResponse calculate(OrderDiscountRequest request) {
-        BigDecimal originalAmount = request.orderAmount();
-        BigDecimal discountAmount = BigDecimal.ZERO;
-        BigDecimal payableAmount = originalAmount;
-
-        log.info("执行无优惠策略，订单号：{}，原始金额：{}，应付金额：{}",
-                request.orderNo(), originalAmount, payableAmount);
-
-        return new OrderDiscountResponse(
-                request.orderNo(),
-                StrUtil.lowerFirst(supportType()),
-                originalAmount,
-                discountAmount,
-                payableAmount
-        );
+    public String strategyName() {
+        return "会员折扣";
     }
+
+    /**
+     * 计算会员折扣金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
+    @Override
+    public OrderSettlementResultVO calculate(OrderSettlementRequest request) {
+        if (!StrUtil.equalsIgnoreCase(request.getUserLevel(), VIP_LEVEL)) {
+            throw new BizException("当前用户不是VIP，不能使用会员折扣策略");
+        }
+
+        BigDecimal payableAmount = NumberUtil.mul(request.getOriginalAmount(), VIP_DISCOUNT_RATE);
+
+        log.info("执行会员折扣策略，userId：{}，userLevel：{}，originalAmount：{}，payableAmount：{}",
+                request.getUserId(), request.getUserLevel(), request.getOriginalAmount(), payableAmount);
+
+        return buildResult(request, payableAmount, "VIP会员享受9折优惠");
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/strategy/FullReductionDiscountStrategy.java`
+满减策略在订单金额达到门槛后减免固定金额。
 
-下面是满减优惠策略，示例规则为满 100 减 20。
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/impl/FullReductionDiscountStrategy.java`
 
 ```java
-package io.github.atengk.design.strategy;
+package io.github.atengk.pattern.strategy.order.strategy.impl;
 
 import cn.hutool.core.util.NumberUtil;
-import io.github.atengk.design.dto.OrderDiscountRequest;
-import io.github.atengk.design.dto.OrderDiscountResponse;
+import io.github.atengk.pattern.strategy.common.BizException;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.strategy.AbstractOrderDiscountStrategy;
+import io.github.atengk.pattern.strategy.order.strategy.OrderDiscountStrategyCodes;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 /**
  * 满减优惠策略
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class FullReductionDiscountStrategy implements OrderDiscountStrategy {
+public class FullReductionDiscountStrategy extends AbstractOrderDiscountStrategy {
 
     private static final BigDecimal THRESHOLD_AMOUNT = BigDecimal.valueOf(100);
+
     private static final BigDecimal REDUCTION_AMOUNT = BigDecimal.valueOf(20);
 
     /**
-     * 获取支持的优惠策略类型
+     * 返回策略编码
      *
-     * @return 优惠策略类型
+     * @return 策略编码
      */
     @Override
-    public String supportType() {
-        return "full_reduction";
+    public String strategyCode() {
+        return OrderDiscountStrategyCodes.FULL_REDUCTION;
     }
 
     /**
-     * 计算订单优惠
+     * 返回策略名称
      *
-     * @param request 订单优惠计算请求
-     * @return 订单优惠计算响应
+     * @return 策略名称
      */
     @Override
-    public OrderDiscountResponse calculate(OrderDiscountRequest request) {
-        BigDecimal originalAmount = request.orderAmount().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal discountAmount = BigDecimal.ZERO;
+    public String strategyName() {
+        return "满减优惠";
+    }
 
-        if (originalAmount.compareTo(THRESHOLD_AMOUNT) >= 0) {
-            discountAmount = REDUCTION_AMOUNT;
+    /**
+     * 计算满减优惠金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
+    @Override
+    public OrderSettlementResultVO calculate(OrderSettlementRequest request) {
+        if (NumberUtil.isLess(request.getOriginalAmount(), THRESHOLD_AMOUNT)) {
+            throw new BizException("订单金额未达到满减门槛");
         }
 
-        BigDecimal payableAmount = NumberUtil.sub(originalAmount, discountAmount).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal payableAmount = NumberUtil.sub(request.getOriginalAmount(), REDUCTION_AMOUNT);
 
-        log.info("执行满减优惠策略，订单号：{}，原始金额：{}，优惠金额：{}，应付金额：{}",
-                request.orderNo(), originalAmount, discountAmount, payableAmount);
+        log.info("执行满减优惠策略，userId：{}，thresholdAmount：{}，reductionAmount：{}，payableAmount：{}",
+                request.getUserId(), THRESHOLD_AMOUNT, REDUCTION_AMOUNT, payableAmount);
 
-        return new OrderDiscountResponse(
-                request.orderNo(),
-                supportType(),
-                originalAmount,
-                discountAmount,
-                payableAmount
-        );
+        return buildResult(request, payableAmount, "满100减20");
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/strategy/PercentageDiscountStrategy.java`
+秒杀价策略使用秒杀单价乘以购买数量重新计算应付金额。
 
-下面是折扣优惠策略，示例规则为 9 折。
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/impl/FlashSaleDiscountStrategy.java`
 
 ```java
-package io.github.atengk.design.strategy;
+package io.github.atengk.pattern.strategy.order.strategy.impl;
 
 import cn.hutool.core.util.NumberUtil;
-import io.github.atengk.design.dto.OrderDiscountRequest;
-import io.github.atengk.design.dto.OrderDiscountResponse;
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.pattern.strategy.common.BizException;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.strategy.AbstractOrderDiscountStrategy;
+import io.github.atengk.pattern.strategy.order.strategy.OrderDiscountStrategyCodes;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 /**
- * 折扣优惠策略
+ * 秒杀价结算策略
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class PercentageDiscountStrategy implements OrderDiscountStrategy {
-
-    private static final BigDecimal DISCOUNT_RATE = BigDecimal.valueOf(0.9);
+public class FlashSaleDiscountStrategy extends AbstractOrderDiscountStrategy {
 
     /**
-     * 获取支持的优惠策略类型
+     * 返回策略编码
      *
-     * @return 优惠策略类型
+     * @return 策略编码
      */
     @Override
-    public String supportType() {
-        return "percentage";
+    public String strategyCode() {
+        return OrderDiscountStrategyCodes.FLASH_SALE;
     }
 
     /**
-     * 计算订单优惠
+     * 返回策略名称
      *
-     * @param request 订单优惠计算请求
-     * @return 订单优惠计算响应
+     * @return 策略名称
      */
     @Override
-    public OrderDiscountResponse calculate(OrderDiscountRequest request) {
-        BigDecimal originalAmount = request.orderAmount().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal payableAmount = NumberUtil.mul(originalAmount, DISCOUNT_RATE).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal discountAmount = NumberUtil.sub(originalAmount, payableAmount).setScale(2, RoundingMode.HALF_UP);
-
-        log.info("执行折扣优惠策略，订单号：{}，原始金额：{}，优惠金额：{}，应付金额：{}",
-                request.orderNo(), originalAmount, discountAmount, payableAmount);
-
-        return new OrderDiscountResponse(
-                request.orderNo(),
-                supportType(),
-                originalAmount,
-                discountAmount,
-                payableAmount
-        );
+    public String strategyName() {
+        return "秒杀价";
     }
+
+    /**
+     * 计算秒杀价金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
+    @Override
+    public OrderSettlementResultVO calculate(OrderSettlementRequest request) {
+        if (ObjectUtil.isNull(request.getFlashSaleUnitPrice())
+                || NumberUtil.isLessOrEqual(request.getFlashSaleUnitPrice(), BigDecimal.ZERO)) {
+            throw new BizException("秒杀单价必须大于0");
+        }
+
+        BigDecimal payableAmount = NumberUtil.mul(request.getFlashSaleUnitPrice(), request.getQuantity());
+
+        if (NumberUtil.isGreater(payableAmount, request.getOriginalAmount())) {
+            throw new BizException("秒杀价不能高于订单原始金额");
+        }
+
+        log.info("执行秒杀价策略，userId：{}，productId：{}，unitPrice：{}，quantity：{}，payableAmount：{}",
+                request.getUserId(),
+                request.getProductId(),
+                request.getFlashSaleUnitPrice(),
+                request.getQuantity(),
+                payableAmount);
+
+        return buildResult(request, payableAmount, "按秒杀价结算");
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/context/OrderDiscountContext.java`
+## 策略执行器
 
-下面是订单优惠策略上下文。它接收所有策略实现，并根据策略类型选择对应策略执行。
+策略执行器负责收集所有策略，并根据策略编码执行对应策略。
+业务服务不直接依赖具体策略类，只依赖执行器。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/OrderDiscountStrategyExecutor.java`
 
 ```java
-package io.github.atengk.design.context;
+package io.github.atengk.pattern.strategy.order.strategy;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderDiscountRequest;
-import io.github.atengk.design.dto.OrderDiscountResponse;
-import io.github.atengk.design.strategy.OrderDiscountStrategy;
+import io.github.atengk.pattern.strategy.common.BizException;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * 订单优惠策略上下文
+ * 订单优惠策略执行器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class OrderDiscountContext {
+public class OrderDiscountStrategyExecutor {
 
     private final Map<String, OrderDiscountStrategy> strategyMap;
 
     /**
-     * 创建订单优惠策略上下文
+     * 初始化订单优惠策略执行器
      *
-     * @param strategies 订单优惠策略列表
+     * @param strategies Spring 容器中的订单优惠策略集合
      */
-    public OrderDiscountContext(List<OrderDiscountStrategy> strategies) {
+    public OrderDiscountStrategyExecutor(List<OrderDiscountStrategy> strategies) {
         if (CollUtil.isEmpty(strategies)) {
-            log.warn("订单优惠策略列表为空");
-            this.strategyMap = Map.of();
+            this.strategyMap = Collections.emptyMap();
+            log.warn("订单优惠策略执行器未加载到任何策略");
             return;
         }
 
-        this.strategyMap = strategies.stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        strategy -> StrUtil.trim(strategy.supportType()).toLowerCase(),
-                        Function.identity()
-                ));
+        Map<String, OrderDiscountStrategy> registerMap = new HashMap<>(strategies.size());
+        for (OrderDiscountStrategy strategy : strategies) {
+            String strategyCode = StrUtil.upperCase(strategy.strategyCode());
+            if (registerMap.containsKey(strategyCode)) {
+                throw new IllegalStateException("订单优惠策略编码重复：" + strategyCode);
+            }
 
-        log.info("初始化订单优惠策略上下文，支持策略类型：{}", strategyMap.keySet());
+            registerMap.put(strategyCode, strategy);
+            log.info("注册订单优惠策略，strategyCode：{}，strategyName：{}",
+                    strategyCode, strategy.strategyName());
+        }
+
+        this.strategyMap = Collections.unmodifiableMap(registerMap);
     }
 
     /**
-     * 计算订单优惠
+     * 执行订单优惠策略
      *
-     * @param request 订单优惠计算请求
-     * @return 订单优惠计算响应
+     * @param request 订单结算请求
+     * @return 订单结算结果
      */
-    public OrderDiscountResponse calculate(OrderDiscountRequest request) {
-        validateRequest(request);
-
-        String strategyType = StrUtil.trim(request.strategyType()).toLowerCase();
-        OrderDiscountStrategy strategy = strategyMap.get(strategyType);
+    public OrderSettlementResultVO execute(OrderSettlementRequest request) {
+        String strategyCode = StrUtil.upperCase(request.getStrategyCode());
+        OrderDiscountStrategy strategy = strategyMap.get(strategyCode);
 
         if (strategy == null) {
-            log.warn("计算订单优惠失败，不支持的策略类型：{}", request.strategyType());
-            throw new IllegalArgumentException("不支持的策略类型：" + request.strategyType());
+            throw new BizException(StrUtil.format("不支持的订单优惠策略：{}", request.getStrategyCode()));
         }
 
-        log.debug("匹配订单优惠策略成功，订单号：{}，策略类型：{}", request.orderNo(), strategyType);
-        return strategy.calculate(request);
+        log.info("开始执行订单优惠策略，strategyCode：{}，strategyName：{}",
+                strategy.strategyCode(), strategy.strategyName());
+
+        OrderSettlementResultVO result = strategy.calculate(request);
+
+        log.info("订单优惠策略执行完成，strategyCode：{}，originalAmount：{}，discountAmount：{}，payableAmount：{}",
+                result.getStrategyCode(),
+                result.getOriginalAmount(),
+                result.getDiscountAmount(),
+                result.getPayableAmount());
+
+        return result;
     }
 
-    /**
-     * 校验订单优惠请求
-     *
-     * @param request 订单优惠计算请求
-     */
-    private void validateRequest(OrderDiscountRequest request) {
-        if (request == null) {
-            log.warn("计算订单优惠失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.strategyType())) {
-            log.warn("计算订单优惠失败，策略类型为空");
-            throw new IllegalArgumentException("策略类型不能为空");
-        }
-
-        if (StrUtil.isBlank(request.orderNo())) {
-            log.warn("计算订单优惠失败，订单号为空");
-            throw new IllegalArgumentException("订单号不能为空");
-        }
-
-        if (request.orderAmount() == null || request.orderAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("计算订单优惠失败，订单金额不合法，订单金额：{}", request.orderAmount());
-            throw new IllegalArgumentException("订单金额必须大于0");
-        }
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderDiscountController.java`
+## 业务服务
 
-下面是订单优惠计算接口，用于验证策略模式效果。
+业务服务负责订单结算主流程。可以看到，这里没有策略类型的 `if-else`，只是调用策略执行器完成计算。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/service/OrderSettlementService.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.strategy.order.service;
 
-import io.github.atengk.design.context.OrderDiscountContext;
-import io.github.atengk.design.dto.OrderDiscountRequest;
-import io.github.atengk.design.dto.OrderDiscountResponse;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
+
+/**
+ * 订单结算服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderSettlementService {
+
+    /**
+     * 计算订单结算金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
+    OrderSettlementResultVO settle(OrderSettlementRequest request);
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/service/impl/OrderSettlementServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.strategy.order.service.impl;
+
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.service.OrderSettlementService;
+import io.github.atengk.pattern.strategy.order.strategy.OrderDiscountStrategyExecutor;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 订单结算服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class OrderSettlementServiceImpl implements OrderSettlementService {
+
+    private final OrderDiscountStrategyExecutor orderDiscountStrategyExecutor;
+
+    /**
+     * 计算订单结算金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
+    @Override
+    public OrderSettlementResultVO settle(OrderSettlementRequest request) {
+        log.info("开始订单结算，userId：{}，productId：{}，strategyCode：{}",
+                request.getUserId(), request.getProductId(), request.getStrategyCode());
+
+        OrderSettlementResultVO result = orderDiscountStrategyExecutor.execute(request);
+
+        log.info("订单结算完成，userId：{}，productId：{}，payableAmount：{}",
+                result.getUserId(), result.getProductId(), result.getPayableAmount());
+
+        return result;
+    }
+
+}
+```
+
+## 控制器接口
+
+控制器提供订单结算入口。调用方传入策略编码，系统自动选择对应策略执行。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/controller/OrderSettlementController.java`
+
+```java
+package io.github.atengk.pattern.strategy.order.controller;
+
+import io.github.atengk.pattern.strategy.common.ApiResult;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.service.OrderSettlementService;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-
 /**
- * 订单优惠控制器
+ * 订单结算接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/order-settlements")
 @RequiredArgsConstructor
-@RequestMapping("/strategy/order-discount")
-public class OrderDiscountController {
+public class OrderSettlementController {
 
-    private final OrderDiscountContext orderDiscountContext;
+    private final OrderSettlementService orderSettlementService;
 
     /**
-     * 计算订单优惠
+     * 计算订单结算金额
      *
-     * @param strategyType 策略类型
-     * @param orderNo      订单号
-     * @param orderAmount  订单金额
-     * @return 订单优惠计算响应
+     * @param request 订单结算请求
+     * @return 订单结算结果
      */
     @PostMapping("/calculate")
-    public OrderDiscountResponse calculate(@RequestParam String strategyType,
-                                           @RequestParam String orderNo,
-                                           @RequestParam BigDecimal orderAmount) {
-        OrderDiscountRequest request = new OrderDiscountRequest(strategyType, orderNo, orderAmount);
-        return orderDiscountContext.calculate(request);
+    public ApiResult<OrderSettlementResultVO> calculate(@Valid @RequestBody OrderSettlementRequest request) {
+        return ApiResult.success(orderSettlementService.settle(request));
     }
+
 }
 ```
 
-接口调用示例：
+## 使用方式
+
+启动项目后，调用订单结算接口即可触发策略模式。
+
+接口信息：
+
+| 项目         | 内容                           |
+| ------------ | ------------------------------ |
+| 请求路径     | `/order-settlements/calculate` |
+| 请求方法     | `POST`                         |
+| Content-Type | `application/json`             |
+| 核心字段     | `strategyCode`                 |
+
+普通结算请求：
 
 ```bash
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=none&orderNo=ORDER10001&orderAmount=120.00"
-
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=full_reduction&orderNo=ORDER10002&orderAmount=120.00"
-
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=percentage&orderNo=ORDER10003&orderAmount=120.00"
+curl -X POST "http://localhost:8080/order-settlements/calculate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 2,
+    "originalAmount": 199.90,
+    "strategyCode": "NORMAL"
+  }'
 ```
 
-可能返回：
+返回示例：
 
 ```json
 {
-  "orderNo": "ORDER10002",
-  "strategyType": "full_reduction",
-  "originalAmount": 120.00,
-  "discountAmount": 20,
-  "payableAmount": 100.00
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 2,
+    "strategyCode": "NORMAL",
+    "strategyName": "普通结算",
+    "originalAmount": 199.90,
+    "discountAmount": 0.00,
+    "payableAmount": 199.90,
+    "message": "普通结算，无优惠"
+  }
 }
 ```
 
-这种方式的优点是扩展成本低。后续新增优惠策略，只需要新增一个实现类并注册为 Spring Bean，不需要修改控制器，也不需要修改已有策略。
+会员折扣请求：
 
-## 扩展一个新策略
+```bash
+curl -X POST "http://localhost:8080/order-settlements/calculate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 2,
+    "originalAmount": 199.90,
+    "strategyCode": "VIP_DISCOUNT",
+    "userLevel": "VIP"
+  }'
+```
 
-在 Spring 策略分发模式中，新增策略通常只需要新增一个实现类。下面以新人立减策略为例，规则为立减 30 元，但应付金额最低不能小于 0.01 元。
+返回示例：
 
-文件位置：`src/main/java/io/github/atengk/design/strategy/NewUserDiscountStrategy.java`
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 2,
+    "strategyCode": "VIP_DISCOUNT",
+    "strategyName": "会员折扣",
+    "originalAmount": 199.90,
+    "discountAmount": 19.99,
+    "payableAmount": 179.91,
+    "message": "VIP会员享受9折优惠"
+  }
+}
+```
 
-下面的实现类会被 Spring 自动扫描，并自动加入 `OrderDiscountContext` 的策略列表。
+满减优惠请求：
+
+```bash
+curl -X POST "http://localhost:8080/order-settlements/calculate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10002,
+    "productId": 20002,
+    "quantity": 1,
+    "originalAmount": 159.90,
+    "strategyCode": "FULL_REDUCTION"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "userId": 10002,
+    "productId": 20002,
+    "quantity": 1,
+    "strategyCode": "FULL_REDUCTION",
+    "strategyName": "满减优惠",
+    "originalAmount": 159.90,
+    "discountAmount": 20.00,
+    "payableAmount": 139.90,
+    "message": "满100减20"
+  }
+}
+```
+
+秒杀价请求：
+
+```bash
+curl -X POST "http://localhost:8080/order-settlements/calculate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10003,
+    "productId": 20003,
+    "quantity": 2,
+    "originalAmount": 299.80,
+    "strategyCode": "FLASH_SALE",
+    "flashSaleUnitPrice": 99.90
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "userId": 10003,
+    "productId": 20003,
+    "quantity": 2,
+    "strategyCode": "FLASH_SALE",
+    "strategyName": "秒杀价",
+    "originalAmount": 299.80,
+    "discountAmount": 100.00,
+    "payableAmount": 199.80,
+    "message": "按秒杀价结算"
+  }
+}
+```
+
+不支持的策略请求：
+
+```bash
+curl -X POST "http://localhost:8080/order-settlements/calculate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 1,
+    "originalAmount": 99.90,
+    "strategyCode": "UNKNOWN"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 500,
+  "message": "不支持的订单优惠策略：UNKNOWN",
+  "data": null
+}
+```
+
+## 验证方式
+
+项目启动后，可以看到策略注册日志：
+
+```text
+注册订单优惠策略，strategyCode：NORMAL，strategyName：普通结算
+注册订单优惠策略，strategyCode：VIP_DISCOUNT，strategyName：会员折扣
+注册订单优惠策略，strategyCode：FULL_REDUCTION，strategyName：满减优惠
+注册订单优惠策略，strategyCode：FLASH_SALE，strategyName：秒杀价
+```
+
+执行会员折扣策略后，可以看到类似日志：
+
+```text
+开始订单结算，userId：10001，productId：20001，strategyCode：VIP_DISCOUNT
+开始执行订单优惠策略，strategyCode：VIP_DISCOUNT，strategyName：会员折扣
+执行会员折扣策略，userId：10001，userLevel：VIP，originalAmount：199.90，payableAmount：179.9100
+订单优惠策略执行完成，strategyCode：VIP_DISCOUNT，originalAmount：199.90，discountAmount：19.99，payableAmount：179.91
+订单结算完成，userId：10001，productId：20001，payableAmount：179.91
+```
+
+执行非法策略时，可以看到业务异常日志：
+
+```text
+业务处理失败：不支持的订单优惠策略：UNKNOWN
+```
+
+## 扩展方式
+
+如果后续新增“新人优惠策略”，只需要三步。
+
+第一，新增策略编码：
 
 ```java
-package io.github.atengk.design.strategy;
+public static final String NEW_USER_DISCOUNT = "NEW_USER_DISCOUNT";
+```
+
+第二，新增策略实现类。
+
+文件位置：`src/main/java/io/github/atengk/pattern/strategy/order/strategy/impl/NewUserDiscountStrategy.java`
+
+```java
+package io.github.atengk.pattern.strategy.order.strategy.impl;
 
 import cn.hutool.core.util.NumberUtil;
-import io.github.atengk.design.dto.OrderDiscountRequest;
-import io.github.atengk.design.dto.OrderDiscountResponse;
+import io.github.atengk.pattern.strategy.order.dto.OrderSettlementRequest;
+import io.github.atengk.pattern.strategy.order.strategy.AbstractOrderDiscountStrategy;
+import io.github.atengk.pattern.strategy.order.strategy.OrderDiscountStrategyCodes;
+import io.github.atengk.pattern.strategy.order.vo.OrderSettlementResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 /**
  * 新人优惠策略
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class NewUserDiscountStrategy implements OrderDiscountStrategy {
+public class NewUserDiscountStrategy extends AbstractOrderDiscountStrategy {
 
-    private static final BigDecimal DISCOUNT_AMOUNT = BigDecimal.valueOf(30);
-    private static final BigDecimal MIN_PAYABLE_AMOUNT = BigDecimal.valueOf(0.01);
-
-    /**
-     * 获取支持的优惠策略类型
-     *
-     * @return 优惠策略类型
-     */
-    @Override
-    public String supportType() {
-        return "new_user";
-    }
+    private static final BigDecimal NEW_USER_DISCOUNT_AMOUNT = BigDecimal.valueOf(15);
 
     /**
-     * 计算订单优惠
+     * 返回策略编码
      *
-     * @param request 订单优惠计算请求
-     * @return 订单优惠计算响应
+     * @return 策略编码
      */
     @Override
-    public OrderDiscountResponse calculate(OrderDiscountRequest request) {
-        BigDecimal originalAmount = request.orderAmount().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal payableAmount = NumberUtil.sub(originalAmount, DISCOUNT_AMOUNT).setScale(2, RoundingMode.HALF_UP);
-
-        if (payableAmount.compareTo(MIN_PAYABLE_AMOUNT) < 0) {
-            payableAmount = MIN_PAYABLE_AMOUNT;
-        }
-
-        BigDecimal discountAmount = NumberUtil.sub(originalAmount, payableAmount).setScale(2, RoundingMode.HALF_UP);
-
-        log.info("执行新人优惠策略，订单号：{}，原始金额：{}，优惠金额：{}，应付金额：{}",
-                request.orderNo(), originalAmount, discountAmount, payableAmount);
-
-        return new OrderDiscountResponse(
-                request.orderNo(),
-                supportType(),
-                originalAmount,
-                discountAmount,
-                payableAmount
-        );
+    public String strategyCode() {
+        return OrderDiscountStrategyCodes.NEW_USER_DISCOUNT;
     }
-}
-```
 
-调用示例：
-
-```bash
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=new_user&orderNo=ORDER10004&orderAmount=88.00"
-```
-
-可能返回：
-
-```json
-{
-  "orderNo": "ORDER10004",
-  "strategyType": "new_user",
-  "originalAmount": 88.00,
-  "discountAmount": 30.00,
-  "payableAmount": 58.00
-}
-```
-
-新增策略时，原有的 `OrderDiscountController`、`OrderDiscountContext`、其他策略类都不需要修改。这就是策略模式对开闭原则的体现。
-
-## 策略模式和工厂模式的关系
-
-策略模式和工厂模式经常组合使用，但二者关注点不同。
-
-策略模式关注“行为如何变化”。例如满减、折扣、新人优惠都属于不同的优惠算法。
-
-工厂模式关注“对象如何创建或获取”。例如根据 `strategyType` 获取哪个 `OrderDiscountStrategy` 实现。
-
-在上面的 Spring Boot 示例中：
-
-```text
-OrderDiscountStrategy      策略接口
-NoneDiscountStrategy       具体策略
-FullReductionDiscountStrategy 具体策略
-PercentageDiscountStrategy 具体策略
-OrderDiscountContext       策略上下文，也承担策略查找职责
-```
-
-如果项目规模较大，可以把策略查找职责单独拆成工厂类：
-
-```text
-OrderDiscountStrategyFactory 负责获取策略
-OrderDiscountContext         负责组织执行流程
-```
-
-简单项目中，直接让 `OrderDiscountContext` 持有策略 Map 即可，结构更轻。
-
-## 验证方式
-
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行无优惠策略：
-
-```bash
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=none&orderNo=ORDER10001&orderAmount=120.00"
-```
-
-执行满减策略：
-
-```bash
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=full_reduction&orderNo=ORDER10002&orderAmount=120.00"
-```
-
-执行折扣策略：
-
-```bash
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=percentage&orderNo=ORDER10003&orderAmount=120.00"
-```
-
-执行新人优惠策略：
-
-```bash
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=new_user&orderNo=ORDER10004&orderAmount=88.00"
-```
-
-如果策略分发正常，可以看到类似日志：
-
-```text
-初始化订单优惠策略上下文，支持策略类型：[none, full_reduction, percentage, new_user]
-执行无优惠策略，订单号：ORDER10001，原始金额：120.00，应付金额：120.00
-执行满减优惠策略，订单号：ORDER10002，原始金额：120.00，优惠金额：20，应付金额：100.00
-执行折扣优惠策略，订单号：ORDER10003，原始金额：120.00，优惠金额：12.00，应付金额：108.00
-执行新人优惠策略，订单号：ORDER10004，原始金额：88.00，优惠金额：30.00，应付金额：58.00
-```
-
-如果传入不支持的策略类型：
-
-```bash
-curl -X POST "http://localhost:8080/strategy/order-discount/calculate?strategyType=vip&orderNo=ORDER10005&orderAmount=120.00"
-```
-
-会抛出异常：
-
-```text
-不支持的策略类型：vip
-```
-
-实际项目中建议结合全局异常处理器，将该异常转换成统一响应结构。
-
-## 注意事项
-
-策略模式适合解决同一业务点下多种算法、多种规则、多种处理方式的问题。如果只是两三个非常简单且短期不会扩展的分支，强行使用策略模式可能会增加类数量和维护成本。
-
-不推荐在业务代码中这样写：
-
-```java
-if ("none".equals(strategyType)) {
-    return noneDiscount(request);
-}
-if ("full_reduction".equals(strategyType)) {
-    return fullReductionDiscount(request);
-}
-if ("percentage".equals(strategyType)) {
-    return percentageDiscount(request);
-}
-```
-
-推荐使用策略分发：
-
-```java
-OrderDiscountResponse response = orderDiscountContext.calculate(request);
-```
-
-策略 Bean 默认是 Spring 单例，不要在策略类成员变量中保存请求级数据。
-
-错误示例：
-
-```java
-private String currentOrderNo;
-private BigDecimal currentOrderAmount;
-private BigDecimal currentDiscountAmount;
-```
-
-这些字段在并发请求下会互相污染，导致线程安全问题。
-
-推荐将请求数据放在方法参数、局部变量、DTO 或上下文对象中。
-
-```java
-public OrderDiscountResponse calculate(OrderDiscountRequest request) {
-    BigDecimal originalAmount = request.orderAmount();
-    BigDecimal payableAmount = originalAmount;
-    return new OrderDiscountResponse(request.orderNo(), supportType(), originalAmount, BigDecimal.ZERO, payableAmount);
-}
-```
-
-如果策略需要读取数据库、Redis、配置中心或远程服务，可以直接在具体策略类中注入对应的 Spring Bean。
-
-示例：
-
-```java
-@RequiredArgsConstructor
-@Component
-public class MemberDiscountStrategy implements OrderDiscountStrategy {
-
-    private final MemberService memberService;
-
+    /**
+     * 返回策略名称
+     *
+     * @return 策略名称
+     */
     @Override
-    public String supportType() {
-        return "member";
+    public String strategyName() {
+        return "新人优惠";
     }
 
+    /**
+     * 计算新人优惠金额
+     *
+     * @param request 订单结算请求
+     * @return 订单结算结果
+     */
     @Override
-    public OrderDiscountResponse calculate(OrderDiscountRequest request) {
-        // 根据会员等级计算优惠
-        return null;
+    public OrderSettlementResultVO calculate(OrderSettlementRequest request) {
+        BigDecimal payableAmount = NumberUtil.sub(request.getOriginalAmount(), NEW_USER_DISCOUNT_AMOUNT);
+
+        log.info("执行新人优惠策略，userId：{}，discountAmount：{}，payableAmount：{}",
+                request.getUserId(), NEW_USER_DISCOUNT_AMOUNT, payableAmount);
+
+        return buildResult(request, payableAmount, "新人立减15元");
     }
+
 }
 ```
 
-实际项目中不要返回 `null`，这里仅用于说明策略类可以注入其他业务 Bean。完整实现时应返回明确的业务响应对象。
+第三，使用新策略编码调用接口：
 
-## 总结
+```bash
+curl -X POST "http://localhost:8080/order-settlements/calculate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10004,
+    "productId": 20004,
+    "quantity": 1,
+    "originalAmount": 89.90,
+    "strategyCode": "NEW_USER_DISCOUNT"
+  }'
+```
 
-在 JDK21 和 Spring Boot 3 项目中，策略模式的实践重点是把变化的业务规则从主流程中拆出来，让主流程稳定，让策略实现可扩展。
+由于策略执行器会自动加载 Spring 容器中的 `OrderDiscountStrategy` 实现类，所以新增策略后不需要修改执行器和结算服务。
 
-普通 Java 策略适合无依赖的算法封装。Spring Boot 策略分发适合业务系统中的多实现选择。对于订单优惠、支付渠道、物流计费、文件解析、风控规则等场景，推荐使用“策略接口 + 多个策略实现 + 策略上下文”的结构。
+## 结合数据库配置
 
-策略模式不是为了消灭所有分支判断，而是为了让频繁变化的分支逻辑具备更低的扩展成本和更清晰的维护边界。
+实际项目中，策略编码通常不会由前端随意传入，而是根据商品、活动、用户权益、优惠券规则等配置计算出来。
+
+可以设计一张活动策略配置表：
+
+```sql
+-- 活动策略配置表
+CREATE TABLE t_discount_strategy_config (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    activity_code VARCHAR(64) NOT NULL COMMENT '活动编码',
+    strategy_code VARCHAR(64) NOT NULL COMMENT '策略编码',
+    strategy_name VARCHAR(128) NOT NULL COMMENT '策略名称',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用',
+    start_time DATETIME NOT NULL COMMENT '开始时间',
+    end_time DATETIME NOT NULL COMMENT '结束时间',
+    created_at DATETIME NOT NULL COMMENT '创建时间',
+    updated_at DATETIME NOT NULL COMMENT '更新时间',
+    UNIQUE KEY uk_activity_code (activity_code),
+    KEY idx_strategy_code (strategy_code)
+) COMMENT='活动策略配置表';
+```
+
+订单结算时可以先根据活动编码查出 `strategy_code`，再交给策略执行器执行。这样运营只需要配置活动和策略关系，代码侧只需要维护具体策略实现。
+
+## 优点和注意事项
+
+策略模式的核心价值是把多种算法或业务处理方式拆开，使它们可以独立扩展和替换。
+
+| 注意事项         | 说明                                                        |
+| ---------------- | ----------------------------------------------------------- |
+| 策略编码要稳定   | 策略编码可能被数据库、前端、运营配置依赖，不建议随意修改    |
+| 策略职责要单一   | 一个策略只处理一种明确算法，不要混入多个业务分支            |
+| 公共逻辑放抽象类 | 金额格式化、结果构建、通用校验可以放到抽象基类              |
+| 不要过度设计     | 如果只有两个很简单的分支，直接判断可能更清晰                |
+| 策略选择要可信   | 不建议完全信任前端传入的策略编码，生产项目应由后端规则决定  |
+| 注意金额精度     | 金额计算必须使用 `BigDecimal`，避免使用 `double` 或 `float` |
+
+## 和状态模式的区别
+
+策略模式和状态模式结构很像，但意图不同。
+
+| 模式     | 关注点                       | 典型场景                               |
+| -------- | ---------------------------- | -------------------------------------- |
+| 策略模式 | 根据外部条件选择一种算法     | 优惠计算、支付渠道、导出格式、登录方式 |
+| 状态模式 | 对象内部状态变化后行为也变化 | 订单状态、审批状态、工单状态、任务状态 |
+
+策略模式通常由外部输入或配置决定使用哪种策略。
+状态模式通常由对象当前状态决定能执行什么行为。
+
+## 和工厂模式的区别
+
+策略模式经常和工厂模式或注册器一起使用，但两者关注点不同。
+
+| 模式          | 关注点               | 在本示例中的体现                                     |
+| ------------- | -------------------- | ---------------------------------------------------- |
+| 策略模式      | 定义多种可替换算法   | `OrderDiscountStrategy` 及其实现类                   |
+| 工厂 / 注册器 | 根据标识获取具体对象 | `OrderDiscountStrategyExecutor` 内部的 `strategyMap` |
+
+简单来说，策略模式解决“算法如何拆分”，工厂或注册器解决“对象如何获取”。
+
+## 和命令模式的区别
+
+策略模式和命令模式都可以通过编码选择处理类，但语义不同。
+
+| 模式     | 关注点                     | 典型场景                               |
+| -------- | -------------------------- | -------------------------------------- |
+| 策略模式 | 选择一种算法并返回计算结果 | 优惠计算、运费计算、路由选择、评分算法 |
+| 命令模式 | 封装一个业务动作并执行     | 创建订单、取消订单、退款、任务调度     |
+
+如果核心是“同类算法可替换”，优先考虑策略模式。
+如果核心是“一个动作被封装、执行、排队或记录”，优先考虑命令模式。
+
+## 小结
+
+策略模式在 Spring Boot 项目中的常见落地方式是：定义统一策略接口，为每种业务算法创建独立策略类，再通过执行器或注册器根据策略编码选择执行。
+在订单结算、支付渠道、运费计算、导出格式、登录方式、消息发送等场景中，策略模式可以有效减少 `if-else` 分支，使业务算法更清晰、更容易扩展。

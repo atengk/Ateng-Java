@@ -1,1565 +1,1424 @@
-# 设计模式：依赖注入模式
+# 依赖注入模式
 
-依赖注入模式用于把对象依赖的创建和装配交给外部容器或调用方处理，而不是在对象内部主动 `new` 依赖对象。在 JDK21 和 Spring Boot 3 项目中，依赖注入是 Spring IoC 的核心思想，常用于 Controller 注入 Service、Service 注入 Repository、业务服务注入策略实现、配置对象注入、外部客户端注入、测试替身注入等场景。
+依赖注入模式是 Spring Boot 项目中最基础、最常用的工程实践模式，属于当前设计模式文档体系中的 **Spring Boot 实战补充模式**。它的核心作用是由外部容器装配对象依赖，而不是由业务对象自己创建依赖对象。Spring 的核心基础之一就是依赖注入。
 
-需要注意：依赖注入模式不是 GoF 23 种设计模式之一，属于这次设计模式文档里的“遗漏补充”。它是 Spring Boot 项目中最基础、最高频、最重要的工程模式之一，优先级通常高于大部分传统设计模式。
+在实际项目中，Controller 注入 Service、Service 注入 Repository、策略类注入多个实现、配置类注入属性对象、测试环境替换 Mock Bean，本质上都属于依赖注入的使用场景。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 **JDK 21 + Spring Boot 3**，使用一个“通知发送”场景说明依赖注入模式。业务目标是：根据请求中的通知类型，自动选择短信、邮件或站内信发送器，而业务层不直接 `new` 具体实现类。
+
+普通写法中，业务代码可能会直接创建依赖：
+
+```java
+NotifySender sender = new EmailNotifySender();
+sender.send(message);
+```
+
+这种写法会让业务层和具体实现强耦合。使用依赖注入后，发送器由 Spring 容器管理，业务层只依赖接口和注册器：
+
+```java
+NotifySender sender = notifySenderRegistry.getSender(request.notifyType());
+sender.send(message);
+```
+
+### 项目依赖
 
 文件位置：`pom.xml`
 
+下面配置 Web、Validation、Configuration Processor、Hutool 和 Lombok。示例中使用配置属性注入、多实现注入、构造器注入和接口注入。
+
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证依赖注入效果 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、集合等通用处理 -->
+    <!-- Spring Validation：用于请求参数和配置属性校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Configuration Processor：生成配置元数据，提升 application.yml 提示体验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-configuration-processor</artifactId>
+        <optional>true</optional>
+    </dependency>
+
+    <!-- Hutool：常用工具类，简化字符串、集合、对象等处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.35</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok：减少构造器、日志对象等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试和 Bean 注入验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+### 应用配置
 
-## 核心概念
+文件位置：`src/main/resources/application.yml`
 
-依赖注入的核心目标是让对象不再自己创建依赖，而是由外部把依赖传进来。这样可以降低类之间的耦合，提高可测试性、可替换性和扩展性。
+这里配置默认通知渠道和启用的通知渠道。后续通过 `@ConfigurationProperties` 注入到配置对象中。
 
-没有依赖注入时，代码通常写成：
+```yaml
+spring:
+  application:
+    name: design-pattern-dependency-injection
 
-```java
-public class OrderService {
+server:
+  port: 8080
 
-    private final SmsNoticeSender sender = new SmsNoticeSender();
-}
-```
-
-这种写法的问题是：`OrderService` 被固定绑定到 `SmsNoticeSender`，后续要换成邮件、站内信、Mock 对象、远程通知客户端都不方便。
-
-使用依赖注入后，代码通常写成：
-
-```java
-public class OrderService {
-
-    private final NoticeSender sender;
-
-    public OrderService(NoticeSender sender) {
-        this.sender = sender;
-    }
-}
-```
-
-依赖对象由外部传入，`OrderService` 只依赖抽象接口，不依赖具体实现。
-
-常见角色如下：
-
-| 角色                 | 说明                                         |
-| -------------------- | -------------------------------------------- |
-| Client               | 需要依赖其他对象的业务类                     |
-| Dependency           | 被依赖对象，例如 Service、Repository、Sender |
-| Injector / Container | 注入器或容器，负责创建和装配对象             |
-| Interface            | 抽象接口，用于隔离具体实现                   |
-| Implementation       | 具体实现类，由容器管理并注入                 |
-
-在 Spring Boot 项目中，常见依赖注入方式如下：
-
-| 注入方式              | 推荐程度 | 说明                                |
-| --------------------- | -------- | ----------------------------------- |
-| 构造方法注入          | 高       | 推荐默认使用，依赖不可变，便于测试  |
-| Setter 注入           | 中       | 适合可选依赖或后置配置              |
-| 字段注入              | 低       | 不推荐，测试困难，依赖不清晰        |
-| `ObjectProvider` 注入 | 中       | 适合可选 Bean、延迟获取、多实现选择 |
-| `List` / `Map` 注入   | 高       | 适合策略集合、处理器集合、插件集合  |
-
-推荐优先级：
-
-```text
-构造方法注入 > List / Map 注入 > ObjectProvider 注入 > Setter 注入 > 字段注入
-```
-
-## 普通 Java 依赖注入
-
-普通 Java 中不依赖 Spring 容器，也可以手动实现依赖注入。下面以订单创建后发送通知为例，订单服务依赖通知发送器，但不关心具体发送方式。
-
-整体关系如下：
-
-```text
-OrderService
-    -> NoticeSender
-
-NoticeSender
-    -> SmsNoticeSender
-    -> EmailNoticeSender
+notify:
+  default-type: EMAIL       # 默认通知类型
+  enabled-types:            # 当前启用的通知类型
+    - SMS
+    - EMAIL
+    - IN_APP
 ```
 
 ### 文件结构
 
-```text
-src/main/java/io/github/atengk/design/di/simple/
-├── NoticeSender.java
-├── SmsNoticeSender.java
-├── EmailNoticeSender.java
-└── OrderService.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/di/simple/NoticeSender.java`
-
-下面是通知发送器接口，订单服务只依赖该接口。
-
-```java
-package io.github.atengk.design.di.simple;
-
-/**
- * 通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface NoticeSender {
-
-    /**
-     * 发送通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
-     * @return 发送结果
-     */
-    String send(String receiver, String content);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/di/simple/SmsNoticeSender.java`
-
-下面是短信通知发送器实现。
-
-```java
-package io.github.atengk.design.di.simple;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 短信通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class SmsNoticeSender implements NoticeSender {
-
-    /**
-     * 发送短信通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
-     * @return 发送结果
-     */
-    @Override
-    public String send(String receiver, String content) {
-        if (StrUtil.hasBlank(receiver, content)) {
-            log.warn("短信发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("接收人和内容不能为空");
-        }
-
-        String bizId = "SMS" + IdUtil.getSnowflakeNextId();
-        log.info("短信发送成功，接收人：{}，业务ID：{}", receiver, bizId);
-        return bizId;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/di/simple/EmailNoticeSender.java`
-
-下面是邮件通知发送器实现。
-
-```java
-package io.github.atengk.design.di.simple;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 邮件通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class EmailNoticeSender implements NoticeSender {
-
-    /**
-     * 发送邮件通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
-     * @return 发送结果
-     */
-    @Override
-    public String send(String receiver, String content) {
-        if (StrUtil.hasBlank(receiver, content)) {
-            log.warn("邮件发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("接收人和内容不能为空");
-        }
-
-        String bizId = "EMAIL" + IdUtil.getSnowflakeNextId();
-        log.info("邮件发送成功，接收人：{}，业务ID：{}", receiver, bizId);
-        return bizId;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/di/simple/OrderService.java`
-
-下面是订单服务。它通过构造方法接收 `NoticeSender`，这就是最基础的构造方法注入。
-
-```java
-package io.github.atengk.design.di.simple;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 订单服务
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class OrderService {
-
-    private final NoticeSender noticeSender;
-
-    /**
-     * 创建订单服务
-     *
-     * @param noticeSender 通知发送器
-     */
-    public OrderService(NoticeSender noticeSender) {
-        if (noticeSender == null) {
-            throw new IllegalArgumentException("通知发送器不能为空");
-        }
-
-        this.noticeSender = noticeSender;
-    }
-
-    /**
-     * 创建订单
-     *
-     * @param userId   用户ID
-     * @param receiver 通知接收人
-     * @return 订单号
-     */
-    public String createOrder(Long userId, String receiver) {
-        if (userId == null || userId <= 0 || StrUtil.isBlank(receiver)) {
-            log.warn("创建订单失败，用户ID或接收人不合法，用户ID：{}，接收人：{}", userId, receiver);
-            throw new IllegalArgumentException("用户ID和接收人不能为空");
-        }
-
-        String orderNo = "ORDER" + IdUtil.getSnowflakeNextId();
-        log.info("创建订单成功，订单号：{}，用户ID：{}", orderNo, userId);
-
-        noticeSender.send(receiver, StrUtil.format("订单 {} 创建成功", orderNo));
-        return orderNo;
-    }
-}
-```
-
-使用方式：
-
-```java
-NoticeSender smsSender = new SmsNoticeSender();
-OrderService smsOrderService = new OrderService(smsSender);
-smsOrderService.createOrder(10001L, "13800138000");
-
-NoticeSender emailSender = new EmailNoticeSender();
-OrderService emailOrderService = new OrderService(emailSender);
-emailOrderService.createOrder(10002L, "ateng@example.com");
-```
-
-这里 `OrderService` 没有修改代码，就可以切换短信或邮件通知。这就是依赖注入的核心价值：依赖从内部创建变成外部传入。
-
-## Spring Boot 构造方法注入
-
-Spring Boot 项目中，依赖注入由 Spring 容器自动完成。推荐使用构造方法注入，让依赖关系在对象创建时就确定下来。
-
-下面以订单创建接口为例，`OrderCreateServiceImpl` 依赖 `OrderNoticeSender`。由于存在多个通知发送器实现，所以使用 `@Qualifier` 明确指定默认注入短信发送器。
-
-整体流程如下：
+依赖注入模式本身不是某一个固定类，而是一种对象装配方式。下面示例按 Controller、Service、Sender、Registry、Properties 分层组织。
 
 ```text
-Controller
-    -> OrderCreateService
-        -> OrderNoticeSender
-            -> SmsOrderNoticeSender
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/dependencyinjection
 ├── DependencyInjectionApplication.java
-├── controller/
-│   └── OrderController.java
-├── dto/
-│   ├── OrderCreateRequest.java
-│   └── OrderCreateResponse.java
-├── sender/
-│   ├── OrderNoticeSender.java
-│   ├── SmsOrderNoticeSender.java
-│   └── EmailOrderNoticeSender.java
-└── service/
-    ├── OrderCreateService.java
-    └── impl/
-        └── OrderCreateServiceImpl.java
+├── config
+│   └── NotifyProperties.java
+├── controller
+│   └── NotifyController.java
+├── dto
+│   └── SendNotifyRequest.java
+├── registry
+│   └── NotifySenderRegistry.java
+├── sender
+│   ├── EmailNotifySender.java
+│   ├── InAppNotifySender.java
+│   ├── NotifyMessage.java
+│   ├── NotifySender.java
+│   ├── NotifyType.java
+│   └── SmsNotifySender.java
+├── service
+│   ├── NotifyService.java
+│   └── impl
+│       └── NotifyServiceImpl.java
+└── vo
+    └── SendNotifyResponse.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/DependencyInjectionApplication.java`
+## 模式说明
 
-下面是 Spring Boot 启动类。
+依赖注入模式的核心思想是：对象不主动创建依赖，而是由外部容器把依赖传进来。
+
+不推荐的写法：
+
+```text
+NotifyServiceImpl
+ -> new SmsNotifySender()
+ -> new EmailNotifySender()
+ -> new InAppNotifySender()
+```
+
+推荐的写法：
+
+```text
+Spring Container
+ -> 创建 SmsNotifySender
+ -> 创建 EmailNotifySender
+ -> 创建 InAppNotifySender
+ -> 注入 NotifySenderRegistry
+ -> 注入 NotifyServiceImpl
+ -> 注入 NotifyController
+```
+
+在 Spring Boot 项目中，常见依赖注入方式有三种：
+
+| 注入方式    | 示例                                                         | 推荐程度     |
+| ----------- | ------------------------------------------------------------ | ------------ |
+| 构造器注入  | `private final NotifyService notifyService` + `@RequiredArgsConstructor` | 推荐         |
+| Setter 注入 | `setNotifyService(...)`                                      | 适合可选依赖 |
+| 字段注入    | `@Autowired private NotifyService notifyService`             | 不推荐       |
+
+推荐优先使用构造器注入，因为它可以保证依赖不可变、便于单元测试，也更容易发现循环依赖问题。
+
+## 核心代码
+
+这一节给出依赖注入模式的完整关键代码。示例重点体现四点：
+
+```text
+1. Controller 依赖 Service 接口。
+2. Service 依赖 NotifySenderRegistry 和配置属性对象。
+3. NotifySenderRegistry 注入所有 NotifySender 实现。
+4. 新增通知渠道时，业务层不需要修改核心调用逻辑。
+```
+
+### 启动类
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/DependencyInjectionApplication.java`
+
+启动类用于启动 Spring Boot 应用，并开启配置属性扫描。
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.dependencyinjection;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
  * 依赖注入模式示例启动类
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
+@ConfigurationPropertiesScan
 @SpringBootApplication
 public class DependencyInjectionApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(DependencyInjectionApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateRequest.java`
+### 通知配置属性
 
-下面是订单创建请求对象。
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/config/NotifyProperties.java`
+
+该配置类用于接收 `application.yml` 中的 `notify` 配置，实现配置属性注入。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.dependencyinjection.config;
 
-import java.math.BigDecimal;
+import io.github.atengk.dependencyinjection.sender.NotifyType;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+import java.util.List;
 
 /**
- * 订单创建请求
+ * 通知配置属性
  *
- * @param userId      用户ID
- * @param receiver    通知接收人
- * @param productName 商品名称
- * @param amount      订单金额
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public record OrderCreateRequest(
-        Long userId,
+@Validated
+@ConfigurationProperties(prefix = "notify")
+public record NotifyProperties(
+
+        @NotNull(message = "默认通知类型不能为空")
+        NotifyType defaultType,
+
+        @NotEmpty(message = "启用通知类型不能为空")
+        List<NotifyType> enabledTypes
+
+) {
+}
+```
+
+### 通知类型枚举
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/sender/NotifyType.java`
+
+该枚举定义系统支持的通知类型。
+
+```java
+package io.github.atengk.dependencyinjection.sender;
+
+/**
+ * 通知类型
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public enum NotifyType {
+
+    SMS,
+
+    EMAIL,
+
+    IN_APP
+
+}
+```
+
+### 通知消息对象
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/sender/NotifyMessage.java`
+
+该对象用于承载通知发送所需数据。
+
+```java
+package io.github.atengk.dependencyinjection.sender;
+
+import java.time.LocalDateTime;
+
+/**
+ * 通知消息对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public record NotifyMessage(
+
         String receiver,
-        String productName,
-        BigDecimal amount
+
+        String title,
+
+        String content,
+
+        LocalDateTime createTime
+
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateResponse.java`
+### 通知发送器接口
 
-下面是订单创建响应对象。
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/sender/NotifySender.java`
 
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 订单创建响应
- *
- * @param orderNo     订单号
- * @param userId      用户ID
- * @param productName 商品名称
- * @param amount      订单金额
- * @param noticeBizId 通知业务ID
- * @param message     响应消息
- * @author Ateng
- * @since 2026-05-01
- */
-public record OrderCreateResponse(
-        String orderNo,
-        Long userId,
-        String productName,
-        BigDecimal amount,
-        String noticeBizId,
-        String message
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/sender/OrderNoticeSender.java`
-
-下面是订单通知发送器接口。
+该接口定义通知发送器的统一行为。业务层不直接依赖短信、邮件、站内信等具体实现。
 
 ```java
-package io.github.atengk.design.sender;
+package io.github.atengk.dependencyinjection.sender;
 
 /**
- * 订单通知发送器
+ * 通知发送器接口
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public interface OrderNoticeSender {
+public interface NotifySender {
 
     /**
-     * 获取通知渠道
+     * 获取通知类型
      *
-     * @return 通知渠道
+     * @return 通知类型
      */
-    String channel();
+    NotifyType notifyType();
 
     /**
-     * 发送订单通知
+     * 发送通知
      *
-     * @param receiver 接收人
-     * @param content  通知内容
-     * @return 通知业务ID
+     * @param message 通知消息
      */
-    String send(String receiver, String content);
-}
-```
+    void send(NotifyMessage message);
 
-文件位置：`src/main/java/io/github/atengk/design/sender/SmsOrderNoticeSender.java`
-
-下面是短信订单通知发送器。Bean 名默认是 `smsOrderNoticeSender`。
-
-```java
-package io.github.atengk.design.sender;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 短信订单通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class SmsOrderNoticeSender implements OrderNoticeSender {
-
-    /**
-     * 获取通知渠道
-     *
-     * @return 通知渠道
-     */
-    @Override
-    public String channel() {
-        return "sms";
-    }
-
-    /**
-     * 发送短信订单通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
-     * @return 通知业务ID
-     */
-    @Override
-    public String send(String receiver, String content) {
-        if (StrUtil.hasBlank(receiver, content)) {
-            log.warn("短信订单通知发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("接收人和内容不能为空");
-        }
-
-        String bizId = "SMS" + IdUtil.getSnowflakeNextId();
-        log.info("短信订单通知发送成功，接收人：{}，业务ID：{}", receiver, bizId);
-        return bizId;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/sender/EmailOrderNoticeSender.java`
-
-下面是邮件订单通知发送器。Bean 名默认是 `emailOrderNoticeSender`。
-
-```java
-package io.github.atengk.design.sender;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 邮件订单通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class EmailOrderNoticeSender implements OrderNoticeSender {
-
-    /**
-     * 获取通知渠道
-     *
-     * @return 通知渠道
-     */
-    @Override
-    public String channel() {
-        return "email";
-    }
-
-    /**
-     * 发送邮件订单通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
-     * @return 通知业务ID
-     */
-    @Override
-    public String send(String receiver, String content) {
-        if (StrUtil.hasBlank(receiver, content)) {
-            log.warn("邮件订单通知发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("接收人和内容不能为空");
-        }
-
-        String bizId = "EMAIL" + IdUtil.getSnowflakeNextId();
-        log.info("邮件订单通知发送成功，接收人：{}，业务ID：{}", receiver, bizId);
-        return bizId;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/OrderCreateService.java`
-
-下面是订单创建服务接口。
-
-```java
-package io.github.atengk.design.service;
-
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-
-/**
- * 订单创建服务
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface OrderCreateService {
-
-    /**
-     * 创建订单
-     *
-     * @param request 订单创建请求
-     * @return 订单创建响应
-     */
-    OrderCreateResponse create(OrderCreateRequest request);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderCreateServiceImpl.java`
-
-下面是订单创建服务实现。它通过构造方法注入指定的订单通知发送器。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-import io.github.atengk.design.sender.OrderNoticeSender;
-import io.github.atengk.design.service.OrderCreateService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-
-/**
- * 订单创建服务实现
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Service
-public class OrderCreateServiceImpl implements OrderCreateService {
-
-    private final OrderNoticeSender orderNoticeSender;
-
-    /**
-     * 创建订单创建服务
-     *
-     * @param orderNoticeSender 订单通知发送器
-     */
-    public OrderCreateServiceImpl(@Qualifier("smsOrderNoticeSender") OrderNoticeSender orderNoticeSender) {
-        this.orderNoticeSender = orderNoticeSender;
-    }
-
-    /**
-     * 创建订单
-     *
-     * @param request 订单创建请求
-     * @return 订单创建响应
-     */
-    @Override
-    public OrderCreateResponse create(OrderCreateRequest request) {
-        validateRequest(request);
-
-        String orderNo = "ORDER" + IdUtil.getSnowflakeNextId();
-        log.info("创建订单成功，订单号：{}，用户ID：{}，商品：{}，金额：{}",
-                orderNo, request.userId(), request.productName(), request.amount());
-
-        String noticeBizId = orderNoticeSender.send(
-                request.receiver(),
-                StrUtil.format("订单 {} 创建成功，商品：{}", orderNo, request.productName())
-        );
-
-        log.info("订单创建后通知发送完成，订单号：{}，通知渠道：{}，通知业务ID：{}",
-                orderNo, orderNoticeSender.channel(), noticeBizId);
-
-        return new OrderCreateResponse(
-                orderNo,
-                request.userId(),
-                request.productName(),
-                request.amount(),
-                noticeBizId,
-                "订单创建成功"
-        );
-    }
-
-    /**
-     * 校验订单创建请求
-     *
-     * @param request 订单创建请求
-     */
-    private void validateRequest(OrderCreateRequest request) {
-        if (request == null) {
-            log.warn("创建订单失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("创建订单失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (StrUtil.hasBlank(request.receiver(), request.productName())) {
-            log.warn("创建订单失败，接收人或商品名称为空");
-            throw new IllegalArgumentException("接收人和商品名称不能为空");
-        }
-
-        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("创建订单失败，订单金额不合法，金额：{}", request.amount());
-            throw new IllegalArgumentException("订单金额必须大于0");
-        }
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderController.java`
-
-下面是订单接口，用于验证构造方法注入效果。
-
-```java
-package io.github.atengk.design.controller;
-
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-import io.github.atengk.design.service.OrderCreateService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-
-/**
- * 订单控制器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/dependency-injection/order")
-public class OrderController {
-
-    private final OrderCreateService orderCreateService;
-
-    /**
-     * 创建订单
-     *
-     * @param userId      用户ID
-     * @param receiver    通知接收人
-     * @param productName 商品名称
-     * @param amount      订单金额
-     * @return 订单创建响应
-     */
-    @PostMapping("/create")
-    public OrderCreateResponse create(@RequestParam Long userId,
-                                      @RequestParam String receiver,
-                                      @RequestParam String productName,
-                                      @RequestParam BigDecimal amount) {
-        OrderCreateRequest request = new OrderCreateRequest(userId, receiver, productName, amount);
-        return orderCreateService.create(request);
-    }
 }
 ```
 
 ## 多实现注入
 
-当一个接口有多个实现时，Spring Boot 项目中常见处理方式有三种：`@Qualifier` 指定 Bean、`@Primary` 指定默认 Bean、注入 `List` 或 `Map` 后按业务类型选择。
+这一节定义三个通知发送器实现。它们都实现 `NotifySender` 接口，并通过 `@Component` 注册到 Spring 容器中。
 
-### `@Qualifier` 指定实现
+### 短信通知发送器
 
-当一个接口存在多个 Bean 时，直接按接口注入会报错。可以使用 `@Qualifier` 指定 Bean 名。
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/sender/SmsNotifySender.java`
 
-```java
-public OrderCreateServiceImpl(@Qualifier("smsOrderNoticeSender") OrderNoticeSender orderNoticeSender) {
-    this.orderNoticeSender = orderNoticeSender;
-}
-```
-
-这种方式适合某个类明确只需要一个固定实现。
-
-### `@Primary` 指定默认实现
-
-如果某个实现是默认实现，可以在实现类上加 `@Primary`。
+该实现类负责短信通知发送。示例中使用日志模拟真实短信服务调用。
 
 ```java
-@Primary
-@Component
-public class SmsOrderNoticeSender implements OrderNoticeSender {
-}
-```
+package io.github.atengk.dependencyinjection.sender;
 
-这样按接口注入时，Spring 会优先选择 `SmsOrderNoticeSender`。但如果默认实现不够明确，建议使用 `@Qualifier`，避免后续维护人员误解。
-
-### `List` 注入全部实现
-
-当业务需要广播给所有实现时，可以直接注入 `List<OrderNoticeSender>`。
-
-文件位置：`src/main/java/io/github/atengk/design/service/OrderNoticeBroadcastService.java`
-
-下面是订单通知广播服务接口。
-
-```java
-package io.github.atengk.design.service;
-
-/**
- * 订单通知广播服务
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface OrderNoticeBroadcastService {
-
-    /**
-     * 广播订单通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
-     */
-    void broadcast(String receiver, String content);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderNoticeBroadcastServiceImpl.java`
-
-下面是订单通知广播服务实现。它通过构造方法注入所有 `OrderNoticeSender` 实现。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.sender.OrderNoticeSender;
-import io.github.atengk.design.service.OrderNoticeBroadcastService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.util.List;
+import org.springframework.stereotype.Component;
 
 /**
- * 订单通知广播服务实现
+ * 短信通知发送器
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Slf4j
-@Service
-public class OrderNoticeBroadcastServiceImpl implements OrderNoticeBroadcastService {
-
-    private final List<OrderNoticeSender> orderNoticeSenders;
+@Component
+public class SmsNotifySender implements NotifySender {
 
     /**
-     * 创建订单通知广播服务
+     * 获取通知类型
      *
-     * @param orderNoticeSenders 订单通知发送器列表
-     */
-    public OrderNoticeBroadcastServiceImpl(List<OrderNoticeSender> orderNoticeSenders) {
-        this.orderNoticeSenders = orderNoticeSenders;
-    }
-
-    /**
-     * 广播订单通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
+     * @return 通知类型
      */
     @Override
-    public void broadcast(String receiver, String content) {
-        if (StrUtil.hasBlank(receiver, content)) {
-            log.warn("广播订单通知失败，接收人或内容为空");
-            throw new IllegalArgumentException("接收人和内容不能为空");
-        }
-
-        if (CollUtil.isEmpty(orderNoticeSenders)) {
-            log.warn("广播订单通知失败，通知发送器列表为空");
-            return;
-        }
-
-        for (OrderNoticeSender sender : orderNoticeSenders) {
-            String bizId = sender.send(receiver, content);
-            log.info("广播订单通知成功，渠道：{}，业务ID：{}", sender.channel(), bizId);
-        }
+    public NotifyType notifyType() {
+        return NotifyType.SMS;
     }
+
+    /**
+     * 发送短信通知
+     *
+     * @param message 通知消息
+     */
+    @Override
+    public void send(NotifyMessage message) {
+        String smsContent = StrUtil.format("【系统通知】{}：{}", message.title(), message.content());
+        log.info("发送短信通知，receiver={}，content={}", message.receiver(), smsContent);
+
+        // 真实项目中可以在这里调用短信供应商 API。
+    }
+
 }
 ```
 
-这种方式适合插件集合、处理器集合、监听器集合、导出器集合等场景。
+### 邮件通知发送器
 
-### `Map` 注入全部实现
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/sender/EmailNotifySender.java`
 
-如果需要按 Bean 名选择实现，可以注入 `Map<String, OrderNoticeSender>`。Map 的 key 默认是 Bean 名。
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderNoticeSelector.java`
-
-下面是订单通知选择器。它通过 Map 注入所有通知发送器，并按 Bean 名选择。
+该实现类负责邮件通知发送。示例中使用日志模拟真实邮件服务调用。
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.dependencyinjection.sender;
 
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.sender.OrderNoticeSender;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-
 /**
- * 订单通知选择器
+ * 邮件通知发送器
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class OrderNoticeSelector {
-
-    private final Map<String, OrderNoticeSender> senderMap;
+public class EmailNotifySender implements NotifySender {
 
     /**
-     * 创建订单通知选择器
+     * 获取通知类型
      *
-     * @param senderMap 通知发送器Map
+     * @return 通知类型
      */
-    public OrderNoticeSelector(Map<String, OrderNoticeSender> senderMap) {
-        this.senderMap = senderMap;
-        log.info("初始化订单通知选择器完成，Bean名称：{}", senderMap.keySet());
+    @Override
+    public NotifyType notifyType() {
+        return NotifyType.EMAIL;
     }
 
     /**
-     * 根据Bean名称选择通知发送器
+     * 发送邮件通知
      *
-     * @param beanName Bean名称
-     * @return 通知发送器
+     * @param message 通知消息
      */
-    public OrderNoticeSender selectByBeanName(String beanName) {
-        if (StrUtil.isBlank(beanName)) {
-            log.warn("选择订单通知发送器失败，Bean名称为空");
-            throw new IllegalArgumentException("Bean名称不能为空");
-        }
+    @Override
+    public void send(NotifyMessage message) {
+        String subject = StrUtil.format("系统通知 - {}", message.title());
+        log.info("发送邮件通知，receiver={}，subject={}，content={}",
+                message.receiver(), subject, message.content());
 
-        OrderNoticeSender sender = senderMap.get(beanName);
-        if (sender == null) {
-            log.warn("选择订单通知发送器失败，Bean不存在，Bean名称：{}", beanName);
-            throw new IllegalArgumentException("通知发送器不存在：" + beanName);
-        }
-
-        return sender;
+        // 真实项目中可以在这里调用 JavaMail、企业邮箱或第三方邮件服务。
     }
+
 }
 ```
 
-如果希望按业务渠道选择，例如 `sms`、`email`，建议自己转换为 `channel -> sender`，不要依赖 Bean 名作为业务标识。
+### 站内信通知发送器
 
-## 配置对象注入
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/sender/InAppNotifySender.java`
 
-依赖注入不只适用于 Service，也适用于配置对象。Spring Boot 推荐使用 `@ConfigurationProperties` 注入配置，而不是在业务代码中到处使用 `@Value`。
-
-文件位置：`src/main/resources/application.yml`
-
-下面是订单通知配置。
-
-```yaml
-order:
-  notice:
-    # 是否开启订单通知
-    enabled: true
-    # 默认通知渠道
-    default-channel: sms
-    # 通知标题前缀
-    title-prefix: "订单通知"
-```
-
-文件位置：`src/main/java/io/github/atengk/design/config/OrderNoticeProperties.java`
-
-下面是订单通知配置属性类。
+该实现类负责站内信通知发送。示例中使用日志模拟保存站内信记录。
 
 ```java
-package io.github.atengk.design.config;
+package io.github.atengk.dependencyinjection.sender;
 
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 订单通知配置属性
+ * 站内信通知发送器
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-@Data
+@Slf4j
 @Component
-@ConfigurationProperties(prefix = "order.notice")
-public class OrderNoticeProperties {
+public class InAppNotifySender implements NotifySender {
 
     /**
-     * 是否开启订单通知
+     * 获取通知类型
+     *
+     * @return 通知类型
      */
-    private Boolean enabled = true;
+    @Override
+    public NotifyType notifyType() {
+        return NotifyType.IN_APP;
+    }
 
     /**
-     * 默认通知渠道
+     * 发送站内信通知
+     *
+     * @param message 通知消息
      */
-    private String defaultChannel = "sms";
+    @Override
+    public void send(NotifyMessage message) {
+        log.info("保存站内信通知，receiver={}，title={}，content={}，createTime={}",
+                message.receiver(), message.title(), message.content(), message.createTime());
 
-    /**
-     * 通知标题前缀
-     */
-    private String titlePrefix = "订单通知";
+        // 真实项目中可以在这里写入站内信表或推送 WebSocket 消息。
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/ConfigurableOrderNoticeService.java`
+## 注册器代码
 
-下面是使用配置对象的订单通知服务。
+当一个接口存在多个实现时，Spring 可以直接注入 `List<NotifySender>` 或 `Map<String, NotifySender>`。本示例使用 `List<NotifySender>` 构建一个按通知类型索引的注册器。
+
+### 通知发送器注册器
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/registry/NotifySenderRegistry.java`
+
+该注册器通过构造器注入所有 `NotifySender` 实现，并提供按类型获取发送器的能力。
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.dependencyinjection.registry;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.config.OrderNoticeProperties;
-import io.github.atengk.design.sender.OrderNoticeSender;
+import cn.hutool.core.collection.CollUtil;
+import io.github.atengk.dependencyinjection.config.NotifyProperties;
+import io.github.atengk.dependencyinjection.sender.NotifySender;
+import io.github.atengk.dependencyinjection.sender.NotifyType;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * 可配置订单通知服务
+ * 通知发送器注册器
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Slf4j
-@Service
-public class ConfigurableOrderNoticeService {
+@Component
+public class NotifySenderRegistry {
 
-    private final OrderNoticeProperties properties;
-    private final Map<String, OrderNoticeSender> senderMap;
+    private final List<NotifySender> notifySenders;
 
-    /**
-     * 创建可配置订单通知服务
-     *
-     * @param properties 订单通知配置
-     * @param senders    订单通知发送器列表
-     */
-    public ConfigurableOrderNoticeService(OrderNoticeProperties properties, List<OrderNoticeSender> senders) {
-        this.properties = properties;
-        this.senderMap = senders.stream()
-                .collect(Collectors.toUnmodifiableMap(OrderNoticeSender::channel, Function.identity()));
+    private final NotifyProperties notifyProperties;
 
-        log.info("初始化可配置订单通知服务完成，默认渠道：{}，可用渠道：{}",
-                properties.getDefaultChannel(), senderMap.keySet());
+    private final Map<NotifyType, NotifySender> senderMap = new EnumMap<>(NotifyType.class);
+
+    public NotifySenderRegistry(List<NotifySender> notifySenders, NotifyProperties notifyProperties) {
+        this.notifySenders = CollUtil.emptyIfNull(notifySenders);
+        this.notifyProperties = notifyProperties;
     }
 
     /**
-     * 发送默认渠道通知
-     *
-     * @param receiver 接收人
-     * @param orderNo  订单号
-     * @return 通知业务ID
+     * 初始化通知发送器映射
      */
-    public String sendDefaultNotice(String receiver, String orderNo) {
-        if (Boolean.FALSE.equals(properties.getEnabled())) {
-            log.info("订单通知未开启，跳过发送，订单号：{}", orderNo);
-            return "";
+    @PostConstruct
+    public void init() {
+        for (NotifySender notifySender : notifySenders) {
+            NotifyType notifyType = notifySender.notifyType();
+
+            if (!notifyProperties.enabledTypes().contains(notifyType)) {
+                log.info("通知发送器未启用，notifyType={}，sender={}",
+                        notifyType, notifySender.getClass().getSimpleName());
+                continue;
+            }
+
+            if (senderMap.containsKey(notifyType)) {
+                throw new IllegalStateException("通知类型存在重复发送器：" + notifyType);
+            }
+
+            senderMap.put(notifyType, notifySender);
+            log.info("注册通知发送器成功，notifyType={}，sender={}",
+                    notifyType, notifySender.getClass().getSimpleName());
         }
 
-        if (StrUtil.hasBlank(receiver, orderNo)) {
-            log.warn("发送默认订单通知失败，接收人或订单号为空");
-            throw new IllegalArgumentException("接收人和订单号不能为空");
+        if (CollUtil.isEmpty(senderMap)) {
+            throw new IllegalStateException("没有可用的通知发送器");
         }
-
-        OrderNoticeSender sender = senderMap.get(properties.getDefaultChannel());
-        if (sender == null) {
-            log.warn("默认通知渠道不存在，渠道：{}", properties.getDefaultChannel());
-            throw new IllegalArgumentException("默认通知渠道不存在：" + properties.getDefaultChannel());
-        }
-
-        String content = StrUtil.format("{}：订单 {} 创建成功", properties.getTitlePrefix(), orderNo);
-        return sender.send(receiver, content);
     }
+
+    /**
+     * 根据通知类型获取发送器
+     *
+     * @param notifyType 通知类型
+     * @return 通知发送器
+     */
+    public NotifySender getSender(NotifyType notifyType) {
+        NotifyType actualType = notifyType == null ? notifyProperties.defaultType() : notifyType;
+        NotifySender notifySender = senderMap.get(actualType);
+
+        if (notifySender == null) {
+            throw new IllegalArgumentException("通知类型未启用或不存在：" + actualType);
+        }
+
+        return notifySender;
+    }
+
 }
 ```
 
-配置对象注入的好处是：配置集中、类型安全、便于测试，也便于后续接入配置中心。
+这段代码体现了依赖注入在多实现扩展中的价值。新增一个 `WebhookNotifySender` 时，只要实现 `NotifySender` 并加上 `@Component`，注册器就可以自动接收到它。业务 Service 不需要新增 `new WebhookNotifySender()`。
 
-## ObjectProvider 延迟注入
+## 业务代码
 
-有些依赖不是每次都需要，或者 Bean 可能不存在，可以使用 `ObjectProvider` 做可选注入或延迟获取。
+这一节给出接口请求对象、响应对象、Service 和 Controller。业务层只关心通知发送能力，不关心具体实现类的创建过程。
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OptionalAuditService.java`
+### 请求 DTO
 
-下面是可选审计服务。只有存在审计处理器时才执行审计逻辑。
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/dto/SendNotifyRequest.java`
+
+该 DTO 用于接收通知发送请求。
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.dependencyinjection.dto;
 
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.stereotype.Service;
+import io.github.atengk.dependencyinjection.sender.NotifyType;
+import jakarta.validation.constraints.NotBlank;
 
 /**
- * 可选审计服务
+ * 发送通知请求
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-@Slf4j
-@Service
-public class OptionalAuditService {
+public record SendNotifyRequest(
 
-    private final ObjectProvider<AuditHandler> auditHandlerProvider;
+        NotifyType notifyType,
 
-    /**
-     * 创建可选审计服务
-     *
-     * @param auditHandlerProvider 审计处理器提供者
-     */
-    public OptionalAuditService(ObjectProvider<AuditHandler> auditHandlerProvider) {
-        this.auditHandlerProvider = auditHandlerProvider;
-    }
+        @NotBlank(message = "接收人不能为空")
+        String receiver,
 
-    /**
-     * 记录操作审计
-     *
-     * @param bizType 业务类型
-     * @param bizNo   业务编号
-     */
-    public void record(String bizType, String bizNo) {
-        if (StrUtil.hasBlank(bizType, bizNo)) {
-            log.warn("记录审计失败，业务类型或业务编号为空");
-            return;
-        }
+        @NotBlank(message = "通知标题不能为空")
+        String title,
 
-        AuditHandler auditHandler = auditHandlerProvider.getIfAvailable();
-        if (auditHandler == null) {
-            log.info("审计处理器不存在，跳过审计，业务类型：{}，业务编号：{}", bizType, bizNo);
-            return;
-        }
+        @NotBlank(message = "通知内容不能为空")
+        String content
 
-        auditHandler.record(bizType, bizNo);
-    }
-
-    /**
-     * 审计处理器
-     *
-     * @author Ateng
-     * @since 2026-05-01
-     */
-    public interface AuditHandler {
-
-        /**
-         * 记录审计
-         *
-         * @param bizType 业务类型
-         * @param bizNo   业务编号
-         */
-        void record(String bizType, String bizNo);
-    }
+) {
 }
 ```
 
-`ObjectProvider` 适合可选依赖、延迟加载、避免启动阶段过早创建对象等场景。但不要把它当成万能查找器滥用，否则会接近服务定位器模式，降低依赖清晰度。
+### 响应 VO
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/vo/SendNotifyResponse.java`
+
+该 VO 用于返回通知发送结果。
+
+```java
+package io.github.atengk.dependencyinjection.vo;
+
+import io.github.atengk.dependencyinjection.sender.NotifyType;
+
+import java.time.LocalDateTime;
+
+/**
+ * 发送通知响应
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public record SendNotifyResponse(
+
+        Boolean success,
+
+        NotifyType notifyType,
+
+        String receiver,
+
+        String message,
+
+        LocalDateTime sendTime
+
+) {
+}
+```
+
+### Service 接口
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/service/NotifyService.java`
+
+该接口定义通知发送能力。
+
+```java
+package io.github.atengk.dependencyinjection.service;
+
+import io.github.atengk.dependencyinjection.dto.SendNotifyRequest;
+import io.github.atengk.dependencyinjection.vo.SendNotifyResponse;
+
+/**
+ * 通知业务接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface NotifyService {
+
+    /**
+     * 发送通知
+     *
+     * @param request 发送通知请求
+     * @return 发送通知响应
+     */
+    SendNotifyResponse send(SendNotifyRequest request);
+
+}
+```
+
+### Service 实现
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/service/impl/NotifyServiceImpl.java`
+
+该实现类通过构造器注入 `NotifySenderRegistry`，再由注册器选择具体发送器。
+
+```java
+package io.github.atengk.dependencyinjection.service.impl;
+
+import io.github.atengk.dependencyinjection.dto.SendNotifyRequest;
+import io.github.atengk.dependencyinjection.registry.NotifySenderRegistry;
+import io.github.atengk.dependencyinjection.sender.NotifyMessage;
+import io.github.atengk.dependencyinjection.sender.NotifySender;
+import io.github.atengk.dependencyinjection.sender.NotifyType;
+import io.github.atengk.dependencyinjection.service.NotifyService;
+import io.github.atengk.dependencyinjection.vo.SendNotifyResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+
+/**
+ * 通知业务实现
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class NotifyServiceImpl implements NotifyService {
+
+    private final NotifySenderRegistry notifySenderRegistry;
+
+    /**
+     * 发送通知
+     *
+     * @param request 发送通知请求
+     * @return 发送通知响应
+     */
+    @Override
+    public SendNotifyResponse send(SendNotifyRequest request) {
+        NotifySender notifySender = notifySenderRegistry.getSender(request.notifyType());
+        NotifyType actualNotifyType = notifySender.notifyType();
+
+        NotifyMessage message = new NotifyMessage(
+                request.receiver(),
+                request.title(),
+                request.content(),
+                LocalDateTime.now()
+        );
+
+        notifySender.send(message);
+        log.info("通知发送完成，notifyType={}，receiver={}", actualNotifyType, request.receiver());
+
+        return new SendNotifyResponse(
+                true,
+                actualNotifyType,
+                request.receiver(),
+                "发送成功",
+                LocalDateTime.now()
+        );
+    }
+
+}
+```
+
+### Controller 接口
+
+文件位置：`src/main/java/io/github/atengk/dependencyinjection/controller/NotifyController.java`
+
+该 Controller 通过构造器注入 `NotifyService`。它只依赖业务接口，不依赖具体实现。
+
+```java
+package io.github.atengk.dependencyinjection.controller;
+
+import io.github.atengk.dependencyinjection.dto.SendNotifyRequest;
+import io.github.atengk.dependencyinjection.service.NotifyService;
+import io.github.atengk.dependencyinjection.vo.SendNotifyResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 通知接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@RestController
+@RequestMapping("/notifies")
+@RequiredArgsConstructor
+public class NotifyController {
+
+    private final NotifyService notifyService;
+
+    /**
+     * 发送通知
+     *
+     * @param request 发送通知请求
+     * @return 发送通知响应
+     */
+    @PostMapping("/send")
+    public SendNotifyResponse send(@Valid @RequestBody SendNotifyRequest request) {
+        return notifyService.send(request);
+    }
+
+}
+```
 
 ## 使用方式
 
-启动 Spring Boot 项目：
+本示例提供一个发送通知接口。请求中可以指定通知类型，如果不传 `notifyType`，系统会使用配置中的默认通知类型 `EMAIL`。
+
+### 发送短信通知
+
+接口信息：
+
+| 项目         | 内容                 |
+| ------------ | -------------------- |
+| 请求路径     | `/notifies/send`     |
+| 请求方法     | `POST`               |
+| Content-Type | `application/json`   |
+| 主要作用     | 根据通知类型发送通知 |
+
+请求示例：
+
+```bash
+curl -X POST 'http://localhost:8080/notifies/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "notifyType": "SMS",
+    "receiver": "13800000000",
+    "title": "订单创建成功",
+    "content": "您的订单已经创建成功，请及时支付"
+  }'
+```
+
+响应示例：
+
+```json
+{
+  "success": true,
+  "notifyType": "SMS",
+  "receiver": "13800000000",
+  "message": "发送成功",
+  "sendTime": "2026-05-13T10:30:00"
+}
+```
+
+### 发送邮件通知
+
+请求示例：
+
+```bash
+curl -X POST 'http://localhost:8080/notifies/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "notifyType": "EMAIL",
+    "receiver": "user@example.com",
+    "title": "账户安全提醒",
+    "content": "您的账户刚刚完成一次登录"
+  }'
+```
+
+### 使用默认通知类型
+
+如果请求中不传 `notifyType`，注册器会使用 `notify.default-type` 配置的默认类型。
+
+```bash
+curl -X POST 'http://localhost:8080/notifies/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "receiver": "user@example.com",
+    "title": "默认渠道通知",
+    "content": "这条通知会使用默认通知类型发送"
+  }'
+```
+
+响应中的 `notifyType` 应为：
+
+```json
+{
+  "notifyType": "EMAIL"
+}
+```
+
+## 验证方式
+
+可以通过接口响应和日志验证依赖注入是否生效。
+
+启动项目：
 
 ```bash
 mvn spring-boot:run
 ```
 
-调用创建订单接口：
+发送短信通知：
 
 ```bash
-curl -X POST "http://localhost:8080/dependency-injection/order/create?userId=10001&receiver=13800138000&productName=机械键盘&amount=199.00"
+curl -X POST 'http://localhost:8080/notifies/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "notifyType": "SMS",
+    "receiver": "13800000000",
+    "title": "测试短信",
+    "content": "这是一条短信通知"
+  }'
 ```
 
-可能返回：
+发送站内信通知：
 
-```json
-{
-  "orderNo": "ORDER2020123456789017600",
-  "userId": 10001,
-  "productName": "机械键盘",
-  "amount": 199.00,
-  "noticeBizId": "SMS2020123456789017601",
-  "message": "订单创建成功"
-}
+```bash
+curl -X POST 'http://localhost:8080/notifies/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "notifyType": "IN_APP",
+    "receiver": "10001",
+    "title": "测试站内信",
+    "content": "这是一条站内信通知"
+  }'
 ```
 
-如果构造方法注入正常，可以看到类似日志：
+验证点：
 
 ```text
-创建订单成功，订单号：ORDER2020123456789017600，用户ID：10001，商品：机械键盘，金额：199.00
-短信订单通知发送成功，接收人：13800138000，业务ID：SMS2020123456789017601
-订单创建后通知发送完成，订单号：ORDER2020123456789017600，通知渠道：sms，通知业务ID：SMS2020123456789017601
+1. 启动日志中可以看到 SmsNotifySender、EmailNotifySender、InAppNotifySender 被注册。
+2. NotifyController 中没有 new NotifyServiceImpl。
+3. NotifyServiceImpl 中没有 new SmsNotifySender、new EmailNotifySender。
+4. NotifySenderRegistry 通过 List<NotifySender> 自动获得所有发送器实现。
+5. 新增发送器实现后，只要交给 Spring 管理，就可以被自动注入。
 ```
 
-如果把 `OrderCreateServiceImpl` 构造方法中的 `@Qualifier("smsOrderNoticeSender")` 改成 `@Qualifier("emailOrderNoticeSender")`，通知渠道会从短信切换为邮件，业务服务主体逻辑不需要修改。
-
-## 测试方式
-
-依赖注入能显著提升测试便利性。因为业务类依赖接口，测试时可以注入一个假的实现，不需要真实发送短信或邮件。
-
-文件位置：`src/test/java/io/github/atengk/design/service/OrderCreateServiceTest.java`
-
-下面是订单创建服务的单元测试。测试中手动注入一个假的通知发送器。
-
-```java
-package io.github.atengk.design.service;
-
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-import io.github.atengk.design.sender.OrderNoticeSender;
-import io.github.atengk.design.service.impl.OrderCreateServiceImpl;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Qualifier;
-
-import java.math.BigDecimal;
-
-/**
- * 订单创建服务测试
- *
- * @author Ateng
- * @since 2026-05-01
- */
-class OrderCreateServiceTest {
-
-    /**
-     * 测试创建订单成功
-     */
-    @Test
-    void shouldCreateOrderSuccess() {
-        OrderNoticeSender fakeSender = new OrderNoticeSender() {
-
-            /**
-             * 获取通知渠道
-             *
-             * @return 通知渠道
-             */
-            @Override
-            public String channel() {
-                return "fake";
-            }
-
-            /**
-             * 发送订单通知
-             *
-             * @param receiver 接收人
-             * @param content  通知内容
-             * @return 通知业务ID
-             */
-            @Override
-            public String send(String receiver, String content) {
-                return "FAKE_NOTICE_ID";
-            }
-        };
-
-        OrderCreateService service = new TestOrderCreateServiceImpl(fakeSender);
-        OrderCreateRequest request = new OrderCreateRequest(
-                10001L,
-                "13800138000",
-                "机械键盘",
-                BigDecimal.valueOf(199)
-        );
-
-        OrderCreateResponse response = service.create(request);
-
-        Assertions.assertNotNull(response.orderNo());
-        Assertions.assertEquals("FAKE_NOTICE_ID", response.noticeBizId());
-        Assertions.assertEquals("订单创建成功", response.message());
-    }
-
-    /**
-     * 测试订单创建服务实现，用于绕开Spring容器直接注入假对象
-     *
-     * @author Ateng
-     * @since 2026-05-01
-     */
-    private static class TestOrderCreateServiceImpl extends OrderCreateServiceImpl {
-
-        /**
-         * 创建测试订单创建服务
-         *
-         * @param sender 通知发送器
-         */
-        public TestOrderCreateServiceImpl(OrderNoticeSender sender) {
-            super(sender);
-        }
-    }
-}
-```
-
-上面这个测试展示了依赖注入的直接收益：测试不需要启动短信服务，不需要连接外部系统，只要注入一个测试实现即可验证业务流程。
-
-如果不想继承测试类，也可以把 `OrderCreateServiceImpl` 的构造方法保留为普通 public 构造方法，测试中直接 new。示例中 `@Qualifier` 只影响 Spring 注入，不影响普通 Java 调用。
-
-## 依赖注入和工厂模式的区别
-
-依赖注入和工厂模式都和对象创建有关，但关注点不同。
-
-| 对比项      | 依赖注入模式            | 工厂模式                             |
-| ----------- | ----------------------- | ------------------------------------ |
-| 核心目的    | 把依赖交给外部注入      | 封装对象创建逻辑                     |
-| 使用方式    | 容器或调用方传入依赖    | 调用工厂获取对象                     |
-| 控制权      | 依赖由外部控制          | 调用方主动调用工厂                   |
-| Spring 对应 | IoC 容器、Bean 注入     | BeanFactory、FactoryBean、自定义工厂 |
-| 典型场景    | Service 注入 Repository | 根据类型创建客户端或处理器           |
-
-简单理解：
+如果启动失败，重点检查：
 
 ```text
-依赖注入：需要什么，外部给我。
-工厂模式：我要什么，去工厂拿。
+1. 启动类是否添加 @ConfigurationPropertiesScan。
+2. NotifyProperties 是否使用 @ConfigurationProperties(prefix = "notify")。
+3. application.yml 中 notify.default-type 是否能转换为 NotifyType。
+4. 所有 NotifySender 实现是否添加 @Component。
+5. 是否存在两个发送器返回相同 notifyType。
 ```
 
-在 Spring 项目中，容器本身就可以看成大型对象工厂，但应用代码更推荐通过依赖注入使用对象，而不是到处主动从容器里取对象。
+## 构造器注入
 
-## 依赖注入和服务定位器的区别
+构造器注入是 Spring Boot 项目中最推荐的依赖注入方式。它可以让依赖在对象创建时一次性传入，并且配合 `final` 字段保证依赖不可变。
 
-服务定位器模式是调用方主动通过容器或注册表查找依赖。依赖注入是依赖被动传入。二者都能解耦具体实现，但依赖透明度不同。
-
-服务定位器写法：
-
-```java
-OrderNoticeSender sender = applicationContext.getBean(OrderNoticeSender.class);
-```
-
-依赖注入写法：
-
-```java
-public OrderCreateServiceImpl(OrderNoticeSender sender) {
-    this.sender = sender;
-}
-```
-
-| 对比项           | 依赖注入 | 服务定位器 |
-| ---------------- | -------- | ---------- |
-| 依赖是否显式     | 显式     | 隐式       |
-| 测试便利性       | 高       | 较低       |
-| 代码可读性       | 高       | 较低       |
-| 是否主动查找依赖 | 否       | 是         |
-| 推荐程度         | 高       | 低         |
-
-在 Spring Boot 项目中，不推荐在业务代码里频繁使用 `ApplicationContext.getBean()`。这会隐藏真实依赖关系，让测试和维护变困难。
-
-不推荐：
-
-```java
-@Component
-public class OrderService {
-
-    @Autowired
-    private ApplicationContext applicationContext;
-
-    public void createOrder() {
-        NoticeSender sender = applicationContext.getBean(NoticeSender.class);
-    }
-}
-```
-
-推荐：
-
-```java
-@Service
-public class OrderService {
-
-    private final NoticeSender noticeSender;
-
-    public OrderService(NoticeSender noticeSender) {
-        this.noticeSender = noticeSender;
-    }
-}
-```
-
-## 常见注入问题
-
-依赖注入虽然基础，但项目中经常出现注入歧义、循环依赖、字段注入滥用、Bean 未注册等问题。
-
-### 多 Bean 注入歧义
-
-如果一个接口有多个实现，按接口注入时会报错：
-
-```text
-expected single matching bean but found 2
-```
-
-常见解决方式：
-
-```text
-使用 @Qualifier 指定 Bean
-使用 @Primary 指定默认 Bean
-注入 List 或 Map 后自行选择
-按业务类型建立上下文选择器
-```
-
-### Bean 未注册
-
-如果类没有加 `@Component`、`@Service`、`@Repository`，或者不在启动类扫描路径下，就不会被 Spring 管理。
-
-常见检查点：
-
-```text
-类上是否有组件注解
-包路径是否在启动类所在包或子包下
-是否被条件注解排除
-是否是接口而没有实现类
-是否创建了多个 ApplicationContext
-```
-
-### 循环依赖
-
-循环依赖通常说明模块边界不清晰。例如：
-
-```text
-OrderService -> PaymentService -> OrderService
-```
-
-推荐解决方式：
-
-```text
-重新拆分职责
-抽取第三个协调服务
-使用事件驱动解耦
-抽取领域服务
-避免互相调用
-```
-
-不建议优先使用 `@Lazy` 掩盖循环依赖。`@Lazy` 可以解决启动问题，但不解决设计问题。
-
-### 字段注入
-
-字段注入常见写法：
-
-```java
-@Autowired
-private OrderRepository orderRepository;
-```
-
-不推荐这种方式。问题包括：
-
-```text
-依赖不透明
-对象不能直接 new
-单元测试不方便
-final 不可用
-容易隐藏过多依赖
-```
-
-推荐构造方法注入：
-
-```java
-private final OrderRepository orderRepository;
-
-public OrderService(OrderRepository orderRepository) {
-    this.orderRepository = orderRepository;
-}
-```
-
-如果使用 Lombok，可以用 `@RequiredArgsConstructor` 简化构造方法：
+推荐写法：
 
 ```java
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OrderService {
+public class NotifyServiceImpl implements NotifyService {
+
+    private final NotifySenderRegistry notifySenderRegistry;
+
+}
+```
+
+这段代码通过 Lombok 的 `@RequiredArgsConstructor` 生成构造器。Spring 会自动使用这个构造器注入 `NotifySenderRegistry`。
+
+不推荐字段注入：
+
+```java
+@Autowired
+private NotifySenderRegistry notifySenderRegistry;
+```
+
+字段注入的问题是：
+
+```text
+1. 不利于单元测试手动构造对象。
+2. 依赖关系不够明确。
+3. 字段不能声明为 final。
+4. 容易隐藏循环依赖问题。
+```
+
+## 多实现注入
+
+当一个接口有多个实现时，Spring Boot 支持多种注入方式。
+
+### 注入指定实现
+
+如果只想注入某一个实现，可以使用 `@Qualifier`。
+
+示例：
+
+```java
+package io.github.atengk.dependencyinjection.service.impl;
+
+import io.github.atengk.dependencyinjection.sender.NotifyMessage;
+import io.github.atengk.dependencyinjection.sender.NotifySender;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+
+/**
+ * 审计通知业务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class AuditNotifyService {
+
+    private final NotifySender emailNotifySender;
+
+    public AuditNotifyService(@Qualifier("emailNotifySender") NotifySender emailNotifySender) {
+        this.emailNotifySender = emailNotifySender;
+    }
+
+    /**
+     * 发送审计通知
+     *
+     * @param receiver 接收人
+     * @param content 通知内容
+     */
+    public void sendAuditNotify(String receiver, String content) {
+        NotifyMessage message = new NotifyMessage(
+                receiver,
+                "审计通知",
+                content,
+                LocalDateTime.now()
+        );
+
+        emailNotifySender.send(message);
+        log.info("审计通知发送完成，receiver={}", receiver);
+    }
+
+}
+```
+
+这里的 `emailNotifySender` Bean 名称默认来自类名 `EmailNotifySender` 的首字母小写形式。
+
+### 注入所有实现
+
+如果需要根据业务类型动态选择实现，推荐注入 `List<NotifySender>` 或 `Map<String, NotifySender>`。
+
+示例：
+
+```java
+public NotifySenderRegistry(List<NotifySender> notifySenders, NotifyProperties notifyProperties) {
+    this.notifySenders = CollUtil.emptyIfNull(notifySenders);
+    this.notifyProperties = notifyProperties;
+}
+```
+
+这种方式非常适合策略模式、命令模式、责任链模式、事件处理器注册等场景。
+
+## 配置属性注入
+
+业务代码中不要把配置写死。例如默认通知类型、启用通知类型、发送频率、第三方接口地址等，都应该通过配置注入。
+
+推荐写法：
+
+```java
+@ConfigurationProperties(prefix = "notify")
+public record NotifyProperties(
+        NotifyType defaultType,
+        List<NotifyType> enabledTypes
+) {
+}
+```
+
+相比直接使用 `@Value`：
+
+```java
+@Value("${notify.default-type}")
+private String defaultType;
+```
+
+`@ConfigurationProperties` 更适合复杂配置对象，优势是：
+
+```text
+1. 支持配置分组。
+2. 支持类型转换。
+3. 支持参数校验。
+4. 支持配置元数据提示。
+5. 更适合多字段配置。
+```
+
+`@Value` 更适合少量、简单、临时的配置读取。
+
+## 测试中的依赖替换
+
+依赖注入的一个重要价值是测试友好。业务层依赖接口后，测试时可以替换具体实现，而不用改业务代码。
+
+例如测试 `NotifyServiceImpl` 时，可以手动构造一个假的发送器注册器，或者在 Spring Boot 测试中使用 Mock Bean 替换依赖。
+
+示例思路：
+
+```java
+package io.github.atengk.dependencyinjection.service.impl;
+
+import io.github.atengk.dependencyinjection.dto.SendNotifyRequest;
+import io.github.atengk.dependencyinjection.registry.NotifySenderRegistry;
+import io.github.atengk.dependencyinjection.sender.NotifyMessage;
+import io.github.atengk.dependencyinjection.sender.NotifySender;
+import io.github.atengk.dependencyinjection.sender.NotifyType;
+import io.github.atengk.dependencyinjection.vo.SendNotifyResponse;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.mockito.Mockito.*;
+
+/**
+ * 通知业务测试
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+class NotifyServiceImplTest {
+
+    @Test
+    void shouldSendNotifySuccess() {
+        NotifySenderRegistry registry = mock(NotifySenderRegistry.class);
+        NotifySender sender = mock(NotifySender.class);
+
+        when(sender.notifyType()).thenReturn(NotifyType.EMAIL);
+        when(registry.getSender(NotifyType.EMAIL)).thenReturn(sender);
+
+        NotifyServiceImpl notifyService = new NotifyServiceImpl(registry);
+        SendNotifyRequest request = new SendNotifyRequest(
+                NotifyType.EMAIL,
+                "user@example.com",
+                "测试标题",
+                "测试内容"
+        );
+
+        SendNotifyResponse response = notifyService.send(request);
+
+        Assertions.assertTrue(response.success());
+        Assertions.assertEquals(NotifyType.EMAIL, response.notifyType());
+        verify(sender, times(1)).send(any(NotifyMessage.class));
+    }
+
+}
+```
+
+如果项目中使用 Mockito，需要补充测试依赖：
+
+```xml
+<!-- Spring Boot Test：包含 JUnit、Mockito、AssertJ 等常用测试组件 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+构造器注入让测试可以直接 `new NotifyServiceImpl(registry)`，不用启动完整 Spring 容器。
+
+## 适用场景
+
+依赖注入适合绝大多数 Spring Boot 组件协作场景。
+
+常见适用场景：
+
+```text
+Controller 注入 Service：
+- 用户接口调用用户业务
+- 订单接口调用订单业务
+- 支付接口调用支付业务
+
+Service 注入 Repository：
+- 用户业务访问用户仓储
+- 订单业务访问订单仓储
+- 商品业务访问库存仓储
+
+业务注入多个实现：
+- 多通知渠道
+- 多支付渠道
+- 多文件存储实现
+- 多导入解析器
+- 多风控规则
+
+配置注入：
+- 第三方接口地址
+- 默认业务参数
+- 开关配置
+- 限流阈值
+
+测试替换：
+- 替换外部接口
+- 替换消息发送器
+- 替换远程服务客户端
+- 替换数据库访问组件
+```
+
+## 不适用场景
+
+依赖注入虽然常用，但不代表所有对象都必须交给 Spring 管理。
+
+不建议交给 Spring 容器管理的对象：
+
+```text
+1. 简单 DTO、VO、Command、Query 对象。
+2. 每次请求都不同的临时业务数据对象。
+3. 纯局部变量对象。
+4. 无依赖、无状态、只是一次性使用的普通值对象。
+5. 不需要生命周期管理的简单工具返回对象。
+```
+
+例如下面这些对象通常不需要注册为 Bean：
+
+```text
+UserCreateRequest
+OrderCreateCommand
+UserAccountVO
+Money
+Address
+NotifyMessage
+```
+
+这些对象一般由接口反序列化、构造方法、工厂方法或业务流程临时创建即可。
+
+## 和工厂模式的区别
+
+依赖注入模式和工厂模式都能解决对象创建问题，但侧重点不同。
+
+| 对比项   | 依赖注入模式               | 工厂模式            |
+| -------- | -------------------------- | ------------------- |
+| 核心关注 | 谁来装配依赖               | 谁来创建对象        |
+| 创建方   | Spring 容器                | 工厂类              |
+| 使用方式 | 注入 Bean                  | 调用 factory.create |
+| 适合对象 | 稳定组件、服务、策略、配置 | 运行时动态创建对象  |
+| 生命周期 | 通常由容器管理             | 通常由工厂控制      |
+
+简单理解：
+
+```text
+依赖注入适合管理长期存在的组件。
+工厂模式适合按参数动态创建对象。
+```
+
+在 Spring Boot 中，二者经常结合使用。例如 `CouponReceiveSpecificationFactory` 可以由 Spring 注入到 Service 中，而 Factory 内部负责组合规格对象。
+
+## 和策略模式的关系
+
+依赖注入经常和策略模式一起使用。策略模式负责定义多种算法或业务处理方式，依赖注入负责把这些策略实现装配到业务代码中。
+
+例如通知发送：
+
+```text
+策略接口：NotifySender
+策略实现：SmsNotifySender、EmailNotifySender、InAppNotifySender
+策略注册：NotifySenderRegistry
+依赖注入：Spring 自动注入 List<NotifySender>
+```
+
+策略模式回答：
+
+```text
+不同通知类型怎么发送？
+```
+
+依赖注入回答：
+
+```text
+这些通知发送器由谁创建、谁装配、谁传给业务对象？
+```
+
+二者不是竞争关系，而是互补关系。
+
+## 和单例模式的关系
+
+Spring Bean 默认通常是单例作用域，这和单例模式有关，但二者不是完全相同。
+
+| 对比项   | Spring 单例 Bean | 传统单例模式          |
+| -------- | ---------------- | --------------------- |
+| 管理方   | Spring 容器      | 类自己管理            |
+| 创建方式 | 容器创建         | 私有构造器 + 静态实例 |
+| 测试替换 | 容易替换         | 较困难                |
+| 依赖管理 | 容器注入         | 自己查找或创建        |
+| 推荐程度 | Spring 项目推荐  | Spring 项目中较少手写 |
+
+在 Spring Boot 项目中，不建议到处手写传统单例。更推荐把无状态服务注册为 Spring Bean，由容器统一管理。
+
+## 项目落地建议
+
+在 Spring Boot 项目中使用依赖注入模式时，应优先保证依赖清晰、边界稳定、注入方式一致。
+
+建议：
+
+```text
+1. 优先使用构造器注入。
+2. 依赖字段尽量声明为 final。
+3. 不推荐字段注入。
+4. Controller 依赖 Service 接口。
+5. Service 依赖 Repository 接口或业务组件接口。
+6. 多实现接口使用 List、Map、@Qualifier 或注册器统一管理。
+7. 配置项较多时使用 @ConfigurationProperties。
+8. 不要把 DTO、VO、普通值对象注册成 Bean。
+9. 不要在业务代码中频繁 ApplicationContext.getBean。
+10. 避免 Bean 之间形成循环依赖。
+```
+
+推荐写法：
+
+```java
+@Service
+@RequiredArgsConstructor
+public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
+
+    private final ApplicationEventPublisher eventPublisher;
+
 }
 ```
 
-但涉及 `@Qualifier`、复杂构造逻辑或需要明确构造参数时，建议手写构造方法。
+不推荐写法：
 
-## 注意事项
+```java
+@Service
+public class OrderServiceImpl implements OrderService {
 
-依赖注入是 Spring Boot 项目最基础的工程模式，但不要把它理解成简单的 `@Autowired`。它的重点是控制依赖方向、面向接口编程、提高可替换性和可测试性。
+    @Autowired
+    private OrderRepository orderRepository;
 
-适合使用依赖注入的场景：
-
-```text
-Controller 注入 Service
-Service 注入 Repository
-业务类注入策略接口
-配置类注入属性对象
-客户端类注入配置和工具类
-聚合服务注入多个子服务
-测试中注入 Mock 或 Fake 对象
+}
 ```
 
-不太适合使用依赖注入的场景：
+更不推荐写法：
+
+```java
+OrderRepository orderRepository = ApplicationContextHolder.getBean(OrderRepository.class);
+```
+
+直接从容器中取 Bean 会隐藏依赖关系，让代码更难测试和维护。
+
+## 常见问题
+
+### 为什么不推荐字段注入
+
+字段注入虽然少写代码，但缺点明显：
 
 ```text
-简单值对象
+1. 无法使用 final 保证依赖不可变。
+2. 单元测试时不方便手动构造对象。
+3. 依赖关系隐藏在字段上，不如构造器清晰。
+4. 容易掩盖循环依赖。
+5. 对象脱离 Spring 容器后不可用。
+```
+
+构造器注入可以让依赖一眼可见，也更符合不可变对象设计。
+
+### Bean 找不到怎么办
+
+常见原因：
+
+```text
+1. 类没有添加 @Component、@Service、@Repository、@Configuration。
+2. 类不在 Spring Boot 启动类扫描路径下。
+3. 接口有多个实现，但没有指定 @Qualifier 或 @Primary。
+4. 配置条件不满足，例如 @ConditionalOnProperty。
+5. 配置属性类没有开启 @ConfigurationPropertiesScan。
+```
+
+解决思路：
+
+```text
+1. 检查类是否被 Spring 管理。
+2. 检查包路径是否在启动类同级或子级。
+3. 检查是否存在多个候选 Bean。
+4. 检查配置属性是否正确绑定。
+5. 检查启动日志中的 Bean 注册信息。
+```
+
+### 多个实现注入时如何选择
+
+常见方式有四种：
+
+| 方式             | 适合场景               |
+| ---------------- | ---------------------- |
+| `@Qualifier`     | 明确指定某个实现       |
+| `@Primary`       | 设置默认实现           |
+| `List<T>`        | 获取全部实现后自行筛选 |
+| `Map<String, T>` | 按 Bean 名称获取实现   |
+
+如果是业务类型选择，例如支付类型、通知类型、文件类型，推荐使用注册器：
+
+```text
+List<NotifySender>
+ -> NotifySenderRegistry
+ -> 按 NotifyType 获取具体实现
+```
+
+这样比在 Service 中写大量 `if else` 更清晰。
+
+### 是否所有类都要交给 Spring 管理
+
+不是。只有需要被复用、被注入、被代理、被配置管理或参与生命周期管理的组件，才适合交给 Spring 管理。
+
+适合注册为 Bean：
+
+```text
+Service
+Repository
+Controller
+Config
+Client
+Sender
+Handler
+Strategy
+Factory
+Registry
+Listener
+```
+
+不适合注册为 Bean：
+
+```text
 DTO
+VO
 Entity
-临时局部对象
-没有外部依赖的工具方法
-需要频繁创建的有状态对象
+Command
+Query
+Message
+普通值对象
+临时计算对象
 ```
-
-不要把所有类都交给 Spring 管理。领域对象、请求对象、响应对象、临时计算对象通常不需要注册为 Bean。
-
-不推荐：
-
-```java
-@Component
-public class OrderEntity {
-}
-```
-
-推荐：
-
-```java
-public class Order {
-}
-```
-
-Spring Bean 默认是单例。被注入的 Service、Component、Repository 中不要保存请求级状态。
-
-错误示例：
-
-```java
-private Long currentUserId;
-private String currentOrderNo;
-```
-
-推荐使用方法参数和局部变量：
-
-```java
-public OrderCreateResponse create(OrderCreateRequest request) {
-    String orderNo = "ORDER" + IdUtil.getSnowflakeNextId();
-    return response;
-}
-```
-
-依赖注入应该尽量依赖接口，而不是直接依赖实现类。
-
-不推荐：
-
-```java
-private final SmsOrderNoticeSender smsOrderNoticeSender;
-```
-
-推荐：
-
-```java
-private final OrderNoticeSender orderNoticeSender;
-```
-
-但也不要为了形式强行抽接口。如果某个类没有替换实现、没有测试替身、没有扩展点，直接注入具体类也可以接受。接口应该服务于抽象和扩展，而不是机械分层。
-
-构造方法参数过多通常说明类职责过重。如果一个 Service 构造方法注入了十几个依赖，需要考虑拆分服务或引入中介者、外观、领域服务等结构。
-
-风险示例：
-
-```text
-OrderService(
-    UserService,
-    ProductService,
-    InventoryService,
-    PaymentService,
-    CouponService,
-    NoticeService,
-    AuditService,
-    RiskService,
-    DeliveryService
-)
-```
-
-这种类往往已经变成上帝服务，建议拆分业务用例或抽出协调层。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，依赖注入模式的实践重点是让对象不主动创建依赖，而是通过构造方法、配置对象、集合注入或容器注入获得依赖，从而降低耦合、提升可测试性和扩展性。
+依赖注入模式是 Spring Boot 项目中最基础的工程模式之一。它把对象创建和依赖装配交给 Spring 容器，让业务代码只依赖抽象接口和稳定组件。
 
-普通 Java 依赖注入适合理解构造方法注入的本质。Spring Boot 项目中更推荐使用“接口 + 实现类 Bean + 构造方法注入”的结构。对于多实现注入，可以使用 `@Qualifier`、`@Primary`、`List`、`Map` 或上下文选择器。对于配置注入，推荐使用 `@ConfigurationProperties` 绑定配置对象。
+推荐落地方式：
 
-依赖注入不是简单使用 `@Autowired`，也不是把所有对象都交给 Spring 管理。它最适合处理“业务类依赖外部协作对象，并且依赖需要可替换、可测试、可组合”的场景。实际落地时，需要重点关注构造方法注入、多实现歧义、循环依赖、字段注入滥用、Bean 扫描范围和单例 Bean 的线程安全问题。
+```text
+Controller
+ -> 注入 Service
+
+Service
+ -> 注入 Repository、Registry、Factory、Publisher
+
+Registry
+ -> 注入多个 Strategy、Sender、Handler 实现
+
+Properties
+ -> 注入 application.yml 配置
+```
+
+在真实项目中，依赖注入通常会和策略模式、工厂模式、仓储模式、事件驱动模式一起使用。它本身不直接解决某个业务算法问题，但能让对象协作关系更清晰，代码更容易扩展、替换、测试和维护。

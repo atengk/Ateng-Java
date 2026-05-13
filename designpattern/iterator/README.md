@@ -1,346 +1,280 @@
-# 设计模式：迭代器模式
+# 迭代器模式
 
-迭代器模式用于在不暴露集合内部结构的前提下，按统一方式顺序访问集合中的元素。在 JDK21 和 Spring Boot 3 项目中，迭代器模式常用于分页数据遍历、树节点遍历、批量任务扫描、文件记录读取、游标查询、大数据分批处理、聚合对象内部元素访问等场景。
+迭代器模式用于在不暴露集合内部结构的情况下，按统一方式顺序访问集合元素。
+在 Spring Boot 项目中，迭代器模式常用于分页批处理、批量导出、批量发送通知、数据迁移、游标扫描、分批消费任务、批量补偿处理等场景。
 
-需要注意：迭代器模式关注的是“如何遍历集合”。如果是处理树形整体和部分结构，更适合组合模式；如果是把操作封装成对象，更适合命令模式；如果是对大批量数据进行分批扫描且隐藏分页细节，迭代器模式更合适。
+本文以“分页批量处理订单数据”为例，通过迭代器按批读取订单，避免一次性把全部订单加载到内存中。
+
+## 适用场景
+
+迭代器模式适合处理“调用方需要遍历数据，但不应该关心数据如何读取”的场景。
+
+在订单批处理业务中，常见需求包括：
+
+| 场景         | 说明                                             |
+| ------------ | ------------------------------------------------ |
+| 批量导出订单 | 按批读取订单，逐批写入 Excel、CSV 或对象存储     |
+| 批量补偿订单 | 查询待补偿订单，逐批执行补偿逻辑                 |
+| 批量发送通知 | 查询满足条件的订单，逐批发送短信、站内信或 MQ    |
+| 批量同步数据 | 按游标读取订单，同步到搜索引擎、数仓或第三方系统 |
+| 批量巡检状态 | 分批扫描异常订单，输出巡检报告                   |
+
+如果在 Service 中直接写分页循环，业务代码会混合“分页读取逻辑”和“订单处理逻辑”。迭代器模式可以把分页读取细节封装起来，调用方只需要不断判断是否还有下一批数据，然后处理当前批次。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 Spring Boot 3，使用 Hutool、Lombok 和 Validation。Hutool 用于集合判断、字符串判断、计时和 ID 生成，Validation 用于接口参数基础校验。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证迭代器模式行为 -->
+    <!-- Spring Boot Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、集合、ID 等通用处理 -->
+    <!-- Spring Boot Validation：用于接口参数基础校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：提供集合、字符串、计时、ID生成等工具能力 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.29</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、Getter、构造方法等样板代码 -->
+    <!-- Lombok：简化 Getter、Setter、构造器、日志对象等代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
-
-## 核心概念
-
-迭代器模式的核心目标是把集合遍历逻辑从集合对象中拆出来，让调用方通过统一的迭代接口访问元素，而不用关心底层数据是数组、列表、树、分页接口还是游标查询。
-
-常见角色如下：
-
-| 角色              | 说明                                          |
-| ----------------- | --------------------------------------------- |
-| Iterator          | 迭代器接口，定义 `hasNext`、`next` 等访问方法 |
-| ConcreteIterator  | 具体迭代器，实现具体遍历逻辑                  |
-| Aggregate         | 聚合对象，表示可被遍历的数据集合              |
-| ConcreteAggregate | 具体聚合对象，负责创建迭代器                  |
-| Client            | 调用方，面向迭代器访问元素                    |
-
-常见实现方式如下：
-
-| 实现方式         | 是否推荐 | 适用场景                     |
-| ---------------- | -------- | ---------------------------- |
-| Java `Iterator`  | 推荐     | 本地集合遍历                 |
-| 自定义迭代器     | 推荐     | 需要隐藏特殊遍历规则         |
-| 分页迭代器       | 强烈推荐 | 批量处理数据库或远程接口数据 |
-| 游标迭代器       | 强烈推荐 | 大数据量扫描                 |
-| 直接暴露内部集合 | 不推荐   | 调用方容易依赖内部结构       |
-
-在 Spring Boot 项目中，常见优先级通常是：
+建议目录结构如下：
 
 ```text
-分页迭代器 / 游标迭代器 > Java Iterator > 直接暴露内部 List
+src/main/java/io/github/atengk/pattern/iterator
+├── IteratorApplication.java
+├── common
+│   ├── ApiResult.java
+│   ├── BizException.java
+│   └── GlobalExceptionHandler.java
+└── order
+    ├── controller
+    │   └── OrderBatchController.java
+    ├── dto
+    │   └── OrderBatchProcessRequest.java
+    ├── entity
+    │   └── OrderInfo.java
+    ├── iterator
+    │   ├── OrderBatchIterator.java
+    │   ├── OrderBatchIteratorFactory.java
+    │   └── OrderCursorBatchIterator.java
+    ├── repository
+    │   └── MockOrderRepository.java
+    ├── service
+    │   ├── OrderBatchService.java
+    │   └── impl
+    │       └── OrderBatchServiceImpl.java
+    └── vo
+        └── OrderBatchProcessResultVO.java
 ```
 
-迭代器模式不是为了替代所有 `for` 循环，而是为了把“如何取下一批数据、如何判断是否结束、如何隐藏内部结构”这些遍历细节封装起来。
+## 核心设计
 
-## 普通 Java 迭代器
+本示例使用“游标批量迭代器”实现订单分页读取。相比普通页码分页，游标分页在批处理场景中更稳定，尤其适合大数据量扫描。
 
-普通 Java 迭代器适合不依赖 Spring 容器的集合遍历场景。下面以订单集合为例，调用方只通过迭代器遍历订单，不直接操作订单列表。
+角色关系如下：
 
-整体结构如下：
+| 角色                | 项目中的类                  | 说明                                    |
+| ------------------- | --------------------------- | --------------------------------------- |
+| Iterator            | `OrderBatchIterator`        | 定义是否存在下一批、获取下一批数据      |
+| ConcreteIterator    | `OrderCursorBatchIterator`  | 基于游标按批读取订单                    |
+| Aggregate / Factory | `OrderBatchIteratorFactory` | 创建具体订单迭代器                      |
+| Client              | `OrderBatchServiceImpl`     | 使用迭代器处理订单，不关心读取细节      |
+| Data Source         | `MockOrderRepository`       | 模拟订单数据源，实际项目可替换为 Mapper |
+
+执行流程如下：
 
 ```text
-OrderCollection
-    -> 创建 OrderIterator
-        -> hasNext()
-        -> next()
+Controller
+  -> OrderBatchService
+    -> OrderBatchIteratorFactory
+      -> OrderCursorBatchIterator
+        -> MockOrderRepository
+    -> while(iterator.hasNext())
+      -> iterator.next()
+      -> 处理当前批次订单
 ```
 
-### 文件结构
+迭代器只负责“如何读取下一批数据”，Service 只负责“拿到数据后如何处理”。
 
-```text
-src/main/java/io/github/atengk/design/iterator/simple/
-├── OrderItem.java
-├── OrderIterator.java
-└── OrderCollection.java
-```
+## 公共代码
 
-文件位置：`src/main/java/io/github/atengk/design/iterator/simple/OrderItem.java`
+公共响应对象、业务异常和全局异常处理用于统一接口返回。实际项目中可以复用已有基础包。
 
-下面是订单元素对象，用于表示集合中的单个订单。
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/common/ApiResult.java`
 
 ```java
-package io.github.atengk.design.iterator.simple;
+package io.github.atengk.pattern.iterator.common;
 
-import java.math.BigDecimal;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * 订单元素
+ * 统一接口响应对象
  *
- * @param orderNo 订单号
- * @param userId  用户ID
- * @param amount  订单金额
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderItem(String orderNo, Long userId, BigDecimal amount) {
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    /**
+     * 返回成功结果
+     *
+     * @param data 响应数据
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(200, "操作成功", data);
+    }
+
+    /**
+     * 返回失败结果
+     *
+     * @param message 错误信息
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> fail(String message) {
+        return new ApiResult<>(500, message, null);
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/iterator/simple/OrderIterator.java`
-
-下面是订单迭代器接口，定义是否存在下一个元素以及获取下一个元素的方法。
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/common/BizException.java`
 
 ```java
-package io.github.atengk.design.iterator.simple;
+package io.github.atengk.pattern.iterator.common;
 
 /**
- * 订单迭代器
+ * 业务异常
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface OrderIterator {
+public class BizException extends RuntimeException {
 
     /**
-     * 是否存在下一个订单
+     * 创建业务异常
      *
-     * @return true 表示存在，false 表示不存在
+     * @param message 异常信息
      */
-    boolean hasNext();
+    public BizException(String message) {
+        super(message);
+    }
 
-    /**
-     * 获取下一个订单
-     *
-     * @return 订单元素
-     */
-    OrderItem next();
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/iterator/simple/OrderCollection.java`
-
-下面是订单集合对象。它隐藏内部列表结构，只对外提供添加订单和创建迭代器能力。
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/common/GlobalExceptionHandler.java`
 
 ```java
-package io.github.atengk.design.iterator.simple;
+package io.github.atengk.pattern.iterator.common;
 
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NoSuchElementException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * 订单集合
+ * 全局异常处理器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
-public class OrderCollection {
-
-    private final List<OrderItem> orders = new ArrayList<>();
+@RestControllerAdvice
+public class GlobalExceptionHandler {
 
     /**
-     * 添加订单
+     * 处理业务异常
      *
-     * @param order 订单元素
+     * @param exception 业务异常
+     * @return 统一响应对象
      */
-    public void add(OrderItem order) {
-        validateOrder(order);
-
-        orders.add(order);
-        log.info("添加订单到集合成功，订单号：{}，当前数量：{}", order.orderNo(), orders.size());
+    @ExceptionHandler(BizException.class)
+    public ApiResult<Void> handleBizException(BizException exception) {
+        log.warn("业务处理失败：{}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
     }
 
     /**
-     * 创建订单迭代器
+     * 处理参数校验异常
      *
-     * @return 订单迭代器
+     * @param exception 参数校验异常
+     * @return 统一响应对象
      */
-    public OrderIterator iterator() {
-        return new ListOrderIterator(List.copyOf(orders));
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ApiResult<Void> handleValidException(Exception exception) {
+        log.warn("接口参数校验失败：{}", exception.getMessage());
+        return ApiResult.fail("请求参数不合法");
     }
 
     /**
-     * 获取订单数量
+     * 处理请求体解析异常
      *
-     * @return 订单数量
+     * @param exception 请求体解析异常
+     * @return 统一响应对象
      */
-    public int size() {
-        return orders.size();
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResult<Void> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("请求体解析失败：{}", exception.getMessage());
+        return ApiResult.fail("请求体格式不正确");
     }
 
     /**
-     * 校验订单元素
+     * 处理系统异常
      *
-     * @param order 订单元素
+     * @param exception 系统异常
+     * @return 统一响应对象
      */
-    private void validateOrder(OrderItem order) {
-        if (order == null) {
-            log.warn("添加订单失败，订单为空");
-            throw new IllegalArgumentException("订单不能为空");
-        }
-
-        if (StrUtil.isBlank(order.orderNo())) {
-            log.warn("添加订单失败，订单号为空");
-            throw new IllegalArgumentException("订单号不能为空");
-        }
-
-        if (order.userId() == null || order.userId() <= 0) {
-            log.warn("添加订单失败，用户ID不合法，用户ID：{}", order.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (order.amount() == null || order.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("添加订单失败，订单金额不合法，金额：{}", order.amount());
-            throw new IllegalArgumentException("订单金额必须大于0");
-        }
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统异常", exception);
+        return ApiResult.fail("系统繁忙，请稍后重试");
     }
 
-    /**
-     * 基于列表的订单迭代器
-     *
-     * @author Ateng
-     * @since 2026-04-30
-     */
-    private static class ListOrderIterator implements OrderIterator {
-
-        private final List<OrderItem> orders;
-        private int cursor = 0;
-
-        /**
-         * 创建基于列表的订单迭代器
-         *
-         * @param orders 订单列表
-         */
-        private ListOrderIterator(List<OrderItem> orders) {
-            this.orders = CollUtil.emptyIfNull(orders);
-        }
-
-        /**
-         * 是否存在下一个订单
-         *
-         * @return true 表示存在，false 表示不存在
-         */
-        @Override
-        public boolean hasNext() {
-            return cursor < orders.size();
-        }
-
-        /**
-         * 获取下一个订单
-         *
-         * @return 订单元素
-         */
-        @Override
-        public OrderItem next() {
-            if (!hasNext()) {
-                throw new NoSuchElementException("没有更多订单");
-            }
-
-            return orders.get(cursor++);
-        }
-    }
 }
 ```
 
-使用方式：
+## 完整代码
+
+下面给出迭代器模式的核心实现。示例使用内存集合模拟订单表，实际项目中可以把 `MockOrderRepository` 替换成 MyBatis-Plus Mapper，并使用 `id > lastId limit batchSize` 的方式查询。
+
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/IteratorApplication.java`
 
 ```java
-OrderCollection collection = new OrderCollection();
-collection.add(new OrderItem("ORDER10001", 10001L, BigDecimal.valueOf(99.90)));
-collection.add(new OrderItem("ORDER10002", 10002L, BigDecimal.valueOf(199.00)));
-
-OrderIterator iterator = collection.iterator();
-while (iterator.hasNext()) {
-    OrderItem order = iterator.next();
-    System.out.println(order.orderNo());
-}
-```
-
-调用方只通过 `OrderIterator` 访问订单元素，不需要知道 `OrderCollection` 内部使用的是 `ArrayList`、数组还是其他结构。
-
-## Spring Boot 分页迭代器
-
-Spring Boot 项目中，迭代器模式更常见的价值是隐藏分页查询细节。调用方只需要不断调用 `hasNext` 和 `next`，不用关心当前是第几页、每页多少条、什么时候加载下一页。
-
-下面以订单批量处理为例，系统需要分页扫描订单，并逐个处理订单。
-
-整体流程如下：
-
-```text
-Controller 触发处理
-    -> OrderBatchProcessService
-        -> OrderPageIterator
-            -> OrderQueryService 分页查询
-                -> 逐个返回订单
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
-├── IteratorApplication.java
-├── controller/
-│   └── OrderBatchController.java
-├── dto/
-│   ├── OrderData.java
-│   ├── PageQuery.java
-│   ├── PageResult.java
-│   └── BatchProcessResponse.java
-├── iterator/
-│   └── OrderPageIterator.java
-└── service/
-    ├── OrderQueryService.java
-    ├── OrderBatchProcessService.java
-    └── impl/
-        ├── OrderQueryServiceImpl.java
-        └── OrderBatchProcessServiceImpl.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/IteratorApplication.java`
-
-下面是 Spring Boot 启动类。
-
-```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.iterator;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -349,934 +283,779 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 迭代器模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class IteratorApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(IteratorApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderData.java`
+## 订单模型
 
-下面是订单数据对象，用于模拟数据库查询结果。
+订单实体用于模拟数据库中的订单记录。这里保留 `id` 字段作为游标分页依据。
+
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/entity/OrderInfo.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.iterator.order.entity;
+
+import lombok.Builder;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单数据
+ * 订单信息实体
  *
- * @param orderNo 订单号
- * @param userId  用户ID
- * @param amount  订单金额
- * @param status  订单状态
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderData(
-        String orderNo,
-        Long userId,
-        BigDecimal amount,
-        String status
-) {
+@Data
+@Builder
+public class OrderInfo {
+
+    private Long id;
+
+    private String orderNo;
+
+    private Long userId;
+
+    private Long productId;
+
+    private BigDecimal amount;
+
+    private String status;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/PageQuery.java`
+请求对象用于接收批处理参数，包括订单状态和每批处理数量。
 
-下面是分页查询对象。
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/dto/OrderBatchProcessRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.iterator.order.dto;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
 
 /**
- * 分页查询
+ * 订单批处理请求参数
  *
- * @param pageNum  页码，从 1 开始
- * @param pageSize 每页大小
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record PageQuery(Integer pageNum, Integer pageSize) {
+@Data
+public class OrderBatchProcessRequest {
+
+    @NotBlank(message = "订单状态不能为空")
+    private String status;
+
+    @Min(value = 1, message = "每批处理数量不能小于1")
+    @Max(value = 500, message = "每批处理数量不能大于500")
+    private Integer batchSize = 20;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/PageResult.java`
+响应对象用于返回批处理结果，包括总处理数量、批次数和处理状态。
 
-下面是分页结果对象。
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/vo/OrderBatchProcessResultVO.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.iterator.order.vo;
 
-import java.util.List;
+import lombok.Builder;
+import lombok.Data;
 
 /**
- * 分页结果
+ * 订单批处理结果
  *
- * @param records  当前页数据
- * @param pageNum  当前页码
- * @param pageSize 每页大小
- * @param total    总数量
- * @param hasNext  是否存在下一页
- * @param <T>      数据类型
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record PageResult<T>(
-        List<T> records,
-        Integer pageNum,
-        Integer pageSize,
-        Long total,
-        Boolean hasNext
-) {
+@Data
+@Builder
+public class OrderBatchProcessResultVO {
+
+    private String status;
+
+    private Integer batchSize;
+
+    private Integer batchCount;
+
+    private Integer totalCount;
+
+    private Long costMillis;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/BatchProcessResponse.java`
+## 模拟数据源
 
-下面是批量处理响应对象。
+这里使用 `MockOrderRepository` 模拟订单表。核心方法是 `queryByStatusAfterId`，它根据状态和游标 ID 查询下一批订单。
 
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 批量处理响应
- *
- * @param totalCount  处理数量
- * @param totalAmount 处理总金额
- * @param message     响应消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record BatchProcessResponse(
-        Integer totalCount,
-        BigDecimal totalAmount,
-        String message
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/OrderQueryService.java`
-
-下面是订单查询服务接口，负责按分页条件查询订单。
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/repository/MockOrderRepository.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.iterator.order.repository;
 
-import io.github.atengk.design.dto.OrderData;
-import io.github.atengk.design.dto.PageQuery;
-import io.github.atengk.design.dto.PageResult;
-
-/**
- * 订单查询服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface OrderQueryService {
-
-    /**
-     * 分页查询订单
-     *
-     * @param query 分页查询
-     * @return 订单分页结果
-     */
-    PageResult<OrderData> queryPage(PageQuery query);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderQueryServiceImpl.java`
-
-下面是订单查询服务实现。示例使用内存数据模拟数据库分页查询，实际项目中可以替换为 MyBatis-Plus 分页查询。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import cn.hutool.core.collection.CollUtil;
-import io.github.atengk.design.dto.OrderData;
-import io.github.atengk.design.dto.PageQuery;
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.service.OrderQueryService;
+import cn.hutool.core.util.IdUtil;
+import io.github.atengk.pattern.iterator.order.entity.OrderInfo;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * 订单查询服务实现
+ * 模拟订单数据仓储
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
-@Service
-public class OrderQueryServiceImpl implements OrderQueryService {
+@Repository
+public class MockOrderRepository {
 
-    private static final List<OrderData> MOCK_ORDERS = List.of(
-            new OrderData("ORDER10001", 10001L, BigDecimal.valueOf(99.90), "PAID"),
-            new OrderData("ORDER10002", 10002L, BigDecimal.valueOf(199.00), "PAID"),
-            new OrderData("ORDER10003", 10003L, BigDecimal.valueOf(49.90), "CREATED"),
-            new OrderData("ORDER10004", 10004L, BigDecimal.valueOf(299.00), "PAID"),
-            new OrderData("ORDER10005", 10005L, BigDecimal.valueOf(18.80), "CANCELED"),
-            new OrderData("ORDER10006", 10006L, BigDecimal.valueOf(66.60), "PAID")
-    );
+    private final List<OrderInfo> orderStorage = new ArrayList<>();
 
     /**
-     * 分页查询订单
-     *
-     * @param query 分页查询
-     * @return 订单分页结果
+     * 初始化模拟订单数据
      */
-    @Override
-    public PageResult<OrderData> queryPage(PageQuery query) {
-        validateQuery(query);
+    @PostConstruct
+    public void initData() {
+        for (long index = 1; index <= 105; index++) {
+            String status = index % 3 == 0 ? "CANCELED" : "PAID";
 
-        int fromIndex = (query.pageNum() - 1) * query.pageSize();
-        if (fromIndex >= MOCK_ORDERS.size()) {
-            log.info("分页查询订单为空，页码：{}，每页大小：{}", query.pageNum(), query.pageSize());
-            return new PageResult<>(List.of(), query.pageNum(), query.pageSize(), (long) MOCK_ORDERS.size(), false);
+            OrderInfo orderInfo = OrderInfo.builder()
+                    .id(index)
+                    .orderNo("OD" + IdUtil.getSnowflakeNextIdStr())
+                    .userId(10000L + index)
+                    .productId(20000L + index)
+                    .amount(BigDecimal.valueOf(50 + index))
+                    .status(status)
+                    .build();
+
+            orderStorage.add(orderInfo);
         }
 
-        int toIndex = Math.min(fromIndex + query.pageSize(), MOCK_ORDERS.size());
-        List<OrderData> records = MOCK_ORDERS.subList(fromIndex, toIndex);
-        boolean hasNext = toIndex < MOCK_ORDERS.size();
-
-        log.info("分页查询订单成功，页码：{}，每页大小：{}，当前数量：{}，是否有下一页：{}",
-                query.pageNum(), query.pageSize(), CollUtil.size(records), hasNext);
-
-        return new PageResult<>(
-                records,
-                query.pageNum(),
-                query.pageSize(),
-                (long) MOCK_ORDERS.size(),
-                hasNext
-        );
+        log.info("模拟订单数据初始化完成，订单数量：{}", orderStorage.size());
     }
 
     /**
-     * 校验分页查询
+     * 根据订单状态和游标ID查询下一批订单
      *
-     * @param query 分页查询
+     * @param status 订单状态
+     * @param lastId 上一次读取到的最大ID
+     * @param limit 查询数量
+     * @return 订单列表
      */
-    private void validateQuery(PageQuery query) {
-        if (query == null) {
-            log.warn("分页查询订单失败，查询参数为空");
-            throw new IllegalArgumentException("分页查询参数不能为空");
-        }
-
-        if (query.pageNum() == null || query.pageNum() <= 0) {
-            log.warn("分页查询订单失败，页码不合法，页码：{}", query.pageNum());
-            throw new IllegalArgumentException("页码必须大于0");
-        }
-
-        if (query.pageSize() == null || query.pageSize() <= 0) {
-            log.warn("分页查询订单失败，每页大小不合法，每页大小：{}", query.pageSize());
-            throw new IllegalArgumentException("每页大小必须大于0");
-        }
+    public List<OrderInfo> queryByStatusAfterId(String status, Long lastId, Integer limit) {
+        return orderStorage.stream()
+                .filter(orderInfo -> orderInfo.getStatus().equalsIgnoreCase(status))
+                .filter(orderInfo -> orderInfo.getId() > lastId)
+                .sorted(Comparator.comparingLong(OrderInfo::getId))
+                .limit(limit)
+                .toList();
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/iterator/OrderPageIterator.java`
+## 迭代器接口
 
-下面是订单分页迭代器。它内部维护分页状态，调用方只需要逐个取订单。
+迭代器接口定义批量读取的统一行为。调用方不需要知道数据来自数据库、缓存、文件还是远程接口。
+
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/iterator/OrderBatchIterator.java`
 
 ```java
-package io.github.atengk.design.iterator;
+package io.github.atengk.pattern.iterator.order.iterator;
 
-import cn.hutool.core.collection.CollUtil;
-import io.github.atengk.design.dto.OrderData;
-import io.github.atengk.design.dto.PageQuery;
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.service.OrderQueryService;
-import lombok.extern.slf4j.Slf4j;
+import io.github.atengk.pattern.iterator.order.entity.OrderInfo;
 
-import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 /**
- * 订单分页迭代器
+ * 订单批量迭代器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-public class OrderPageIterator implements Iterator<OrderData> {
-
-    private final OrderQueryService orderQueryService;
-    private final int pageSize;
-
-    private int currentPageNum = 1;
-    private boolean hasMorePage = true;
-    private List<OrderData> currentRecords = List.of();
-    private int currentIndex = 0;
+public interface OrderBatchIterator {
 
     /**
-     * 创建订单分页迭代器
+     * 判断是否存在下一批订单
      *
-     * @param orderQueryService 订单查询服务
-     * @param pageSize          每页大小
+     * @return 是否存在下一批
      */
-    public OrderPageIterator(OrderQueryService orderQueryService, int pageSize) {
-        if (orderQueryService == null) {
-            throw new IllegalArgumentException("订单查询服务不能为空");
-        }
+    boolean hasNext();
 
-        if (pageSize <= 0) {
-            throw new IllegalArgumentException("每页大小必须大于0");
-        }
+    /**
+     * 获取下一批订单
+     *
+     * @return 下一批订单列表
+     */
+    List<OrderInfo> next();
 
-        this.orderQueryService = orderQueryService;
-        this.pageSize = pageSize;
+}
+```
+
+## 游标批量迭代器
+
+具体迭代器封装游标分页逻辑。调用方只需要调用 `hasNext()` 和 `next()`，不用关心 `lastId` 如何维护。
+
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/iterator/OrderCursorBatchIterator.java`
+
+```java
+package io.github.atengk.pattern.iterator.order.iterator;
+
+import cn.hutool.core.collection.CollUtil;
+import io.github.atengk.pattern.iterator.common.BizException;
+import io.github.atengk.pattern.iterator.order.entity.OrderInfo;
+import io.github.atengk.pattern.iterator.order.repository.MockOrderRepository;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * 基于游标的订单批量迭代器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+public class OrderCursorBatchIterator implements OrderBatchIterator {
+
+    private final MockOrderRepository orderRepository;
+
+    private final String status;
+
+    private final Integer batchSize;
+
+    private Long lastId = 0L;
+
+    private Boolean loaded = false;
+
+    private Boolean finished = false;
+
+    private List<OrderInfo> currentBatch = Collections.emptyList();
+
+    /**
+     * 创建订单游标批量迭代器
+     *
+     * @param orderRepository 订单仓储
+     * @param status 订单状态
+     * @param batchSize 每批数量
+     */
+    public OrderCursorBatchIterator(MockOrderRepository orderRepository, String status, Integer batchSize) {
+        this.orderRepository = orderRepository;
+        this.status = status;
+        this.batchSize = batchSize;
     }
 
     /**
-     * 是否存在下一个订单
+     * 判断是否存在下一批订单
      *
-     * @return true 表示存在，false 表示不存在
+     * @return 是否存在下一批
      */
     @Override
     public boolean hasNext() {
-        if (currentIndex < currentRecords.size()) {
-            return true;
-        }
-
-        if (!hasMorePage) {
+        if (finished) {
             return false;
         }
 
-        loadNextPage();
-        return currentIndex < currentRecords.size();
-    }
-
-    /**
-     * 获取下一个订单
-     *
-     * @return 订单数据
-     */
-    @Override
-    public OrderData next() {
-        if (!hasNext()) {
-            throw new NoSuchElementException("没有更多订单数据");
+        if (!loaded) {
+            loadNextBatch();
         }
 
-        return currentRecords.get(currentIndex++);
+        return CollUtil.isNotEmpty(currentBatch);
     }
 
     /**
-     * 加载下一页数据
+     * 获取下一批订单
+     *
+     * @return 下一批订单列表
      */
-    private void loadNextPage() {
-        PageResult<OrderData> pageResult = orderQueryService.queryPage(new PageQuery(currentPageNum, pageSize));
+    @Override
+    public List<OrderInfo> next() {
+        if (!hasNext()) {
+            throw new BizException("没有可读取的下一批订单");
+        }
 
-        currentRecords = CollUtil.emptyIfNull(pageResult.records());
-        currentIndex = 0;
-        hasMorePage = Boolean.TRUE.equals(pageResult.hasNext());
-        currentPageNum++;
+        List<OrderInfo> result = currentBatch;
+        OrderInfo lastOrder = result.get(result.size() - 1);
+        lastId = lastOrder.getId();
 
-        log.info("订单分页迭代器加载数据，页码：{}，数量：{}，是否有下一页：{}",
-                pageResult.pageNum(), currentRecords.size(), hasMorePage);
+        loaded = false;
+        currentBatch = Collections.emptyList();
+
+        log.info("读取下一批订单完成，status：{}，lastId：{}，batchCount：{}",
+                status, lastId, result.size());
+
+        return result;
     }
+
+    /**
+     * 加载下一批订单
+     */
+    private void loadNextBatch() {
+        currentBatch = orderRepository.queryByStatusAfterId(status, lastId, batchSize);
+        loaded = true;
+
+        if (CollUtil.isEmpty(currentBatch)) {
+            finished = true;
+            log.info("订单迭代器读取结束，status：{}，lastId：{}", status, lastId);
+        }
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/OrderBatchProcessService.java`
+## 迭代器工厂
 
-下面是订单批量处理服务接口。
+迭代器工厂负责创建具体迭代器。这样 Service 不直接依赖具体迭代器构造细节，后续可以扩展为数据库迭代器、Redis 迭代器或远程接口迭代器。
+
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/iterator/OrderBatchIteratorFactory.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.iterator.order.iterator;
 
-import io.github.atengk.design.dto.BatchProcessResponse;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.iterator.common.BizException;
+import io.github.atengk.pattern.iterator.order.repository.MockOrderRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /**
- * 订单批量处理服务
+ * 订单批量迭代器工厂
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface OrderBatchProcessService {
+@Component
+@RequiredArgsConstructor
+public class OrderBatchIteratorFactory {
+
+    private final MockOrderRepository orderRepository;
+
+    /**
+     * 创建按订单状态读取的批量迭代器
+     *
+     * @param status 订单状态
+     * @param batchSize 每批数量
+     * @return 订单批量迭代器
+     */
+    public OrderBatchIterator createByStatus(String status, Integer batchSize) {
+        if (StrUtil.isBlank(status)) {
+            throw new BizException("订单状态不能为空");
+        }
+
+        if (batchSize == null || batchSize <= 0) {
+            throw new BizException("每批处理数量必须大于0");
+        }
+
+        return new OrderCursorBatchIterator(orderRepository, StrUtil.upperCase(status), batchSize);
+    }
+
+}
+```
+
+## 业务服务
+
+业务服务是迭代器的使用方。它只关心“是否还有下一批”和“如何处理当前批次”，不关心数据源如何分页读取。
+
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/service/OrderBatchService.java`
+
+```java
+package io.github.atengk.pattern.iterator.order.service;
+
+import io.github.atengk.pattern.iterator.order.dto.OrderBatchProcessRequest;
+import io.github.atengk.pattern.iterator.order.vo.OrderBatchProcessResultVO;
+
+/**
+ * 订单批处理服务接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderBatchService {
 
     /**
      * 批量处理订单
      *
-     * @param pageSize 每页大小
-     * @return 批量处理响应
+     * @param request 订单批处理请求
+     * @return 批处理结果
      */
-    BatchProcessResponse process(Integer pageSize);
+    OrderBatchProcessResultVO processOrders(OrderBatchProcessRequest request);
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderBatchProcessServiceImpl.java`
+Service 实现类使用迭代器循环读取订单，并逐批执行处理逻辑。
 
-下面是订单批量处理服务实现。它使用分页迭代器逐个处理订单，不直接关心分页查询细节。
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/service/impl/OrderBatchServiceImpl.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.iterator.order.service.impl;
 
-import cn.hutool.core.util.NumberUtil;
-import io.github.atengk.design.dto.BatchProcessResponse;
-import io.github.atengk.design.dto.OrderData;
-import io.github.atengk.design.iterator.OrderPageIterator;
-import io.github.atengk.design.service.OrderBatchProcessService;
-import io.github.atengk.design.service.OrderQueryService;
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.date.TimeInterval;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.iterator.order.dto.OrderBatchProcessRequest;
+import io.github.atengk.pattern.iterator.order.entity.OrderInfo;
+import io.github.atengk.pattern.iterator.order.iterator.OrderBatchIterator;
+import io.github.atengk.pattern.iterator.order.iterator.OrderBatchIteratorFactory;
+import io.github.atengk.pattern.iterator.order.service.OrderBatchService;
+import io.github.atengk.pattern.iterator.order.vo.OrderBatchProcessResultVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
+import java.util.List;
 
 /**
- * 订单批量处理服务实现
+ * 订单批处理服务实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OrderBatchProcessServiceImpl implements OrderBatchProcessService {
+public class OrderBatchServiceImpl implements OrderBatchService {
 
-    private final OrderQueryService orderQueryService;
+    private final OrderBatchIteratorFactory orderBatchIteratorFactory;
 
     /**
      * 批量处理订单
      *
-     * @param pageSize 每页大小
-     * @return 批量处理响应
+     * @param request 订单批处理请求
+     * @return 批处理结果
      */
     @Override
-    public BatchProcessResponse process(Integer pageSize) {
-        int actualPageSize = pageSize == null || pageSize <= 0 ? 2 : pageSize;
-        OrderPageIterator iterator = new OrderPageIterator(orderQueryService, actualPageSize);
+    public OrderBatchProcessResultVO processOrders(OrderBatchProcessRequest request) {
+        TimeInterval timer = DateUtil.timer();
 
+        String status = StrUtil.upperCase(request.getStatus());
+        Integer batchSize = request.getBatchSize();
+
+        OrderBatchIterator iterator = orderBatchIteratorFactory.createByStatus(status, batchSize);
+
+        int batchCount = 0;
         int totalCount = 0;
-        BigDecimal totalAmount = BigDecimal.ZERO;
 
         while (iterator.hasNext()) {
-            OrderData order = iterator.next();
+            List<OrderInfo> orderBatch = iterator.next();
 
-            if (!"PAID".equals(order.status())) {
-                log.info("跳过非已支付订单，订单号：{}，状态：{}", order.orderNo(), order.status());
-                continue;
-            }
+            batchCount++;
+            totalCount += orderBatch.size();
 
-            totalCount++;
-            totalAmount = NumberUtil.add(totalAmount, order.amount());
-
-            log.info("处理已支付订单，订单号：{}，用户ID：{}，金额：{}", order.orderNo(), order.userId(), order.amount());
+            handleOrderBatch(orderBatch, batchCount);
         }
 
-        log.info("批量处理订单完成，处理数量：{}，处理总金额：{}", totalCount, totalAmount);
+        long costMillis = timer.interval();
+        log.info("订单批处理完成，status：{}，batchSize：{}，batchCount：{}，totalCount：{}，costMillis：{}",
+                status, batchSize, batchCount, totalCount, costMillis);
 
-        return new BatchProcessResponse(
-                totalCount,
-                totalAmount,
-                "批量处理完成"
-        );
+        return OrderBatchProcessResultVO.builder()
+                .status(status)
+                .batchSize(batchSize)
+                .batchCount(batchCount)
+                .totalCount(totalCount)
+                .costMillis(costMillis)
+                .build();
     }
+
+    /**
+     * 处理当前批次订单
+     *
+     * @param orderBatch 订单批次
+     * @param batchIndex 批次序号
+     */
+    private void handleOrderBatch(List<OrderInfo> orderBatch, Integer batchIndex) {
+        log.info("开始处理第 {} 批订单，数量：{}", batchIndex, orderBatch.size());
+
+        for (OrderInfo orderInfo : orderBatch) {
+            log.info("处理订单，id：{}，orderNo：{}，userId：{}，amount：{}，status：{}",
+                    orderInfo.getId(),
+                    orderInfo.getOrderNo(),
+                    orderInfo.getUserId(),
+                    orderInfo.getAmount(),
+                    orderInfo.getStatus());
+        }
+
+        log.info("第 {} 批订单处理完成", batchIndex);
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderBatchController.java`
+## 控制器接口
 
-下面是订单批量处理接口，用于验证分页迭代器效果。
+控制器提供批处理入口。调用方传入订单状态和每批数量后，服务层通过迭代器完成批量处理。
+
+文件位置：`src/main/java/io/github/atengk/pattern/iterator/order/controller/OrderBatchController.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.iterator.order.controller;
 
-import io.github.atengk.design.dto.BatchProcessResponse;
-import io.github.atengk.design.service.OrderBatchProcessService;
+import io.github.atengk.pattern.iterator.common.ApiResult;
+import io.github.atengk.pattern.iterator.order.dto.OrderBatchProcessRequest;
+import io.github.atengk.pattern.iterator.order.service.OrderBatchService;
+import io.github.atengk.pattern.iterator.order.vo.OrderBatchProcessResultVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 订单批量处理控制器
+ * 订单批处理接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/order-batches")
 @RequiredArgsConstructor
-@RequestMapping("/iterator/order")
 public class OrderBatchController {
 
-    private final OrderBatchProcessService orderBatchProcessService;
+    private final OrderBatchService orderBatchService;
 
     /**
      * 批量处理订单
      *
-     * @param pageSize 每页大小
-     * @return 批量处理响应
+     * @param request 订单批处理请求
+     * @return 批处理结果
      */
     @PostMapping("/process")
-    public BatchProcessResponse process(@RequestParam(required = false) Integer pageSize) {
-        return orderBatchProcessService.process(pageSize);
+    public ApiResult<OrderBatchProcessResultVO> processOrders(@Valid @RequestBody OrderBatchProcessRequest request) {
+        return ApiResult.success(orderBatchService.processOrders(request));
     }
+
 }
 ```
 
-接口调用示例：
+## 使用方式
+
+启动项目后，调用批处理接口即可触发迭代器按批读取订单。
+
+接口信息：
+
+| 项目         | 内容                     |
+| ------------ | ------------------------ |
+| 请求路径     | `/order-batches/process` |
+| 请求方法     | `POST`                   |
+| Content-Type | `application/json`       |
+| 主要参数     | `status`、`batchSize`    |
+
+处理已支付订单：
 
 ```bash
-curl -X POST "http://localhost:8080/iterator/order/process?pageSize=2"
+curl -X POST "http://localhost:8080/order-batches/process" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "PAID",
+    "batchSize": 20
+  }'
 ```
 
-可能返回：
+返回示例：
 
 ```json
 {
-  "totalCount": 4,
-  "totalAmount": 664.50,
-  "message": "批量处理完成"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "status": "PAID",
+    "batchSize": 20,
+    "batchCount": 4,
+    "totalCount": 70,
+    "costMillis": 35
+  }
 }
 ```
 
-这种方式的优点是批量处理逻辑不用直接写分页循环。分页状态、下一页加载、结束判断都被封装在 `OrderPageIterator` 中。
+处理已取消订单：
 
-## 游标迭代器
-
-当数据量较大时，页码分页可能存在性能问题，尤其是数据库 `OFFSET` 很大时查询会变慢。此时可以使用游标迭代器，通过上一批数据的最大 ID 或时间作为下一批查询条件。
-
-整体思路如下：
-
-```text
-lastId = 0
-查询 id > lastId LIMIT pageSize
-处理当前批次
-lastId = 当前批次最大 id
-继续查询下一批
+```bash
+curl -X POST "http://localhost:8080/order-batches/process" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "CANCELED",
+    "batchSize": 10
+  }'
 ```
 
-### 文件结构
+返回示例：
 
-```text
-src/main/java/io/github/atengk/design/iterator/cursor/
-├── UserData.java
-├── UserCursorQueryService.java
-└── UserCursorIterator.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/iterator/cursor/UserData.java`
-
-下面是用户数据对象。
-
-```java
-package io.github.atengk.design.iterator.cursor;
-
-/**
- * 用户数据
- *
- * @param id       用户ID
- * @param username 用户名
- * @author Ateng
- * @since 2026-04-30
- */
-public record UserData(Long id, String username) {
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "status": "CANCELED",
+    "batchSize": 10,
+    "batchCount": 4,
+    "totalCount": 35,
+    "costMillis": 20
+  }
 }
 ```
-
-文件位置：`src/main/java/io/github/atengk/design/iterator/cursor/UserCursorQueryService.java`
-
-下面是用户游标查询服务接口。
-
-```java
-package io.github.atengk.design.iterator.cursor;
-
-import java.util.List;
-
-/**
- * 用户游标查询服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface UserCursorQueryService {
-
-    /**
-     * 按游标查询用户
-     *
-     * @param lastId   上一次最大用户ID
-     * @param pageSize 每批大小
-     * @return 用户列表
-     */
-    List<UserData> queryAfterId(Long lastId, Integer pageSize);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/iterator/cursor/UserCursorIterator.java`
-
-下面是用户游标迭代器。它通过 `lastId` 控制下一批数据的位置。
-
-```java
-package io.github.atengk.design.iterator.cursor;
-
-import cn.hutool.core.collection.CollUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
-
-/**
- * 用户游标迭代器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class UserCursorIterator implements Iterator<UserData> {
-
-    private final UserCursorQueryService queryService;
-    private final int pageSize;
-
-    private Long lastId = 0L;
-    private boolean hasMore = true;
-    private List<UserData> currentRecords = List.of();
-    private int currentIndex = 0;
-
-    /**
-     * 创建用户游标迭代器
-     *
-     * @param queryService 用户游标查询服务
-     * @param pageSize     每批大小
-     */
-    public UserCursorIterator(UserCursorQueryService queryService, int pageSize) {
-        if (queryService == null) {
-            throw new IllegalArgumentException("用户游标查询服务不能为空");
-        }
-
-        if (pageSize <= 0) {
-            throw new IllegalArgumentException("每批大小必须大于0");
-        }
-
-        this.queryService = queryService;
-        this.pageSize = pageSize;
-    }
-
-    /**
-     * 是否存在下一个用户
-     *
-     * @return true 表示存在，false 表示不存在
-     */
-    @Override
-    public boolean hasNext() {
-        if (currentIndex < currentRecords.size()) {
-            return true;
-        }
-
-        if (!hasMore) {
-            return false;
-        }
-
-        loadNextBatch();
-        return currentIndex < currentRecords.size();
-    }
-
-    /**
-     * 获取下一个用户
-     *
-     * @return 用户数据
-     */
-    @Override
-    public UserData next() {
-        if (!hasNext()) {
-            throw new NoSuchElementException("没有更多用户数据");
-        }
-
-        return currentRecords.get(currentIndex++);
-    }
-
-    /**
-     * 加载下一批数据
-     */
-    private void loadNextBatch() {
-        currentRecords = CollUtil.emptyIfNull(queryService.queryAfterId(lastId, pageSize));
-        currentIndex = 0;
-
-        if (CollUtil.isEmpty(currentRecords)) {
-            hasMore = false;
-            log.info("用户游标迭代器加载结束，lastId：{}", lastId);
-            return;
-        }
-
-        lastId = currentRecords.get(currentRecords.size() - 1).id();
-        hasMore = currentRecords.size() == pageSize;
-
-        log.info("用户游标迭代器加载数据，数量：{}，lastId：{}，是否继续：{}",
-                currentRecords.size(), lastId, hasMore);
-    }
-}
-```
-
-游标迭代器比页码分页更适合大批量扫描，但要求查询字段有稳定顺序，例如自增 ID、创建时间加 ID 等。生产环境中常见 SQL 如下：
-
-```sql
-SELECT id, username
-FROM sys_user
-WHERE id > #{lastId}
-ORDER BY id ASC
-LIMIT #{pageSize};
-```
-
-这种查询不会随着扫描页数增大而出现明显的 `OFFSET` 性能问题。
-
-## 迭代器模式和组合模式的关系
-
-组合模式常用于构建树，迭代器模式常用于遍历树。二者可以组合使用。
-
-例如权限树使用组合模式建模后，可以再提供一个深度优先迭代器，统一遍历所有节点。
-
-示例遍历方式：
-
-```text
-系统管理
-用户管理
-新增用户
-删除用户
-角色管理
-新增角色
-分配权限
-```
-
-组合模式解决“树怎么组织”，迭代器模式解决“树怎么遍历”。
-
-在业务项目中，如果树结构只需要返回给前端展示，直接递归转换 DTO 即可。如果树结构需要多种遍历方式，例如深度优先、广度优先、只遍历叶子节点、只遍历菜单节点，就可以引入专门的迭代器。
-
-## 迭代器模式和责任链模式的区别
-
-迭代器模式和责任链模式都可能出现“一个接一个处理”的结构，但含义不同。
-
-| 对比项           | 迭代器模式                 | 责任链模式                    |
-| ---------------- | -------------------------- | ----------------------------- |
-| 核心目的         | 顺序访问集合元素           | 多个处理器依次处理请求        |
-| 被遍历对象       | 数据元素                   | 处理器节点                    |
-| 是否修改处理流程 | 不强调                     | 强调处理、中断、放行          |
-| 典型方法         | `hasNext`、`next`          | `handle`、`check`、`doFilter` |
-| 典型场景         | 扫描订单、读取文件、遍历树 | 参数校验、风控链、过滤链      |
-
-简单理解：
-
-```text
-迭代器模式：一个一个取数据。
-责任链模式：一个请求过多个关卡。
-```
-
-批量扫描订单适合迭代器模式。订单提交前经过参数校验、库存校验、风控校验，更适合责任链模式。
-
-## 迭代器模式和 Stream 的关系
-
-Java Stream 也可以完成集合遍历、过滤、映射和聚合，但它和迭代器模式关注点不同。
-
-| 对比项   | 迭代器模式                       | Java Stream                  |
-| -------- | -------------------------------- | ---------------------------- |
-| 核心目的 | 封装遍历过程                     | 声明式数据处理               |
-| 数据来源 | 可以是集合、分页、游标、远程接口 | 通常基于已有集合或可流式来源 |
-| 控制方式 | 手动 `hasNext` / `next`          | 链式操作                     |
-| 适合场景 | 隐藏分页或游标细节               | 集合过滤、映射、聚合         |
-| 可中断性 | 调用方容易控制                   | 通过短路操作控制             |
-
-如果数据已经在内存中，使用 Stream 通常更简洁：
-
-```java
-BigDecimal totalAmount = orders.stream()
-        .filter(order -> "PAID".equals(order.status()))
-        .map(OrderData::amount)
-        .reduce(BigDecimal.ZERO, BigDecimal::add);
-```
-
-如果数据需要从数据库或远程接口分批加载，迭代器更适合隐藏分页细节：
-
-```java
-OrderPageIterator iterator = new OrderPageIterator(orderQueryService, 100);
-while (iterator.hasNext()) {
-    OrderData order = iterator.next();
-    // 逐个处理订单
-}
-```
-
-两者也可以结合。例如自定义 `Spliterator` 后把分页迭代器包装成 Stream，但普通业务项目中没有必要过度封装。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
+正常请求后，可以通过日志观察迭代器读取和业务处理过程。
+
+```text
+模拟订单数据初始化完成，订单数量：105
+读取下一批订单完成，status：PAID，lastId：29，batchCount：20
+开始处理第 1 批订单，数量：20
+第 1 批订单处理完成
+读取下一批订单完成，status：PAID，lastId：59，batchCount：20
+开始处理第 2 批订单，数量：20
+第 2 批订单处理完成
+读取下一批订单完成，status：PAID，lastId：89，batchCount：20
+开始处理第 3 批订单，数量：20
+第 3 批订单处理完成
+读取下一批订单完成，status：PAID，lastId：105，batchCount：10
+开始处理第 4 批订单，数量：10
+第 4 批订单处理完成
+订单迭代器读取结束，status：PAID，lastId：105
+订单批处理完成，status：PAID，batchSize：20，batchCount：4，totalCount：70，costMillis：35
+```
+
+如果每批数量超过限制，例如：
 
 ```bash
-mvn spring-boot:run
+curl -X POST "http://localhost:8080/order-batches/process" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "PAID",
+    "batchSize": 1000
+  }'
 ```
 
-执行订单批量处理接口：
+返回示例：
 
-```bash
-curl -X POST "http://localhost:8080/iterator/order/process?pageSize=2"
-```
-
-如果分页迭代器正常，可以看到类似日志：
-
-```text
-分页查询订单成功，页码：1，每页大小：2，当前数量：2，是否有下一页：true
-订单分页迭代器加载数据，页码：1，数量：2，是否有下一页：true
-处理已支付订单，订单号：ORDER10001，用户ID：10001，金额：99.90
-处理已支付订单，订单号：ORDER10002，用户ID：10002，金额：199.00
-分页查询订单成功，页码：2，每页大小：2，当前数量：2，是否有下一页：true
-订单分页迭代器加载数据，页码：2，数量：2，是否有下一页：true
-跳过非已支付订单，订单号：ORDER10003，状态：CREATED
-处理已支付订单，订单号：ORDER10004，用户ID：10004，金额：299.00
-分页查询订单成功，页码：3，每页大小：2，当前数量：2，是否有下一页：false
-订单分页迭代器加载数据，页码：3，数量：2，是否有下一页：false
-跳过非已支付订单，订单号：ORDER10005，状态：CANCELED
-处理已支付订单，订单号：ORDER10006，用户ID：10006，金额：66.60
-批量处理订单完成，处理数量：4，处理总金额：664.50
-```
-
-执行不传分页大小的请求：
-
-```bash
-curl -X POST "http://localhost:8080/iterator/order/process"
-```
-
-服务会使用默认分页大小 `2`，用于避免一次性加载过多数据。
-
-执行非法分页大小：
-
-```bash
-curl -X POST "http://localhost:8080/iterator/order/process?pageSize=-1"
-```
-
-示例代码中会自动使用默认值。如果项目要求严格校验，也可以直接抛出异常。
-
-## 注意事项
-
-迭代器模式适合隐藏遍历细节，但不要为了普通集合遍历强行封装迭代器。如果只是简单遍历一个 `List`，直接使用增强 `for` 或 Stream 即可。
-
-适合使用迭代器模式的场景：
-
-```text
-分页扫描数据
-游标扫描数据
-读取大文件记录
-遍历复杂树结构
-隐藏集合内部结构
-需要多种遍历方式
-需要统一遍历本地和远程数据
-```
-
-不太适合使用迭代器模式的场景：
-
-```text
-简单 List 遍历
-简单 Map 遍历
-只处理几个固定元素
-遍历逻辑没有复用价值
-```
-
-分页迭代器中要避免一次性加载全部数据。下面这种写法不适合大数据量：
-
-```java
-List<OrderData> allOrders = orderQueryService.queryAll();
-for (OrderData order : allOrders) {
-    // 处理订单
+```json
+{
+  "code": 500,
+  "message": "请求参数不合法",
+  "data": null
 }
 ```
 
-推荐分批加载：
+## 替换为 MyBatis-Plus 查询
+
+实际项目中，`MockOrderRepository` 通常会被 Mapper 替换。核心 SQL 思路是按主键游标读取，避免深分页。
+
+示例 SQL：
+
+```sql
+-- 按状态和游标ID查询下一批订单
+SELECT
+    id,
+    order_no,
+    user_id,
+    product_id,
+    amount,
+    status
+FROM t_order
+WHERE status = #{status}
+  AND id > #{lastId}
+ORDER BY id ASC
+LIMIT #{limit};
+```
+
+如果使用 MyBatis-Plus，可以把仓储方法改成类似形式：
 
 ```java
-OrderPageIterator iterator = new OrderPageIterator(orderQueryService, 100);
-while (iterator.hasNext()) {
-    OrderData order = iterator.next();
-    // 处理订单
+public List<OrderInfo> queryByStatusAfterId(String status, Long lastId, Integer limit) {
+    return lambdaQuery()
+            .eq(OrderInfo::getStatus, status)
+            .gt(OrderInfo::getId, lastId)
+            .orderByAsc(OrderInfo::getId)
+            .last("LIMIT " + limit)
+            .list();
 }
 ```
 
-迭代器通常不是线程安全对象。不要把同一个迭代器实例放到 Spring 单例 Bean 的成员变量中共享。
+在生产项目中，`limit` 应来自后端校验后的整数，不要直接拼接用户输入的原始字符串。
 
-错误示例：
+## 扩展方式
 
-```java
-private OrderPageIterator currentIterator;
-```
+如果后续不仅要遍历订单，还要遍历用户、商品、账单、库存记录，可以抽象出通用批量迭代器。
 
-推荐在方法内部创建迭代器：
+例如定义泛型批量迭代器：
 
 ```java
-public BatchProcessResponse process(Integer pageSize) {
-    OrderPageIterator iterator = new OrderPageIterator(orderQueryService, pageSize);
-    while (iterator.hasNext()) {
-        OrderData order = iterator.next();
-    }
+package io.github.atengk.pattern.iterator.common;
+
+import java.util.List;
+
+/**
+ * 通用批量迭代器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface BatchIterator<T> {
+
+    /**
+     * 判断是否存在下一批数据
+     *
+     * @return 是否存在下一批
+     */
+    boolean hasNext();
+
+    /**
+     * 获取下一批数据
+     *
+     * @return 下一批数据
+     */
+    List<T> next();
+
 }
 ```
 
-分页迭代器要注意数据变化问题。如果遍历过程中数据被新增、删除或修改，页码分页可能出现重复数据或漏数据。对一致性要求较高的场景，建议使用游标分页、快照表、任务表或固定查询条件。
+然后让订单迭代器实现 `BatchIterator<OrderInfo>`，用户迭代器实现 `BatchIterator<UserInfo>`。这样批量处理框架可以复用，只需要替换具体数据读取逻辑。
 
-常见生产方案：
+## 优点和注意事项
 
-```text
-按 ID 游标扫描
-按 create_time + id 组合游标扫描
-先生成待处理任务快照
-使用状态字段标记处理进度
-使用数据库锁或分布式锁控制并发
-```
+迭代器模式的核心价值是隔离遍历逻辑和业务处理逻辑。Service 不需要直接维护分页参数、游标、是否结束等细节，只需要按统一方式获取下一批数据。
 
-如果迭代器处理的是远程接口分页，需要考虑超时、限流、重试和幂等。不要在迭代器内部无限重试，否则可能导致线程长时间阻塞。
+| 注意事项                     | 说明                                                         |
+| ---------------------------- | ------------------------------------------------------------ |
+| 优先使用游标分页             | 批处理场景中，`id > lastId` 通常比 `pageNo + pageSize` 更稳定 |
+| 避免一次性加载全部数据       | 大批量导出、补偿、同步时不要直接 `list()` 全量数据           |
+| 处理逻辑要考虑幂等           | 批处理失败重试时，订单处理动作应具备幂等能力                 |
+| 迭代期间避免修改查询条件字段 | 如果一边查询 `status = PAID`，一边把状态改掉，普通页码分页可能跳数据 |
+| 注意批次大小                 | 批次过小会增加查询次数，批次过大会增加内存和接口压力         |
+| 可以结合任务调度             | 迭代器模式常和 XXL-JOB、Spring Task、MQ 消费补偿任务结合使用 |
 
-生产环境中，批量处理通常还需要记录进度：
+## 和责任链模式的区别
 
-```text
-任务ID
-当前游标
-已处理数量
-失败数量
-最近错误
-任务状态
-开始时间
-结束时间
-```
+迭代器模式和责任链模式都可能出现“顺序执行”，但语义不同。
 
-迭代器只负责遍历，不应该承担复杂业务处理。业务处理逻辑应放在 Service、Handler 或 Command 中。
+| 模式       | 关注点                       | 典型场景                               |
+| ---------- | ---------------------------- | -------------------------------------- |
+| 迭代器模式 | 顺序访问一组数据             | 分页读取、批量导出、批量处理、游标扫描 |
+| 责任链模式 | 一个请求依次经过多个处理节点 | 参数校验、风控校验、审批链、过滤链     |
 
-不推荐：
+简单来说，迭代器模式遍历的是“数据集合”，责任链模式遍历的是“处理节点”。
 
-```java
-public OrderData next() {
-    OrderData order = currentRecords.get(currentIndex++);
-    // 更新订单状态
-    // 发送消息
-    // 写审计日志
-    return order;
-}
-```
+## 小结
 
-推荐：
-
-```java
-while (iterator.hasNext()) {
-    OrderData order = iterator.next();
-    orderProcessor.process(order);
-}
-```
-
-## 总结
-
-在 JDK21 和 Spring Boot 3 项目中，迭代器模式的实践重点是隐藏集合、分页、游标或树结构的遍历细节，让调用方用统一方式访问元素。
-
-普通 Java 迭代器适合理解原理和本地集合封装。Spring Boot 项目中更常见的是分页迭代器和游标迭代器，适合订单批处理、用户扫描、数据同步、文件导入、远程接口分页拉取等场景。推荐使用“查询服务 + 迭代器 + 批处理服务”的结构，让分页状态和业务处理逻辑解耦。
-
-迭代器模式不是为了替代所有 `for` 循环，而是为了处理“遍历过程复杂、数据来源复杂、需要隐藏内部结构或分批加载”的场景。实际落地时，需要重点关注分页一致性、游标选择、内存占用、异常重试、处理进度和线程安全。
+迭代器模式在 Spring Boot 项目中的常见落地方式是：定义统一迭代器接口，把分页读取、游标维护、结束判断封装到具体迭代器中，业务服务只负责处理每批数据。
+在批量导出、批量补偿、数据同步、消息重试、巡检任务等场景中，迭代器模式可以有效降低批处理代码复杂度，并避免一次性加载大量数据。

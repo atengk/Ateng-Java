@@ -1,38 +1,56 @@
-# 设计模式：享元模式
+# 享元模式
 
-享元模式用于共享大量细粒度对象，减少重复对象创建带来的内存开销。在 JDK21 和 Spring Boot 3 项目中，享元模式常用于字典项缓存、权限节点样式、商品标签样式、消息模板、文件图标、报表单元格样式、规则配置、枚举型处理器、连接池、线程池等场景。
+享元模式属于结构型模式，核心作用是共享大量重复对象中的公共部分，减少内存开销和对象创建成本。在当前设计模式文档体系中，享元模式位于结构型模式分类下，适合缓存共享对象、字典项、模板对象、配置对象、规则对象等 Spring Boot 项目场景。
 
-需要注意：享元模式关注的是“共享可复用对象”。如果对象每次都有独立状态，不适合强行共享；如果只是缓存查询结果，不一定是享元模式；如果对象内部状态可以共享，外部变化数据通过方法参数传入，享元模式更合适。
+本文以 **JDK21 + Spring Boot 3** 后端项目为背景，通过“优惠券模板共享”的示例，说明享元模式在真实项目中的落地方式。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例模拟一个优惠券模块。系统中会给大量用户发放优惠券，但很多用户券实际上都来自同一个优惠券模板。
 
-文件位置：`pom.xml`
+如果每一张用户券都重复保存模板名称、优惠类型、满减门槛、优惠金额、使用说明等字段，内存对象会出现大量重复数据：
+
+```text
+用户券 1：用户 A + 模板 T1 + 满 100 减 10 + 新人优惠券
+用户券 2：用户 B + 模板 T1 + 满 100 减 10 + 新人优惠券
+用户券 3：用户 C + 模板 T1 + 满 100 减 10 + 新人优惠券
+```
+
+这些对象中，“用户 ID、领取时间、使用状态”是每张券不同的外部状态，而“模板名称、优惠类型、门槛金额、优惠金额”是大量券共享的内部状态。
+
+享元模式的处理方式是：把可共享的优惠券模板抽成享元对象，由工厂统一缓存和复用；用户券对象只保存自己的外部状态，并引用共享模板。
+
+本示例需要以下依赖。
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证享元模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、集合、金额等通用处理 -->
+    <!-- 参数校验：用于校验优惠券发放请求参数 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：用于金额、集合、字符串、ID、日期等常用工具处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>${hutool.version}</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、Getter、构造方法等样板代码 -->
+    <!-- Lombok：减少 DTO、VO、构造器等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- 测试依赖：用于单元测试和接口测试 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -41,386 +59,121 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+示例项目配置如下。
 
-## 核心概念
+```yaml
+server:
+  port: 8080 # 示例服务端口
 
-享元模式的核心目标是把对象状态拆成内部状态和外部状态。内部状态可以共享，放在享元对象内部；外部状态不能共享，由调用方在使用时传入。
+coupon:
+  cache:
+    preload: true # 是否启动时预加载优惠券模板
+```
 
-常见角色如下：
-
-| 角色              | 说明                                           |
-| ----------------- | ---------------------------------------------- |
-| Flyweight         | 享元接口，定义共享对象的统一行为               |
-| ConcreteFlyweight | 具体享元对象，保存可共享的内部状态             |
-| FlyweightFactory  | 享元工厂，负责创建和缓存享元对象               |
-| Intrinsic State   | 内部状态，可共享，例如样式编码、颜色、模板内容 |
-| Extrinsic State   | 外部状态，不共享，例如用户ID、订单号、商品名称 |
-
-典型结构如下：
+本示例的核心文件结构如下。
 
 ```text
-调用方
-    -> FlyweightFactory
-        -> 根据 key 获取共享对象
-            -> Flyweight.operation(extrinsicState)
+src/main/java/io/github/atengk/designpattern/flyweight
+├── FlyweightApplication.java
+├── config
+│   └── CouponProperties.java
+├── controller
+│   └── UserCouponController.java
+├── dto
+│   ├── UserCouponIssueRequest.java
+│   └── UserCouponUseRequest.java
+├── enums
+│   ├── CouponDiscountType.java
+│   └── UserCouponStatus.java
+├── flyweight
+│   ├── CouponTemplateFlyweight.java
+│   ├── CouponTemplateFlyweightFactory.java
+│   └── UserCouponContext.java
+├── repository
+│   ├── CouponTemplateMemoryRepository.java
+│   └── UserCouponMemoryRepository.java
+├── service
+│   ├── UserCouponService.java
+│   └── UserCouponServiceImpl.java
+├── vo
+│   ├── ApiResult.java
+│   ├── CouponTemplateCacheStatsVO.java
+│   └── UserCouponVO.java
+└── web
+    └── GlobalExceptionHandler.java
 ```
 
-享元模式最关键的是分清内部状态和外部状态。
+## 模式设计
 
-```text
-内部状态：不随每次调用变化，可以被多个调用方共享。
-外部状态：每次调用不同，不能放到共享对象成员变量中。
-```
+享元模式的重点是区分内部状态和外部状态。
 
-以商品标签样式为例：
+内部状态是可以共享、相对稳定、与具体使用场景无关的数据；外部状态是不能共享、由调用方或上下文传入的数据。
 
-```text
-内部状态：标签类型、背景色、字体色、图标、固定前缀。
-外部状态：商品ID、商品名称、库存数量、价格、操作人。
-```
+在本示例中，优惠券模板是内部状态，用户券上下文是外部状态。
 
-在 Spring Boot 项目中，常见优先级通常是：
+| 类型     | 示例字段          | 是否共享 | 说明           |
+| -------- | ----------------- | -------- | -------------- |
+| 内部状态 | `templateId`      | 是       | 优惠券模板 ID  |
+| 内部状态 | `templateName`    | 是       | 优惠券模板名称 |
+| 内部状态 | `discountType`    | 是       | 优惠类型       |
+| 内部状态 | `thresholdAmount` | 是       | 使用门槛       |
+| 内部状态 | `discountAmount`  | 是       | 优惠金额       |
+| 外部状态 | `userCouponId`    | 否       | 用户券 ID      |
+| 外部状态 | `userId`          | 否       | 用户 ID        |
+| 外部状态 | `receiveTime`     | 否       | 领取时间       |
+| 外部状态 | `status`          | 否       | 用户券状态     |
 
-```text
-Spring Bean 单例享元 / 工厂缓存享元 > 普通 Java 享元 > 每次 new 大量重复对象
-```
+本示例中的角色分工如下。
 
-享元模式适合对象数量大、对象内部大部分状态重复、共享对象不可变或接近不可变的场景。
+| 角色       | 示例类                           | 说明                                 |
+| ---------- | -------------------------------- | ------------------------------------ |
+| 享元对象   | `CouponTemplateFlyweight`        | 可共享的优惠券模板对象               |
+| 享元工厂   | `CouponTemplateFlyweightFactory` | 负责创建、缓存、获取享元对象         |
+| 外部状态   | `UserCouponContext`              | 每张用户券独有的上下文数据           |
+| 模板仓储   | `CouponTemplateMemoryRepository` | 模拟模板数据来源                     |
+| 用户券仓储 | `UserCouponMemoryRepository`     | 模拟用户券数据存储                   |
+| 业务服务   | `UserCouponServiceImpl`          | 组合享元对象和外部状态，完成业务操作 |
 
-## 普通 Java 享元模式
-
-普通 Java 享元模式适合不依赖 Spring 容器的对象共享场景。下面以菜单图标渲染为例，系统中可能有大量菜单节点，但图标类型只有少数几种。图标编码、名称、颜色属于内部状态，可以共享；菜单编码、菜单名称属于外部状态，每次渲染时传入。
-
-整体关系如下：
-
-```text
-MenuIconFactory
-    -> 根据 iconCode 获取共享 MenuIcon
-        -> MenuIcon.render(menuCode, menuName)
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/flyweight/simple/
-├── MenuIcon.java
-├── SharedMenuIcon.java
-├── MenuIconFactory.java
-└── MenuNode.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/flyweight/simple/MenuIcon.java`
-
-下面是菜单图标享元接口。渲染时传入外部状态。
-
-```java
-package io.github.atengk.design.flyweight.simple;
-
-/**
- * 菜单图标享元
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface MenuIcon {
-
-    /**
-     * 渲染菜单图标
-     *
-     * @param menuCode 菜单编码
-     * @param menuName 菜单名称
-     * @return 渲染结果
-     */
-    String render(String menuCode, String menuName);
-
-    /**
-     * 获取图标编码
-     *
-     * @return 图标编码
-     */
-    String iconCode();
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/flyweight/simple/SharedMenuIcon.java`
-
-下面是共享菜单图标对象。它保存图标编码、图标名称和颜色，这些都是可以共享的内部状态。
-
-```java
-package io.github.atengk.design.flyweight.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 共享菜单图标
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-public class SharedMenuIcon implements MenuIcon {
-
-    private final String iconCode;
-    private final String iconName;
-    private final String color;
-
-    /**
-     * 创建共享菜单图标
-     *
-     * @param iconCode 图标编码
-     * @param iconName 图标名称
-     * @param color    图标颜色
-     */
-    public SharedMenuIcon(String iconCode, String iconName, String color) {
-        if (StrUtil.hasBlank(iconCode, iconName, color)) {
-            log.warn("创建共享菜单图标失败，图标编码、名称或颜色为空");
-            throw new IllegalArgumentException("图标编码、名称和颜色不能为空");
-        }
-
-        this.iconCode = iconCode;
-        this.iconName = iconName;
-        this.color = color;
-
-        log.info("创建共享菜单图标，图标编码：{}，图标名称：{}，颜色：{}", iconCode, iconName, color);
-    }
-
-    /**
-     * 渲染菜单图标
-     *
-     * @param menuCode 菜单编码
-     * @param menuName 菜单名称
-     * @return 渲染结果
-     */
-    @Override
-    public String render(String menuCode, String menuName) {
-        if (StrUtil.hasBlank(menuCode, menuName)) {
-            log.warn("渲染菜单图标失败，菜单编码或名称为空");
-            throw new IllegalArgumentException("菜单编码和名称不能为空");
-        }
-
-        return StrUtil.format("菜单[{}-{}] 使用图标[{}-{}]，颜色：{}",
-                menuCode, menuName, iconCode, iconName, color);
-    }
-
-    /**
-     * 获取图标编码
-     *
-     * @return 图标编码
-     */
-    @Override
-    public String iconCode() {
-        return iconCode;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/flyweight/simple/MenuIconFactory.java`
-
-下面是菜单图标享元工厂。它通过 `ConcurrentHashMap` 缓存图标对象，避免重复创建。
-
-```java
-package io.github.atengk.design.flyweight.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * 菜单图标享元工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class MenuIconFactory {
-
-    private final Map<String, MenuIcon> iconCache = new ConcurrentHashMap<>();
-
-    /**
-     * 获取菜单图标
-     *
-     * @param iconCode 图标编码
-     * @return 菜单图标享元
-     */
-    public MenuIcon getIcon(String iconCode) {
-        if (StrUtil.isBlank(iconCode)) {
-            log.warn("获取菜单图标失败，图标编码为空");
-            throw new IllegalArgumentException("图标编码不能为空");
-        }
-
-        String key = StrUtil.trim(iconCode).toLowerCase();
-        return iconCache.computeIfAbsent(key, this::createIcon);
-    }
-
-    /**
-     * 获取缓存数量
-     *
-     * @return 缓存数量
-     */
-    public int cacheSize() {
-        return iconCache.size();
-    }
-
-    /**
-     * 创建菜单图标
-     *
-     * @param iconCode 图标编码
-     * @return 菜单图标享元
-     */
-    private MenuIcon createIcon(String iconCode) {
-        log.info("菜单图标缓存未命中，开始创建图标，图标编码：{}", iconCode);
-
-        return switch (iconCode) {
-            case "system" -> new SharedMenuIcon("system", "系统图标", "#1677ff");
-            case "user" -> new SharedMenuIcon("user", "用户图标", "#52c41a");
-            case "order" -> new SharedMenuIcon("order", "订单图标", "#fa8c16");
-            case "report" -> new SharedMenuIcon("report", "报表图标", "#722ed1");
-            default -> new SharedMenuIcon(iconCode, "默认图标", "#8c8c8c");
-        };
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/flyweight/simple/MenuNode.java`
-
-下面是菜单节点对象。它保存菜单自身数据，并引用共享图标对象。
-
-```java
-package io.github.atengk.design.flyweight.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-
-/**
- * 菜单节点
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-public class MenuNode {
-
-    private final String menuCode;
-    private final String menuName;
-    private final MenuIcon menuIcon;
-
-    /**
-     * 创建菜单节点
-     *
-     * @param menuCode 菜单编码
-     * @param menuName 菜单名称
-     * @param menuIcon 菜单图标享元
-     */
-    public MenuNode(String menuCode, String menuName, MenuIcon menuIcon) {
-        if (StrUtil.hasBlank(menuCode, menuName)) {
-            throw new IllegalArgumentException("菜单编码和名称不能为空");
-        }
-        if (menuIcon == null) {
-            throw new IllegalArgumentException("菜单图标不能为空");
-        }
-
-        this.menuCode = menuCode;
-        this.menuName = menuName;
-        this.menuIcon = menuIcon;
-    }
-
-    /**
-     * 渲染菜单节点
-     *
-     * @return 渲染结果
-     */
-    public String render() {
-        return menuIcon.render(menuCode, menuName);
-    }
-}
-```
-
-使用方式：
-
-```java
-MenuIconFactory iconFactory = new MenuIconFactory();
-
-MenuNode userMenu = new MenuNode("system:user", "用户管理", iconFactory.getIcon("user"));
-MenuNode roleMenu = new MenuNode("system:role", "角色管理", iconFactory.getIcon("user"));
-MenuNode orderMenu = new MenuNode("order:list", "订单列表", iconFactory.getIcon("order"));
-
-String userRenderText = userMenu.render();
-String roleRenderText = roleMenu.render();
-String orderRenderText = orderMenu.render();
-
-int cacheSize = iconFactory.cacheSize();
-```
-
-这里 `userMenu` 和 `roleMenu` 使用的是同一个 `user` 图标享元对象。菜单编码和菜单名称不同，但图标编码、名称、颜色是共享的。
-
-## Spring Boot 享元模式
-
-Spring Boot 项目中，享元模式常用于共享样式、模板、规则、处理器等不可变对象。下面以商品标签渲染为例，商品数量可能很多，但标签样式只有少数几种。标签样式对象可以共享，商品信息通过上下文传入。
-
-整体流程如下：
+核心流程如下。
 
 ```text
 Controller
-    -> ProductLabelService
-        -> LabelStyleFactory
-            -> LabelStyle 共享样式
-                -> render(LabelRenderContext)
+    ↓
+UserCouponService
+    ↓
+UserCouponMemoryRepository 查询用户券外部状态
+    ↓
+CouponTemplateFlyweightFactory 获取共享模板对象
+    ↓
+CouponTemplateFlyweight 计算优惠与转换展示
+    ↓
+返回用户券详情
 ```
 
-示例支持三种标签样式：
+享元模式的关键不是简单缓存，而是把大量对象中的重复部分抽离出来共享，把变化部分作为外部状态传入。
 
-```text
-promotion     促销标签
-stock_warning 库存预警标签
-new_product   新品标签
-```
+## 核心代码
 
-### 文件结构
+下面给出享元模式在 Spring Boot 项目中的关键实现。示例使用内存仓储模拟数据库，真实项目中可以替换为 MyBatis-Plus、Redis 或本地缓存组件。
 
-```text
-src/main/java/io/github/atengk/design/
-├── FlyweightApplication.java
-├── controller/
-│   └── ProductLabelController.java
-├── dto/
-│   ├── LabelRenderContext.java
-│   ├── LabelRenderRequest.java
-│   └── LabelRenderResponse.java
-├── flyweight/
-│   ├── LabelStyle.java
-│   ├── PromotionLabelStyle.java
-│   ├── StockWarningLabelStyle.java
-│   └── NewProductLabelStyle.java
-├── factory/
-│   └── LabelStyleFactory.java
-└── service/
-    ├── ProductLabelService.java
-    └── impl/
-        └── ProductLabelServiceImpl.java
-```
+项目启动类负责启动 Spring Boot 应用，并开启配置属性扫描。
 
-文件位置：`src/main/java/io/github/atengk/design/FlyweightApplication.java`
-
-下面是 Spring Boot 启动类。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/FlyweightApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.designpattern.flyweight;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
- * 享元模式示例启动类
+ * 享元模式示例应用启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
+@ConfigurationPropertiesScan
 @SpringBootApplication
 public class FlyweightApplication {
 
@@ -435,351 +188,706 @@ public class FlyweightApplication {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/LabelRenderRequest.java`
+优惠券配置类用于控制模板缓存行为。
 
-下面是商品标签渲染请求对象。它包含样式编码和商品外部状态。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/config/CouponProperties.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.designpattern.flyweight.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * 优惠券配置
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@ConfigurationProperties(prefix = "coupon")
+public class CouponProperties {
+
+    /**
+     * 缓存配置
+     */
+    private Cache cache = new Cache();
+
+    /**
+     * 缓存配置项
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    public static class Cache {
+
+        /**
+         * 是否启动时预加载模板
+         */
+        private Boolean preload = Boolean.TRUE;
+    }
+}
+```
+
+优惠类型枚举用于表达不同优惠券模板的计算方式。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/enums/CouponDiscountType.java`
+
+```java
+package io.github.atengk.designpattern.flyweight.enums;
+
+import cn.hutool.core.util.StrUtil;
+
+import java.util.Arrays;
+
+/**
+ * 优惠券优惠类型
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public enum CouponDiscountType {
+
+    /**
+     * 满减券
+     */
+    FULL_REDUCTION,
+
+    /**
+     * 立减券
+     */
+    DIRECT_REDUCTION;
+
+    /**
+     * 根据类型编码解析优惠类型
+     *
+     * @param type 类型编码
+     * @return 优惠类型
+     */
+    public static CouponDiscountType parse(String type) {
+        if (StrUtil.isBlank(type)) {
+            throw new IllegalArgumentException("优惠类型不能为空");
+        }
+
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.name(), type))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的优惠类型：{}", type)));
+    }
+}
+```
+
+用户券状态枚举用于标识用户券是否可用、已使用或已过期。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/enums/UserCouponStatus.java`
+
+```java
+package io.github.atengk.designpattern.flyweight.enums;
+
+import cn.hutool.core.util.StrUtil;
+
+import java.util.Arrays;
+
+/**
+ * 用户优惠券状态
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public enum UserCouponStatus {
+
+    /**
+     * 未使用
+     */
+    UNUSED,
+
+    /**
+     * 已使用
+     */
+    USED,
+
+    /**
+     * 已过期
+     */
+    EXPIRED;
+
+    /**
+     * 根据状态编码解析用户券状态
+     *
+     * @param status 状态编码
+     * @return 用户券状态
+     */
+    public static UserCouponStatus parse(String status) {
+        if (StrUtil.isBlank(status)) {
+            throw new IllegalArgumentException("用户券状态不能为空");
+        }
+
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.name(), status))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的用户券状态：{}", status)));
+    }
+}
+```
+
+发放用户券请求 DTO 用于模拟批量发券。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/dto/UserCouponIssueRequest.java`
+
+```java
+package io.github.atengk.designpattern.flyweight.dto;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+/**
+ * 用户优惠券发放请求
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class UserCouponIssueRequest {
+
+    /**
+     * 用户 ID
+     */
+    @NotBlank(message = "用户 ID 不能为空")
+    private String userId;
+
+    /**
+     * 优惠券模板 ID
+     */
+    @NotBlank(message = "优惠券模板 ID 不能为空")
+    private String templateId;
+
+    /**
+     * 发放数量
+     */
+    @Min(value = 1, message = "发放数量不能小于 1")
+    @Max(value = 100, message = "单次最多发放 100 张")
+    private Integer quantity = 1;
+}
+```
+
+使用用户券请求 DTO 用于模拟核销优惠券。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/dto/UserCouponUseRequest.java`
+
+```java
+package io.github.atengk.designpattern.flyweight.dto;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 标签渲染请求
+ * 用户优惠券使用请求
  *
- * @param styleCode   标签样式编码
- * @param productId   商品ID
- * @param productName 商品名称
- * @param price       商品价格
- * @param stock       商品库存
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record LabelRenderRequest(
-        String styleCode,
-        Long productId,
-        String productName,
-        BigDecimal price,
-        Integer stock
-) {
+@Data
+public class UserCouponUseRequest {
+
+    /**
+     * 用户券 ID
+     */
+    @NotBlank(message = "用户券 ID 不能为空")
+    private String userCouponId;
+
+    /**
+     * 订单金额
+     */
+    @NotNull(message = "订单金额不能为空")
+    @DecimalMin(value = "0.01", message = "订单金额必须大于 0")
+    private BigDecimal orderAmount;
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/LabelRenderContext.java`
+用户券返回 VO 聚合用户券外部状态和模板享元对象的共享信息。
 
-下面是标签渲染上下文，也就是享元模式中的外部状态。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/vo/UserCouponVO.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.designpattern.flyweight.vo;
+
+import lombok.Builder;
+import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
- * 标签渲染上下文
+ * 用户优惠券返回对象
  *
- * @param productId   商品ID
- * @param productName 商品名称
- * @param price       商品价格
- * @param stock       商品库存
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record LabelRenderContext(
-        Long productId,
-        String productName,
-        BigDecimal price,
-        Integer stock
-) {
+@Data
+@Builder
+public class UserCouponVO {
+
+    /**
+     * 用户券 ID
+     */
+    private String userCouponId;
+
+    /**
+     * 用户 ID
+     */
+    private String userId;
+
+    /**
+     * 优惠券模板 ID
+     */
+    private String templateId;
+
+    /**
+     * 优惠券模板名称
+     */
+    private String templateName;
+
+    /**
+     * 优惠类型
+     */
+    private String discountType;
+
+    /**
+     * 使用门槛
+     */
+    private BigDecimal thresholdAmount;
+
+    /**
+     * 优惠金额
+     */
+    private BigDecimal discountAmount;
+
+    /**
+     * 用户券状态
+     */
+    private String status;
+
+    /**
+     * 领取时间
+     */
+    private LocalDateTime receiveTime;
+
+    /**
+     * 展示文案
+     */
+    private String displayText;
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/LabelRenderResponse.java`
+缓存统计 VO 用于验证享元对象是否被复用。
 
-下面是标签渲染响应对象。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/vo/CouponTemplateCacheStatsVO.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.designpattern.flyweight.vo;
+
+import lombok.Builder;
+import lombok.Data;
 
 /**
- * 标签渲染响应
+ * 优惠券模板缓存统计返回对象
  *
- * @param styleCode   标签样式编码
- * @param productId   商品ID
- * @param productName 商品名称
- * @param labelText   标签文本
- * @param styleText   样式文本
- * @param cacheSize   当前享元缓存数量
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record LabelRenderResponse(
-        String styleCode,
-        Long productId,
-        String productName,
-        String labelText,
-        String styleText,
-        Integer cacheSize
-) {
+@Data
+@Builder
+public class CouponTemplateCacheStatsVO {
+
+    /**
+     * 缓存模板数量
+     */
+    private Integer cacheSize;
+
+    /**
+     * 模板仓储数量
+     */
+    private Integer repositorySize;
+
+    /**
+     * 是否已预加载
+     */
+    private Boolean preloaded;
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/flyweight/LabelStyle.java`
+统一 API 返回对象用于包装接口响应。
 
-下面是标签样式享元接口。样式对象内部保存共享样式信息，渲染时接收外部上下文。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/vo/ApiResult.java`
 
 ```java
-package io.github.atengk.design.flyweight;
+package io.github.atengk.designpattern.flyweight.vo;
 
-import io.github.atengk.design.dto.LabelRenderContext;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * 标签样式享元
+ * API 统一返回对象
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface LabelStyle {
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
 
     /**
-     * 获取样式编码
-     *
-     * @return 样式编码
+     * 业务状态码
      */
-    String styleCode();
+    private Integer code;
 
     /**
-     * 渲染标签文本
-     *
-     * @param context 标签渲染上下文
-     * @return 标签文本
+     * 返回消息
      */
-    String renderLabel(LabelRenderContext context);
+    private String message;
 
     /**
-     * 获取样式描述
-     *
-     * @return 样式描述
+     * 返回数据
      */
-    String styleText();
+    private T data;
+
+    /**
+     * 成功返回
+     *
+     * @param data 返回数据
+     * @return API 返回对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return ApiResult.<T>builder()
+                .code(200)
+                .message("操作成功")
+                .data(data)
+                .build();
+    }
+
+    /**
+     * 失败返回
+     *
+     * @param message 失败消息
+     * @return API 返回对象
+     */
+    public static ApiResult<Void> fail(String message) {
+        return ApiResult.<Void>builder()
+                .code(500)
+                .message(message)
+                .build();
+    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/flyweight/PromotionLabelStyle.java`
+用户券上下文表示外部状态。它不保存模板名称、优惠金额等重复字段，只保存每张用户券独有的信息。
 
-下面是促销标签样式。标签颜色、图标、前缀属于内部状态，可被多个商品共享。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/flyweight/UserCouponContext.java`
 
 ```java
-package io.github.atengk.design.flyweight;
+package io.github.atengk.designpattern.flyweight.flyweight;
+
+import io.github.atengk.designpattern.flyweight.enums.UserCouponStatus;
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+/**
+ * 用户优惠券上下文
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class UserCouponContext {
+
+    /**
+     * 用户券 ID
+     */
+    private String userCouponId;
+
+    /**
+     * 用户 ID
+     */
+    private String userId;
+
+    /**
+     * 优惠券模板 ID
+     */
+    private String templateId;
+
+    /**
+     * 用户券状态
+     */
+    private UserCouponStatus status;
+
+    /**
+     * 领取时间
+     */
+    private LocalDateTime receiveTime;
+}
+```
+
+优惠券模板享元对象保存可共享的模板信息，并提供优惠计算和展示文案生成能力。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/flyweight/CouponTemplateFlyweight.java`
+
+```java
+package io.github.atengk.designpattern.flyweight.flyweight;
 
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.LabelRenderContext;
-import lombok.extern.slf4j.Slf4j;
+import io.github.atengk.designpattern.flyweight.enums.CouponDiscountType;
+import io.github.atengk.designpattern.flyweight.vo.UserCouponVO;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
 
 /**
- * 促销标签样式
+ * 优惠券模板享元对象
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-public class PromotionLabelStyle implements LabelStyle {
-
-    private final String backgroundColor = "#fff1f0";
-    private final String fontColor = "#cf1322";
-    private final String icon = "🔥";
-    private final String prefix = "限时促销";
+@Getter
+@RequiredArgsConstructor
+public class CouponTemplateFlyweight {
 
     /**
-     * 获取样式编码
-     *
-     * @return 样式编码
+     * 优惠券模板 ID
      */
-    @Override
-    public String styleCode() {
-        return "promotion";
-    }
+    private final String templateId;
 
     /**
-     * 渲染标签文本
-     *
-     * @param context 标签渲染上下文
-     * @return 标签文本
+     * 优惠券模板名称
      */
-    @Override
-    public String renderLabel(LabelRenderContext context) {
-        validateContext(context);
-
-        BigDecimal discountPrice = NumberUtil.mul(context.price(), BigDecimal.valueOf(0.9));
-        return StrUtil.format("{} {}：{}，促销价 {} 元",
-                icon, prefix, context.productName(), discountPrice);
-    }
+    private final String templateName;
 
     /**
-     * 获取样式描述
-     *
-     * @return 样式描述
+     * 优惠类型
      */
-    @Override
-    public String styleText() {
-        return StrUtil.format("background:{};color:{};prefix:{}", backgroundColor, fontColor, prefix);
-    }
+    private final CouponDiscountType discountType;
 
     /**
-     * 校验上下文
-     *
-     * @param context 标签渲染上下文
+     * 使用门槛
      */
-    private void validateContext(LabelRenderContext context) {
-        if (context == null || StrUtil.isBlank(context.productName()) || context.price() == null) {
-            log.warn("渲染促销标签失败，上下文、商品名称或价格为空");
-            throw new IllegalArgumentException("商品名称和价格不能为空");
+    private final BigDecimal thresholdAmount;
+
+    /**
+     * 优惠金额
+     */
+    private final BigDecimal discountAmount;
+
+    /**
+     * 计算优惠金额
+     *
+     * @param orderAmount 订单金额
+     * @return 实际优惠金额
+     */
+    public BigDecimal calculateDiscount(BigDecimal orderAmount) {
+        if (orderAmount == null || NumberUtil.isLess(orderAmount, BigDecimal.ZERO)) {
+            throw new IllegalArgumentException("订单金额不合法");
         }
+
+        if (discountType == CouponDiscountType.FULL_REDUCTION
+                && NumberUtil.isLess(orderAmount, thresholdAmount)) {
+            return BigDecimal.ZERO;
+        }
+
+        return NumberUtil.min(discountAmount, orderAmount);
+    }
+
+    /**
+     * 转换用户券展示对象
+     *
+     * @param context 用户券上下文
+     * @return 用户券展示对象
+     */
+    public UserCouponVO toUserCouponVO(UserCouponContext context) {
+        return UserCouponVO.builder()
+                .userCouponId(context.getUserCouponId())
+                .userId(context.getUserId())
+                .templateId(templateId)
+                .templateName(templateName)
+                .discountType(discountType.name())
+                .thresholdAmount(thresholdAmount)
+                .discountAmount(discountAmount)
+                .status(context.getStatus().name())
+                .receiveTime(context.getReceiveTime())
+                .displayText(buildDisplayText())
+                .build();
+    }
+
+    /**
+     * 构建优惠券展示文案
+     *
+     * @return 展示文案
+     */
+    public String buildDisplayText() {
+        if (discountType == CouponDiscountType.FULL_REDUCTION) {
+            return StrUtil.format("满 {} 减 {}", thresholdAmount.toPlainString(), discountAmount.toPlainString());
+        }
+
+        return StrUtil.format("立减 {}", discountAmount.toPlainString());
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/flyweight/StockWarningLabelStyle.java`
+优惠券模板内存仓储模拟数据库中的模板表。
 
-下面是库存预警标签样式。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/repository/CouponTemplateMemoryRepository.java`
 
 ```java
-package io.github.atengk.design.flyweight;
+package io.github.atengk.designpattern.flyweight.repository;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.LabelRenderContext;
-import lombok.extern.slf4j.Slf4j;
+import io.github.atengk.designpattern.flyweight.enums.CouponDiscountType;
+import lombok.Builder;
+import lombok.Data;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 库存预警标签样式
+ * 优惠券模板内存仓储
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-public class StockWarningLabelStyle implements LabelStyle {
+@Repository
+public class CouponTemplateMemoryRepository {
 
-    private final String backgroundColor = "#fff7e6";
-    private final String fontColor = "#d46b08";
-    private final String icon = "⚠";
-    private final String prefix = "库存预警";
+    private final Map<String, CouponTemplateRecord> templateMap = new ConcurrentHashMap<>();
 
     /**
-     * 获取样式编码
-     *
-     * @return 样式编码
+     * 初始化示例优惠券模板
      */
-    @Override
-    public String styleCode() {
-        return "stock_warning";
+    public CouponTemplateMemoryRepository() {
+        templateMap.put("template-10", CouponTemplateRecord.builder()
+                .templateId("template-10")
+                .templateName("新人满减券")
+                .discountType(CouponDiscountType.FULL_REDUCTION)
+                .thresholdAmount(new BigDecimal("100.00"))
+                .discountAmount(new BigDecimal("10.00"))
+                .build());
+
+        templateMap.put("template-30", CouponTemplateRecord.builder()
+                .templateId("template-30")
+                .templateName("大额订单满减券")
+                .discountType(CouponDiscountType.FULL_REDUCTION)
+                .thresholdAmount(new BigDecimal("300.00"))
+                .discountAmount(new BigDecimal("30.00"))
+                .build());
+
+        templateMap.put("template-direct-5", CouponTemplateRecord.builder()
+                .templateId("template-direct-5")
+                .templateName("无门槛立减券")
+                .discountType(CouponDiscountType.DIRECT_REDUCTION)
+                .thresholdAmount(BigDecimal.ZERO)
+                .discountAmount(new BigDecimal("5.00"))
+                .build());
     }
 
     /**
-     * 渲染标签文本
+     * 根据模板 ID 查询模板
      *
-     * @param context 标签渲染上下文
-     * @return 标签文本
+     * @param templateId 模板 ID
+     * @return 模板记录
      */
-    @Override
-    public String renderLabel(LabelRenderContext context) {
-        if (context == null || StrUtil.isBlank(context.productName()) || context.stock() == null) {
-            log.warn("渲染库存预警标签失败，上下文、商品名称或库存为空");
-            throw new IllegalArgumentException("商品名称和库存不能为空");
+    public CouponTemplateRecord getByTemplateId(String templateId) {
+        CouponTemplateRecord record = templateMap.get(templateId);
+        if (record == null) {
+            throw new IllegalArgumentException("优惠券模板不存在：" + templateId);
         }
-
-        return StrUtil.format("{} {}：{}，当前库存 {} 件",
-                icon, prefix, context.productName(), context.stock());
+        return record;
     }
 
     /**
-     * 获取样式描述
+     * 查询全部模板
      *
-     * @return 样式描述
+     * @return 模板记录列表
      */
-    @Override
-    public String styleText() {
-        return StrUtil.format("background:{};color:{};prefix:{}", backgroundColor, fontColor, prefix);
+    public List<CouponTemplateRecord> listAll() {
+        return List.copyOf(templateMap.values());
+    }
+
+    /**
+     * 查询模板数量
+     *
+     * @return 模板数量
+     */
+    public int count() {
+        return templateMap.size();
+    }
+
+    /**
+     * 优惠券模板记录
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    @Builder
+    public static class CouponTemplateRecord {
+
+        /**
+         * 优惠券模板 ID
+         */
+        private String templateId;
+
+        /**
+         * 优惠券模板名称
+         */
+        private String templateName;
+
+        /**
+         * 优惠类型
+         */
+        private CouponDiscountType discountType;
+
+        /**
+         * 使用门槛
+         */
+        private BigDecimal thresholdAmount;
+
+        /**
+         * 优惠金额
+         */
+        private BigDecimal discountAmount;
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/flyweight/NewProductLabelStyle.java`
+享元工厂负责统一创建、缓存和获取优惠券模板享元对象。相同模板 ID 永远复用同一个享元对象。
 
-下面是新品标签样式。
-
-```java
-package io.github.atengk.design.flyweight;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.LabelRenderContext;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 新品标签样式
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class NewProductLabelStyle implements LabelStyle {
-
-    private final String backgroundColor = "#f6ffed";
-    private final String fontColor = "#389e0d";
-    private final String icon = "🆕";
-    private final String prefix = "新品上架";
-
-    /**
-     * 获取样式编码
-     *
-     * @return 样式编码
-     */
-    @Override
-    public String styleCode() {
-        return "new_product";
-    }
-
-    /**
-     * 渲染标签文本
-     *
-     * @param context 标签渲染上下文
-     * @return 标签文本
-     */
-    @Override
-    public String renderLabel(LabelRenderContext context) {
-        if (context == null || StrUtil.isBlank(context.productName())) {
-            log.warn("渲染新品标签失败，上下文或商品名称为空");
-            throw new IllegalArgumentException("商品名称不能为空");
-        }
-
-        return StrUtil.format("{} {}：{}", icon, prefix, context.productName());
-    }
-
-    /**
-     * 获取样式描述
-     *
-     * @return 样式描述
-     */
-    @Override
-    public String styleText() {
-        return StrUtil.format("background:{};color:{};prefix:{}", backgroundColor, fontColor, prefix);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factory/LabelStyleFactory.java`
-
-下面是标签样式享元工厂。它负责按样式编码缓存并返回共享样式对象。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/flyweight/CouponTemplateFlyweightFactory.java`
 
 ```java
-package io.github.atengk.design.factory;
+package io.github.atengk.designpattern.flyweight.flyweight;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.flyweight.LabelStyle;
-import io.github.atengk.design.flyweight.NewProductLabelStyle;
-import io.github.atengk.design.flyweight.PromotionLabelStyle;
-import io.github.atengk.design.flyweight.StockWarningLabelStyle;
+import cn.hutool.core.util.BooleanUtil;
+import io.github.atengk.designpattern.flyweight.config.CouponProperties;
+import io.github.atengk.designpattern.flyweight.repository.CouponTemplateMemoryRepository;
+import io.github.atengk.designpattern.flyweight.repository.CouponTemplateMemoryRepository.CouponTemplateRecord;
+import io.github.atengk.designpattern.flyweight.vo.CouponTemplateCacheStatsVO;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -787,772 +895,789 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 标签样式享元工厂
+ * 优惠券模板享元工厂
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class LabelStyleFactory {
+@RequiredArgsConstructor
+public class CouponTemplateFlyweightFactory {
 
-    private final Map<String, LabelStyle> styleCache = new ConcurrentHashMap<>();
+    private final CouponTemplateMemoryRepository couponTemplateMemoryRepository;
+    private final CouponProperties couponProperties;
+    private final Map<String, CouponTemplateFlyweight> cache = new ConcurrentHashMap<>();
+    private volatile boolean preloaded = false;
 
     /**
-     * 获取标签样式
-     *
-     * @param styleCode 样式编码
-     * @return 标签样式享元
+     * 初始化模板缓存
      */
-    public LabelStyle getStyle(String styleCode) {
-        if (StrUtil.isBlank(styleCode)) {
-            log.warn("获取标签样式失败，样式编码为空");
-            throw new IllegalArgumentException("样式编码不能为空");
+    @PostConstruct
+    public void init() {
+        if (BooleanUtil.isTrue(couponProperties.getCache().getPreload())) {
+            couponTemplateMemoryRepository.listAll()
+                    .forEach(record -> cache.put(record.getTemplateId(), createFlyweight(record)));
+            preloaded = true;
+            log.info("优惠券模板享元预加载完成，cacheSize={}", cache.size());
         }
-
-        String key = StrUtil.trim(styleCode).toLowerCase();
-        return styleCache.computeIfAbsent(key, this::createStyle);
     }
 
     /**
-     * 获取缓存数量
+     * 根据模板 ID 获取享元对象
      *
-     * @return 缓存数量
+     * @param templateId 模板 ID
+     * @return 优惠券模板享元对象
      */
-    public int cacheSize() {
-        return styleCache.size();
+    public CouponTemplateFlyweight getFlyweight(String templateId) {
+        CouponTemplateFlyweight flyweight = cache.computeIfAbsent(templateId, key -> {
+            CouponTemplateRecord record = couponTemplateMemoryRepository.getByTemplateId(key);
+            log.info("创建优惠券模板享元对象，templateId={}，templateName={}", record.getTemplateId(), record.getTemplateName());
+            return createFlyweight(record);
+        });
+
+        log.info("获取优惠券模板享元对象，templateId={}，identityHash={}",
+                templateId, System.identityHashCode(flyweight));
+
+        return flyweight;
     }
 
     /**
-     * 清理样式缓存
-     */
-    public void clearCache() {
-        styleCache.clear();
-        log.info("清理标签样式享元缓存完成");
-    }
-
-    /**
-     * 创建标签样式
+     * 查询缓存统计信息
      *
-     * @param styleCode 样式编码
-     * @return 标签样式享元
+     * @return 缓存统计
      */
-    private LabelStyle createStyle(String styleCode) {
-        log.info("标签样式缓存未命中，开始创建样式，样式编码：{}", styleCode);
+    public CouponTemplateCacheStatsVO stats() {
+        return CouponTemplateCacheStatsVO.builder()
+                .cacheSize(cache.size())
+                .repositorySize(couponTemplateMemoryRepository.count())
+                .preloaded(preloaded)
+                .build();
+    }
 
-        return switch (styleCode) {
-            case "promotion" -> new PromotionLabelStyle();
-            case "stock_warning" -> new StockWarningLabelStyle();
-            case "new_product" -> new NewProductLabelStyle();
-            default -> {
-                log.warn("创建标签样式失败，不支持的样式编码：{}", styleCode);
-                throw new IllegalArgumentException("不支持的标签样式：" + styleCode);
-            }
-        };
+    /**
+     * 根据模板记录创建享元对象
+     *
+     * @param record 模板记录
+     * @return 优惠券模板享元对象
+     */
+    private CouponTemplateFlyweight createFlyweight(CouponTemplateRecord record) {
+        return new CouponTemplateFlyweight(
+                record.getTemplateId(),
+                record.getTemplateName(),
+                record.getDiscountType(),
+                record.getThresholdAmount(),
+                record.getDiscountAmount()
+        );
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/ProductLabelService.java`
+用户券内存仓储只保存外部状态，不重复保存模板内部状态。
 
-下面是商品标签服务接口。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/repository/UserCouponMemoryRepository.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.designpattern.flyweight.repository;
 
-import io.github.atengk.design.dto.LabelRenderRequest;
-import io.github.atengk.design.dto.LabelRenderResponse;
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.flyweight.enums.UserCouponStatus;
+import io.github.atengk.designpattern.flyweight.flyweight.UserCouponContext;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 商品标签服务
+ * 用户优惠券内存仓储
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface ProductLabelService {
+@Slf4j
+@Repository
+public class UserCouponMemoryRepository {
+
+    private final List<UserCouponContext> userCoupons = new CopyOnWriteArrayList<>();
 
     /**
-     * 渲染商品标签
+     * 发放用户优惠券
      *
-     * @param request 标签渲染请求
-     * @return 标签渲染响应
+     * @param userId     用户 ID
+     * @param templateId 模板 ID
+     * @return 用户券上下文
      */
-    LabelRenderResponse render(LabelRenderRequest request);
+    public UserCouponContext issue(String userId, String templateId) {
+        UserCouponContext context = UserCouponContext.builder()
+                .userCouponId("UC_" + IdUtil.fastSimpleUUID())
+                .userId(userId)
+                .templateId(templateId)
+                .status(UserCouponStatus.UNUSED)
+                .receiveTime(LocalDateTime.now())
+                .build();
+
+        userCoupons.add(context);
+        log.info("用户优惠券发放成功，userCouponId={}，userId={}，templateId={}",
+                context.getUserCouponId(), userId, templateId);
+
+        return context;
+    }
+
+    /**
+     * 查询用户优惠券列表
+     *
+     * @param userId 用户 ID
+     * @return 用户券上下文列表
+     */
+    public List<UserCouponContext> listByUserId(String userId) {
+        return userCoupons.stream()
+                .filter(context -> StrUtil.equals(context.getUserId(), userId))
+                .toList();
+    }
+
+    /**
+     * 根据用户券 ID 查询用户券
+     *
+     * @param userCouponId 用户券 ID
+     * @return 用户券上下文
+     */
+    public UserCouponContext getByUserCouponId(String userCouponId) {
+        return userCoupons.stream()
+                .filter(context -> StrUtil.equals(context.getUserCouponId(), userCouponId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("用户优惠券不存在：" + userCouponId));
+    }
+
+    /**
+     * 标记用户券已使用
+     *
+     * @param userCouponId 用户券 ID
+     */
+    public void markUsed(String userCouponId) {
+        UserCouponContext context = getByUserCouponId(userCouponId);
+        context.setStatus(UserCouponStatus.USED);
+        log.info("用户优惠券已使用，userCouponId={}", userCouponId);
+    }
+
+    /**
+     * 查询用户券数量
+     *
+     * @return 用户券数量
+     */
+    public int count() {
+        return userCoupons.size();
+    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/ProductLabelServiceImpl.java`
+用户券服务接口定义发券、查询、使用和缓存统计能力。
 
-下面是商品标签服务实现。它从享元工厂获取共享样式对象，再将商品上下文作为外部状态传入。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/service/UserCouponService.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.designpattern.flyweight.service;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.LabelRenderContext;
-import io.github.atengk.design.dto.LabelRenderRequest;
-import io.github.atengk.design.dto.LabelRenderResponse;
-import io.github.atengk.design.factory.LabelStyleFactory;
-import io.github.atengk.design.flyweight.LabelStyle;
-import io.github.atengk.design.service.ProductLabelService;
+import io.github.atengk.designpattern.flyweight.dto.UserCouponIssueRequest;
+import io.github.atengk.designpattern.flyweight.dto.UserCouponUseRequest;
+import io.github.atengk.designpattern.flyweight.vo.CouponTemplateCacheStatsVO;
+import io.github.atengk.designpattern.flyweight.vo.UserCouponVO;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * 用户优惠券服务接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface UserCouponService {
+
+    /**
+     * 发放用户优惠券
+     *
+     * @param request 发放请求
+     * @return 用户券列表
+     */
+    List<UserCouponVO> issue(UserCouponIssueRequest request);
+
+    /**
+     * 查询用户优惠券列表
+     *
+     * @param userId 用户 ID
+     * @return 用户券列表
+     */
+    List<UserCouponVO> listByUserId(String userId);
+
+    /**
+     * 使用用户优惠券
+     *
+     * @param request 使用请求
+     * @return 实际优惠金额
+     */
+    BigDecimal use(UserCouponUseRequest request);
+
+    /**
+     * 查询模板缓存统计
+     *
+     * @return 缓存统计
+     */
+    CouponTemplateCacheStatsVO stats();
+}
+```
+
+服务实现类把用户券外部状态和模板享元对象组合起来完成业务操作。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/service/UserCouponServiceImpl.java`
+
+```java
+package io.github.atengk.designpattern.flyweight.service;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.designpattern.flyweight.dto.UserCouponIssueRequest;
+import io.github.atengk.designpattern.flyweight.dto.UserCouponUseRequest;
+import io.github.atengk.designpattern.flyweight.enums.UserCouponStatus;
+import io.github.atengk.designpattern.flyweight.flyweight.CouponTemplateFlyweight;
+import io.github.atengk.designpattern.flyweight.flyweight.CouponTemplateFlyweightFactory;
+import io.github.atengk.designpattern.flyweight.flyweight.UserCouponContext;
+import io.github.atengk.designpattern.flyweight.repository.CouponTemplateMemoryRepository;
+import io.github.atengk.designpattern.flyweight.repository.UserCouponMemoryRepository;
+import io.github.atengk.designpattern.flyweight.vo.CouponTemplateCacheStatsVO;
+import io.github.atengk.designpattern.flyweight.vo.UserCouponVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * 商品标签服务实现
+ * 用户优惠券服务实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ProductLabelServiceImpl implements ProductLabelService {
+public class UserCouponServiceImpl implements UserCouponService {
 
-    private final LabelStyleFactory labelStyleFactory;
+    private final CouponTemplateMemoryRepository couponTemplateMemoryRepository;
+    private final UserCouponMemoryRepository userCouponMemoryRepository;
+    private final CouponTemplateFlyweightFactory couponTemplateFlyweightFactory;
 
     /**
-     * 渲染商品标签
+     * 发放用户优惠券
      *
-     * @param request 标签渲染请求
-     * @return 标签渲染响应
+     * @param request 发放请求
+     * @return 用户券列表
      */
     @Override
-    public LabelRenderResponse render(LabelRenderRequest request) {
-        validateRequest(request);
+    public List<UserCouponVO> issue(UserCouponIssueRequest request) {
+        couponTemplateMemoryRepository.getByTemplateId(request.getTemplateId());
 
-        LabelStyle labelStyle = labelStyleFactory.getStyle(request.styleCode());
-        LabelRenderContext context = new LabelRenderContext(
-                request.productId(),
-                request.productName(),
-                request.price(),
-                request.stock()
-        );
+        List<UserCouponVO> resultList = new ArrayList<>();
+        for (int i = 0; i < request.getQuantity(); i++) {
+            UserCouponContext context = userCouponMemoryRepository.issue(request.getUserId(), request.getTemplateId());
+            CouponTemplateFlyweight flyweight = couponTemplateFlyweightFactory.getFlyweight(context.getTemplateId());
+            resultList.add(flyweight.toUserCouponVO(context));
+        }
 
-        String labelText = labelStyle.renderLabel(context);
-        String styleText = labelStyle.styleText();
+        log.info("用户优惠券批量发放完成，userId={}，templateId={}，quantity={}",
+                request.getUserId(), request.getTemplateId(), resultList.size());
 
-        log.info("商品标签渲染完成，样式编码：{}，商品ID：{}，缓存数量：{}",
-                labelStyle.styleCode(), request.productId(), labelStyleFactory.cacheSize());
-
-        return new LabelRenderResponse(
-                labelStyle.styleCode(),
-                request.productId(),
-                request.productName(),
-                labelText,
-                styleText,
-                labelStyleFactory.cacheSize()
-        );
+        return resultList;
     }
 
     /**
-     * 校验标签渲染请求
+     * 查询用户优惠券列表
      *
-     * @param request 标签渲染请求
+     * @param userId 用户 ID
+     * @return 用户券列表
      */
-    private void validateRequest(LabelRenderRequest request) {
-        if (request == null) {
-            log.warn("渲染商品标签失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
+    @Override
+    public List<UserCouponVO> listByUserId(String userId) {
+        List<UserCouponContext> contexts = userCouponMemoryRepository.listByUserId(userId);
+        if (CollUtil.isEmpty(contexts)) {
+            return List.of();
         }
 
-        if (StrUtil.hasBlank(request.styleCode(), request.productName())) {
-            log.warn("渲染商品标签失败，样式编码或商品名称为空");
-            throw new IllegalArgumentException("样式编码和商品名称不能为空");
+        List<UserCouponVO> resultList = contexts.stream()
+                .map(context -> {
+                    CouponTemplateFlyweight flyweight = couponTemplateFlyweightFactory.getFlyweight(context.getTemplateId());
+                    return flyweight.toUserCouponVO(context);
+                })
+                .toList();
+
+        log.info("查询用户优惠券列表成功，userId={}，size={}", userId, resultList.size());
+        return resultList;
+    }
+
+    /**
+     * 使用用户优惠券
+     *
+     * @param request 使用请求
+     * @return 实际优惠金额
+     */
+    @Override
+    public BigDecimal use(UserCouponUseRequest request) {
+        UserCouponContext context = userCouponMemoryRepository.getByUserCouponId(request.getUserCouponId());
+        if (context.getStatus() != UserCouponStatus.UNUSED) {
+            throw new IllegalStateException("当前优惠券不可使用，status=" + context.getStatus());
         }
 
-        if (request.productId() == null || request.productId() <= 0) {
-            log.warn("渲染商品标签失败，商品ID不合法，商品ID：{}", request.productId());
-            throw new IllegalArgumentException("商品ID必须大于0");
+        CouponTemplateFlyweight flyweight = couponTemplateFlyweightFactory.getFlyweight(context.getTemplateId());
+        BigDecimal discountAmount = flyweight.calculateDiscount(request.getOrderAmount());
+
+        if (NumberUtil.equals(discountAmount, BigDecimal.ZERO)) {
+            throw new IllegalStateException("订单金额未满足优惠券使用门槛");
         }
 
-        if (request.price() == null || request.price().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("渲染商品标签失败，商品价格不合法，商品价格：{}", request.price());
-            throw new IllegalArgumentException("商品价格必须大于0");
-        }
+        userCouponMemoryRepository.markUsed(request.getUserCouponId());
+        log.info("用户优惠券使用成功，userCouponId={}，templateId={}，orderAmount={}，discountAmount={}",
+                request.getUserCouponId(), context.getTemplateId(), request.getOrderAmount(), discountAmount);
 
-        if (request.stock() == null || request.stock() < 0) {
-            log.warn("渲染商品标签失败，商品库存不合法，商品库存：{}", request.stock());
-            throw new IllegalArgumentException("商品库存不能小于0");
-        }
+        return discountAmount;
+    }
+
+    /**
+     * 查询模板缓存统计
+     *
+     * @return 缓存统计
+     */
+    @Override
+    public CouponTemplateCacheStatsVO stats() {
+        CouponTemplateCacheStatsVO stats = couponTemplateFlyweightFactory.stats();
+        log.info("查询优惠券模板享元缓存统计，cacheSize={}，repositorySize={}",
+                stats.getCacheSize(), stats.getRepositorySize());
+        return stats;
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/ProductLabelController.java`
+Controller 对外提供发券、查询用户券、使用优惠券和查看缓存统计接口。
 
-下面是商品标签接口，用于验证享元模式效果。
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/controller/UserCouponController.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.designpattern.flyweight.controller;
 
-import io.github.atengk.design.dto.LabelRenderRequest;
-import io.github.atengk.design.dto.LabelRenderResponse;
-import io.github.atengk.design.service.ProductLabelService;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.flyweight.dto.UserCouponIssueRequest;
+import io.github.atengk.designpattern.flyweight.dto.UserCouponUseRequest;
+import io.github.atengk.designpattern.flyweight.service.UserCouponService;
+import io.github.atengk.designpattern.flyweight.vo.ApiResult;
+import io.github.atengk.designpattern.flyweight.vo.CouponTemplateCacheStatsVO;
+import io.github.atengk.designpattern.flyweight.vo.UserCouponVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
- * 商品标签控制器
+ * 用户优惠券接口控制器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/flyweight/product-label")
-public class ProductLabelController {
+@RequestMapping("/api/user-coupons")
+public class UserCouponController {
 
-    private final ProductLabelService productLabelService;
+    private final UserCouponService userCouponService;
 
     /**
-     * 渲染商品标签
+     * 发放用户优惠券
      *
-     * @param styleCode   标签样式编码
-     * @param productId   商品ID
-     * @param productName 商品名称
-     * @param price       商品价格
-     * @param stock       商品库存
-     * @return 标签渲染响应
+     * @param request 发放请求
+     * @return 用户券列表
      */
-    @GetMapping("/render")
-    public LabelRenderResponse render(@RequestParam String styleCode,
-                                      @RequestParam Long productId,
-                                      @RequestParam String productName,
-                                      @RequestParam BigDecimal price,
-                                      @RequestParam Integer stock) {
-        LabelRenderRequest request = new LabelRenderRequest(
-                styleCode,
-                productId,
-                productName,
-                price,
-                stock
-        );
+    @PostMapping("/issue")
+    public ApiResult<List<UserCouponVO>> issue(@Valid @RequestBody UserCouponIssueRequest request) {
+        return ApiResult.success(userCouponService.issue(request));
+    }
 
-        return productLabelService.render(request);
+    /**
+     * 查询用户优惠券列表
+     *
+     * @param userId 用户 ID
+     * @return 用户券列表
+     */
+    @GetMapping
+    public ApiResult<List<UserCouponVO>> listByUserId(@RequestParam String userId) {
+        if (StrUtil.isBlank(userId)) {
+            throw new IllegalArgumentException("用户 ID 不能为空");
+        }
+        return ApiResult.success(userCouponService.listByUserId(userId));
+    }
+
+    /**
+     * 使用用户优惠券
+     *
+     * @param request 使用请求
+     * @return 实际优惠金额
+     */
+    @PostMapping("/use")
+    public ApiResult<BigDecimal> use(@Valid @RequestBody UserCouponUseRequest request) {
+        return ApiResult.success(userCouponService.use(request));
+    }
+
+    /**
+     * 查询模板享元缓存统计
+     *
+     * @return 缓存统计
+     */
+    @GetMapping("/template-cache/stats")
+    public ApiResult<CouponTemplateCacheStatsVO> stats() {
+        return ApiResult.success(userCouponService.stats());
     }
 }
 ```
 
-接口调用示例：
+全局异常处理器用于统一处理参数校验异常和业务异常。
 
-```bash
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=promotion&productId=10001&productName=机械键盘&price=199.00&stock=50"
+文件位置：`src/main/java/io/github/atengk/designpattern/flyweight/web/GlobalExceptionHandler.java`
 
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=promotion&productId=10002&productName=无线鼠标&price=99.00&stock=80"
+```java
+package io.github.atengk.designpattern.flyweight.web;
 
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=stock_warning&productId=10003&productName=显示器&price=999.00&stock=3"
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.flyweight.vo.ApiResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ApiResult<Void> handleValidException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .findFirst()
+                .map(error -> StrUtil.format("{} {}", error.getField(), error.getDefaultMessage()))
+                .orElse("请求参数不合法");
+
+        log.warn("请求参数校验失败，message={}", message);
+        return ApiResult.fail(message);
+    }
+
+    /**
+     * 处理非法参数异常
+     *
+     * @param exception 非法参数异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ApiResult<Void> handleIllegalArgumentException(IllegalArgumentException exception) {
+        log.warn("请求参数错误，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理业务状态异常
+     *
+     * @param exception 业务状态异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ApiResult<Void> handleIllegalStateException(IllegalStateException exception) {
+        log.warn("业务处理失败，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统处理异常", exception);
+        return ApiResult.fail("系统处理异常");
+    }
+}
 ```
 
-促销标签可能返回：
+## 使用方式
+
+启动项目后，可以先查看模板享元缓存统计。
+
+```bash
+curl -X GET 'http://localhost:8080/api/user-coupons/template-cache/stats'
+```
+
+返回示例：
 
 ```json
 {
-  "styleCode": "promotion",
-  "productId": 10001,
-  "productName": "机械键盘",
-  "labelText": "🔥 限时促销：机械键盘，促销价 179.100 元",
-  "styleText": "background:#fff1f0;color:#cf1322;prefix:限时促销",
-  "cacheSize": 1
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "cacheSize": 3,
+    "repositorySize": 3,
+    "preloaded": true
+  }
 }
 ```
 
-连续多次使用 `promotion` 样式时，缓存数量不会重复增长，因为共享的是同一个促销标签样式对象。
-
-## 扩展一个新享元对象
-
-在享元模式中，扩展新的共享对象通常是在享元工厂中增加一个创建分支，或者把享元对象注册为 Spring Bean 后通过 Map 管理。下面以“会员专享标签”为例，新增样式 `vip`。
-
-文件位置：`src/main/java/io/github/atengk/design/flyweight/VipLabelStyle.java`
-
-下面是会员专享标签样式。
-
-```java
-package io.github.atengk.design.flyweight;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.LabelRenderContext;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 会员专享标签样式
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class VipLabelStyle implements LabelStyle {
-
-    private final String backgroundColor = "#f9f0ff";
-    private final String fontColor = "#722ed1";
-    private final String icon = "👑";
-    private final String prefix = "会员专享";
-
-    /**
-     * 获取样式编码
-     *
-     * @return 样式编码
-     */
-    @Override
-    public String styleCode() {
-        return "vip";
-    }
-
-    /**
-     * 渲染标签文本
-     *
-     * @param context 标签渲染上下文
-     * @return 标签文本
-     */
-    @Override
-    public String renderLabel(LabelRenderContext context) {
-        if (context == null || StrUtil.isBlank(context.productName())) {
-            log.warn("渲染会员专享标签失败，上下文或商品名称为空");
-            throw new IllegalArgumentException("商品名称不能为空");
-        }
-
-        return StrUtil.format("{} {}：{}", icon, prefix, context.productName());
-    }
-
-    /**
-     * 获取样式描述
-     *
-     * @return 样式描述
-     */
-    @Override
-    public String styleText() {
-        return StrUtil.format("background:{};color:{};prefix:{}", backgroundColor, fontColor, prefix);
-    }
-}
-```
-
-在 `LabelStyleFactory` 的 `createStyle` 中新增分支：
-
-```java
-case "vip" -> new VipLabelStyle();
-```
-
-调用示例：
+给同一个用户批量发放 3 张相同模板的优惠券：
 
 ```bash
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=vip&productId=10004&productName=会员礼盒&price=299.00&stock=20"
+curl -X POST 'http://localhost:8080/api/user-coupons/issue' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user-1001",
+    "templateId": "template-10",
+    "quantity": 3
+  }'
 ```
 
-如果享元类型会频繁增加，可以进一步改造成 Spring Bean 注册方式，避免每次都修改工厂的 `switch`。
+返回示例：
 
-## Spring Bean 享元注册方式
-
-如果享元对象本身是无状态或只持有不可变内部状态，可以直接把每个享元对象注册为 Spring 单例 Bean。Spring 默认单例本身就是一种共享机制。下面是改造思路。
-
-文件位置：`src/main/java/io/github/atengk/design/flyweight/SpringPromotionLabelStyle.java`
-
-下面的写法将促销标签样式直接作为 Spring Bean 共享。
-
-```java
-package io.github.atengk.design.flyweight;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.LabelRenderContext;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * Spring促销标签样式
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class SpringPromotionLabelStyle implements LabelStyle {
-
-    /**
-     * 获取样式编码
-     *
-     * @return 样式编码
-     */
-    @Override
-    public String styleCode() {
-        return "spring_promotion";
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": [
+    {
+      "userCouponId": "UC_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "userId": "user-1001",
+      "templateId": "template-10",
+      "templateName": "新人满减券",
+      "discountType": "FULL_REDUCTION",
+      "thresholdAmount": 100.00,
+      "discountAmount": 10.00,
+      "status": "UNUSED",
+      "receiveTime": "2026-05-13T10:30:00",
+      "displayText": "满 100.00 减 10.00"
     }
-
-    /**
-     * 渲染标签文本
-     *
-     * @param context 标签渲染上下文
-     * @return 标签文本
-     */
-    @Override
-    public String renderLabel(LabelRenderContext context) {
-        if (context == null || StrUtil.isBlank(context.productName())) {
-            log.warn("渲染Spring促销标签失败，商品名称为空");
-            throw new IllegalArgumentException("商品名称不能为空");
-        }
-
-        return StrUtil.format("Spring共享促销标签：{}", context.productName());
-    }
-
-    /**
-     * 获取样式描述
-     *
-     * @return 样式描述
-     */
-    @Override
-    public String styleText() {
-        return "background:#fff1f0;color:#cf1322;prefix:Spring共享促销";
-    }
+  ]
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/factory/SpringLabelStyleRegistry.java`
+查询用户优惠券列表：
 
-下面是基于 Spring Bean 的享元注册表。它收集所有 `LabelStyle` Bean，并按样式编码建立索引。
+```bash
+curl -X GET 'http://localhost:8080/api/user-coupons?userId=user-1001'
+```
 
-```java
-package io.github.atengk.design.factory;
+使用优惠券：
 
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.flyweight.LabelStyle;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+```bash
+curl -X POST 'http://localhost:8080/api/user-coupons/use' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userCouponId": "UC_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "orderAmount": 199.90
+  }'
+```
 
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+返回示例：
 
-/**
- * Spring标签样式享元注册表
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class SpringLabelStyleRegistry {
-
-    private final Map<String, LabelStyle> styleMap;
-
-    /**
-     * 创建Spring标签样式享元注册表
-     *
-     * @param styles 标签样式列表
-     */
-    public SpringLabelStyleRegistry(List<LabelStyle> styles) {
-        if (CollUtil.isEmpty(styles)) {
-            log.warn("Spring标签样式列表为空");
-            this.styleMap = Map.of();
-            return;
-        }
-
-        this.styleMap = styles.stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        style -> StrUtil.trim(style.styleCode()).toLowerCase(),
-                        Function.identity()
-                ));
-
-        log.info("初始化Spring标签样式享元注册表，样式数量：{}，样式编码：{}",
-                styleMap.size(), styleMap.keySet());
-    }
-
-    /**
-     * 获取标签样式
-     *
-     * @param styleCode 样式编码
-     * @return 标签样式
-     */
-    public LabelStyle getStyle(String styleCode) {
-        if (StrUtil.isBlank(styleCode)) {
-            log.warn("获取Spring标签样式失败，样式编码为空");
-            throw new IllegalArgumentException("样式编码不能为空");
-        }
-
-        LabelStyle style = styleMap.get(StrUtil.trim(styleCode).toLowerCase());
-        if (style == null) {
-            log.warn("获取Spring标签样式失败，不支持的样式编码：{}", styleCode);
-            throw new IllegalArgumentException("不支持的样式编码：" + styleCode);
-        }
-
-        return style;
-    }
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": 10.00
 }
 ```
 
-这种方式更符合 Spring Boot 项目的扩展习惯。新增享元对象时，只需要新增一个 `@Component` 实现类，不需要改动注册表逻辑。
+订单金额不满足满减门槛时：
 
-## 内部状态和外部状态
-
-享元模式最容易出错的地方，是把外部状态误放进共享对象成员变量。共享对象如果保存了请求级数据，在并发环境下会出现数据串扰。
-
-推荐内部状态：
-
-```text
-样式编码
-颜色
-图标
-固定模板
-固定规则
-不可变配置
+```bash
+curl -X POST 'http://localhost:8080/api/user-coupons/use' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userCouponId": "UC_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "orderAmount": 50.00
+  }'
 ```
 
-推荐外部状态：
+返回示例：
 
-```text
-用户ID
-订单号
-商品ID
-商品名称
-当前库存
-当前价格
-本次操作人
-本次请求流水号
-```
-
-错误示例：
-
-```java
-public class PromotionLabelStyle implements LabelStyle {
-
-    private Long currentProductId;
-    private String currentProductName;
-
-    public String renderLabel(LabelRenderContext context) {
-        this.currentProductId = context.productId();
-        this.currentProductName = context.productName();
-        return currentProductName;
-    }
+```json
+{
+  "code": 500,
+  "message": "订单金额未满足优惠券使用门槛",
+  "data": null
 }
 ```
-
-这种写法在 Spring 单例或工厂缓存对象中是危险的。多个请求同时渲染时，成员变量会互相覆盖。
-
-推荐写法：
-
-```java
-public String renderLabel(LabelRenderContext context) {
-    return StrUtil.format("促销商品：{}", context.productName());
-}
-```
-
-共享对象只保存可复用状态，每次变化的数据都通过方法参数传入。
-
-## 享元模式和缓存的区别
-
-享元模式经常使用缓存，但它和普通缓存不是一回事。
-
-| 对比项   | 享元模式                     | 普通缓存                     |
-| -------- | ---------------------------- | ---------------------------- |
-| 核心目的 | 共享大量细粒度对象           | 减少重复查询或计算           |
-| 关注点   | 对象共享、状态拆分           | 数据读取性能                 |
-| 典型对象 | 样式、模板、处理器、图标     | 查询结果、接口响应、统计结果 |
-| 状态要求 | 内部状态可共享，外部状态传入 | 不一定拆分状态               |
-| 使用方式 | 工厂返回共享对象             | 缓存命中返回数据             |
-
-简单理解：
-
-```text
-享元模式：共享对象本身。
-普通缓存：缓存数据结果。
-```
-
-例如共享 `PromotionLabelStyle` 是享元模式。缓存某个商品的详情 JSON 是普通缓存。两者可以组合使用，但意图不同。
-
-## 享元模式和单例模式的区别
-
-享元模式和单例模式都可能共享对象，但粒度不同。
-
-| 对比项       | 享元模式                 | 单例模式                 |
-| ------------ | ------------------------ | ------------------------ |
-| 对象数量     | 可以有多个共享对象       | 通常只有一个实例         |
-| 访问方式     | 通过 key 从工厂获取      | 通过固定入口获取唯一实例 |
-| 关注点       | 共享大量细粒度对象       | 保证全局唯一             |
-| 典型场景     | 字典项、样式、图标、模板 | 配置管理器、上下文对象   |
-| 是否需要工厂 | 通常需要                 | 不一定                   |
-
-简单理解：
-
-```text
-单例模式：这个类全局只有一个对象。
-享元模式：这类对象按 key 共享，能复用就复用。
-```
-
-Spring Bean 默认单例可以作为享元对象的载体，但不是所有单例 Bean 都是享元模式。享元模式更强调大量相似对象的共享和内部状态、外部状态的拆分。
-
-## 享元模式和原型模式的区别
-
-享元模式和原型模式都和对象创建有关，但方向相反。
-
-| 对比项   | 享元模式                   | 原型模式                     |
-| -------- | -------------------------- | ---------------------------- |
-| 核心目的 | 共享对象，减少创建数量     | 复制对象，快速创建新对象     |
-| 对象关系 | 多个调用方共享同一个对象   | 基于模板复制出新对象         |
-| 状态处理 | 内部状态共享，外部状态传入 | 复制已有对象状态             |
-| 典型场景 | 样式、图标、模板、规则     | 审批流模板复制、导出任务复制 |
-| 风险点   | 请求级状态污染共享对象     | 浅拷贝导致引用共享           |
-
-简单理解：
-
-```text
-享元模式：别重复创建，大家共享一个。
-原型模式：已有一个模板，复制一份新的。
-```
-
-商品标签样式适合享元模式。基于一个审批流程模板复制出新的审批流程，适合原型模式。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
+可以从下面几个角度验证享元模式是否落地成功。
 
-```bash
-mvn spring-boot:run
-```
+第一，大量用户券没有重复保存模板信息。`UserCouponContext` 只保存 `userCouponId`、`userId`、`templateId`、`status`、`receiveTime`，模板名称、优惠类型、门槛金额、优惠金额都来自 `CouponTemplateFlyweight`。
 
-执行促销标签渲染：
-
-```bash
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=promotion&productId=10001&productName=机械键盘&price=199.00&stock=50"
-```
-
-再次执行同一标签样式但换不同商品：
-
-```bash
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=promotion&productId=10002&productName=无线鼠标&price=99.00&stock=80"
-```
-
-执行库存预警标签渲染：
-
-```bash
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=stock_warning&productId=10003&productName=显示器&price=999.00&stock=3"
-```
-
-如果享元模式正常，可以看到类似日志：
+第二，相同模板 ID 复用同一个享元对象。日志中的 `identityHash` 可以帮助观察同一个 `templateId` 获取到的对象是否一致。
 
 ```text
-标签样式缓存未命中，开始创建样式，样式编码：promotion
-商品标签渲染完成，样式编码：promotion，商品ID：10001，缓存数量：1
-商品标签渲染完成，样式编码：promotion，商品ID：10002，缓存数量：1
-标签样式缓存未命中，开始创建样式，样式编码：stock_warning
-商品标签渲染完成，样式编码：stock_warning，商品ID：10003，缓存数量：2
+获取优惠券模板享元对象，templateId=template-10，identityHash=123456789
+获取优惠券模板享元对象，templateId=template-10，identityHash=123456789
+获取优惠券模板享元对象，templateId=template-10，identityHash=123456789
 ```
 
-重点观察第二次 `promotion` 请求。它不会再次创建 `PromotionLabelStyle`，而是复用缓存中的共享对象。
+第三，缓存数量和用户券数量不会线性增长。即使给 10000 个用户发放 `template-10`，模板享元缓存中仍然只需要一个 `template-10` 对象。
 
-执行不支持的样式编码：
+第四，业务操作通过“享元对象 + 外部状态”完成。展示用户券时，`CouponTemplateFlyweight.toUserCouponVO(context)` 会把共享模板信息和用户券上下文组合成返回对象。
 
-```bash
-curl "http://localhost:8080/flyweight/product-label/render?styleCode=unknown&productId=10004&productName=测试商品&price=10.00&stock=1"
-```
-
-异常日志示例：
+可以重点查看日志：
 
 ```text
-创建标签样式失败，不支持的样式编码：unknown
+优惠券模板享元预加载完成，cacheSize=3
+用户优惠券发放成功，userCouponId=UC_xxx，userId=user-1001，templateId=template-10
+获取优惠券模板享元对象，templateId=template-10，identityHash=123456789
+用户优惠券使用成功，userCouponId=UC_xxx，templateId=template-10，orderAmount=199.90，discountAmount=10.00
 ```
 
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
+## 扩展 Redis 缓存
 
-## 注意事项
+示例中使用 `ConcurrentHashMap` 保存享元对象，适合单体应用或本地缓存场景。生产环境中，如果模板数据需要跨实例共享，可以使用 Redis 缓存模板数据。
 
-享元模式适合共享大量细粒度对象，但不适合所有对象。只有当对象数量大、内部状态重复、外部状态可以清晰拆分时，享元模式才有明显收益。
-
-适合使用享元模式的场景：
+但要注意：享元对象本身通常是 JVM 内对象，Redis 保存的是可重建享元对象的数据。常见做法是：
 
 ```text
-大量重复样式对象
-大量重复模板对象
-大量重复规则对象
-大量重复字典项对象
-大量重复图标对象
-大量无状态处理器
-对象创建成本较高且可复用
+Redis 保存模板 JSON
+本地 JVM 缓存 CouponTemplateFlyweight
+缓存未命中时从 Redis 或数据库加载模板数据
+再创建本地享元对象
 ```
 
-不太适合使用享元模式的场景：
-
-```text
-对象数量很少
-对象状态每次都不同
-对象包含请求级可变状态
-对象生命周期非常短且创建成本低
-共享后反而增加理解成本
-```
-
-不要把请求级状态放进享元对象成员变量中。Spring Bean 默认是单例，工厂缓存对象也会被多个请求共享。
-
-错误示例：
+扩展时可以把 `CouponTemplateFlyweightFactory` 中的加载逻辑改成：
 
 ```java
-private Long currentUserId;
-private String currentOrderNo;
-private String currentProductName;
+CouponTemplateRecord record = loadFromLocalCacheOrRedisOrDatabase(templateId);
+return createFlyweight(record);
 ```
 
-推荐把这些数据放到上下文对象中：
+如果模板变化频率较低，可以本地缓存加过期时间。如果模板需要实时生效，可以结合版本号、消息通知或缓存失效事件刷新本地享元对象。
+
+## 扩展新优惠类型
+
+如果要新增折扣券，例如 `DISCOUNT_RATE`，可以先扩展枚举：
 
 ```java
-public String renderLabel(LabelRenderContext context) {
-    return StrUtil.format("商品：{}", context.productName());
+/**
+ * 折扣券
+ */
+DISCOUNT_RATE
+```
+
+然后在 `CouponTemplateFlyweight` 中扩展计算逻辑：
+
+```java
+if (discountType == CouponDiscountType.DISCOUNT_RATE) {
+    return orderAmount.subtract(NumberUtil.mul(orderAmount, discountAmount));
 }
 ```
 
-享元对象最好设计为不可变对象。内部状态通过构造方法设置，后续不再修改。
-
-推荐写法：
-
-```java
-private final String backgroundColor;
-private final String fontColor;
-private final String prefix;
-```
-
-如果享元缓存可能无限增长，需要设计清理策略。本文示例中的样式编码是有限集合，因此可以长期缓存。如果 key 来自用户输入且数量不可控，就要谨慎。
-
-风险示例：
+生产项目中，如果优惠类型越来越多，不建议把所有计算逻辑都写在享元对象中。可以把优惠计算进一步拆成策略模式：
 
 ```text
-styleCode=user_custom_10001
-styleCode=user_custom_10002
-styleCode=user_custom_10003
-...
+CouponTemplateFlyweight 保存共享模板状态
+CouponDiscountStrategy 负责不同优惠类型的计算
 ```
 
-这种情况下缓存可能持续增长，导致内存压力。可以考虑限制缓存大小、使用 Caffeine、Redis 或定期清理。
+这时享元模式负责共享模板对象，策略模式负责扩展优惠算法，两者可以组合使用。
 
-生产环境中常见控制方式：
+## 适用场景
+
+享元模式适合存在大量重复对象，并且这些对象可以拆分为共享内部状态和独立外部状态的场景。
+
+常见 Spring Boot 项目场景如下。
+
+| 场景       | 内部状态           | 外部状态                     |
+| ---------- | ------------------ | ---------------------------- |
+| 优惠券系统 | 优惠券模板         | 用户券 ID、用户 ID、领取状态 |
+| 权限系统   | 权限定义、菜单定义 | 用户角色、授权状态           |
+| 字典系统   | 字典项定义         | 当前表单字段、当前业务对象   |
+| 消息系统   | 消息模板           | 接收人、变量参数、发送状态   |
+| 报表系统   | 报表模板           | 查询条件、导出人、导出时间   |
+| 工作流系统 | 流程定义、节点定义 | 流程实例、当前审批人、状态   |
+| 商品系统   | 商品规格定义       | SKU 库存、价格、销售状态     |
+
+享元模式尤其适合以下特征明显的模块：
 
 ```text
-限制 key 来源
-限制缓存最大数量
-缓存过期时间
-定期清理不活跃对象
-监控缓存命中率和缓存大小
+对象数量非常多
+对象中有大量重复字段
+重复字段相对稳定
+对象可以拆成共享状态和外部状态
+共享对象可以被缓存和复用
 ```
 
-享元模式不应该掩盖业务语义。如果对象本身应该是独立的业务实体，例如订单、支付单、用户会话，不应该为了减少对象数量而强行共享。
+## 和其他模式的区别
 
-不推荐共享这些对象：
+享元模式容易和单例模式、缓存、原型模式、对象池混淆。区分时重点看模式解决的问题。
 
-```text
-订单实体
-支付单实体
-用户会话上下文
-请求上下文
-事务上下文
-当前操作日志对象
-```
+| 模式     | 关注点                 | 和享元模式的区别                                             |
+| -------- | ---------------------- | ------------------------------------------------------------ |
+| 享元模式 | 共享大量细粒度重复对象 | 重点是拆分内部状态和外部状态                                 |
+| 单例模式 | 保证一个类只有一个实例 | 通常只有一个对象，不强调大量对象共享                         |
+| 缓存     | 避免重复查询或计算     | 缓存是一种技术手段，享元强调对象结构设计                     |
+| 原型模式 | 通过复制创建新对象     | 重点是复制对象，不是共享对象                                 |
+| 对象池   | 复用可变对象资源       | 通常用于连接、线程等昂贵资源，享元对象通常更偏不可变共享数据 |
 
-这些对象通常都有独立状态，强行共享会导致数据污染和并发问题。
+本示例中，优惠券模板对象被多个用户券共享，而且用户券外部状态独立变化，所以更适合使用享元模式。
+
+## 注意事项
+
+享元对象应尽量设计成不可变对象。示例中的 `CouponTemplateFlyweight` 使用 `final` 字段和只读 getter，避免共享对象被某个业务流程修改后影响其他用户券。
+
+不要把外部状态放进享元对象。比如 `userId`、`userCouponId`、`status` 不应该保存到 `CouponTemplateFlyweight` 中，否则对象就无法安全共享。
+
+享元工厂要考虑线程安全。Spring Boot 服务通常是多线程处理请求，示例中使用 `ConcurrentHashMap` 和 `computeIfAbsent()` 保证并发场景下缓存创建安全。
+
+不要为了少量对象强行使用享元模式。如果对象数量很少，或者重复字段不多，使用享元模式可能只会增加复杂度。
+
+享元模式不能代替数据库设计。用户券表中仍然应该保存 `templateId` 作为外键或关联字段，模板信息应该放在模板表中。享元模式主要解决运行时对象复用和代码结构问题。
+
+模板变更要考虑缓存一致性。如果模板对象已经被缓存，后台修改了模板配置，需要明确是立即刷新、延迟刷新、版本化生效，还是禁止修改已发放模板。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，享元模式的实践重点是把可共享的内部状态提取到共享对象中，把每次变化的外部状态通过参数传入，从而减少重复对象创建和内存占用。
+享元模式的核心价值是把大量重复对象中的共享部分抽离出来复用，从而降低内存占用和对象创建成本。
 
-普通 Java 享元模式适合理解对象共享、内部状态和外部状态拆分。Spring Boot 项目中更常见的是“享元接口 + 具体享元对象 + 享元工厂或 Spring 单例注册表”的结构。对于商品标签样式、消息模板、菜单图标、字典项、规则配置、无状态处理器等场景，享元模式可以减少重复对象数量，并让共享对象管理更加清晰。
+在本示例中：
 
-享元模式不是普通缓存的同义词，也不是单例模式的替代品。它最适合处理“大量对象高度相似，且共享状态和变化状态可以清晰拆分”的场景。实际落地时，需要重点控制请求级状态污染、缓存无限增长、线程安全和对象职责边界。
+```text
+CouponTemplateFlyweight 保存可共享的优惠券模板信息
+UserCouponContext 保存每张用户券独有的外部状态
+CouponTemplateFlyweightFactory 负责缓存和复用模板享元对象
+UserCouponServiceImpl 通过模板享元对象和用户券上下文组合完成业务操作
+```
+
+最终效果是：
+
+```text
+用户券对象不再重复保存模板字段
+相同模板 ID 复用同一个享元对象
+共享状态和外部状态边界清晰
+大量用户券场景下对象结构更轻量
+模板展示和优惠计算逻辑更容易集中维护
+```

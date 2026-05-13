@@ -1,416 +1,281 @@
-# 设计模式：观察者模式
+# 观察者模式
 
-观察者模式用于在一个对象状态发生变化时，自动通知多个依赖对象执行后续处理。在 JDK21 和 Spring Boot 3 项目中，观察者模式常用于订单创建后通知、支付成功后异步处理、缓存刷新、消息推送、积分发放、优惠券发放、审计日志、领域事件、Spring 事件监听等场景。
+观察者模式用于在一个对象状态发生变化时，自动通知多个依赖对象执行各自逻辑。
+在 Spring Boot 项目中，观察者模式常用于业务事件通知、订单状态变更、支付成功后续处理、缓存刷新、消息通知、日志审计、数据统计、异步任务触发等场景。
 
-需要注意：观察者模式关注的是“一处变化，多方响应”。如果只是调用一个固定后续流程，普通方法调用即可；如果一个业务事件发生后，需要多个模块各自独立响应，观察者模式更合适。
+本文以“订单支付成功后的多业务订阅处理”为例。订单支付成功后，系统需要扣减库存、发放积分、核销优惠券、发送通知、记录统计。使用观察者模式后，支付主流程只负责发布“订单已支付事件”，后续业务由多个监听器独立处理。
+
+## 适用场景
+
+观察者模式适合处理“一个业务动作发生后，需要触发多个后续动作”的场景。
+
+订单支付成功后，通常会触发以下业务：
+
+| 观察者       | 职责             |
+| ------------ | ---------------- |
+| 库存监听器   | 扣减商品库存     |
+| 积分监听器   | 给用户发放积分   |
+| 优惠券监听器 | 核销已使用优惠券 |
+| 通知监听器   | 发送支付成功通知 |
+| 统计监听器   | 记录订单支付统计 |
+
+如果这些逻辑全部写在支付 Service 中，支付方法会变得臃肿，并且每新增一个后续动作都要修改支付主流程。观察者模式可以让主流程只发布事件，具体后续动作由监听器独立完成。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 Spring Boot 3，使用 Spring 内置事件机制实现观察者模式。
+`ApplicationEventPublisher` 作为事件发布器，`@EventListener` 作为事件监听器。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证观察者模式行为 -->
+    <!-- Spring Boot Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、日期等通用处理 -->
+    <!-- Spring Boot Validation：用于接口参数基础校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：提供字符串、对象、金额、ID 等常用工具能力 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.29</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok：简化 Getter、Setter、构造器、日志对象等代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
-
-## 核心概念
-
-观察者模式的核心目标是解耦事件发布方和事件订阅方。发布方只负责发布事件，不关心有多少观察者，也不关心观察者具体做什么。
-
-常见角色如下：
-
-| 角色             | 说明                                               |
-| ---------------- | -------------------------------------------------- |
-| Subject          | 被观察者，也叫主题，负责维护观察者列表并发布通知   |
-| Observer         | 观察者，负责响应主题发布的事件                     |
-| Event            | 事件对象，携带本次变化的上下文数据                 |
-| ConcreteSubject  | 具体主题，业务状态发生变化后通知观察者             |
-| ConcreteObserver | 具体观察者，执行通知、日志、积分、优惠券等后续逻辑 |
-
-常见实现方式如下：
-
-| 实现方式                      | 是否推荐         | 适用场景                           |
-| ----------------------------- | ---------------- | ---------------------------------- |
-| 普通 Java 观察者              | 推荐用于理解原理 | 无 Spring 依赖的事件通知           |
-| Spring ApplicationEvent       | 强烈推荐         | Spring Boot 项目内事件发布和监听   |
-| `@EventListener`              | 强烈推荐         | 注解式监听事件，代码简洁           |
-| 异步事件监听                  | 推荐             | 事件响应耗时较长，不希望阻塞主流程 |
-| JDK `Observable` / `Observer` | 不推荐           | 已过时，不建议在新项目使用         |
-
-在 Spring Boot 项目中，常见优先级通常是：
+建议目录结构如下：
 
 ```text
-Spring ApplicationEvent + @EventListener > 普通 Java 观察者 > JDK Observable
-```
-
-Spring Boot 项目中更推荐使用 Spring 内置事件机制，而不是自己维护观察者列表。
-
-## 普通 Java 观察者
-
-普通 Java 观察者适合不依赖 Spring 容器的事件通知场景。下面以用户注册事件为例，用户注册成功后，需要通知多个观察者处理后续逻辑。
-
-整体流程如下：
-
-```text
-用户注册成功 -> 发布用户注册事件 -> 发送欢迎消息 -> 发放新人优惠券 -> 记录审计日志
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/observer/simple/
-├── UserRegisterEvent.java
-├── UserRegisterObserver.java
-├── UserRegisterSubject.java
-├── WelcomeMessageObserver.java
-├── NewUserCouponObserver.java
-└── RegisterAuditObserver.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/observer/simple/UserRegisterEvent.java`
-
-下面是用户注册事件对象，用于携带用户注册后的上下文数据。
-
-```java
-package io.github.atengk.design.observer.simple;
-
-import java.time.LocalDateTime;
-
-/**
- * 用户注册事件
- *
- * @param eventId      事件ID
- * @param userId       用户ID
- * @param username     用户名
- * @param registerTime 注册时间
- * @author Ateng
- * @since 2026-04-30
- */
-public record UserRegisterEvent(
-        String eventId,
-        Long userId,
-        String username,
-        LocalDateTime registerTime
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/observer/simple/UserRegisterObserver.java`
-
-下面是用户注册观察者接口，所有注册后续处理器都实现该接口。
-
-```java
-package io.github.atengk.design.observer.simple;
-
-/**
- * 用户注册观察者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface UserRegisterObserver {
-
-    /**
-     * 处理用户注册事件
-     *
-     * @param event 用户注册事件
-     */
-    void onRegister(UserRegisterEvent event);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/observer/simple/UserRegisterSubject.java`
-
-下面是用户注册主题对象，负责维护观察者列表，并在用户注册成功后通知所有观察者。
-
-```java
-package io.github.atengk.design.observer.simple;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-/**
- * 用户注册主题
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class UserRegisterSubject {
-
-    private final List<UserRegisterObserver> observers = new CopyOnWriteArrayList<>();
-
-    /**
-     * 添加观察者
-     *
-     * @param observer 用户注册观察者
-     */
-    public void addObserver(UserRegisterObserver observer) {
-        if (observer == null) {
-            log.warn("添加用户注册观察者失败，观察者为空");
-            throw new IllegalArgumentException("观察者不能为空");
-        }
-
-        observers.add(observer);
-        log.info("添加用户注册观察者成功，当前观察者数量：{}", observers.size());
-    }
-
-    /**
-     * 移除观察者
-     *
-     * @param observer 用户注册观察者
-     */
-    public void removeObserver(UserRegisterObserver observer) {
-        if (observer == null) {
-            return;
-        }
-
-        observers.remove(observer);
-        log.info("移除用户注册观察者成功，当前观察者数量：{}", observers.size());
-    }
-
-    /**
-     * 注册用户并通知观察者
-     *
-     * @param userId   用户ID
-     * @param username 用户名
-     */
-    public void register(Long userId, String username) {
-        validateRegisterParam(userId, username);
-
-        UserRegisterEvent event = new UserRegisterEvent(
-                IdUtil.fastSimpleUUID(),
-                userId,
-                username,
-                DateUtil.date().toLocalDateTime()
-        );
-
-        log.info("用户注册成功，用户ID：{}，用户名：{}，事件ID：{}", userId, username, event.eventId());
-        notifyObservers(event);
-    }
-
-    /**
-     * 通知所有观察者
-     *
-     * @param event 用户注册事件
-     */
-    private void notifyObservers(UserRegisterEvent event) {
-        if (CollUtil.isEmpty(observers)) {
-            log.warn("用户注册事件无观察者处理，事件ID：{}", event.eventId());
-            return;
-        }
-
-        for (UserRegisterObserver observer : observers) {
-            try {
-                observer.onRegister(event);
-            } catch (Exception exception) {
-                log.warn("用户注册观察者处理失败，事件ID：{}，观察者：{}，异常：{}",
-                        event.eventId(), observer.getClass().getSimpleName(), exception.getMessage());
-            }
-        }
-    }
-
-    /**
-     * 校验注册参数
-     *
-     * @param userId   用户ID
-     * @param username 用户名
-     */
-    private void validateRegisterParam(Long userId, String username) {
-        if (userId == null || userId <= 0) {
-            log.warn("用户注册失败，用户ID不合法，用户ID：{}", userId);
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (StrUtil.isBlank(username)) {
-            log.warn("用户注册失败，用户名为空");
-            throw new IllegalArgumentException("用户名不能为空");
-        }
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/observer/simple/WelcomeMessageObserver.java`
-
-下面是欢迎消息观察者，用于在用户注册后发送欢迎消息。
-
-```java
-package io.github.atengk.design.observer.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 欢迎消息观察者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class WelcomeMessageObserver implements UserRegisterObserver {
-
-    /**
-     * 处理用户注册事件
-     *
-     * @param event 用户注册事件
-     */
-    @Override
-    public void onRegister(UserRegisterEvent event) {
-        log.info("发送欢迎消息，用户ID：{}，用户名：{}", event.userId(), event.username());
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/observer/simple/NewUserCouponObserver.java`
-
-下面是新人优惠券观察者，用于在用户注册后发放新人优惠券。
-
-```java
-package io.github.atengk.design.observer.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 新人优惠券观察者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class NewUserCouponObserver implements UserRegisterObserver {
-
-    /**
-     * 处理用户注册事件
-     *
-     * @param event 用户注册事件
-     */
-    @Override
-    public void onRegister(UserRegisterEvent event) {
-        log.info("发放新人优惠券，用户ID：{}，事件ID：{}", event.userId(), event.eventId());
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/observer/simple/RegisterAuditObserver.java`
-
-下面是注册审计观察者，用于记录用户注册审计日志。
-
-```java
-package io.github.atengk.design.observer.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 注册审计观察者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class RegisterAuditObserver implements UserRegisterObserver {
-
-    /**
-     * 处理用户注册事件
-     *
-     * @param event 用户注册事件
-     */
-    @Override
-    public void onRegister(UserRegisterEvent event) {
-        log.info("记录用户注册审计日志，用户ID：{}，注册时间：{}，事件ID：{}",
-                event.userId(), event.registerTime(), event.eventId());
-    }
-}
-```
-
-使用方式：
-
-```java
-UserRegisterSubject subject = new UserRegisterSubject();
-
-subject.addObserver(new WelcomeMessageObserver());
-subject.addObserver(new NewUserCouponObserver());
-subject.addObserver(new RegisterAuditObserver());
-
-subject.register(10001L, "Ateng");
-```
-
-普通 Java 观察者的优点是结构直观，不依赖框架。缺点是观察者注册、移除、异常隔离、异步处理、事务边界都需要自己管理。
-
-## Spring Boot 观察者
-
-Spring Boot 项目中更推荐使用 Spring 事件机制实现观察者模式。业务服务通过 `ApplicationEventPublisher` 发布事件，监听器通过 `@EventListener` 订阅事件。
-
-下面以订单创建事件为例，订单创建成功后通知多个监听器处理后续逻辑。
-
-整体流程如下：
-
-```text
-创建订单 -> 发布订单创建事件 -> 发放积分 -> 发送通知 -> 记录审计日志
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/pattern/observer
 ├── ObserverApplication.java
-├── controller/
-│   └── OrderCreateController.java
-├── dto/
-│   ├── OrderCreateRequest.java
-│   └── OrderCreateResponse.java
-├── event/
-│   └── OrderCreatedEvent.java
-├── listener/
-│   ├── OrderPointListener.java
-│   ├── OrderNoticeListener.java
-│   └── OrderAuditListener.java
-└── service/
-    ├── OrderCreateService.java
-    └── impl/
-        └── OrderCreateServiceImpl.java
+├── common
+│   ├── ApiResult.java
+│   ├── BizException.java
+│   └── GlobalExceptionHandler.java
+└── order
+    ├── controller
+    │   └── OrderPayController.java
+    ├── dto
+    │   └── OrderPayRequest.java
+    ├── event
+    │   └── OrderPaidEvent.java
+    ├── listener
+    │   ├── CouponWriteOffListener.java
+    │   ├── OrderStatisticListener.java
+    │   ├── PointRewardListener.java
+    │   ├── StockDeductListener.java
+    │   └── UserNotifyListener.java
+    ├── publisher
+    │   └── OrderEventPublisher.java
+    ├── service
+    │   ├── OrderPaymentService.java
+    │   └── impl
+    │       └── OrderPaymentServiceImpl.java
+    └── vo
+        └── OrderPayResultVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/ObserverApplication.java`
+## 核心设计
 
-下面是 Spring Boot 启动类。
+本示例把观察者模式拆成四个核心角色：
+
+| 角色                | 项目中的类                | 说明                                     |
+| ------------------- | ------------------------- | ---------------------------------------- |
+| Subject / Publisher | `OrderEventPublisher`     | 事件发布者，负责发布订单支付成功事件     |
+| Event               | `OrderPaidEvent`          | 事件对象，保存订单支付成功后的上下文数据 |
+| Observer            | `StockDeductListener` 等  | 观察者，监听事件并执行各自业务           |
+| Client              | `OrderPaymentServiceImpl` | 支付业务，完成主流程后发布事件           |
+
+执行流程如下：
+
+```text
+Controller
+  -> OrderPaymentService
+    -> 完成订单支付主流程
+    -> OrderEventPublisher.publishOrderPaidEvent()
+      -> StockDeductListener
+      -> PointRewardListener
+      -> CouponWriteOffListener
+      -> UserNotifyListener
+      -> OrderStatisticListener
+```
+
+支付服务不直接依赖库存、积分、优惠券、通知和统计服务，而是通过事件发布机制解耦后续动作。
+
+## 公共代码
+
+公共响应、业务异常和全局异常处理用于统一接口返回。实际项目中可以复用已有基础包。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/common/ApiResult.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.observer.common;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 统一接口响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    /**
+     * 返回成功结果
+     *
+     * @param data 响应数据
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(200, "操作成功", data);
+    }
+
+    /**
+     * 返回失败结果
+     *
+     * @param message 错误信息
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> fail(String message) {
+        return new ApiResult<>(500, message, null);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/common/BizException.java`
+
+```java
+package io.github.atengk.pattern.observer.common;
+
+/**
+ * 业务异常
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class BizException extends RuntimeException {
+
+    /**
+     * 创建业务异常
+     *
+     * @param message 异常信息
+     */
+    public BizException(String message) {
+        super(message);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/common/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.pattern.observer.common;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理业务异常
+     *
+     * @param exception 业务异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(BizException.class)
+    public ApiResult<Void> handleBizException(BizException exception) {
+        log.warn("业务处理失败：{}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ApiResult<Void> handleValidException(Exception exception) {
+        log.warn("接口参数校验失败：{}", exception.getMessage());
+        return ApiResult.fail("请求参数不合法");
+    }
+
+    /**
+     * 处理请求体解析异常
+     *
+     * @param exception 请求体解析异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResult<Void> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("请求体解析失败：{}", exception.getMessage());
+        return ApiResult.fail("请求体格式不正确");
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统异常", exception);
+        return ApiResult.fail("系统繁忙，请稍后重试");
+    }
+
+}
+```
+
+## 完整代码
+
+下面给出观察者模式的核心实现。示例使用 Spring 事件机制完成事件发布与监听，实际项目中可以进一步替换为 MQ、领域事件表或事务消息。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/ObserverApplication.java`
+
+```java
+package io.github.atengk.pattern.observer;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -419,509 +284,730 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 观察者模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class ObserverApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(ObserverApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateRequest.java`
+## 请求对象和响应对象
 
-下面是订单创建请求参数对象。
+请求对象用于接收订单支付参数，响应对象用于返回支付结果和事件 ID。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/dto/OrderPayRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.observer.order.dto;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单创建请求
+ * 订单支付请求参数
  *
- * @param userId      用户ID
- * @param productId   商品ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param unitPrice   商品单价
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderCreateRequest(
-        Long userId,
-        Long productId,
-        String productName,
-        Integer quantity,
-        BigDecimal unitPrice
-) {
+@Data
+public class OrderPayRequest {
+
+    @NotNull(message = "用户ID不能为空")
+    private Long userId;
+
+    @NotNull(message = "商品ID不能为空")
+    private Long productId;
+
+    @Min(value = 1, message = "购买数量必须大于0")
+    private Integer quantity;
+
+    @NotNull(message = "支付金额不能为空")
+    @DecimalMin(value = "0.01", message = "支付金额必须大于0")
+    private BigDecimal payAmount;
+
+    private String couponCode;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateResponse.java`
-
-下面是订单创建响应结果。
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/vo/OrderPayResultVO.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.observer.order.vo;
+
+import lombok.Builder;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单创建响应
+ * 订单支付结果
  *
- * @param orderNo     订单号
- * @param userId      用户ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param totalAmount 订单总金额
- * @param message     结果消息
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderCreateResponse(
-        String orderNo,
-        Long userId,
-        String productName,
-        Integer quantity,
-        BigDecimal totalAmount,
-        String message
-) {
+@Data
+@Builder
+public class OrderPayResultVO {
+
+    private String orderNo;
+
+    private String payNo;
+
+    private String eventId;
+
+    private BigDecimal payAmount;
+
+    private String status;
+
+    private String message;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/event/OrderCreatedEvent.java`
+## 事件对象
 
-下面是订单创建事件。事件对象只携带后续监听器需要的数据，不建议直接把复杂实体对象暴露给所有监听器。
+事件对象用于承载订单支付成功后的业务上下文。多个观察者会基于这个事件对象执行各自逻辑。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/event/OrderPaidEvent.java`
 
 ```java
-package io.github.atengk.design.event;
+package io.github.atengk.pattern.observer.order.event;
+
+import lombok.Builder;
+import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 订单创建事件
+ * 订单支付成功事件
  *
- * @param eventId     事件ID
- * @param orderNo     订单号
- * @param userId      用户ID
- * @param productId   商品ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param totalAmount 订单总金额
- * @param createTime  创建时间
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderCreatedEvent(
-        String eventId,
-        String orderNo,
-        Long userId,
-        Long productId,
-        String productName,
-        Integer quantity,
-        BigDecimal totalAmount,
-        LocalDateTime createTime
-) {
+@Getter
+@Builder
+public class OrderPaidEvent {
+
+    private final String eventId;
+
+    private final String orderNo;
+
+    private final String payNo;
+
+    private final Long userId;
+
+    private final Long productId;
+
+    private final Integer quantity;
+
+    private final BigDecimal payAmount;
+
+    private final String couponCode;
+
+    private final LocalDateTime paidAt;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/OrderCreateService.java`
+## 事件发布者
 
-下面是订单创建服务接口。
+事件发布者封装 Spring 的 `ApplicationEventPublisher`。业务服务只调用业务语义明确的方法，不直接散落 `publishEvent` 代码。
 
-```java
-package io.github.atengk.design.service;
-
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-
-/**
- * 订单创建服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface OrderCreateService {
-
-    /**
-     * 创建订单
-     *
-     * @param request 订单创建请求
-     * @return 订单创建响应
-     */
-    OrderCreateResponse createOrder(OrderCreateRequest request);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderCreateServiceImpl.java`
-
-下面是订单创建服务实现。订单创建成功后，通过 `ApplicationEventPublisher` 发布订单创建事件。
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/publisher/OrderEventPublisher.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.observer.order.publisher;
 
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.NumberUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-import io.github.atengk.design.event.OrderCreatedEvent;
-import io.github.atengk.design.service.OrderCreateService;
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Component;
+
+/**
+ * 订单事件发布者
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class OrderEventPublisher {
+
+    private final ApplicationEventPublisher applicationEventPublisher;
+
+    /**
+     * 发布订单支付成功事件
+     *
+     * @param event 订单支付成功事件
+     */
+    public void publishOrderPaidEvent(OrderPaidEvent event) {
+        log.info("发布订单支付成功事件，eventId：{}，orderNo：{}，payNo：{}",
+                event.getEventId(), event.getOrderNo(), event.getPayNo());
+
+        applicationEventPublisher.publishEvent(event);
+    }
+
+}
+```
+
+## 支付服务
+
+支付服务完成订单支付主流程后，只发布“订单支付成功事件”。它不直接调用库存、积分、优惠券、通知和统计逻辑。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/service/OrderPaymentService.java`
+
+```java
+package io.github.atengk.pattern.observer.order.service;
+
+import io.github.atengk.pattern.observer.order.dto.OrderPayRequest;
+import io.github.atengk.pattern.observer.order.vo.OrderPayResultVO;
+
+/**
+ * 订单支付服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderPaymentService {
+
+    /**
+     * 支付订单
+     *
+     * @param request 订单支付请求
+     * @return 订单支付结果
+     */
+    OrderPayResultVO payOrder(OrderPayRequest request);
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/service/impl/OrderPaymentServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.observer.order.service.impl;
+
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.pattern.observer.common.BizException;
+import io.github.atengk.pattern.observer.order.dto.OrderPayRequest;
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
+import io.github.atengk.pattern.observer.order.publisher.OrderEventPublisher;
+import io.github.atengk.pattern.observer.order.service.OrderPaymentService;
+import io.github.atengk.pattern.observer.order.vo.OrderPayResultVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.time.LocalDateTime;
 
 /**
- * 订单创建服务实现
+ * 订单支付服务实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OrderCreateServiceImpl implements OrderCreateService {
+public class OrderPaymentServiceImpl implements OrderPaymentService {
 
-    private final ApplicationEventPublisher eventPublisher;
+    private final OrderEventPublisher orderEventPublisher;
 
     /**
-     * 创建订单
+     * 支付订单
      *
-     * @param request 订单创建请求
-     * @return 订单创建响应
+     * @param request 订单支付请求
+     * @return 订单支付结果
      */
     @Override
-    public OrderCreateResponse createOrder(OrderCreateRequest request) {
-        validateRequest(request);
+    public OrderPayResultVO payOrder(OrderPayRequest request) {
+        checkPayRequest(request);
 
-        String orderNo = "ORDER" + IdUtil.getSnowflakeNextId();
-        BigDecimal totalAmount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()))
-                .setScale(2, RoundingMode.HALF_UP);
+        String orderNo = "OD" + IdUtil.getSnowflakeNextIdStr();
+        String payNo = "PAY" + IdUtil.getSnowflakeNextIdStr();
+        String eventId = "EVT" + IdUtil.getSnowflakeNextIdStr();
 
-        log.info("创建订单成功，订单号：{}，用户ID：{}，商品ID：{}，金额：{}",
-                orderNo, request.userId(), request.productId(), totalAmount);
+        log.info("订单支付成功，orderNo：{}，payNo：{}，userId：{}，payAmount：{}",
+                orderNo, payNo, request.getUserId(), request.getPayAmount());
 
-        OrderCreatedEvent event = new OrderCreatedEvent(
-                IdUtil.fastSimpleUUID(),
-                orderNo,
-                request.userId(),
-                request.productId(),
-                request.productName(),
-                request.quantity(),
-                totalAmount,
-                DateUtil.date().toLocalDateTime()
-        );
+        OrderPaidEvent event = OrderPaidEvent.builder()
+                .eventId(eventId)
+                .orderNo(orderNo)
+                .payNo(payNo)
+                .userId(request.getUserId())
+                .productId(request.getProductId())
+                .quantity(request.getQuantity())
+                .payAmount(request.getPayAmount())
+                .couponCode(request.getCouponCode())
+                .paidAt(LocalDateTime.now())
+                .build();
 
-        eventPublisher.publishEvent(event);
-        log.info("发布订单创建事件，事件ID：{}，订单号：{}", event.eventId(), orderNo);
+        orderEventPublisher.publishOrderPaidEvent(event);
 
-        return new OrderCreateResponse(
-                orderNo,
-                request.userId(),
-                request.productName(),
-                request.quantity(),
-                totalAmount,
-                "创建成功"
-        );
+        return OrderPayResultVO.builder()
+                .orderNo(orderNo)
+                .payNo(payNo)
+                .eventId(eventId)
+                .payAmount(request.getPayAmount())
+                .status("PAID")
+                .message("订单支付成功")
+                .build();
     }
 
     /**
-     * 校验订单创建请求
+     * 校验支付请求
      *
-     * @param request 订单创建请求
+     * @param request 支付请求
      */
-    private void validateRequest(OrderCreateRequest request) {
-        if (request == null) {
-            log.warn("创建订单失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
+    private void checkPayRequest(OrderPayRequest request) {
+        if (ObjectUtil.isNull(request.getUserId()) || request.getUserId() <= 0) {
+            throw new BizException("用户ID不合法");
         }
 
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("创建订单失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
+        if (ObjectUtil.isNull(request.getProductId()) || request.getProductId() <= 0) {
+            throw new BizException("商品ID不合法");
         }
 
-        if (request.productId() == null || request.productId() <= 0) {
-            log.warn("创建订单失败，商品ID不合法，商品ID：{}", request.productId());
-            throw new IllegalArgumentException("商品ID必须大于0");
+        if (ObjectUtil.isNull(request.getQuantity()) || request.getQuantity() <= 0) {
+            throw new BizException("购买数量必须大于0");
         }
 
-        if (StrUtil.isBlank(request.productName())) {
-            log.warn("创建订单失败，商品名称为空");
-            throw new IllegalArgumentException("商品名称不能为空");
-        }
-
-        if (request.quantity() == null || request.quantity() <= 0) {
-            log.warn("创建订单失败，购买数量不合法，购买数量：{}", request.quantity());
-            throw new IllegalArgumentException("购买数量必须大于0");
-        }
-
-        if (request.unitPrice() == null || request.unitPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("创建订单失败，商品单价不合法，商品单价：{}", request.unitPrice());
-            throw new IllegalArgumentException("商品单价必须大于0");
+        if (ObjectUtil.isNull(request.getPayAmount())
+                || NumberUtil.isLessOrEqual(request.getPayAmount(), BigDecimal.ZERO)) {
+            throw new BizException("支付金额必须大于0");
         }
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/listener/OrderPointListener.java`
+## 观察者监听器
 
-下面是订单积分监听器，用于在订单创建后发放积分。
+下面的多个监听器都是观察者。它们监听同一个 `OrderPaidEvent`，但各自执行不同业务。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/listener/StockDeductListener.java`
 
 ```java
-package io.github.atengk.design.listener;
+package io.github.atengk.pattern.observer.order.listener;
 
-import io.github.atengk.design.event.OrderCreatedEvent;
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * 订单积分监听器
+ * 库存扣减监听器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class OrderPointListener {
+public class StockDeductListener {
 
     /**
-     * 处理订单创建事件
+     * 监听订单支付成功事件并扣减库存
      *
-     * @param event 订单创建事件
+     * @param event 订单支付成功事件
      */
+    @Order(10)
     @EventListener
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        int point = event.totalAmount().intValue();
-        log.info("发放订单积分，事件ID：{}，订单号：{}，用户ID：{}，积分：{}",
-                event.eventId(), event.orderNo(), event.userId(), point);
+    public void onOrderPaid(OrderPaidEvent event) {
+        log.info("开始处理库存扣减，eventId：{}，productId：{}，quantity：{}",
+                event.getEventId(), event.getProductId(), event.getQuantity());
+
+        log.info("库存扣减完成，orderNo：{}，productId：{}，quantity：{}",
+                event.getOrderNo(), event.getProductId(), event.getQuantity());
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/listener/OrderNoticeListener.java`
-
-下面是订单通知监听器，用于在订单创建后发送通知。
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/listener/PointRewardListener.java`
 
 ```java
-package io.github.atengk.design.listener;
+package io.github.atengk.pattern.observer.order.listener;
 
-import io.github.atengk.design.event.OrderCreatedEvent;
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-/**
- * 订单通知监听器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class OrderNoticeListener {
-
-    /**
-     * 处理订单创建事件
-     *
-     * @param event 订单创建事件
-     */
-    @EventListener
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        log.info("发送订单创建通知，事件ID：{}，订单号：{}，用户ID：{}，商品：{}",
-                event.eventId(), event.orderNo(), event.userId(), event.productName());
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/listener/OrderAuditListener.java`
-
-下面是订单审计监听器，用于记录订单创建审计日志。
-
-```java
-package io.github.atengk.design.listener;
-
-import io.github.atengk.design.event.OrderCreatedEvent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
-import org.springframework.stereotype.Component;
-
-/**
- * 订单审计监听器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class OrderAuditListener {
-
-    /**
-     * 处理订单创建事件
-     *
-     * @param event 订单创建事件
-     */
-    @EventListener
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        log.info("记录订单创建审计日志，事件ID：{}，订单号：{}，创建时间：{}",
-                event.eventId(), event.orderNo(), event.createTime());
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderCreateController.java`
-
-下面是订单创建接口，用于验证 Spring 事件监听效果。
-
-```java
-package io.github.atengk.design.controller;
-
-import io.github.atengk.design.dto.OrderCreateRequest;
-import io.github.atengk.design.dto.OrderCreateResponse;
-import io.github.atengk.design.service.OrderCreateService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 
 /**
- * 订单创建控制器
+ * 积分发放监听器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/observer/order")
-public class OrderCreateController {
-
-    private final OrderCreateService orderCreateService;
+@Slf4j
+@Component
+public class PointRewardListener {
 
     /**
-     * 创建订单
+     * 监听订单支付成功事件并发放积分
      *
-     * @param userId      用户ID
-     * @param productId   商品ID
-     * @param productName 商品名称
-     * @param quantity    购买数量
-     * @param unitPrice   商品单价
-     * @return 订单创建响应
+     * @param event 订单支付成功事件
      */
-    @PostMapping("/create")
-    public OrderCreateResponse createOrder(@RequestParam Long userId,
-                                           @RequestParam Long productId,
-                                           @RequestParam String productName,
-                                           @RequestParam Integer quantity,
-                                           @RequestParam BigDecimal unitPrice) {
-        OrderCreateRequest request = new OrderCreateRequest(
-                userId,
-                productId,
-                productName,
-                quantity,
-                unitPrice
-        );
-        return orderCreateService.createOrder(request);
+    @Order(20)
+    @EventListener
+    public void onOrderPaid(OrderPaidEvent event) {
+        Integer rewardPoints = calculateRewardPoints(event.getPayAmount());
+
+        log.info("积分发放完成，eventId：{}，userId：{}，orderNo：{}，rewardPoints：{}",
+                event.getEventId(), event.getUserId(), event.getOrderNo(), rewardPoints);
     }
+
+    /**
+     * 计算奖励积分
+     *
+     * @param payAmount 支付金额
+     * @return 奖励积分
+     */
+    private Integer calculateRewardPoints(BigDecimal payAmount) {
+        return NumberUtil.div(payAmount, BigDecimal.TEN).intValue();
+    }
+
 }
 ```
 
-接口调用示例：
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/listener/CouponWriteOffListener.java`
 
-```bash
-curl -X POST "http://localhost:8080/observer/order/create?userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00"
+```java
+package io.github.atengk.pattern.observer.order.listener;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+/**
+ * 优惠券核销监听器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class CouponWriteOffListener {
+
+    /**
+     * 监听订单支付成功事件并核销优惠券
+     *
+     * @param event 订单支付成功事件
+     */
+    @Order(30)
+    @EventListener
+    public void onOrderPaid(OrderPaidEvent event) {
+        if (StrUtil.isBlank(event.getCouponCode())) {
+            log.info("订单未使用优惠券，无需核销，eventId：{}，orderNo：{}",
+                    event.getEventId(), event.getOrderNo());
+            return;
+        }
+
+        log.info("优惠券核销完成，eventId：{}，userId：{}，orderNo：{}，couponCode：{}",
+                event.getEventId(), event.getUserId(), event.getOrderNo(), event.getCouponCode());
+    }
+
+}
 ```
 
-可能返回：
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/listener/UserNotifyListener.java`
+
+```java
+package io.github.atengk.pattern.observer.order.listener;
+
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+/**
+ * 用户通知监听器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class UserNotifyListener {
+
+    /**
+     * 监听订单支付成功事件并发送用户通知
+     *
+     * @param event 订单支付成功事件
+     */
+    @Order(40)
+    @EventListener
+    public void onOrderPaid(OrderPaidEvent event) {
+        log.info("用户支付成功通知发送完成，eventId：{}，userId：{}，orderNo：{}，payAmount：{}",
+                event.getEventId(), event.getUserId(), event.getOrderNo(), event.getPayAmount());
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/listener/OrderStatisticListener.java`
+
+```java
+package io.github.atengk.pattern.observer.order.listener;
+
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+/**
+ * 订单统计监听器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class OrderStatisticListener {
+
+    /**
+     * 监听订单支付成功事件并记录统计数据
+     *
+     * @param event 订单支付成功事件
+     */
+    @Order(50)
+    @EventListener
+    public void onOrderPaid(OrderPaidEvent event) {
+        log.info("订单支付统计记录完成，eventId：{}，orderNo：{}，productId：{}，payAmount：{}，paidAt：{}",
+                event.getEventId(),
+                event.getOrderNo(),
+                event.getProductId(),
+                event.getPayAmount(),
+                event.getPaidAt());
+    }
+
+}
+```
+
+## 控制器接口
+
+控制器只负责接收订单支付请求，然后调用支付服务。它不需要知道支付成功后有哪些观察者会被触发。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/controller/OrderPayController.java`
+
+```java
+package io.github.atengk.pattern.observer.order.controller;
+
+import io.github.atengk.pattern.observer.common.ApiResult;
+import io.github.atengk.pattern.observer.order.dto.OrderPayRequest;
+import io.github.atengk.pattern.observer.order.service.OrderPaymentService;
+import io.github.atengk.pattern.observer.order.vo.OrderPayResultVO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 订单支付接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@RestController
+@RequestMapping("/orders")
+@RequiredArgsConstructor
+public class OrderPayController {
+
+    private final OrderPaymentService orderPaymentService;
+
+    /**
+     * 支付订单
+     *
+     * @param request 订单支付请求
+     * @return 订单支付结果
+     */
+    @PostMapping("/pay")
+    public ApiResult<OrderPayResultVO> payOrder(@Valid @RequestBody OrderPayRequest request) {
+        return ApiResult.success(orderPaymentService.payOrder(request));
+    }
+
+}
+```
+
+## 使用方式
+
+启动项目后，调用订单支付接口即可触发观察者模式。
+
+接口信息：
+
+| 项目         | 内容                                                     |
+| ------------ | -------------------------------------------------------- |
+| 请求路径     | `/orders/pay`                                            |
+| 请求方法     | `POST`                                                   |
+| Content-Type | `application/json`                                       |
+| 主流程       | 支付订单 → 发布订单支付成功事件 → 多个监听器处理后续业务 |
+
+正常支付订单：
+
+```bash
+curl -X POST "http://localhost:8080/orders/pay" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 2,
+    "payAmount": 199.90,
+    "couponCode": "FULL_100_20"
+  }'
+```
+
+返回示例：
 
 ```json
 {
-  "orderNo": "ORDER2019776866538487808",
-  "userId": 10001,
-  "productName": "键盘",
-  "quantity": 2,
-  "totalAmount": 398.00,
-  "message": "创建成功"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "orderNo": "OD1998948715737427968",
+    "payNo": "PAY1998948715737427969",
+    "eventId": "EVT1998948715737427970",
+    "payAmount": 199.90,
+    "status": "PAID",
+    "message": "订单支付成功"
+  }
 }
 ```
 
-如果事件监听正常，可以看到多个监听器分别处理同一个订单创建事件。
+未使用优惠券支付：
 
-```text
-创建订单成功，订单号：ORDER2019776866538487808，用户ID：10001，商品ID：20001，金额：398.00
-发放订单积分，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808，用户ID：10001，积分：398
-发送订单创建通知，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808，用户ID：10001，商品：键盘
-记录订单创建审计日志，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808，创建时间：2026-04-30T10:15:30
-发布订单创建事件，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808
+```bash
+curl -X POST "http://localhost:8080/orders/pay" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10002,
+    "productId": 20002,
+    "quantity": 1,
+    "payAmount": 59.90
+  }'
 ```
 
-需要注意：Spring 事件默认是同步执行。也就是说，`publishEvent` 会等待监听器执行完成后才继续往下执行。
+返回示例：
 
-## 异步事件监听
-
-如果事件监听器执行耗时较长，例如发送短信、调用第三方接口、生成报表，不建议阻塞主流程。此时可以开启异步事件监听。
-
-异步事件适合“主流程成功后，后续处理可以延迟完成”的场景。下面在订单通知监听器上添加异步执行。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
-├── config/
-│   └── AsyncConfig.java
-└── listener/
-    └── AsyncOrderNoticeListener.java
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "orderNo": "OD1998948991737427971",
+    "payNo": "PAY1998948991737427972",
+    "eventId": "EVT1998948991737427973",
+    "payAmount": 59.90,
+    "status": "PAID",
+    "message": "订单支付成功"
+  }
+}
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/config/AsyncConfig.java`
+非法支付金额请求：
 
-下面是异步线程池配置。`@EnableAsync` 用于开启 Spring 异步方法能力。
+```bash
+curl -X POST "http://localhost:8080/orders/pay" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 20001,
+    "quantity": 1,
+    "payAmount": 0
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 500,
+  "message": "请求参数不合法",
+  "data": null
+}
+```
+
+## 验证方式
+
+正常支付后，可以通过日志观察事件发布和监听器执行过程：
+
+```text
+订单支付成功，orderNo：OD1998948715737427968，payNo：PAY1998948715737427969，userId：10001，payAmount：199.90
+发布订单支付成功事件，eventId：EVT1998948715737427970，orderNo：OD1998948715737427968，payNo：PAY1998948715737427969
+开始处理库存扣减，eventId：EVT1998948715737427970，productId：20001，quantity：2
+库存扣减完成，orderNo：OD1998948715737427968，productId：20001，quantity：2
+积分发放完成，eventId：EVT1998948715737427970，userId：10001，orderNo：OD1998948715737427968，rewardPoints：19
+优惠券核销完成，eventId：EVT1998948715737427970，userId：10001，orderNo：OD1998948715737427968，couponCode：FULL_100_20
+用户支付成功通知发送完成，eventId：EVT1998948715737427970，userId：10001，orderNo：OD1998948715737427968，payAmount：199.90
+订单支付统计记录完成，eventId：EVT1998948715737427970，orderNo：OD1998948715737427968，productId：20001，payAmount：199.90，paidAt：2026-05-13T10:00:00
+```
+
+从日志可以看到，支付服务只发布了一次事件，但多个监听器都收到了该事件并执行自己的业务逻辑。
+
+## 异步事件扩展
+
+默认情况下，Spring 的 `@EventListener` 是同步执行的。也就是说，监听器抛出异常可能影响发布事件的主流程。
+如果订单支付接口不希望等待积分、通知、统计等后续动作完成，可以启用异步事件监听。
+
+异步事件配置如下。
+
+文件位置：`src/main/java/io/github/atengk/pattern/observer/config/AsyncEventConfig.java`
 
 ```java
-package io.github.atengk.design.config;
+package io.github.atengk.pattern.observer.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
 
 /**
- * 异步任务配置
+ * 异步事件配置
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @EnableAsync
 @Configuration
-public class AsyncConfig {
+public class AsyncEventConfig implements AsyncConfigurer {
 
     /**
-     * 创建订单事件线程池
+     * 创建事件处理线程池
      *
-     * @return 订单事件线程池
+     * @return 事件处理线程池
      */
-    @Bean("orderEventExecutor")
-    public Executor orderEventExecutor() {
+    @Bean("eventTaskExecutor")
+    public Executor eventTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setThreadNamePrefix("order-event-");
+        executor.setThreadNamePrefix("event-task-");
         executor.setCorePoolSize(4);
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(200);
@@ -929,252 +1015,149 @@ public class AsyncConfig {
         executor.setAwaitTerminationSeconds(30);
         executor.initialize();
 
-        log.info("初始化订单事件线程池完成");
+        log.info("异步事件线程池初始化完成");
         return executor;
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/listener/AsyncOrderNoticeListener.java`
-
-下面是异步订单通知监听器。它会在指定线程池中执行，不阻塞订单创建主流程。
+然后在监听器方法上增加 `@Async("eventTaskExecutor")`：
 
 ```java
-package io.github.atengk.design.listener;
-
-import io.github.atengk.design.event.OrderCreatedEvent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Component;
-
-/**
- * 异步订单通知监听器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class AsyncOrderNoticeListener {
-
-    /**
-     * 异步处理订单创建事件
-     *
-     * @param event 订单创建事件
-     */
-    @Async("orderEventExecutor")
-    @EventListener
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        log.info("异步发送订单通知，线程：{}，事件ID：{}，订单号：{}，用户ID：{}",
-                Thread.currentThread().getName(), event.eventId(), event.orderNo(), event.userId());
-    }
+@Async("eventTaskExecutor")
+@EventListener
+public void onOrderPaid(OrderPaidEvent event) {
+    log.info("异步处理订单支付成功事件，eventId：{}", event.getEventId());
 }
 ```
 
-开启异步后，订单创建接口可以更快返回，但需要注意：异步监听器的异常不会直接抛回主流程。生产环境中应记录异常日志，并根据业务重要性引入重试、补偿或消息队列。
+异步事件适合通知、统计、日志、非核心后续处理。
+如果是库存扣减、优惠券核销这类强一致业务，需要结合事务、补偿机制或 MQ 事务消息谨慎处理。
 
-## 扩展一个新观察者
+## 事务事件扩展
 
-在 Spring Boot 观察者模式中，新增事件响应逻辑通常只需要新增一个监听器类。下面以库存日志监听器为例，订单创建后记录库存变更流水。
-
-文件位置：`src/main/java/io/github/atengk/design/listener/StockLogListener.java`
-
-下面的监听器会被 Spring 自动扫描，并自动订阅 `OrderCreatedEvent`。
-
-```java
-package io.github.atengk.design.listener;
-
-import io.github.atengk.design.event.OrderCreatedEvent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
-import org.springframework.stereotype.Component;
-
-/**
- * 库存日志监听器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class StockLogListener {
-
-    /**
-     * 处理订单创建事件
-     *
-     * @param event 订单创建事件
-     */
-    @EventListener
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        log.info("记录库存变更流水，事件ID：{}，订单号：{}，商品ID：{}，扣减数量：{}",
-                event.eventId(), event.orderNo(), event.productId(), event.quantity());
-    }
-}
-```
-
-新增该监听器后，`OrderCreateServiceImpl` 不需要修改。订单创建服务仍然只负责创建订单和发布事件，库存日志由新监听器独立完成。
-
-这就是观察者模式的核心价值：发布方稳定，订阅方可扩展。
-
-## 观察者模式和发布订阅的区别
-
-观察者模式和发布订阅模式都能实现“一处发布，多处响应”，但二者耦合程度不同。
-
-| 对比项   | 观察者模式                        | 发布订阅模式                             |
-| -------- | --------------------------------- | ---------------------------------------- |
-| 通信方式 | 主题直接通知观察者                | 发布方通过中间消息通道通知订阅方         |
-| 中间层   | 通常没有独立消息中间件            | 通常有消息队列、事件总线或 Broker        |
-| 耦合程度 | 发布方和观察者存在一定关系        | 发布方和订阅方解耦更彻底                 |
-| 事务边界 | 多数在同一进程内                  | 通常跨进程、跨服务                       |
-| 典型实现 | Spring ApplicationEvent、GUI 事件 | RabbitMQ、Kafka、Redis Pub/Sub、RocketMQ |
-
-简单理解：
-
-```text
-观察者模式：对象状态变了，通知当前进程内的观察者。
-发布订阅模式：事件发到中间通道，由订阅者自行消费。
-```
-
-Spring `ApplicationEvent` 更接近进程内观察者模式。Kafka、RabbitMQ 这类消息队列更接近发布订阅模式。
-
-## 观察者模式和策略模式的区别
-
-观察者模式和策略模式的关注点不同。
-
-| 对比项   | 观察者模式                     | 策略模式                 |
-| -------- | ------------------------------ | ------------------------ |
-| 核心目的 | 一个事件触发多个响应           | 从多个算法中选择一个执行 |
-| 调用关系 | 一对多                         | 一对一                   |
-| 关注点   | 通知、扩展、解耦后续处理       | 替换算法、规则分发       |
-| 典型场景 | 订单创建后发积分、发通知、审计 | 满减、折扣、新人优惠     |
-| 扩展方式 | 新增监听器                     | 新增策略实现             |
-
-简单理解：
-
-```text
-观察者模式：发生一件事后，多个模块都要响应。
-策略模式：要处理一件事，但只能选择一种算法处理。
-```
-
-订单创建后同时发积分、发通知、写审计，适合观察者模式。订单优惠从满减、折扣、新人优惠中选择一种，适合策略模式。
-
-## 验证方式
-
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行订单创建接口：
-
-```bash
-curl -X POST "http://localhost:8080/observer/order/create?userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00"
-```
-
-如果观察者模式生效，可以看到订单创建后多个监听器依次响应。
-
-正常日志示例：
-
-```text
-创建订单成功，订单号：ORDER2019776866538487808，用户ID：10001，商品ID：20001，金额：398.00
-发放订单积分，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808，用户ID：10001，积分：398
-发送订单创建通知，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808，用户ID：10001，商品：键盘
-记录订单创建审计日志，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808，创建时间：2026-04-30T10:15:30
-记录库存变更流水，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808，商品ID：20001，扣减数量：2
-发布订单创建事件，事件ID：f17c7a2a81a44e25a06f7de799f6dd7c，订单号：ORDER2019776866538487808
-```
-
-执行异常请求：
-
-```bash
-curl -X POST "http://localhost:8080/observer/order/create?userId=10001&productId=20001&productName=键盘&quantity=0&unitPrice=199.00"
-```
-
-异常日志示例：
-
-```text
-创建订单失败，购买数量不合法，购买数量：0
-```
-
-此时不会发布 `OrderCreatedEvent`，因此监听器不会执行。
-
-## 注意事项
-
-观察者模式适合解耦后续响应逻辑，但不要把主流程必须强一致完成的逻辑随意丢到观察者中。
-
-例如订单创建时，扣减库存如果必须和订单创建保持强一致，通常不建议简单放到异步监听器中处理。否则订单已经创建成功，但库存扣减失败，会产生业务不一致。
-
-更适合放在观察者中的逻辑：
-
-```text
-发送通知
-记录审计日志
-发放非核心奖励
-刷新缓存
-同步搜索索引
-发送埋点事件
-```
-
-不适合随意放在异步观察者中的强一致逻辑：
-
-```text
-核心库存扣减
-核心资金入账
-订单主状态变更
-必须同事务提交的数据写入
-```
-
-Spring 事件默认同步执行。如果监听器抛出异常，可能影响事件发布方后续流程。
+如果订单支付涉及数据库事务，普通 `@EventListener` 可能在事务提交前就执行。
+如果监听器必须等主事务提交成功后再执行，可以使用 `@TransactionalEventListener`。
 
 示例：
 
 ```java
-@EventListener
-public void handleOrderCreated(OrderCreatedEvent event) {
-    throw new IllegalStateException("监听器处理失败");
-}
-```
+package io.github.atengk.pattern.observer.order.listener;
 
-如果不希望某个监听器异常影响主流程，建议在监听器内部捕获异常并记录日志。
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
-```java
-@EventListener
-public void handleOrderCreated(OrderCreatedEvent event) {
-    try {
-        log.info("处理订单创建事件，订单号：{}", event.orderNo());
-    } catch (Exception exception) {
-        log.warn("处理订单创建事件失败，订单号：{}，异常：{}", event.orderNo(), exception.getMessage());
+/**
+ * 事务提交后通知监听器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class TransactionalUserNotifyListener {
+
+    /**
+     * 在事务提交后发送通知
+     *
+     * @param event 订单支付成功事件
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderPaidAfterCommit(OrderPaidEvent event) {
+        log.info("事务提交后发送支付成功通知，eventId：{}，orderNo：{}",
+                event.getEventId(), event.getOrderNo());
     }
+
 }
 ```
 
-异步监听器适合耗时但非强一致的后续处理。生产环境中，如果事件不能丢失，不建议只依赖 Spring 本地异步事件。应使用消息队列或事件表。
+注意：`@TransactionalEventListener` 需要事件发布发生在 Spring 事务上下文中。如果当前没有事务，默认不会执行监听器；可以根据业务需要设置 `fallbackExecution = true`。
 
-推荐生产方案：
+## 扩展方式
 
-```text
-订单事务提交 -> 写入本地事件表 -> 定时任务或消息中间件投递 -> 消费者处理 -> 失败重试或人工补偿
-```
+如果后续需要新增“会员成长值监听器”，只需要新增一个监听器类即可，不需要修改支付主流程。
 
-如果使用 `@TransactionalEventListener`，可以让事件监听器在事务提交后执行，避免事务回滚后仍然处理事件。
-
-示例：
+文件位置：`src/main/java/io/github/atengk/pattern/observer/order/listener/MemberGrowthListener.java`
 
 ```java
-@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-public void handleOrderCreatedAfterCommit(OrderCreatedEvent event) {
-    log.info("事务提交后处理订单创建事件，订单号：{}", event.orderNo());
+package io.github.atengk.pattern.observer.order.listener;
+
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.observer.order.event.OrderPaidEvent;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
+
+/**
+ * 会员成长值监听器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class MemberGrowthListener {
+
+    /**
+     * 监听订单支付成功事件并增加会员成长值
+     *
+     * @param event 订单支付成功事件
+     */
+    @EventListener
+    public void onOrderPaid(OrderPaidEvent event) {
+        Integer growthValue = NumberUtil.div(event.getPayAmount(), 5).intValue();
+
+        log.info("会员成长值增加完成，eventId：{}，userId：{}，growthValue：{}",
+                event.getEventId(), event.getUserId(), growthValue);
+    }
+
 }
 ```
 
-该方式适合“只有主事务提交成功后，才允许处理后续逻辑”的场景。
+新增该类后，Spring 会自动注册监听器。支付服务仍然只发布 `OrderPaidEvent`，不需要修改任何支付代码。
 
-## 总结
+## 优点和注意事项
 
-在 JDK21 和 Spring Boot 3 项目中，观察者模式的实践重点是通过事件解耦业务发布方和多个响应方。
+观察者模式的核心价值是解耦事件发布方和事件处理方。发布方只关心“发生了什么”，观察者各自决定“收到事件后做什么”。
 
-普通 Java 观察者适合理解原理或无框架场景。Spring Boot 项目中更推荐使用 `ApplicationEventPublisher` 发布事件，并使用 `@EventListener` 或 `@TransactionalEventListener` 监听事件。对于订单创建、支付成功、用户注册、文件导入完成、审批通过等场景，观察者模式可以有效减少主流程对后续模块的直接依赖。
+| 注意事项         | 说明                                             |
+| ---------------- | ------------------------------------------------ |
+| 事件对象要稳定   | 事件字段会被多个监听器依赖，不建议频繁破坏性修改 |
+| 监听器职责要单一 | 一个监听器只处理一类后续动作                     |
+| 核心链路谨慎异步 | 库存、优惠券等强一致逻辑不要随意异步化           |
+| 监听器异常要隔离 | 异步监听器应做好异常捕获、日志记录和重试补偿     |
+| 高频事件注意性能 | 事件过多时应考虑线程池、队列、削峰和批处理       |
+| 跨服务事件用 MQ  | Spring 本地事件只适合单体应用或同 JVM 内部解耦   |
 
-观察者模式不是为了替代所有方法调用，而是为了处理“一个业务事件发生后，多个模块需要独立响应”的场景。对于强一致、必须同步完成的核心链路，需要谨慎使用异步观察者，并结合事务、消息队列、重试和补偿机制保证业务可靠性。
+## 和中介者模式的区别
+
+观察者模式和中介者模式都能减少对象之间的直接依赖，但关注点不同。
+
+| 模式       | 关注点                             | 典型场景                                 |
+| ---------- | ---------------------------------- | ---------------------------------------- |
+| 观察者模式 | 一个事件发生后，多个观察者自动响应 | 支付成功后通知、统计、积分、缓存刷新     |
+| 中介者模式 | 一个协调者主动编排多个对象协作     | 订单提交、支付编排、审批流程、工作流调度 |
+
+观察者模式更适合“一对多通知”。
+中介者模式更适合“流程编排和协作控制”。
+
+## 和责任链模式的区别
+
+观察者模式和责任链模式都可能触发多个处理器，但处理关系不同。
+
+| 模式       | 关注点                                             | 典型场景                       |
+| ---------- | -------------------------------------------------- | ------------------------------ |
+| 观察者模式 | 多个监听器响应同一个事件，监听器之间通常互不依赖   | 事件通知、统计、日志、缓存刷新 |
+| 责任链模式 | 一个请求按顺序经过多个节点，节点之间有明确链路关系 | 校验链、过滤链、风控链、审批链 |
+
+观察者模式强调广播通知。
+责任链模式强调顺序处理。
+
+## 小结
+
+观察者模式在 Spring Boot 项目中的常见落地方式是：定义业务事件对象，通过事件发布器发布事件，再由多个监听器独立处理后续动作。
+在订单支付、用户注册、配置变更、缓存刷新、数据统计、消息通知等场景中，观察者模式可以有效降低主流程复杂度，使业务扩展更灵活。

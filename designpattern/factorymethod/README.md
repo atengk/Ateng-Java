@@ -1,38 +1,42 @@
-# 设计模式：工厂方法模式
+# 工厂方法模式
 
-工厂方法模式用于把对象创建逻辑延迟到具体工厂类中，由不同工厂负责创建不同产品对象。在 JDK21 和 Spring Boot 3 项目中，工厂方法模式常用于支付处理器创建、文件解析器创建、消息发送器创建、导入处理器创建、导出处理器创建、通知渠道处理器创建等场景。
-
-需要注意：工厂方法模式关注的是“创建单个产品对象”。如果需要创建同一产品族下的一组对象，更适合抽象工厂模式；如果只是字段很多的复杂对象组装，更适合构建者模式；如果只是根据类型选择一个已有 Bean 执行，也可以使用策略模式或 Spring Bean Map。
+工厂方法模式属于创建型模式，用于把对象创建逻辑延迟到具体工厂类中。它和简单工厂模式的区别在于：简单工厂通常由一个工厂类根据类型返回对象；工厂方法模式则为每一种产品提供一个对应的工厂实现，由具体工厂决定创建哪一种对象。当前设计模式总览中，工厂方法模式属于 GoF 创建型模式，模块名为 `factorymethod`。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 JDK 21、Spring Boot 3、Maven、Hutool、Lombok 编写。示例场景是“多支付渠道下单”，系统支持支付宝、微信支付、余额支付。每一种支付渠道都有自己的客户端创建逻辑，因此使用工厂方法模式将不同客户端的创建过程放到不同工厂中。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证工厂方法模式行为 -->
+    <!-- Spring Boot Web，用于提供支付下单接口 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、集合、金额等通用处理 -->
+    <!-- Spring Boot Validation，用于请求参数校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool 工具类，用于字符串、日期、金额、JSON 等常用处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.36</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok，用于减少构造方法、getter、setter 和日志样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- Spring Boot 测试依赖，用于验证工厂方法选择和客户端创建逻辑 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -41,420 +45,101 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+文件位置：`src/main/resources/application.yml`
 
-## 核心概念
+```yaml
+server:
+  port: 8080
 
-工厂方法模式的核心目标是让调用方依赖抽象产品和抽象工厂，而不是直接 `new` 具体产品对象。每个具体工厂负责创建一种具体产品。
+demo:
+  factory-method:
+    alipay:
+      # 支付宝商户号，示例值
+      merchant-id: ALIPAY_MERCHANT_10001
+      # 支付宝网关地址，示例值
+      gateway-url: https://openapi.alipay.com/gateway.do
+    wechat:
+      # 微信支付商户号，示例值
+      merchant-id: WECHAT_MERCHANT_20001
+      # 微信支付网关地址，示例值
+      gateway-url: https://api.mch.weixin.qq.com
+    balance:
+      # 余额支付内部账户编码，示例值
+      account-code: BALANCE_ACCOUNT_30001
+```
 
-常见角色如下：
+## 模式说明
 
-| 角色            | 说明                               |
-| --------------- | ---------------------------------- |
-| Product         | 抽象产品，定义产品统一行为         |
-| ConcreteProduct | 具体产品，实现具体业务能力         |
-| Factory         | 抽象工厂，定义创建产品的方法       |
-| ConcreteFactory | 具体工厂，负责创建某一种具体产品   |
-| Client          | 调用方，通过工厂创建产品并使用产品 |
+工厂方法模式的核心是定义一个创建对象的工厂接口，把具体对象的创建交给子类工厂完成。调用方依赖抽象工厂和抽象产品，不直接依赖具体产品类。
 
-典型结构如下：
+在本示例中：
 
 ```text
-PaymentHandlerFactory
-└── createHandler()
+PayClient：支付客户端产品接口
+AlipayPayClient：支付宝客户端产品
+WechatPayClient：微信支付客户端产品
+BalancePayClient：余额支付客户端产品
 
-AlipayHandlerFactory
-└── AlipayPaymentHandler
-
-WechatHandlerFactory
-└── WechatPaymentHandler
+PayClientFactory：支付客户端工厂接口
+AlipayPayClientFactory：支付宝客户端工厂
+WechatPayClientFactory：微信支付客户端工厂
+BalancePayClientFactory：余额支付客户端工厂
 ```
 
-工厂方法模式和简单工厂的区别在于：简单工厂通常把所有创建分支写在一个工厂类中；工厂方法模式把不同产品的创建逻辑拆到不同具体工厂中。
-
-在 Spring Boot 项目中，常见优先级通常是：
+工厂方法模式适合以下场景：
 
 ```text
-Spring Bean 工厂方法 > 普通 Java 工厂方法 > 简单工厂 if else
+对象创建逻辑比较复杂
+不同产品有不同初始化参数
+不同产品创建前需要不同校验
+新增产品时希望新增一个工厂类，而不是修改统一工厂的大量分支
+调用方只关心产品接口，不关心产品创建细节
 ```
 
-如果产品数量少、创建逻辑简单，简单工厂也可以接受。如果产品创建逻辑复杂、产品类型经常扩展，工厂方法模式更适合。
+在 Spring Boot 项目中，工厂方法模式常见于支付客户端、短信客户端、存储客户端、文件解析器、导出器、消息生产者、第三方平台适配客户端等场景。
 
-## 普通 Java 工厂方法
+## 项目结构
 
-普通 Java 工厂方法适合不依赖 Spring 容器的产品创建场景。下面以文件解析器为例，系统支持 CSV 和 JSON 两种文件解析器，不同工厂负责创建不同解析器。
-
-整体关系如下：
+本示例使用 Spring Bean 管理具体工厂。业务层根据支付渠道找到对应工厂，再调用工厂方法创建支付客户端。
 
 ```text
-FileParserFactory
-├── CsvFileParserFactory -> CsvFileParser
-└── JsonFileParserFactory -> JsonFileParser
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/factorymethod/simple/
-├── FileParser.java
-├── FileParserFactory.java
-├── CsvFileParser.java
-├── CsvFileParserFactory.java
-├── JsonFileParser.java
-└── JsonFileParserFactory.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factorymethod/simple/FileParser.java`
-
-下面是文件解析器抽象产品接口。
-
-```java
-package io.github.atengk.design.factorymethod.simple;
-
-import java.util.List;
-import java.util.Map;
-
-/**
- * 文件解析器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface FileParser {
-
-    /**
-     * 解析文件内容
-     *
-     * @param content 文件内容
-     * @return 解析结果
-     */
-    List<Map<String, Object>> parse(String content);
-
-    /**
-     * 获取文件类型
-     *
-     * @return 文件类型
-     */
-    String fileType();
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factorymethod/simple/FileParserFactory.java`
-
-下面是文件解析器工厂接口。
-
-```java
-package io.github.atengk.design.factorymethod.simple;
-
-/**
- * 文件解析器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface FileParserFactory {
-
-    /**
-     * 创建文件解析器
-     *
-     * @return 文件解析器
-     */
-    FileParser createParser();
-
-    /**
-     * 获取支持的文件类型
-     *
-     * @return 文件类型
-     */
-    String supportFileType();
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factorymethod/simple/CsvFileParser.java`
-
-下面是 CSV 文件解析器实现。
-
-```java
-package io.github.atengk.design.factorymethod.simple;
-
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-/**
- * CSV文件解析器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class CsvFileParser implements FileParser {
-
-    /**
-     * 解析文件内容
-     *
-     * @param content 文件内容
-     * @return 解析结果
-     */
-    @Override
-    public List<Map<String, Object>> parse(String content) {
-        if (StrUtil.isBlank(content)) {
-            log.warn("CSV文件解析失败，文件内容为空");
-            throw new IllegalArgumentException("CSV文件内容不能为空");
-        }
-
-        List<Map<String, Object>> rows = new ArrayList<>();
-        String[] lines = content.split("\\R");
-
-        for (int index = 0; index < lines.length; index++) {
-            String line = lines[index];
-            if (StrUtil.isBlank(line)) {
-                continue;
-            }
-
-            String[] columns = line.split(",");
-            rows.add(MapUtil.<String, Object>builder()
-                    .put("lineNo", index + 1)
-                    .put("columnCount", columns.length)
-                    .put("rawText", line)
-                    .build());
-        }
-
-        log.info("CSV文件解析完成，行数：{}", rows.size());
-        return rows;
-    }
-
-    /**
-     * 获取文件类型
-     *
-     * @return 文件类型
-     */
-    @Override
-    public String fileType() {
-        return "csv";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factorymethod/simple/CsvFileParserFactory.java`
-
-下面是 CSV 文件解析器工厂。
-
-```java
-package io.github.atengk.design.factorymethod.simple;
-
-/**
- * CSV文件解析器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public class CsvFileParserFactory implements FileParserFactory {
-
-    /**
-     * 创建文件解析器
-     *
-     * @return CSV文件解析器
-     */
-    @Override
-    public FileParser createParser() {
-        return new CsvFileParser();
-    }
-
-    /**
-     * 获取支持的文件类型
-     *
-     * @return 文件类型
-     */
-    @Override
-    public String supportFileType() {
-        return "csv";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factorymethod/simple/JsonFileParser.java`
-
-下面是 JSON 文件解析器实现。示例中用 Hutool JSON 工具将 JSON 数组解析为列表。
-
-```java
-package io.github.atengk.design.factorymethod.simple;
-
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONArray;
-import cn.hutool.json.JSONUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Map;
-
-/**
- * JSON文件解析器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class JsonFileParser implements FileParser {
-
-    /**
-     * 解析文件内容
-     *
-     * @param content 文件内容
-     * @return 解析结果
-     */
-    @Override
-    public List<Map<String, Object>> parse(String content) {
-        if (StrUtil.isBlank(content)) {
-            log.warn("JSON文件解析失败，文件内容为空");
-            throw new IllegalArgumentException("JSON文件内容不能为空");
-        }
-
-        if (!JSONUtil.isTypeJSONArray(content)) {
-            log.warn("JSON文件解析失败，内容不是JSON数组");
-            throw new IllegalArgumentException("JSON文件内容必须是数组格式");
-        }
-
-        JSONArray jsonArray = JSONUtil.parseArray(content);
-        List<Map<String, Object>> rows = jsonArray.stream()
-                .map(item -> MapUtil.<String, Object>builder()
-                        .put("value", item)
-                        .put("type", item == null ? "null" : item.getClass().getSimpleName())
-                        .build())
-                .toList();
-
-        log.info("JSON文件解析完成，数据量：{}", rows.size());
-        return rows;
-    }
-
-    /**
-     * 获取文件类型
-     *
-     * @return 文件类型
-     */
-    @Override
-    public String fileType() {
-        return "json";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factorymethod/simple/JsonFileParserFactory.java`
-
-下面是 JSON 文件解析器工厂。
-
-```java
-package io.github.atengk.design.factorymethod.simple;
-
-/**
- * JSON文件解析器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public class JsonFileParserFactory implements FileParserFactory {
-
-    /**
-     * 创建文件解析器
-     *
-     * @return JSON文件解析器
-     */
-    @Override
-    public FileParser createParser() {
-        return new JsonFileParser();
-    }
-
-    /**
-     * 获取支持的文件类型
-     *
-     * @return 文件类型
-     */
-    @Override
-    public String supportFileType() {
-        return "json";
-    }
-}
-```
-
-使用方式：
-
-```java
-FileParserFactory factory = new CsvFileParserFactory();
-FileParser parser = factory.createParser();
-
-List<Map<String, Object>> rows = parser.parse("""
-        orderNo,amount,status
-        ORDER10001,99.90,PAID
-        ORDER10002,199.00,CREATED
-        """);
-```
-
-如果需要切换为 JSON 解析，只需要替换工厂：
-
-```java
-FileParserFactory factory = new JsonFileParserFactory();
-```
-
-调用方依赖的是 `FileParserFactory` 和 `FileParser` 抽象，不直接依赖 `CsvFileParser` 或 `JsonFileParser`。
-
-## Spring Boot 工厂方法
-
-Spring Boot 项目中更常见的写法，是把具体产品和具体工厂都注册为 Bean，调用方通过工厂上下文选择合适工厂，再由工厂创建或返回产品对象。
-
-下面以支付处理器为例，系统支持支付宝、微信、银联三种支付渠道。每个支付渠道对应一个支付处理器，每个支付处理器由自己的工厂创建。
-
-整体流程如下：
-
-```text
-Controller
-    -> PaymentFactoryContext
-        -> PaymentHandlerFactory
-            -> PaymentHandler
-```
-
-示例支持三个渠道：
-
-```text
-alipay    支付宝
-wechat    微信支付
-unionpay  银联支付
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/pattern/factorymethod
 ├── FactoryMethodApplication.java
-├── controller/
-│   └── PaymentController.java
-├── context/
-│   └── PaymentFactoryContext.java
-├── dto/
-│   ├── PaymentRequest.java
-│   └── PaymentResponse.java
-├── factory/
-│   ├── PaymentHandlerFactory.java
-│   ├── AlipayPaymentHandlerFactory.java
-│   ├── WechatPaymentHandlerFactory.java
-│   └── UnionPayPaymentHandlerFactory.java
-└── handler/
-    ├── PaymentHandler.java
-    ├── AlipayPaymentHandler.java
-    ├── WechatPaymentHandler.java
-    └── UnionPayPaymentHandler.java
+├── client
+│   ├── PayClient.java
+│   ├── AlipayPayClient.java
+│   ├── WechatPayClient.java
+│   └── BalancePayClient.java
+├── config
+│   └── FactoryMethodDemoProperties.java
+├── controller
+│   └── PayOrderController.java
+├── dto
+│   └── PayOrderCreateDTO.java
+├── enums
+│   └── PayChannelEnum.java
+├── factory
+│   ├── PayClientFactory.java
+│   ├── AlipayPayClientFactory.java
+│   ├── WechatPayClientFactory.java
+│   └── BalancePayClientFactory.java
+├── registry
+│   └── PayClientFactoryRegistry.java
+├── service
+│   ├── PayOrderService.java
+│   └── PayOrderServiceImpl.java
+└── vo
+    └── PayOrderCreateVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/FactoryMethodApplication.java`
+## 核心代码
 
-下面是 Spring Boot 启动类。
+这一部分给出工厂方法模式的完整核心代码。重点是 `PayClientFactory` 接口和多个具体工厂类，每个具体工厂类都通过 `createClient()` 创建自己的支付客户端。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/FactoryMethodApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.factorymethod;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -463,1080 +148,1200 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 工厂方法模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class FactoryMethodApplication {
 
     /**
-     * 应用启动入口
+     * 启动工厂方法模式示例应用
      *
      * @param args 启动参数
      */
     public static void main(String[] args) {
         SpringApplication.run(FactoryMethodApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/PaymentRequest.java`
-
-下面是支付请求对象。
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/config/FactoryMethodDemoProperties.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.factorymethod.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+/**
+ * 工厂方法模式示例配置
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Component
+@ConfigurationProperties(prefix = "demo.factory-method")
+public class FactoryMethodDemoProperties {
+
+    /**
+     * 支付宝配置
+     */
+    private Alipay alipay = new Alipay();
+
+    /**
+     * 微信支付配置
+     */
+    private Wechat wechat = new Wechat();
+
+    /**
+     * 余额支付配置
+     */
+    private Balance balance = new Balance();
+
+    /**
+     * 支付宝配置项
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    public static class Alipay {
+
+        /**
+         * 商户号
+         */
+        private String merchantId;
+
+        /**
+         * 网关地址
+         */
+        private String gatewayUrl;
+
+    }
+
+    /**
+     * 微信支付配置项
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    public static class Wechat {
+
+        /**
+         * 商户号
+         */
+        private String merchantId;
+
+        /**
+         * 网关地址
+         */
+        private String gatewayUrl;
+
+    }
+
+    /**
+     * 余额支付配置项
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    public static class Balance {
+
+        /**
+         * 内部账户编码
+         */
+        private String accountCode;
+
+    }
+
+}
+```
+
+下面的枚举用于定义支付渠道，避免在业务代码中直接使用字符串。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/enums/PayChannelEnum.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.enums;
+
+import cn.hutool.core.util.StrUtil;
+import lombok.Getter;
+
+import java.util.Arrays;
+
+/**
+ * 支付渠道枚举
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Getter
+public enum PayChannelEnum {
+
+    ALIPAY("ALIPAY", "支付宝"),
+
+    WECHAT("WECHAT", "微信支付"),
+
+    BALANCE("BALANCE", "余额支付");
+
+    private final String code;
+
+    private final String description;
+
+    PayChannelEnum(String code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+
+    /**
+     * 根据编码解析支付渠道
+     *
+     * @param code 支付渠道编码
+     * @return 支付渠道
+     */
+    public static PayChannelEnum parse(String code) {
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.getCode(), code))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的支付渠道：{}", code)));
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/dto/PayOrderCreateDTO.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.dto;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 支付请求
+ * 支付订单创建请求对象
  *
- * @param channel    支付渠道
- * @param orderNo    订单号
- * @param userId     用户ID
- * @param amount     支付金额
- * @param subject    支付标题
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record PaymentRequest(
-        String channel,
+@Data
+public class PayOrderCreateDTO {
+
+    /**
+     * 支付渠道：ALIPAY、WECHAT、BALANCE
+     */
+    @NotBlank(message = "支付渠道不能为空")
+    private String payChannel;
+
+    /**
+     * 业务订单号
+     */
+    @NotBlank(message = "业务订单号不能为空")
+    private String orderNo;
+
+    /**
+     * 用户编号
+     */
+    @NotBlank(message = "用户编号不能为空")
+    private String userId;
+
+    /**
+     * 支付金额
+     */
+    @NotNull(message = "支付金额不能为空")
+    @DecimalMin(value = "0.01", message = "支付金额必须大于0")
+    private BigDecimal amount;
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/vo/PayOrderCreateVO.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.vo;
+
+import java.math.BigDecimal;
+
+/**
+ * 支付订单创建响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public record PayOrderCreateVO(
+        String payChannel,
         String orderNo,
-        Long userId,
+        String payTradeNo,
         BigDecimal amount,
-        String subject
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/PaymentResponse.java`
-
-下面是支付响应对象。
-
-```java
-package io.github.atengk.design.dto;
-
-/**
- * 支付响应
- *
- * @param channel 支付渠道
- * @param orderNo 订单号
- * @param tradeNo 第三方交易号
- * @param success 是否成功
- * @param message 响应消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record PaymentResponse(
-        String channel,
-        String orderNo,
-        String tradeNo,
         Boolean success,
-        String message
+        String message,
+        String createTime
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/handler/PaymentHandler.java`
+## 产品接口和具体产品
 
-下面是支付处理器抽象产品接口。
+这一部分定义支付客户端产品。业务层不直接依赖支付宝、微信或余额支付客户端，而是统一依赖 `PayClient` 接口。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/client/PayClient.java`
 
 ```java
-package io.github.atengk.design.handler;
+package io.github.atengk.pattern.factorymethod.client;
 
-import io.github.atengk.design.dto.PaymentRequest;
-import io.github.atengk.design.dto.PaymentResponse;
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
 
 /**
- * 支付处理器
+ * 支付客户端接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface PaymentHandler {
+public interface PayClient {
 
     /**
-     * 执行支付
+     * 创建支付订单
      *
-     * @param request 支付请求
-     * @return 支付响应
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
      */
-    PaymentResponse pay(PaymentRequest request);
+    PayOrderCreateVO createPayOrder(PayOrderCreateDTO createDTO);
 
-    /**
-     * 获取支付渠道
-     *
-     * @return 支付渠道
-     */
-    String channel();
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/handler/AlipayPaymentHandler.java`
+下面是支付宝支付客户端。示例中没有真实调用支付宝网关，只模拟创建支付交易号。
 
-下面是支付宝支付处理器。
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/client/AlipayPayClient.java`
 
 ```java
-package io.github.atengk.design.handler;
+package io.github.atengk.pattern.factorymethod.client;
 
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.PaymentRequest;
-import io.github.atengk.design.dto.PaymentResponse;
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 支付宝支付客户端
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+public class AlipayPayClient implements PayClient {
+
+    private final String merchantId;
+
+    private final String gatewayUrl;
+
+    public AlipayPayClient(String merchantId, String gatewayUrl) {
+        this.merchantId = merchantId;
+        this.gatewayUrl = gatewayUrl;
+    }
+
+    /**
+     * 创建支付宝支付订单
+     *
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
+     */
+    @Override
+    public PayOrderCreateVO createPayOrder(PayOrderCreateDTO createDTO) {
+        String tradeNo = StrUtil.format("ALI_{}", IdUtil.fastSimpleUUID());
+
+        log.info("创建支付宝支付订单，merchantId：{}，gatewayUrl：{}，orderNo：{}，amount：{}",
+                merchantId, gatewayUrl, createDTO.getOrderNo(), createDTO.getAmount());
+
+        return new PayOrderCreateVO(
+                PayChannelEnum.ALIPAY.getCode(),
+                createDTO.getOrderNo(),
+                tradeNo,
+                createDTO.getAmount(),
+                true,
+                "支付宝支付订单创建成功",
+                DateUtil.now()
+        );
+    }
+
+}
+```
+
+下面是微信支付客户端。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/client/WechatPayClient.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.client;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 微信支付客户端
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+public class WechatPayClient implements PayClient {
+
+    private final String merchantId;
+
+    private final String gatewayUrl;
+
+    public WechatPayClient(String merchantId, String gatewayUrl) {
+        this.merchantId = merchantId;
+        this.gatewayUrl = gatewayUrl;
+    }
+
+    /**
+     * 创建微信支付订单
+     *
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
+     */
+    @Override
+    public PayOrderCreateVO createPayOrder(PayOrderCreateDTO createDTO) {
+        String tradeNo = StrUtil.format("WX_{}", IdUtil.fastSimpleUUID());
+
+        log.info("创建微信支付订单，merchantId：{}，gatewayUrl：{}，orderNo：{}，amount：{}",
+                merchantId, gatewayUrl, createDTO.getOrderNo(), createDTO.getAmount());
+
+        return new PayOrderCreateVO(
+                PayChannelEnum.WECHAT.getCode(),
+                createDTO.getOrderNo(),
+                tradeNo,
+                createDTO.getAmount(),
+                true,
+                "微信支付订单创建成功",
+                DateUtil.now()
+        );
+    }
+
+}
+```
+
+下面是余额支付客户端。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/client/BalancePayClient.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.client;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 余额支付客户端
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+public class BalancePayClient implements PayClient {
+
+    private final String accountCode;
+
+    public BalancePayClient(String accountCode) {
+        this.accountCode = accountCode;
+    }
+
+    /**
+     * 创建余额支付订单
+     *
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
+     */
+    @Override
+    public PayOrderCreateVO createPayOrder(PayOrderCreateDTO createDTO) {
+        String tradeNo = StrUtil.format("BAL_{}", IdUtil.fastSimpleUUID());
+
+        log.info("创建余额支付订单，accountCode：{}，userId：{}，orderNo：{}，amount：{}",
+                accountCode, createDTO.getUserId(), createDTO.getOrderNo(), createDTO.getAmount());
+
+        return new PayOrderCreateVO(
+                PayChannelEnum.BALANCE.getCode(),
+                createDTO.getOrderNo(),
+                tradeNo,
+                createDTO.getAmount(),
+                true,
+                "余额支付订单创建成功",
+                DateUtil.now()
+        );
+    }
+
+}
+```
+
+## 工厂接口和具体工厂
+
+这一部分是工厂方法模式的核心。`PayClientFactory` 定义工厂方法 `createClient()`，具体工厂类负责创建具体支付客户端。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/factory/PayClientFactory.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.factory;
+
+import io.github.atengk.pattern.factorymethod.client.PayClient;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+
+/**
+ * 支付客户端工厂接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface PayClientFactory {
+
+    /**
+     * 获取当前工厂支持的支付渠道
+     *
+     * @return 支付渠道
+     */
+    PayChannelEnum supportChannel();
+
+    /**
+     * 创建支付客户端
+     *
+     * @return 支付客户端
+     */
+    PayClient createClient();
+
+}
+```
+
+下面是支付宝客户端工厂。它只负责创建支付宝客户端，并处理支付宝客户端的配置校验。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/factory/AlipayPayClientFactory.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.factory;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.factorymethod.client.AlipayPayClient;
+import io.github.atengk.pattern.factorymethod.client.PayClient;
+import io.github.atengk.pattern.factorymethod.config.FactoryMethodDemoProperties;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-
 /**
- * 支付宝支付处理器
+ * 支付宝支付客户端工厂
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class AlipayPaymentHandler implements PaymentHandler {
+@RequiredArgsConstructor
+public class AlipayPayClientFactory implements PayClientFactory {
+
+    private final FactoryMethodDemoProperties properties;
 
     /**
-     * 执行支付
+     * 获取当前工厂支持的支付渠道
      *
-     * @param request 支付请求
-     * @return 支付响应
+     * @return 支付宝支付渠道
      */
     @Override
-    public PaymentResponse pay(PaymentRequest request) {
-        validateRequest(request);
-
-        String tradeNo = "ALI" + IdUtil.getSnowflakeNextId();
-        log.info("支付宝支付成功，订单号：{}，用户ID：{}，金额：{}，交易号：{}",
-                request.orderNo(), request.userId(), request.amount(), tradeNo);
-
-        return new PaymentResponse(channel(), request.orderNo(), tradeNo, true, "支付宝支付成功");
+    public PayChannelEnum supportChannel() {
+        return PayChannelEnum.ALIPAY;
     }
 
     /**
-     * 获取支付渠道
+     * 创建支付宝支付客户端
      *
-     * @return 支付渠道
+     * @return 支付宝支付客户端
      */
     @Override
-    public String channel() {
-        return "alipay";
+    public PayClient createClient() {
+        FactoryMethodDemoProperties.Alipay alipay = properties.getAlipay();
+
+        if (StrUtil.hasBlank(alipay.getMerchantId(), alipay.getGatewayUrl())) {
+            throw new IllegalStateException("支付宝配置不完整，请检查 merchant-id 和 gateway-url");
+        }
+
+        log.info("创建支付宝支付客户端，merchantId：{}", alipay.getMerchantId());
+        return new AlipayPayClient(alipay.getMerchantId(), alipay.getGatewayUrl());
     }
 
-    /**
-     * 校验支付请求
-     *
-     * @param request 支付请求
-     */
-    private void validateRequest(PaymentRequest request) {
-        if (request == null) {
-            log.warn("支付宝支付失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.orderNo())) {
-            log.warn("支付宝支付失败，订单号为空");
-            throw new IllegalArgumentException("订单号不能为空");
-        }
-
-        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("支付宝支付失败，金额不合法，金额：{}", request.amount());
-            throw new IllegalArgumentException("支付金额必须大于0");
-        }
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/handler/WechatPaymentHandler.java`
+下面是微信支付客户端工厂。
 
-下面是微信支付处理器。
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/factory/WechatPayClientFactory.java`
 
 ```java
-package io.github.atengk.design.handler;
+package io.github.atengk.pattern.factorymethod.factory;
 
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.PaymentRequest;
-import io.github.atengk.design.dto.PaymentResponse;
+import io.github.atengk.pattern.factorymethod.client.PayClient;
+import io.github.atengk.pattern.factorymethod.client.WechatPayClient;
+import io.github.atengk.pattern.factorymethod.config.FactoryMethodDemoProperties;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-
 /**
- * 微信支付处理器
+ * 微信支付客户端工厂
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class WechatPaymentHandler implements PaymentHandler {
+@RequiredArgsConstructor
+public class WechatPayClientFactory implements PayClientFactory {
+
+    private final FactoryMethodDemoProperties properties;
 
     /**
-     * 执行支付
+     * 获取当前工厂支持的支付渠道
      *
-     * @param request 支付请求
-     * @return 支付响应
+     * @return 微信支付渠道
      */
     @Override
-    public PaymentResponse pay(PaymentRequest request) {
-        validateRequest(request);
-
-        String tradeNo = "WX" + IdUtil.getSnowflakeNextId();
-        log.info("微信支付成功，订单号：{}，用户ID：{}，金额：{}，交易号：{}",
-                request.orderNo(), request.userId(), request.amount(), tradeNo);
-
-        return new PaymentResponse(channel(), request.orderNo(), tradeNo, true, "微信支付成功");
+    public PayChannelEnum supportChannel() {
+        return PayChannelEnum.WECHAT;
     }
 
     /**
-     * 获取支付渠道
+     * 创建微信支付客户端
      *
-     * @return 支付渠道
+     * @return 微信支付客户端
      */
     @Override
-    public String channel() {
-        return "wechat";
+    public PayClient createClient() {
+        FactoryMethodDemoProperties.Wechat wechat = properties.getWechat();
+
+        if (StrUtil.hasBlank(wechat.getMerchantId(), wechat.getGatewayUrl())) {
+            throw new IllegalStateException("微信支付配置不完整，请检查 merchant-id 和 gateway-url");
+        }
+
+        log.info("创建微信支付客户端，merchantId：{}", wechat.getMerchantId());
+        return new WechatPayClient(wechat.getMerchantId(), wechat.getGatewayUrl());
     }
 
-    /**
-     * 校验支付请求
-     *
-     * @param request 支付请求
-     */
-    private void validateRequest(PaymentRequest request) {
-        if (request == null) {
-            log.warn("微信支付失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.orderNo())) {
-            log.warn("微信支付失败，订单号为空");
-            throw new IllegalArgumentException("订单号不能为空");
-        }
-
-        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("微信支付失败，金额不合法，金额：{}", request.amount());
-            throw new IllegalArgumentException("支付金额必须大于0");
-        }
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/handler/UnionPayPaymentHandler.java`
+下面是余额支付客户端工厂。
 
-下面是银联支付处理器。
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/factory/BalancePayClientFactory.java`
 
 ```java
-package io.github.atengk.design.handler;
+package io.github.atengk.pattern.factorymethod.factory;
 
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.PaymentRequest;
-import io.github.atengk.design.dto.PaymentResponse;
+import io.github.atengk.pattern.factorymethod.client.BalancePayClient;
+import io.github.atengk.pattern.factorymethod.client.PayClient;
+import io.github.atengk.pattern.factorymethod.config.FactoryMethodDemoProperties;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-
 /**
- * 银联支付处理器
+ * 余额支付客户端工厂
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class UnionPayPaymentHandler implements PaymentHandler {
+@RequiredArgsConstructor
+public class BalancePayClientFactory implements PayClientFactory {
+
+    private final FactoryMethodDemoProperties properties;
 
     /**
-     * 执行支付
+     * 获取当前工厂支持的支付渠道
      *
-     * @param request 支付请求
-     * @return 支付响应
+     * @return 余额支付渠道
      */
     @Override
-    public PaymentResponse pay(PaymentRequest request) {
-        validateRequest(request);
-
-        String tradeNo = "UP" + IdUtil.getSnowflakeNextId();
-        log.info("银联支付成功，订单号：{}，用户ID：{}，金额：{}，交易号：{}",
-                request.orderNo(), request.userId(), request.amount(), tradeNo);
-
-        return new PaymentResponse(channel(), request.orderNo(), tradeNo, true, "银联支付成功");
+    public PayChannelEnum supportChannel() {
+        return PayChannelEnum.BALANCE;
     }
 
     /**
-     * 获取支付渠道
+     * 创建余额支付客户端
      *
-     * @return 支付渠道
+     * @return 余额支付客户端
      */
     @Override
-    public String channel() {
-        return "unionpay";
-    }
+    public PayClient createClient() {
+        FactoryMethodDemoProperties.Balance balance = properties.getBalance();
 
-    /**
-     * 校验支付请求
-     *
-     * @param request 支付请求
-     */
-    private void validateRequest(PaymentRequest request) {
-        if (request == null) {
-            log.warn("银联支付失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
+        if (StrUtil.isBlank(balance.getAccountCode())) {
+            throw new IllegalStateException("余额支付配置不完整，请检查 account-code");
         }
 
-        if (StrUtil.isBlank(request.orderNo())) {
-            log.warn("银联支付失败，订单号为空");
-            throw new IllegalArgumentException("订单号不能为空");
-        }
-
-        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("银联支付失败，金额不合法，金额：{}", request.amount());
-            throw new IllegalArgumentException("支付金额必须大于0");
-        }
+        log.info("创建余额支付客户端，accountCode：{}", balance.getAccountCode());
+        return new BalancePayClient(balance.getAccountCode());
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/factory/PaymentHandlerFactory.java`
+## 工厂注册表
 
-下面是支付处理器工厂接口。
+工厂方法模式本身不要求必须有注册表。这里增加 `PayClientFactoryRegistry`，是为了让 Spring Boot 项目可以根据请求渠道快速找到对应工厂，同时避免在 Service 中写大量 `if else`。
 
-```java
-package io.github.atengk.design.factory;
-
-import io.github.atengk.design.handler.PaymentHandler;
-
-/**
- * 支付处理器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface PaymentHandlerFactory {
-
-    /**
-     * 创建支付处理器
-     *
-     * @return 支付处理器
-     */
-    PaymentHandler createHandler();
-
-    /**
-     * 获取支持的支付渠道
-     *
-     * @return 支付渠道
-     */
-    String supportChannel();
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factory/AlipayPaymentHandlerFactory.java`
-
-下面是支付宝支付处理器工厂。
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/registry/PayClientFactoryRegistry.java`
 
 ```java
-package io.github.atengk.design.factory;
-
-import io.github.atengk.design.handler.AlipayPaymentHandler;
-import io.github.atengk.design.handler.PaymentHandler;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-
-/**
- * 支付宝支付处理器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Component
-@RequiredArgsConstructor
-public class AlipayPaymentHandlerFactory implements PaymentHandlerFactory {
-
-    private final AlipayPaymentHandler alipayPaymentHandler;
-
-    /**
-     * 创建支付处理器
-     *
-     * @return 支付处理器
-     */
-    @Override
-    public PaymentHandler createHandler() {
-        return alipayPaymentHandler;
-    }
-
-    /**
-     * 获取支持的支付渠道
-     *
-     * @return 支付渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "alipay";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factory/WechatPaymentHandlerFactory.java`
-
-下面是微信支付处理器工厂。
-
-```java
-package io.github.atengk.design.factory;
-
-import io.github.atengk.design.handler.PaymentHandler;
-import io.github.atengk.design.handler.WechatPaymentHandler;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-
-/**
- * 微信支付处理器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Component
-@RequiredArgsConstructor
-public class WechatPaymentHandlerFactory implements PaymentHandlerFactory {
-
-    private final WechatPaymentHandler wechatPaymentHandler;
-
-    /**
-     * 创建支付处理器
-     *
-     * @return 支付处理器
-     */
-    @Override
-    public PaymentHandler createHandler() {
-        return wechatPaymentHandler;
-    }
-
-    /**
-     * 获取支持的支付渠道
-     *
-     * @return 支付渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "wechat";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/factory/UnionPayPaymentHandlerFactory.java`
-
-下面是银联支付处理器工厂。
-
-```java
-package io.github.atengk.design.factory;
-
-import io.github.atengk.design.handler.PaymentHandler;
-import io.github.atengk.design.handler.UnionPayPaymentHandler;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-
-/**
- * 银联支付处理器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Component
-@RequiredArgsConstructor
-public class UnionPayPaymentHandlerFactory implements PaymentHandlerFactory {
-
-    private final UnionPayPaymentHandler unionPayPaymentHandler;
-
-    /**
-     * 创建支付处理器
-     *
-     * @return 支付处理器
-     */
-    @Override
-    public PaymentHandler createHandler() {
-        return unionPayPaymentHandler;
-    }
-
-    /**
-     * 获取支持的支付渠道
-     *
-     * @return 支付渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "unionpay";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/context/PaymentFactoryContext.java`
-
-下面是支付工厂上下文。它负责根据支付渠道找到对应具体工厂。
-
-```java
-package io.github.atengk.design.context;
+package io.github.atengk.pattern.factorymethod.registry;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.factory.PaymentHandlerFactory;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import io.github.atengk.pattern.factorymethod.factory.PayClientFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * 支付工厂上下文
+ * 支付客户端工厂注册表
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class PaymentFactoryContext {
+public class PayClientFactoryRegistry {
 
-    private final Map<String, PaymentHandlerFactory> factoryMap;
+    private final Map<PayChannelEnum, PayClientFactory> factoryMap;
 
     /**
-     * 创建支付工厂上下文
+     * 初始化支付客户端工厂注册表
      *
-     * @param factories 支付处理器工厂列表
+     * @param payClientFactories 支付客户端工厂列表
      */
-    public PaymentFactoryContext(List<PaymentHandlerFactory> factories) {
-        if (CollUtil.isEmpty(factories)) {
-            log.warn("支付处理器工厂列表为空");
-            this.factoryMap = Map.of();
+    public PayClientFactoryRegistry(List<PayClientFactory> payClientFactories) {
+        if (CollUtil.isEmpty(payClientFactories)) {
+            this.factoryMap = Collections.emptyMap();
+            log.warn("未发现任何支付客户端工厂实现");
             return;
         }
 
-        this.factoryMap = factories.stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        factory -> StrUtil.trim(factory.supportChannel()).toLowerCase(),
-                        Function.identity()
-                ));
+        Map<PayChannelEnum, PayClientFactory> tempFactoryMap = new EnumMap<>(PayChannelEnum.class);
+        for (PayClientFactory factory : payClientFactories) {
+            PayChannelEnum channel = factory.supportChannel();
+            if (tempFactoryMap.containsKey(channel)) {
+                throw new IllegalStateException(StrUtil.format("支付渠道存在重复工厂实现：{}", channel.getCode()));
+            }
 
-        log.info("初始化支付工厂上下文，支持渠道：{}", factoryMap.keySet());
+            tempFactoryMap.put(channel, factory);
+            log.info("注册支付客户端工厂，channel：{}，factory：{}", channel.getCode(), factory.getClass().getSimpleName());
+        }
+
+        this.factoryMap = Collections.unmodifiableMap(tempFactoryMap);
     }
 
     /**
-     * 获取支付处理器工厂
+     * 根据支付渠道获取工厂
      *
-     * @param channel 支付渠道
-     * @return 支付处理器工厂
+     * @param channelCode 支付渠道编码
+     * @return 支付客户端工厂
      */
-    public PaymentHandlerFactory getFactory(String channel) {
-        if (StrUtil.isBlank(channel)) {
-            log.warn("获取支付处理器工厂失败，支付渠道为空");
-            throw new IllegalArgumentException("支付渠道不能为空");
-        }
-
-        String key = StrUtil.trim(channel).toLowerCase();
-        PaymentHandlerFactory factory = factoryMap.get(key);
+    public PayClientFactory getFactory(String channelCode) {
+        PayChannelEnum channel = PayChannelEnum.parse(channelCode);
+        PayClientFactory factory = factoryMap.get(channel);
 
         if (factory == null) {
-            log.warn("获取支付处理器工厂失败，不支持的支付渠道：{}", channel);
-            throw new IllegalArgumentException("不支持的支付渠道：" + channel);
+            throw new IllegalArgumentException(StrUtil.format("支付渠道未注册工厂：{}", channel.getCode()));
         }
 
         return factory;
     }
+
+    /**
+     * 获取已注册工厂数量
+     *
+     * @return 已注册工厂数量
+     */
+    public int registeredCount() {
+        return MapUtil.size(factoryMap);
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/PaymentController.java`
+## 业务层调用
 
-下面是支付接口，用于验证工厂方法模式效果。
+业务层不直接创建支付客户端，而是先通过注册表找到对应工厂，再调用工厂方法创建客户端，最后调用客户端执行业务。
+
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/service/PayOrderService.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.factorymethod.service;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.context.PaymentFactoryContext;
-import io.github.atengk.design.dto.PaymentRequest;
-import io.github.atengk.design.dto.PaymentResponse;
-import io.github.atengk.design.factory.PaymentHandlerFactory;
-import io.github.atengk.design.handler.PaymentHandler;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
 
 /**
- * 支付控制器
+ * 支付订单服务接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/factory-method/payment")
-public class PaymentController {
-
-    private final PaymentFactoryContext paymentFactoryContext;
+public interface PayOrderService {
 
     /**
-     * 执行支付
+     * 创建支付订单
      *
-     * @param channel 支付渠道
-     * @param orderNo 订单号
-     * @param userId  用户ID
-     * @param amount  支付金额
-     * @param subject 支付标题
-     * @return 支付响应
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
      */
-    @PostMapping("/pay")
-    public PaymentResponse pay(@RequestParam String channel,
-                               @RequestParam String orderNo,
-                               @RequestParam Long userId,
-                               @RequestParam BigDecimal amount,
-                               @RequestParam String subject) {
-        PaymentRequest request = new PaymentRequest(
-                channel,
-                orderNo,
-                userId,
-                amount,
-                subject
-        );
+    PayOrderCreateVO createPayOrder(PayOrderCreateDTO createDTO);
 
-        validateRequest(request);
-
-        PaymentHandlerFactory factory = paymentFactoryContext.getFactory(request.channel());
-        PaymentHandler handler = factory.createHandler();
-
-        log.info("匹配支付处理器成功，支付渠道：{}，订单号：{}", handler.channel(), request.orderNo());
-        return handler.pay(request);
-    }
-
-    /**
-     * 校验支付请求
-     *
-     * @param request 支付请求
-     */
-    private void validateRequest(PaymentRequest request) {
-        if (request == null) {
-            log.warn("支付失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.hasBlank(request.channel(), request.orderNo(), request.subject())) {
-            log.warn("支付失败，支付渠道、订单号或标题为空");
-            throw new IllegalArgumentException("支付渠道、订单号和标题不能为空");
-        }
-
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("支付失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("支付失败，金额不合法，金额：{}", request.amount());
-            throw new IllegalArgumentException("支付金额必须大于0");
-        }
-    }
 }
 ```
 
-接口调用示例：
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/service/PayOrderServiceImpl.java`
 
-```bash
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=alipay&orderNo=ORDER10001&userId=10001&amount=99.90&subject=键盘订单"
+```java
+package io.github.atengk.pattern.factorymethod.service;
 
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=wechat&orderNo=ORDER10002&userId=10002&amount=66.60&subject=鼠标订单"
+import cn.hutool.json.JSONUtil;
+import io.github.atengk.pattern.factorymethod.client.PayClient;
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.factory.PayClientFactory;
+import io.github.atengk.pattern.factorymethod.registry.PayClientFactoryRegistry;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=unionpay&orderNo=ORDER10003&userId=10003&amount=188.00&subject=显示器订单"
+/**
+ * 支付订单服务实现
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PayOrderServiceImpl implements PayOrderService {
+
+    private final PayClientFactoryRegistry payClientFactoryRegistry;
+
+    /**
+     * 创建支付订单
+     *
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
+     */
+    @Override
+    public PayOrderCreateVO createPayOrder(PayOrderCreateDTO createDTO) {
+        log.info("准备创建支付订单，请求参数：{}", JSONUtil.toJsonStr(createDTO));
+
+        PayClientFactory factory = payClientFactoryRegistry.getFactory(createDTO.getPayChannel());
+        PayClient payClient = factory.createClient();
+        PayOrderCreateVO result = payClient.createPayOrder(createDTO);
+
+        log.info("支付订单创建完成，响应结果：{}", JSONUtil.toJsonStr(result));
+        return result;
+    }
+
+}
 ```
 
-支付宝可能返回：
+文件位置：`src/main/java/io/github/atengk/pattern/factorymethod/controller/PayOrderController.java`
+
+```java
+package io.github.atengk.pattern.factorymethod.controller;
+
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.service.PayOrderService;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 支付订单接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@RestController
+@RequestMapping("/api/patterns/factory-method/pay-orders")
+@RequiredArgsConstructor
+public class PayOrderController {
+
+    private final PayOrderService payOrderService;
+
+    /**
+     * 创建支付订单
+     *
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
+     */
+    @PostMapping
+    public PayOrderCreateVO createPayOrder(@Valid @RequestBody PayOrderCreateDTO createDTO) {
+        return payOrderService.createPayOrder(createDTO);
+    }
+
+}
+```
+
+## 使用方式
+
+启动项目后，通过不同的 `payChannel` 创建不同渠道的支付订单。业务层不需要知道具体客户端如何创建，只需要通过工厂方法拿到 `PayClient`。
+
+接口地址：
+
+```text
+POST /api/patterns/factory-method/pay-orders
+```
+
+支付宝支付请求：
+
+```bash
+curl -X POST "http://localhost:8080/api/patterns/factory-method/pay-orders" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payChannel": "ALIPAY",
+    "orderNo": "ORDER_10001",
+    "userId": "USER_001",
+    "amount": 99.90
+  }'
+```
+
+响应示例：
 
 ```json
 {
-  "channel": "alipay",
-  "orderNo": "ORDER10001",
-  "tradeNo": "ALI2019776866538487808",
+  "payChannel": "ALIPAY",
+  "orderNo": "ORDER_10001",
+  "payTradeNo": "ALI_8dff930bbfed4238a4c2ba8fa7f4a7bc",
+  "amount": 99.90,
   "success": true,
-  "message": "支付宝支付成功"
+  "message": "支付宝支付订单创建成功",
+  "createTime": "2026-05-13 12:10:30"
 }
 ```
 
-这种方式的优点是 Controller 不需要直接 `new` 支付处理器，也不需要写大量 `if else`。新增支付渠道时，新增处理器和工厂即可。
+微信支付请求：
 
-## 扩展一个新支付工厂
-
-在 Spring Boot 工厂方法模式中，新增产品通常需要新增具体产品和具体工厂。下面以 PayPal 支付为例。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
-├── handler/
-│   └── PaypalPaymentHandler.java
-└── factory/
-    └── PaypalPaymentHandlerFactory.java
+```bash
+curl -X POST "http://localhost:8080/api/patterns/factory-method/pay-orders" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payChannel": "WECHAT",
+    "orderNo": "ORDER_10002",
+    "userId": "USER_002",
+    "amount": 128.50
+  }'
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/handler/PaypalPaymentHandler.java`
+响应示例：
 
-下面是 PayPal 支付处理器。
+```json
+{
+  "payChannel": "WECHAT",
+  "orderNo": "ORDER_10002",
+  "payTradeNo": "WX_a813fd1fbb674f4cba3111ae54bbf435",
+  "amount": 128.50,
+  "success": true,
+  "message": "微信支付订单创建成功",
+  "createTime": "2026-05-13 12:11:45"
+}
+```
+
+余额支付请求：
+
+```bash
+curl -X POST "http://localhost:8080/api/patterns/factory-method/pay-orders" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payChannel": "BALANCE",
+    "orderNo": "ORDER_10003",
+    "userId": "USER_003",
+    "amount": 36.80
+  }'
+```
+
+响应示例：
+
+```json
+{
+  "payChannel": "BALANCE",
+  "orderNo": "ORDER_10003",
+  "payTradeNo": "BAL_eb3f6e501fd34f048a5b90ad73cd2539",
+  "amount": 36.80,
+  "success": true,
+  "message": "余额支付订单创建成功",
+  "createTime": "2026-05-13 12:12:16"
+}
+```
+
+## 新增支付渠道
+
+如果需要新增一种支付渠道，例如银联支付 `UNION_PAY`，工厂方法模式的扩展步骤比较清晰。
+
+先在枚举中新增渠道：
 
 ```java
-package io.github.atengk.design.handler;
+UNION_PAY("UNION_PAY", "银联支付");
+```
 
+然后新增银联支付客户端：
+
+```java
+package io.github.atengk.pattern.factorymethod.client;
+
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.PaymentRequest;
-import io.github.atengk.design.dto.PaymentResponse;
+import io.github.atengk.pattern.factorymethod.dto.PayOrderCreateDTO;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
+import io.github.atengk.pattern.factorymethod.vo.PayOrderCreateVO;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 银联支付客户端
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+public class UnionPayClient implements PayClient {
+
+    /**
+     * 创建银联支付订单
+     *
+     * @param createDTO 支付订单创建请求
+     * @return 支付订单创建结果
+     */
+    @Override
+    public PayOrderCreateVO createPayOrder(PayOrderCreateDTO createDTO) {
+        String tradeNo = StrUtil.format("UNION_{}", IdUtil.fastSimpleUUID());
+
+        log.info("创建银联支付订单，orderNo：{}，amount：{}", createDTO.getOrderNo(), createDTO.getAmount());
+
+        return new PayOrderCreateVO(
+                PayChannelEnum.UNION_PAY.getCode(),
+                createDTO.getOrderNo(),
+                tradeNo,
+                createDTO.getAmount(),
+                true,
+                "银联支付订单创建成功",
+                DateUtil.now()
+        );
+    }
+
+}
+```
+
+再新增银联支付客户端工厂：
+
+```java
+package io.github.atengk.pattern.factorymethod.factory;
+
+import io.github.atengk.pattern.factorymethod.client.PayClient;
+import io.github.atengk.pattern.factorymethod.client.UnionPayClient;
+import io.github.atengk.pattern.factorymethod.enums.PayChannelEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-
 /**
- * PayPal支付处理器
+ * 银联支付客户端工厂
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class PaypalPaymentHandler implements PaymentHandler {
+public class UnionPayClientFactory implements PayClientFactory {
 
     /**
-     * 执行支付
+     * 获取当前工厂支持的支付渠道
      *
-     * @param request 支付请求
-     * @return 支付响应
+     * @return 银联支付渠道
      */
     @Override
-    public PaymentResponse pay(PaymentRequest request) {
-        if (request == null || StrUtil.isBlank(request.orderNo())) {
-            log.warn("PayPal支付失败，请求参数或订单号为空");
-            throw new IllegalArgumentException("请求参数和订单号不能为空");
-        }
-
-        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("PayPal支付失败，金额不合法，订单号：{}，金额：{}", request.orderNo(), request.amount());
-            throw new IllegalArgumentException("支付金额必须大于0");
-        }
-
-        String tradeNo = "PAYPAL" + IdUtil.getSnowflakeNextId();
-        log.info("PayPal支付成功，订单号：{}，金额：{}，交易号：{}",
-                request.orderNo(), request.amount(), tradeNo);
-
-        return new PaymentResponse(channel(), request.orderNo(), tradeNo, true, "PayPal支付成功");
+    public PayChannelEnum supportChannel() {
+        return PayChannelEnum.UNION_PAY;
     }
 
     /**
-     * 获取支付渠道
+     * 创建银联支付客户端
      *
-     * @return 支付渠道
+     * @return 银联支付客户端
      */
     @Override
-    public String channel() {
-        return "paypal";
+    public PayClient createClient() {
+        log.info("创建银联支付客户端");
+        return new UnionPayClient();
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/factory/PaypalPaymentHandlerFactory.java`
-
-下面是 PayPal 支付处理器工厂。
-
-```java
-package io.github.atengk.design.factory;
-
-import io.github.atengk.design.handler.PaymentHandler;
-import io.github.atengk.design.handler.PaypalPaymentHandler;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-
-/**
- * PayPal支付处理器工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Component
-@RequiredArgsConstructor
-public class PaypalPaymentHandlerFactory implements PaymentHandlerFactory {
-
-    private final PaypalPaymentHandler paypalPaymentHandler;
-
-    /**
-     * 创建支付处理器
-     *
-     * @return 支付处理器
-     */
-    @Override
-    public PaymentHandler createHandler() {
-        return paypalPaymentHandler;
-    }
-
-    /**
-     * 获取支持的支付渠道
-     *
-     * @return 支付渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "paypal";
-    }
-}
-```
-
-调用示例：
-
-```bash
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=paypal&orderNo=ORDER10004&userId=10004&amount=20.00&subject=测试订单"
-```
-
-新增 PayPal 后，`PaymentController` 和 `PaymentFactoryContext` 不需要修改。Spring 会自动把新的工厂 Bean 注入到工厂列表中。
-
-## 工厂方法模式和简单工厂
-
-简单工厂通常把创建逻辑集中在一个类中，根据类型判断创建哪个产品。
-
-简单工厂示例：
-
-```java
-public PaymentHandler createHandler(String channel) {
-    if ("alipay".equals(channel)) {
-        return new AlipayPaymentHandler();
-    }
-    if ("wechat".equals(channel)) {
-        return new WechatPaymentHandler();
-    }
-    throw new IllegalArgumentException("不支持的支付渠道：" + channel);
-}
-```
-
-这种方式适合产品数量少、创建逻辑简单的场景。但随着产品类型增加，简单工厂容易变成巨大 `if else` 或 `switch`。
-
-对比如下：
-
-| 对比项   | 简单工厂         | 工厂方法模式         |
-| -------- | ---------------- | -------------------- |
-| 工厂数量 | 一个工厂         | 多个具体工厂         |
-| 创建逻辑 | 集中在一个类中   | 分散到具体工厂中     |
-| 扩展产品 | 通常要修改原工厂 | 新增具体工厂         |
-| 复杂度   | 低               | 中等                 |
-| 适合场景 | 产品少、变化少   | 产品多、创建逻辑复杂 |
-
-简单理解：
-
-```text
-简单工厂：一个工厂根据类型创建不同产品。
-工厂方法：每个具体工厂负责创建一种产品。
-```
-
-如果项目中只有两三个简单对象，简单工厂更直接。如果产品类型持续增加，工厂方法更容易扩展。
-
-## 工厂方法模式和抽象工厂模式
-
-工厂方法模式和抽象工厂模式都属于创建型模式，但创建粒度不同。
-
-| 对比项       | 工厂方法模式           | 抽象工厂模式                       |
-| ------------ | ---------------------- | ---------------------------------- |
-| 创建对象     | 一个产品对象           | 一组相关产品对象                   |
-| 关注点       | 单个产品扩展           | 产品族一致性                       |
-| 工厂方法数量 | 通常一个主要创建方法   | 多个创建方法                       |
-| 典型场景     | 支付处理器、文件解析器 | 多云厂商组件族、多数据库方言组件族 |
-| 扩展产品     | 新增具体工厂           | 新增产品族容易，新增产品等级麻烦   |
-
-简单理解：
-
-```text
-工厂方法模式：创建一个对象。
-抽象工厂模式：创建一整套对象。
-```
-
-如果只创建一个支付处理器，使用工厂方法模式即可。如果一个云厂商下要同时创建对象存储、短信、MQ 等一组组件，则更适合抽象工厂模式。
-
-## 工厂方法模式和策略模式
-
-工厂方法模式和策略模式经常在 Spring Boot 项目中写得很像，都是接口加多个实现。但二者关注点不同。
-
-| 对比项   | 工厂方法模式               | 策略模式                            |
-| -------- | -------------------------- | ----------------------------------- |
-| 核心目的 | 创建对象                   | 执行业务算法                        |
-| 关注点   | 对象创建过程               | 行为选择和执行                      |
-| 典型方法 | `createHandler()`          | `execute()`、`calculate()`、`pay()` |
-| 调用时机 | 先创建产品，再使用产品     | 直接选择策略执行                    |
-| 典型场景 | 创建解析器、处理器、客户端 | 优惠计算、支付规则、物流计费        |
-
-简单理解：
-
-```text
-工厂方法模式：重点是“怎么创建处理器”。
-策略模式：重点是“选哪个处理逻辑执行”。
-```
-
-在实际项目中，两者可以组合使用。工厂负责创建处理器，处理器本身也可以是某种策略。
-
-如果处理器都是 Spring 单例 Bean，且创建逻辑几乎没有差异，那么直接使用策略模式的 Bean Map 也可以，不一定必须显式建工厂类。
+由于 `PayClientFactoryRegistry` 会自动收集所有 `PayClientFactory` Bean，新增工厂类后，不需要修改注册表和业务 Service。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
+可以通过单元测试验证不同渠道是否能获取不同工厂，并创建不同客户端。
 
-```bash
-mvn spring-boot:run
-```
-
-执行支付宝支付：
-
-```bash
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=alipay&orderNo=ORDER10001&userId=10001&amount=99.90&subject=键盘订单"
-```
-
-执行微信支付：
-
-```bash
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=wechat&orderNo=ORDER10002&userId=10002&amount=66.60&subject=鼠标订单"
-```
-
-执行银联支付：
-
-```bash
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=unionpay&orderNo=ORDER10003&userId=10003&amount=188.00&subject=显示器订单"
-```
-
-如果工厂方法模式正常，可以看到类似日志：
-
-```text
-初始化支付工厂上下文，支持渠道：[alipay, wechat, unionpay]
-匹配支付处理器成功，支付渠道：alipay，订单号：ORDER10001
-支付宝支付成功，订单号：ORDER10001，用户ID：10001，金额：99.90，交易号：ALI2019776866538487808
-```
-
-执行不支持的支付渠道：
-
-```bash
-curl -X POST "http://localhost:8080/factory-method/payment/pay?channel=unknown&orderNo=ORDER10004&userId=10004&amount=20.00&subject=测试订单"
-```
-
-异常日志示例：
-
-```text
-获取支付处理器工厂失败，不支持的支付渠道：unknown
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
-
-## 注意事项
-
-工厂方法模式适合隔离对象创建逻辑，但不要为了创建一个非常简单的对象而引入大量工厂类。对象创建本身简单、类型数量很少时，简单工厂或直接 Spring 注入更合适。
-
-适合使用工厂方法模式的场景：
-
-```text
-产品类型较多
-产品创建逻辑复杂
-产品扩展比较频繁
-调用方不应该依赖具体产品类
-希望消除分散的 new 操作
-希望每种产品创建逻辑独立维护
-```
-
-不太适合使用工厂方法模式的场景：
-
-```text
-只创建一个固定对象
-对象创建没有变化
-产品类型很少且不会扩展
-直接 Spring 注入即可满足需求
-为了模式而增加空壳工厂
-```
-
-不要把工厂方法写成新的上帝工厂。
-
-不推荐写法：
+文件位置：`src/test/java/io/github/atengk/pattern/factorymethod/PayClientFactoryRegistryTest.java`
 
 ```java
-public class PaymentFactory {
+package io.github.atengk.pattern.factorymethod;
 
-    public PaymentHandler create(String channel) {
-        if ("alipay".equals(channel)) {
-            // 大量支付宝创建逻辑
-        } else if ("wechat".equals(channel)) {
-            // 大量微信创建逻辑
-        } else if ("unionpay".equals(channel)) {
-            // 大量银联创建逻辑
-        }
-        return null;
+import io.github.atengk.pattern.factorymethod.client.AlipayPayClient;
+import io.github.atengk.pattern.factorymethod.client.BalancePayClient;
+import io.github.atengk.pattern.factorymethod.client.PayClient;
+import io.github.atengk.pattern.factorymethod.client.WechatPayClient;
+import io.github.atengk.pattern.factorymethod.factory.PayClientFactory;
+import io.github.atengk.pattern.factorymethod.registry.PayClientFactoryRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+/**
+ * 支付客户端工厂注册表测试
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@SpringBootTest
+class PayClientFactoryRegistryTest {
+
+    private final PayClientFactoryRegistry payClientFactoryRegistry;
+
+    PayClientFactoryRegistryTest(PayClientFactoryRegistry payClientFactoryRegistry) {
+        this.payClientFactoryRegistry = payClientFactoryRegistry;
     }
-}
-```
 
-推荐将创建逻辑拆分给具体工厂：
+    /**
+     * 验证不同支付渠道能够创建不同支付客户端
+     */
+    @Test
+    void shouldCreateDifferentPayClientByChannel() {
+        PayClientFactory alipayFactory = payClientFactoryRegistry.getFactory("ALIPAY");
+        PayClientFactory wechatFactory = payClientFactoryRegistry.getFactory("WECHAT");
+        PayClientFactory balanceFactory = payClientFactoryRegistry.getFactory("BALANCE");
 
-```java
-public class AlipayPaymentHandlerFactory implements PaymentHandlerFactory {
+        PayClient alipayClient = alipayFactory.createClient();
+        PayClient wechatClient = wechatFactory.createClient();
+        PayClient balanceClient = balanceFactory.createClient();
 
-    public PaymentHandler createHandler() {
-        return alipayPaymentHandler;
+        log.info("支付宝客户端：{}", alipayClient.getClass().getSimpleName());
+        log.info("微信支付客户端：{}", wechatClient.getClass().getSimpleName());
+        log.info("余额支付客户端：{}", balanceClient.getClass().getSimpleName());
+
+        Assertions.assertInstanceOf(AlipayPayClient.class, alipayClient);
+        Assertions.assertInstanceOf(WechatPayClient.class, wechatClient);
+        Assertions.assertInstanceOf(BalancePayClient.class, balanceClient);
     }
+
+    /**
+     * 验证不支持的支付渠道会抛出异常
+     */
+    @Test
+    void shouldThrowExceptionWhenChannelUnsupported() {
+        IllegalArgumentException exception = Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> payClientFactoryRegistry.getFactory("UNKNOWN")
+        );
+
+        log.info("不支持支付渠道异常信息：{}", exception.getMessage());
+        Assertions.assertTrue(exception.getMessage().contains("不支持的支付渠道"));
+    }
+
 }
 ```
 
-如果具体产品是 Spring 单例 Bean，工厂方法通常返回已有 Bean，而不是每次 `new` 一个对象。
+执行测试：
 
-推荐：
-
-```java
-@Override
-public PaymentHandler createHandler() {
-    return alipayPaymentHandler;
-}
+```bash
+mvn test -Dtest=PayClientFactoryRegistryTest
 ```
 
-如果产品对象需要保存请求级状态，不要把状态放在 Spring 单例 Bean 中。可以把请求状态放在方法参数中，或者在工厂中创建新的命令对象、上下文对象。
+命令说明：`-Dtest=PayClientFactoryRegistryTest` 表示只运行当前测试类，用于快速验证工厂方法模式下的工厂注册和客户端创建逻辑。
 
-错误示例：
+## 和简单工厂模式的区别
 
-```java
-private String currentOrderNo;
-private BigDecimal currentAmount;
-```
+简单工厂模式通常是一个工厂类负责创建多种对象。调用方传入类型，工厂内部通过 `if else`、`switch` 或 Map 选择对象。它适合对象类型少、创建逻辑简单的场景。
 
-推荐：
+工厂方法模式是多个工厂类分别负责创建自己的产品。每个产品有一个对应的工厂实现，创建逻辑分散在具体工厂中。它适合对象创建逻辑复杂、不同产品初始化差异明显、希望新增产品时减少修改已有工厂代码的场景。
 
-```java
-public PaymentResponse pay(PaymentRequest request) {
-    return doPay(request.orderNo(), request.amount());
-}
-```
-
-如果产品创建涉及外部配置，例如支付密钥、回调地址、超时时间，建议使用 `@ConfigurationProperties` 或配置中心统一管理，不要硬编码在工厂或产品类中。
-
-常见配置项：
+在 Spring Boot 项目中，可以这样选择：
 
 ```text
-merchantId
-appId
-privateKey
-publicKey
-notifyUrl
-gatewayUrl
-connectTimeout
-readTimeout
-retryTimes
+对象只是按类型分发，创建逻辑很简单：优先简单工厂模式
+每种对象创建过程不同，配置校验不同，初始化流程不同：优先工厂方法模式
+需要创建一组相关对象：考虑抽象工厂模式
+只是根据类型执行业务算法：更接近策略模式
 ```
 
-工厂方法模式只解决对象创建问题，不自动解决业务幂等、状态流转、事务一致性和外部调用可靠性。支付、发货、退款等核心业务仍然需要结合状态模式、命令模式、事务、幂等表、消息队列和补偿机制。
+## 开发建议
+
+在 Spring Boot 项目中使用工厂方法模式时，建议遵循以下原则：
+
+```text
+产品定义统一接口，业务层只面向接口编程
+工厂定义统一接口，每个具体工厂只创建一种产品
+复杂初始化逻辑放到具体工厂中，不要堆在业务 Service 中
+需要依赖配置或外部组件时，让工厂类交给 Spring 容器管理
+工厂注册和路由可以用 Map 承接，避免 Service 中出现大量 if else
+产品对象如果无状态，可以考虑由工厂返回单例 Bean
+产品对象如果有请求级状态，应每次通过工厂创建新对象
+```
+
+需要注意的是，工厂方法模式会增加类数量。如果对象创建逻辑很简单，只有两三个 `new`，没有复杂配置、校验、缓存、初始化流程，就不一定需要使用工厂方法模式。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，工厂方法模式的实践重点是把具体产品创建逻辑放到具体工厂中，让调用方依赖抽象工厂和抽象产品。
+工厂方法模式用于把具体对象的创建过程交给具体工厂类处理。它比简单工厂更强调扩展性和创建职责拆分，适合多种产品创建逻辑差异较大的业务场景。
 
-普通 Java 工厂方法适合理解原理和本地对象创建。Spring Boot 项目中更推荐使用“产品接口 + 具体产品 Bean + 工厂接口 + 具体工厂 Bean + 工厂上下文”的结构。对于支付处理器、文件解析器、导入处理器、消息发送器等场景，工厂方法模式可以减少调用方对具体类的依赖，并让新增产品更加清晰。
+本示例中的核心流程可以概括为：
 
-工厂方法模式不是为了替代所有 `new`，也不是为了替代 Spring 的依赖注入。它最适合处理“产品类型会扩展、创建逻辑需要隔离、调用方不应该感知具体产品类”的场景。实际落地时，需要控制工厂数量和职责边界，避免为了模式引入过度设计。
+```text
+定义支付客户端产品接口 PayClient
+为不同支付渠道创建具体客户端
+定义支付客户端工厂接口 PayClientFactory
+为不同支付渠道创建具体工厂
+Spring 启动时注册所有工厂
+业务层根据支付渠道获取对应工厂
+通过工厂方法 createClient 创建客户端
+调用客户端完成支付下单
+```
+
+在真实 Spring Boot 项目中，工厂方法模式常用于支付、存储、消息、文件解析、第三方平台客户端等模块。它的价值在于把“怎么创建对象”从业务流程中拆出来，让业务层只关注“使用对象完成业务”。

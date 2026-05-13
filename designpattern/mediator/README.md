@@ -1,350 +1,284 @@
-# 设计模式：中介者模式
+# 中介者模式
 
-中介者模式用于把多个对象之间复杂的相互调用关系，集中交给一个中介者对象处理，从而降低对象之间的直接耦合。在 JDK21 和 Spring Boot 3 项目中，中介者模式常用于聊天室消息转发、工单协同、审批流协作、订单多模块协作、页面组件联动、任务调度协同、领域对象之间的事件协调等场景。
+中介者模式用于把多个对象之间复杂的直接调用关系，集中交给一个中介者对象协调。
+在 Spring Boot 项目中，中介者模式常用于订单提交、支付流程、审批协同、消息路由、工作流编排、跨模块业务聚合等场景。
 
-需要注意：中介者模式关注的是“对象之间不要直接互相调用，而是通过中介者通信”。如果只是把多个子系统封装成一个简单入口，更接近外观模式；如果只是发布事件给多个订阅者，更接近观察者模式；如果是多个处理器按顺序处理请求，更适合责任链模式。
+本文以“订单提交协同中心”为例。订单提交时需要校验用户、锁定库存、使用优惠券、创建订单、创建支付单、发送通知。如果这些服务互相调用，依赖关系会快速变复杂。使用中介者模式后，各个业务服务只负责自己的职责，由 `OrderSubmitMediator` 统一编排流程。
+
+## 适用场景
+
+中介者模式适合处理“多个业务对象之间存在复杂协作关系”的场景。
+
+订单提交流程中通常涉及多个模块：
+
+| 模块       | 职责             |
+| ---------- | ---------------- |
+| 用户服务   | 校验用户状态     |
+| 库存服务   | 锁定商品库存     |
+| 优惠券服务 | 校验并使用优惠券 |
+| 订单服务   | 创建订单         |
+| 支付服务   | 创建支付单       |
+| 通知服务   | 发送订单创建通知 |
+
+如果让这些服务直接互相调用，例如订单服务调用库存服务、库存服务再调用通知服务、优惠券服务又依赖订单服务，模块之间会形成网状依赖。中介者模式可以把这些交互集中到一个协调类中，使各个业务服务之间保持相对独立。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 Spring Boot 3，使用 Hutool、Lombok 和 Validation。Hutool 用于对象判断、字符串判断、金额计算和 ID 生成，Validation 用于接口参数基础校验。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证中介者模式行为 -->
+    <!-- Spring Boot Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、集合等通用处理 -->
+    <!-- Spring Boot Validation：用于接口参数基础校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：提供字符串、对象、金额、ID 等常用工具能力 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.29</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法、Getter 等样板代码 -->
+    <!-- Lombok：简化 Getter、Setter、构造器、日志对象等代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
-
-## 核心概念
-
-中介者模式的核心目标是把对象之间的网状依赖变成星形依赖。原本多个对象之间互相调用，后续会出现依赖混乱、修改影响范围大、调用链难追踪等问题。引入中介者后，各对象只依赖中介者，由中介者统一协调交互。
-
-没有中介者时的关系：
+建议目录结构如下：
 
 ```text
-用户模块 -> 通知模块
-用户模块 -> 审计模块
-客服模块 -> 通知模块
-客服模块 -> 工单模块
-工单模块 -> 审计模块
-工单模块 -> 通知模块
+src/main/java/io/github/atengk/pattern/mediator
+├── MediatorApplication.java
+├── common
+│   ├── ApiResult.java
+│   ├── BizException.java
+│   └── GlobalExceptionHandler.java
+└── order
+    ├── controller
+    │   └── OrderSubmitController.java
+    ├── dto
+    │   └── OrderSubmitRequest.java
+    ├── mediator
+    │   ├── OrderSubmitMediator.java
+    │   └── impl
+    │       └── OrderSubmitMediatorImpl.java
+    ├── service
+    │   ├── CouponService.java
+    │   ├── MessageNotifyService.java
+    │   ├── OrderDomainService.java
+    │   ├── PaymentService.java
+    │   ├── ProductStockService.java
+    │   ├── UserAccountService.java
+    │   └── impl
+    │       ├── CouponServiceImpl.java
+    │       ├── MessageNotifyServiceImpl.java
+    │       ├── OrderDomainServiceImpl.java
+    │       ├── PaymentServiceImpl.java
+    │       ├── ProductStockServiceImpl.java
+    │       └── UserAccountServiceImpl.java
+    └── vo
+        └── OrderSubmitResultVO.java
 ```
 
-使用中介者后的关系：
+## 核心设计
 
-```text
-用户模块 ┐
-客服模块 ├── WorkOrderMediator ── 通知模块
-工单模块 ┘                       └── 审计模块
-```
+本示例把中介者模式拆成三个核心角色：
 
-常见角色如下：
+| 角色             | 项目中的类                                     | 说明                                         |
+| ---------------- | ---------------------------------------------- | -------------------------------------------- |
+| Mediator         | `OrderSubmitMediator`                          | 定义订单提交协同接口                         |
+| ConcreteMediator | `OrderSubmitMediatorImpl`                      | 统一编排用户、库存、优惠券、订单、支付、通知 |
+| Colleague        | `UserAccountService`、`ProductStockService` 等 | 具体业务服务，只处理自身职责                 |
 
-| 角色              | 说明                                   |
-| ----------------- | -------------------------------------- |
-| Mediator          | 中介者接口，定义对象之间通信入口       |
-| ConcreteMediator  | 具体中介者，负责协调多个同事对象       |
-| Colleague         | 同事对象，参与协作但不直接依赖其他同事 |
-| ConcreteColleague | 具体同事对象，完成自身职责             |
-| Client            | 调用方，触发某个协作动作               |
-
-在 Spring Boot 项目中，常见优先级通常是：
-
-```text
-Spring Bean 中介者 > 普通 Java 中介者 > 多对象互相注入调用
-```
-
-中介者模式适合对象之间交互关系复杂、协作规则集中变化的场景。如果只是单向的一次性服务编排，外观模式通常更直接。
-
-## 普通 Java 中介者模式
-
-普通 Java 中介者模式适合不依赖 Spring 容器的对象协作场景。下面以聊天室为例，多个用户之间不直接互相发送消息，而是通过聊天室中介者统一转发。
-
-整体关系如下：
-
-```text
-ChatUser
-    -> ChatRoomMediator
-        -> 找到目标用户
-        -> 转发消息
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/mediator/simple/
-├── ChatRoomMediator.java
-├── SimpleChatRoomMediator.java
-└── ChatUser.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/mediator/simple/ChatRoomMediator.java`
-
-下面是聊天室中介者接口，定义用户注册和消息发送能力。
-
-```java
-package io.github.atengk.design.mediator.simple;
-
-/**
- * 聊天室中介者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface ChatRoomMediator {
-
-    /**
-     * 注册用户
-     *
-     * @param user 聊天用户
-     */
-    void register(ChatUser user);
-
-    /**
-     * 发送消息
-     *
-     * @param fromUserId 发送人ID
-     * @param toUserId   接收人ID
-     * @param content    消息内容
-     */
-    void sendMessage(String fromUserId, String toUserId, String content);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/mediator/simple/ChatUser.java`
-
-下面是聊天用户对象。用户只依赖聊天室中介者，不直接持有其他用户对象。
-
-```java
-package io.github.atengk.design.mediator.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 聊天用户
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-public class ChatUser {
-
-    private final String userId;
-    private final String username;
-    private final ChatRoomMediator mediator;
-
-    /**
-     * 创建聊天用户
-     *
-     * @param userId   用户ID
-     * @param username 用户名
-     * @param mediator 聊天室中介者
-     */
-    public ChatUser(String userId, String username, ChatRoomMediator mediator) {
-        if (StrUtil.hasBlank(userId, username)) {
-            throw new IllegalArgumentException("用户ID和用户名不能为空");
-        }
-        if (mediator == null) {
-            throw new IllegalArgumentException("聊天室中介者不能为空");
-        }
-
-        this.userId = userId;
-        this.username = username;
-        this.mediator = mediator;
-    }
-
-    /**
-     * 发送消息
-     *
-     * @param toUserId 接收人ID
-     * @param content  消息内容
-     */
-    public void send(String toUserId, String content) {
-        log.info("用户发送消息，发送人：{}，接收人ID：{}，内容：{}", username, toUserId, content);
-        mediator.sendMessage(userId, toUserId, content);
-    }
-
-    /**
-     * 接收消息
-     *
-     * @param fromUserId 发送人ID
-     * @param content    消息内容
-     */
-    public void receive(String fromUserId, String content) {
-        log.info("用户收到消息，接收人：{}，发送人ID：{}，内容：{}", username, fromUserId, content);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/mediator/simple/SimpleChatRoomMediator.java`
-
-下面是聊天室中介者实现，负责维护用户列表并转发消息。
-
-```java
-package io.github.atengk.design.mediator.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * 简单聊天室中介者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class SimpleChatRoomMediator implements ChatRoomMediator {
-
-    private final Map<String, ChatUser> userMap = new ConcurrentHashMap<>();
-
-    /**
-     * 注册用户
-     *
-     * @param user 聊天用户
-     */
-    @Override
-    public void register(ChatUser user) {
-        if (user == null) {
-            log.warn("注册聊天用户失败，用户为空");
-            throw new IllegalArgumentException("用户不能为空");
-        }
-
-        userMap.put(user.getUserId(), user);
-        log.info("注册聊天用户成功，用户ID：{}，用户名：{}，当前用户数：{}",
-                user.getUserId(), user.getUsername(), userMap.size());
-    }
-
-    /**
-     * 发送消息
-     *
-     * @param fromUserId 发送人ID
-     * @param toUserId   接收人ID
-     * @param content    消息内容
-     */
-    @Override
-    public void sendMessage(String fromUserId, String toUserId, String content) {
-        if (StrUtil.hasBlank(fromUserId, toUserId, content)) {
-            log.warn("聊天室发送消息失败，发送人、接收人或内容为空");
-            throw new IllegalArgumentException("发送人、接收人和内容不能为空");
-        }
-
-        ChatUser targetUser = userMap.get(toUserId);
-        if (targetUser == null) {
-            log.warn("聊天室发送消息失败，接收人不存在，接收人ID：{}", toUserId);
-            throw new IllegalArgumentException("接收人不存在：" + toUserId);
-        }
-
-        log.info("聊天室中介者转发消息，发送人ID：{}，接收人ID：{}", fromUserId, toUserId);
-        targetUser.receive(fromUserId, content);
-    }
-}
-```
-
-使用方式：
-
-```java
-ChatRoomMediator mediator = new SimpleChatRoomMediator();
-
-ChatUser ateng = new ChatUser("10001", "Ateng", mediator);
-ChatUser blair = new ChatUser("10002", "Blair", mediator);
-
-mediator.register(ateng);
-mediator.register(blair);
-
-ateng.send("10002", "你好，这是一条通过中介者转发的消息");
-```
-
-在这个示例中，`ChatUser` 之间没有直接引用关系。用户发送消息时只调用 `ChatRoomMediator`，由中介者决定如何找到目标用户并完成转发。
-
-## Spring Boot 中介者模式
-
-Spring Boot 项目中，中介者模式更适合处理多个业务组件之间的协作。下面以工单协同为例，工单创建、工单分配、通知发送、审计记录本来可能互相调用。使用中介者模式后，各组件只负责自己的职责，中介者负责协调它们之间的交互。
-
-整体流程如下：
+执行流程如下：
 
 ```text
 Controller
-    -> WorkOrderMediator
-        -> WorkOrderService
-        -> AgentService
-        -> NoticeService
-        -> AuditService
+  -> OrderSubmitMediator
+    -> UserAccountService.checkUserAvailable()
+    -> ProductStockService.lockStock()
+    -> CouponService.useCoupon()
+    -> OrderDomainService.createOrder()
+    -> PaymentService.createPayment()
+    -> MessageNotifyService.sendOrderCreatedMessage()
+  -> 返回订单提交结果
 ```
 
-示例支持两个动作：
+中介者模式的重点不是减少代码量，而是减少模块之间的直接依赖。各个业务服务不需要互相注入，也不需要知道完整订单提交流程。
 
-```text
-create  创建工单
-assign  分配工单
-```
+## 公共代码
 
-创建工单时，中介者会协调工单服务、通知服务和审计服务。分配工单时，中介者会协调客服服务、工单服务、通知服务和审计服务。
+公共响应、业务异常和全局异常处理用于统一接口返回。实际项目中可以复用已有基础包。
 
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
-├── MediatorApplication.java
-├── controller/
-│   └── WorkOrderController.java
-├── dto/
-│   ├── WorkOrderCommand.java
-│   └── WorkOrderResponse.java
-├── mediator/
-│   ├── WorkOrderMediator.java
-│   └── DefaultWorkOrderMediator.java
-└── service/
-    ├── WorkOrderService.java
-    ├── AgentService.java
-    ├── NoticeService.java
-    ├── AuditService.java
-    └── impl/
-        ├── WorkOrderServiceImpl.java
-        ├── AgentServiceImpl.java
-        ├── NoticeServiceImpl.java
-        └── AuditServiceImpl.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/MediatorApplication.java`
-
-下面是 Spring Boot 启动类。
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/common/ApiResult.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.mediator.common;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 统一接口响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    /**
+     * 返回成功结果
+     *
+     * @param data 响应数据
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(200, "操作成功", data);
+    }
+
+    /**
+     * 返回失败结果
+     *
+     * @param message 错误信息
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> fail(String message) {
+        return new ApiResult<>(500, message, null);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/common/BizException.java`
+
+```java
+package io.github.atengk.pattern.mediator.common;
+
+/**
+ * 业务异常
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class BizException extends RuntimeException {
+
+    /**
+     * 创建业务异常
+     *
+     * @param message 异常信息
+     */
+    public BizException(String message) {
+        super(message);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/common/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.pattern.mediator.common;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理业务异常
+     *
+     * @param exception 业务异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(BizException.class)
+    public ApiResult<Void> handleBizException(BizException exception) {
+        log.warn("业务处理失败：{}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ApiResult<Void> handleValidException(Exception exception) {
+        log.warn("接口参数校验失败：{}", exception.getMessage());
+        return ApiResult.fail("请求参数不合法");
+    }
+
+    /**
+     * 处理请求体解析异常
+     *
+     * @param exception 请求体解析异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResult<Void> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("请求体解析失败：{}", exception.getMessage());
+        return ApiResult.fail("请求体格式不正确");
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统异常", exception);
+        return ApiResult.fail("系统繁忙，请稍后重试");
+    }
+
+}
+```
+
+## 完整代码
+
+下面给出中介者模式的核心代码。示例使用内存数据模拟用户、库存、优惠券、订单和支付。实际项目中可以替换为数据库、Redis、MQ 或远程 RPC 调用。
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/MediatorApplication.java`
+
+```java
+package io.github.atengk.pattern.mediator;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -353,982 +287,1023 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 中介者模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class MediatorApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(MediatorApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/WorkOrderCommand.java`
+## 请求对象和响应对象
 
-下面是工单协作命令对象，承载一次工单操作需要的参数。
+请求对象用于接收订单提交参数，响应对象用于返回中介者协调后的整体结果。
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/dto/OrderSubmitRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.mediator.order.dto;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+import java.math.BigDecimal;
 
 /**
- * 工单协作命令
+ * 订单提交请求参数
  *
- * @param action      操作类型
- * @param workOrderNo 工单号
- * @param title       工单标题
- * @param userId      用户ID
- * @param agentId     客服ID
- * @param content     工单内容
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record WorkOrderCommand(
-        String action,
-        String workOrderNo,
-        String title,
-        Long userId,
-        Long agentId,
-        String content
-) {
+@Data
+public class OrderSubmitRequest {
+
+    @NotNull(message = "用户ID不能为空")
+    private Long userId;
+
+    @NotNull(message = "商品ID不能为空")
+    private Long productId;
+
+    @Min(value = 1, message = "购买数量必须大于0")
+    private Integer quantity;
+
+    @NotNull(message = "订单金额不能为空")
+    @DecimalMin(value = "0.01", message = "订单金额必须大于0")
+    private BigDecimal amount;
+
+    private String couponCode;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/WorkOrderResponse.java`
-
-下面是工单协作响应对象。
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/vo/OrderSubmitResultVO.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.mediator.order.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
 
 /**
- * 工单协作响应
+ * 订单提交结果
  *
- * @param action      操作类型
- * @param workOrderNo 工单号
- * @param agentId     客服ID
- * @param success     是否成功
- * @param message     响应消息
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record WorkOrderResponse(
-        String action,
-        String workOrderNo,
-        Long agentId,
-        Boolean success,
-        String message
-) {
+@Data
+@Builder
+public class OrderSubmitResultVO {
+
+    private String orderNo;
+
+    private String payNo;
+
+    private Boolean stockLocked;
+
+    private Boolean couponUsed;
+
+    private BigDecimal discountAmount;
+
+    private BigDecimal payableAmount;
+
+    private String message;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/WorkOrderService.java`
+## 同事对象接口
 
-下面是工单服务接口，只处理工单自身能力，不直接调用通知、审计或客服服务。
+同事对象是中介者需要协调的业务服务。每个服务只关心自己的业务能力，不直接调用其他同事对象。
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/UserAccountService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.mediator.order.service;
 
 /**
- * 工单服务
+ * 用户账户服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface WorkOrderService {
+public interface UserAccountService {
 
     /**
-     * 创建工单
+     * 校验用户是否可用
      *
-     * @param title   工单标题
-     * @param userId  用户ID
-     * @param content 工单内容
-     * @return 工单号
+     * @param userId 用户ID
      */
-    String create(String title, Long userId, String content);
+    void checkUserAvailable(Long userId);
 
-    /**
-     * 分配工单
-     *
-     * @param workOrderNo 工单号
-     * @param agentId     客服ID
-     */
-    void assign(String workOrderNo, Long agentId);
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/AgentService.java`
-
-下面是客服服务接口，只负责客服相关能力。
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/ProductStockService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.mediator.order.service;
 
 /**
- * 客服服务
+ * 商品库存服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface AgentService {
+public interface ProductStockService {
 
     /**
-     * 获取可用客服ID
+     * 锁定商品库存
      *
-     * @return 客服ID
+     * @param productId 商品ID
+     * @param quantity 购买数量
      */
-    Long findAvailableAgent();
+    void lockStock(Long productId, Integer quantity);
 
-    /**
-     * 校验客服是否可接单
-     *
-     * @param agentId 客服ID
-     */
-    void checkAgentAvailable(Long agentId);
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/NoticeService.java`
-
-下面是通知服务接口，只负责发送通知。
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/CouponService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.mediator.order.service;
+
+import java.math.BigDecimal;
 
 /**
- * 通知服务
+ * 优惠券服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface NoticeService {
+public interface CouponService {
 
     /**
-     * 发送工单创建通知
+     * 使用优惠券
      *
-     * @param userId      用户ID
-     * @param workOrderNo 工单号
+     * @param userId 用户ID
+     * @param couponCode 优惠券编码
+     * @param orderAmount 订单金额
+     * @return 优惠金额
      */
-    void sendCreatedNotice(Long userId, String workOrderNo);
+    BigDecimal useCoupon(Long userId, String couponCode, BigDecimal orderAmount);
 
-    /**
-     * 发送工单分配通知
-     *
-     * @param agentId     客服ID
-     * @param workOrderNo 工单号
-     */
-    void sendAssignedNotice(Long agentId, String workOrderNo);
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/AuditService.java`
-
-下面是审计服务接口，只负责记录操作审计。
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/OrderDomainService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.pattern.mediator.order.service;
+
+import io.github.atengk.pattern.mediator.order.dto.OrderSubmitRequest;
+
+import java.math.BigDecimal;
 
 /**
- * 审计服务
+ * 订单领域服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface AuditService {
+public interface OrderDomainService {
 
     /**
-     * 记录操作日志
+     * 创建订单
      *
-     * @param action      操作类型
-     * @param workOrderNo 工单号
-     * @param operatorId  操作人ID
+     * @param request 订单提交请求
+     * @param discountAmount 优惠金额
+     * @param payableAmount 应付金额
+     * @return 订单编号
      */
-    void record(String action, String workOrderNo, Long operatorId);
+    String createOrder(OrderSubmitRequest request, BigDecimal discountAmount, BigDecimal payableAmount);
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/WorkOrderServiceImpl.java`
-
-下面是工单服务实现。它只处理创建和分配工单本身，不感知其他服务。
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/PaymentService.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.mediator.order.service;
+
+import java.math.BigDecimal;
+
+/**
+ * 支付服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface PaymentService {
+
+    /**
+     * 创建支付单
+     *
+     * @param orderNo 订单编号
+     * @param payableAmount 应付金额
+     * @return 支付单号
+     */
+    String createPayment(String orderNo, BigDecimal payableAmount);
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/MessageNotifyService.java`
+
+```java
+package io.github.atengk.pattern.mediator.order.service;
+
+/**
+ * 消息通知服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface MessageNotifyService {
+
+    /**
+     * 发送订单创建通知
+     *
+     * @param userId 用户ID
+     * @param orderNo 订单编号
+     */
+    void sendOrderCreatedMessage(Long userId, String orderNo);
+
+}
+```
+
+## 同事对象实现
+
+下面是各个同事对象的实现。它们之间不互相注入、不互相调用，只提供自身能力。
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/impl/UserAccountServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.mediator.order.service.impl;
+
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.pattern.mediator.common.BizException;
+import io.github.atengk.pattern.mediator.order.service.UserAccountService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 用户账户服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class UserAccountServiceImpl implements UserAccountService {
+
+    /**
+     * 校验用户是否可用
+     *
+     * @param userId 用户ID
+     */
+    @Override
+    public void checkUserAvailable(Long userId) {
+        if (ObjectUtil.isNull(userId) || userId <= 0) {
+            throw new BizException("用户ID不合法");
+        }
+
+        if (userId.equals(999L)) {
+            log.warn("用户状态异常，userId：{}", userId);
+            throw new BizException("当前用户状态异常，不能提交订单");
+        }
+
+        log.info("用户校验通过，userId：{}", userId);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/impl/ProductStockServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.mediator.order.service.impl;
+
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.pattern.mediator.common.BizException;
+import io.github.atengk.pattern.mediator.order.service.ProductStockService;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 商品库存服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class ProductStockServiceImpl implements ProductStockService {
+
+    private final Map<Long, Integer> stockStorage = new ConcurrentHashMap<>();
+
+    /**
+     * 初始化模拟库存数据
+     */
+    @PostConstruct
+    public void initStock() {
+        stockStorage.put(1001L, 10);
+        stockStorage.put(1002L, 5);
+        stockStorage.put(1003L, 0);
+        log.info("模拟库存初始化完成，商品数量：{}", stockStorage.size());
+    }
+
+    /**
+     * 锁定商品库存
+     *
+     * @param productId 商品ID
+     * @param quantity 购买数量
+     */
+    @Override
+    public synchronized void lockStock(Long productId, Integer quantity) {
+        if (ObjectUtil.isNull(productId) || productId <= 0) {
+            throw new BizException("商品ID不合法");
+        }
+
+        if (ObjectUtil.isNull(quantity) || quantity <= 0) {
+            throw new BizException("购买数量必须大于0");
+        }
+
+        Integer stock = stockStorage.get(productId);
+        if (ObjectUtil.isNull(stock)) {
+            throw new BizException("商品不存在");
+        }
+
+        if (stock < quantity) {
+            log.warn("商品库存不足，productId：{}，quantity：{}，stock：{}", productId, quantity, stock);
+            throw new BizException("商品库存不足");
+        }
+
+        stockStorage.put(productId, stock - quantity);
+        log.info("库存锁定成功，productId：{}，quantity：{}，remainingStock：{}",
+                productId, quantity, stock - quantity);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/impl/CouponServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.mediator.order.service.impl;
+
+import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.mediator.common.BizException;
+import io.github.atengk.pattern.mediator.order.service.CouponService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+
+/**
+ * 优惠券服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class CouponServiceImpl implements CouponService {
+
+    private static final String NEW_USER_10 = "NEW_USER_10";
+
+    private static final String FULL_100_20 = "FULL_100_20";
+
+    /**
+     * 使用优惠券
+     *
+     * @param userId 用户ID
+     * @param couponCode 优惠券编码
+     * @param orderAmount 订单金额
+     * @return 优惠金额
+     */
+    @Override
+    public BigDecimal useCoupon(Long userId, String couponCode, BigDecimal orderAmount) {
+        if (StrUtil.isBlank(couponCode)) {
+            log.info("未使用优惠券，userId：{}", userId);
+            return BigDecimal.ZERO;
+        }
+
+        if (StrUtil.equalsIgnoreCase(couponCode, NEW_USER_10)) {
+            log.info("优惠券使用成功，userId：{}，couponCode：{}，discountAmount：10.00", userId, couponCode);
+            return BigDecimal.valueOf(10);
+        }
+
+        if (StrUtil.equalsIgnoreCase(couponCode, FULL_100_20)) {
+            if (NumberUtil.isLess(orderAmount, BigDecimal.valueOf(100))) {
+                throw new BizException("订单金额未达到优惠券使用门槛");
+            }
+
+            log.info("优惠券使用成功，userId：{}，couponCode：{}，discountAmount：20.00", userId, couponCode);
+            return BigDecimal.valueOf(20);
+        }
+
+        throw new BizException("优惠券不存在或已失效");
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/impl/OrderDomainServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.mediator.order.service.impl;
 
 import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.service.WorkOrderService;
+import io.github.atengk.pattern.mediator.order.dto.OrderSubmitRequest;
+import io.github.atengk.pattern.mediator.order.service.OrderDomainService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+
+/**
+ * 订单领域服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class OrderDomainServiceImpl implements OrderDomainService {
+
+    /**
+     * 创建订单
+     *
+     * @param request 订单提交请求
+     * @param discountAmount 优惠金额
+     * @param payableAmount 应付金额
+     * @return 订单编号
+     */
+    @Override
+    public String createOrder(OrderSubmitRequest request, BigDecimal discountAmount, BigDecimal payableAmount) {
+        String orderNo = "OD" + IdUtil.getSnowflakeNextIdStr();
+
+        log.info("订单创建成功，orderNo：{}，userId：{}，productId：{}，amount：{}，discountAmount：{}，payableAmount：{}",
+                orderNo,
+                request.getUserId(),
+                request.getProductId(),
+                request.getAmount(),
+                discountAmount,
+                payableAmount);
+
+        return orderNo;
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/impl/PaymentServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.mediator.order.service.impl;
+
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.mediator.common.BizException;
+import io.github.atengk.pattern.mediator.order.service.PaymentService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+
+/**
+ * 支付服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class PaymentServiceImpl implements PaymentService {
+
+    /**
+     * 创建支付单
+     *
+     * @param orderNo 订单编号
+     * @param payableAmount 应付金额
+     * @return 支付单号
+     */
+    @Override
+    public String createPayment(String orderNo, BigDecimal payableAmount) {
+        if (NumberUtil.isLessOrEqual(payableAmount, BigDecimal.ZERO)) {
+            throw new BizException("支付金额必须大于0");
+        }
+
+        if (NumberUtil.isGreater(payableAmount, BigDecimal.valueOf(100000))) {
+            throw new BizException("支付金额超过单笔上限");
+        }
+
+        String payNo = "PAY" + IdUtil.getSnowflakeNextIdStr();
+        log.info("支付单创建成功，orderNo：{}，payNo：{}，payableAmount：{}", orderNo, payNo, payableAmount);
+
+        return payNo;
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/service/impl/MessageNotifyServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.mediator.order.service.impl;
+
+import io.github.atengk.pattern.mediator.order.service.MessageNotifyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * 工单服务实现
+ * 消息通知服务实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
-public class WorkOrderServiceImpl implements WorkOrderService {
+public class MessageNotifyServiceImpl implements MessageNotifyService {
 
     /**
-     * 创建工单
+     * 发送订单创建通知
      *
-     * @param title   工单标题
-     * @param userId  用户ID
-     * @param content 工单内容
-     * @return 工单号
+     * @param userId 用户ID
+     * @param orderNo 订单编号
      */
     @Override
-    public String create(String title, Long userId, String content) {
-        if (StrUtil.hasBlank(title, content)) {
-            log.warn("创建工单失败，标题或内容为空");
-            throw new IllegalArgumentException("工单标题和内容不能为空");
-        }
-
-        if (userId == null || userId <= 0) {
-            log.warn("创建工单失败，用户ID不合法，用户ID：{}", userId);
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        String workOrderNo = "WO" + IdUtil.getSnowflakeNextId();
-        log.info("创建工单成功，工单号：{}，用户ID：{}，标题：{}", workOrderNo, userId, title);
-        return workOrderNo;
+    public void sendOrderCreatedMessage(Long userId, String orderNo) {
+        log.info("订单创建通知发送成功，userId：{}，orderNo：{}", userId, orderNo);
     }
 
-    /**
-     * 分配工单
-     *
-     * @param workOrderNo 工单号
-     * @param agentId     客服ID
-     */
-    @Override
-    public void assign(String workOrderNo, Long agentId) {
-        if (StrUtil.isBlank(workOrderNo)) {
-            log.warn("分配工单失败，工单号为空");
-            throw new IllegalArgumentException("工单号不能为空");
-        }
-
-        if (agentId == null || agentId <= 0) {
-            log.warn("分配工单失败，客服ID不合法，客服ID：{}", agentId);
-            throw new IllegalArgumentException("客服ID必须大于0");
-        }
-
-        log.info("分配工单成功，工单号：{}，客服ID：{}", workOrderNo, agentId);
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/AgentServiceImpl.java`
+## 中介者接口
 
-下面是客服服务实现，负责选择和校验客服。
+中介者接口定义统一的订单提交入口。Controller 只依赖中介者，不直接依赖库存、优惠券、支付等多个服务。
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/mediator/OrderSubmitMediator.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.mediator.order.mediator;
 
-import io.github.atengk.design.service.AgentService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import io.github.atengk.pattern.mediator.order.dto.OrderSubmitRequest;
+import io.github.atengk.pattern.mediator.order.vo.OrderSubmitResultVO;
 
 /**
- * 客服服务实现
+ * 订单提交中介者
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Service
-public class AgentServiceImpl implements AgentService {
-
-    private static final Long MOCK_AGENT_ID = 90001L;
+public interface OrderSubmitMediator {
 
     /**
-     * 获取可用客服ID
+     * 提交订单
      *
-     * @return 客服ID
+     * @param request 订单提交请求
+     * @return 订单提交结果
      */
-    @Override
-    public Long findAvailableAgent() {
-        log.info("查询可用客服成功，客服ID：{}", MOCK_AGENT_ID);
-        return MOCK_AGENT_ID;
-    }
+    OrderSubmitResultVO submitOrder(OrderSubmitRequest request);
 
-    /**
-     * 校验客服是否可接单
-     *
-     * @param agentId 客服ID
-     */
-    @Override
-    public void checkAgentAvailable(Long agentId) {
-        if (agentId == null || agentId <= 0) {
-            log.warn("客服校验失败，客服ID不合法，客服ID：{}", agentId);
-            throw new IllegalArgumentException("客服ID必须大于0");
-        }
-
-        log.info("客服校验通过，客服ID：{}", agentId);
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/NoticeServiceImpl.java`
+## 中介者实现
 
-下面是通知服务实现，负责发送工单相关通知。
+中介者实现类负责集中编排订单提交流程。各个业务服务之间不发生直接调用，由中介者按流程协调。
 
-```java
-package io.github.atengk.design.service.impl;
-
-import io.github.atengk.design.service.NoticeService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 通知服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class NoticeServiceImpl implements NoticeService {
-
-    /**
-     * 发送工单创建通知
-     *
-     * @param userId      用户ID
-     * @param workOrderNo 工单号
-     */
-    @Override
-    public void sendCreatedNotice(Long userId, String workOrderNo) {
-        log.info("发送工单创建通知，用户ID：{}，工单号：{}", userId, workOrderNo);
-    }
-
-    /**
-     * 发送工单分配通知
-     *
-     * @param agentId     客服ID
-     * @param workOrderNo 工单号
-     */
-    @Override
-    public void sendAssignedNotice(Long agentId, String workOrderNo) {
-        log.info("发送工单分配通知，客服ID：{}，工单号：{}", agentId, workOrderNo);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/AuditServiceImpl.java`
-
-下面是审计服务实现，负责记录工单操作日志。
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/mediator/impl/OrderSubmitMediatorImpl.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.pattern.mediator.order.mediator.impl;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.service.AuditService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 审计服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class AuditServiceImpl implements AuditService {
-
-    /**
-     * 记录操作日志
-     *
-     * @param action      操作类型
-     * @param workOrderNo 工单号
-     * @param operatorId  操作人ID
-     */
-    @Override
-    public void record(String action, String workOrderNo, Long operatorId) {
-        if (StrUtil.hasBlank(action, workOrderNo)) {
-            log.warn("记录审计日志失败，操作类型或工单号为空");
-            throw new IllegalArgumentException("操作类型和工单号不能为空");
-        }
-
-        log.info("记录工单审计日志，操作：{}，工单号：{}，操作人ID：{}", action, workOrderNo, operatorId);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/mediator/WorkOrderMediator.java`
-
-下面是工单中介者接口，定义工单协作入口。
-
-```java
-package io.github.atengk.design.mediator;
-
-import io.github.atengk.design.dto.WorkOrderCommand;
-import io.github.atengk.design.dto.WorkOrderResponse;
-
-/**
- * 工单中介者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface WorkOrderMediator {
-
-    /**
-     * 处理工单协作命令
-     *
-     * @param command 工单协作命令
-     * @return 工单协作响应
-     */
-    WorkOrderResponse handle(WorkOrderCommand command);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/mediator/DefaultWorkOrderMediator.java`
-
-下面是工单中介者实现。它集中协调工单、客服、通知和审计服务之间的协作关系。
-
-```java
-package io.github.atengk.design.mediator;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.WorkOrderCommand;
-import io.github.atengk.design.dto.WorkOrderResponse;
-import io.github.atengk.design.service.AgentService;
-import io.github.atengk.design.service.AuditService;
-import io.github.atengk.design.service.NoticeService;
-import io.github.atengk.design.service.WorkOrderService;
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.mediator.order.dto.OrderSubmitRequest;
+import io.github.atengk.pattern.mediator.order.mediator.OrderSubmitMediator;
+import io.github.atengk.pattern.mediator.order.service.CouponService;
+import io.github.atengk.pattern.mediator.order.service.MessageNotifyService;
+import io.github.atengk.pattern.mediator.order.service.OrderDomainService;
+import io.github.atengk.pattern.mediator.order.service.PaymentService;
+import io.github.atengk.pattern.mediator.order.service.ProductStockService;
+import io.github.atengk.pattern.mediator.order.service.UserAccountService;
+import io.github.atengk.pattern.mediator.order.vo.OrderSubmitResultVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 /**
- * 默认工单中介者
+ * 订单提交中介者实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DefaultWorkOrderMediator implements WorkOrderMediator {
+public class OrderSubmitMediatorImpl implements OrderSubmitMediator {
 
-    private static final String ACTION_CREATE = "create";
-    private static final String ACTION_ASSIGN = "assign";
+    private final UserAccountService userAccountService;
 
-    private final WorkOrderService workOrderService;
-    private final AgentService agentService;
-    private final NoticeService noticeService;
-    private final AuditService auditService;
+    private final ProductStockService productStockService;
+
+    private final CouponService couponService;
+
+    private final OrderDomainService orderDomainService;
+
+    private final PaymentService paymentService;
+
+    private final MessageNotifyService messageNotifyService;
 
     /**
-     * 处理工单协作命令
+     * 提交订单
      *
-     * @param command 工单协作命令
-     * @return 工单协作响应
+     * @param request 订单提交请求
+     * @return 订单提交结果
      */
     @Override
-    public WorkOrderResponse handle(WorkOrderCommand command) {
-        validateCommand(command);
+    public OrderSubmitResultVO submitOrder(OrderSubmitRequest request) {
+        log.info("开始提交订单，userId：{}，productId：{}，quantity：{}",
+                request.getUserId(), request.getProductId(), request.getQuantity());
 
-        String action = StrUtil.trim(command.action()).toLowerCase();
+        userAccountService.checkUserAvailable(request.getUserId());
 
-        if (ACTION_CREATE.equals(action)) {
-            return createWorkOrder(command);
-        }
+        productStockService.lockStock(request.getProductId(), request.getQuantity());
 
-        if (ACTION_ASSIGN.equals(action)) {
-            return assignWorkOrder(command);
-        }
-
-        log.warn("处理工单协作失败，不支持的操作类型：{}", command.action());
-        throw new IllegalArgumentException("不支持的操作类型：" + command.action());
-    }
-
-    /**
-     * 创建工单
-     *
-     * @param command 工单协作命令
-     * @return 工单协作响应
-     */
-    private WorkOrderResponse createWorkOrder(WorkOrderCommand command) {
-        String workOrderNo = workOrderService.create(command.title(), command.userId(), command.content());
-        Long agentId = agentService.findAvailableAgent();
-
-        workOrderService.assign(workOrderNo, agentId);
-        noticeService.sendCreatedNotice(command.userId(), workOrderNo);
-        noticeService.sendAssignedNotice(agentId, workOrderNo);
-        auditService.record(ACTION_CREATE, workOrderNo, command.userId());
-
-        log.info("中介者完成工单创建协作，工单号：{}，用户ID：{}，客服ID：{}",
-                workOrderNo, command.userId(), agentId);
-
-        return new WorkOrderResponse(
-                ACTION_CREATE,
-                workOrderNo,
-                agentId,
-                true,
-                "工单创建成功"
+        BigDecimal discountAmount = couponService.useCoupon(
+                request.getUserId(),
+                request.getCouponCode(),
+                request.getAmount()
         );
+
+        BigDecimal payableAmount = calculatePayableAmount(request.getAmount(), discountAmount);
+
+        String orderNo = orderDomainService.createOrder(request, discountAmount, payableAmount);
+
+        String payNo = paymentService.createPayment(orderNo, payableAmount);
+
+        messageNotifyService.sendOrderCreatedMessage(request.getUserId(), orderNo);
+
+        log.info("订单提交完成，orderNo：{}，payNo：{}", orderNo, payNo);
+
+        return OrderSubmitResultVO.builder()
+                .orderNo(orderNo)
+                .payNo(payNo)
+                .stockLocked(true)
+                .couponUsed(NumberUtil.isGreater(discountAmount, BigDecimal.ZERO))
+                .discountAmount(discountAmount)
+                .payableAmount(payableAmount)
+                .message("订单提交成功")
+                .build();
     }
 
     /**
-     * 分配工单
+     * 计算应付金额
      *
-     * @param command 工单协作命令
-     * @return 工单协作响应
+     * @param orderAmount 订单金额
+     * @param discountAmount 优惠金额
+     * @return 应付金额
      */
-    private WorkOrderResponse assignWorkOrder(WorkOrderCommand command) {
-        if (StrUtil.isBlank(command.workOrderNo())) {
-            log.warn("分配工单失败，工单号为空");
-            throw new IllegalArgumentException("工单号不能为空");
+    private BigDecimal calculatePayableAmount(BigDecimal orderAmount, BigDecimal discountAmount) {
+        BigDecimal payableAmount = NumberUtil.sub(orderAmount, discountAmount);
+
+        if (NumberUtil.isLessOrEqual(payableAmount, BigDecimal.ZERO)) {
+            log.warn("优惠后金额小于等于0，按最低支付金额处理，orderAmount：{}，discountAmount：{}",
+                    orderAmount, discountAmount);
+            return BigDecimal.valueOf(0.01);
         }
 
-        Long agentId = command.agentId();
-        agentService.checkAgentAvailable(agentId);
-
-        workOrderService.assign(command.workOrderNo(), agentId);
-        noticeService.sendAssignedNotice(agentId, command.workOrderNo());
-        auditService.record(ACTION_ASSIGN, command.workOrderNo(), agentId);
-
-        log.info("中介者完成工单分配协作，工单号：{}，客服ID：{}", command.workOrderNo(), agentId);
-
-        return new WorkOrderResponse(
-                ACTION_ASSIGN,
-                command.workOrderNo(),
-                agentId,
-                true,
-                "工单分配成功"
-        );
+        return payableAmount;
     }
 
-    /**
-     * 校验工单协作命令
-     *
-     * @param command 工单协作命令
-     */
-    private void validateCommand(WorkOrderCommand command) {
-        if (command == null) {
-            log.warn("处理工单协作失败，命令为空");
-            throw new IllegalArgumentException("工单协作命令不能为空");
-        }
-
-        if (StrUtil.isBlank(command.action())) {
-            log.warn("处理工单协作失败，操作类型为空");
-            throw new IllegalArgumentException("操作类型不能为空");
-        }
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/WorkOrderController.java`
+## 控制器接口
 
-下面是工单接口，用于验证中介者模式效果。
+控制器只负责接收 HTTP 请求，然后调用中介者。它不直接编排用户、库存、优惠券、订单、支付和通知服务。
+
+文件位置：`src/main/java/io/github/atengk/pattern/mediator/order/controller/OrderSubmitController.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.mediator.order.controller;
 
-import io.github.atengk.design.dto.WorkOrderCommand;
-import io.github.atengk.design.dto.WorkOrderResponse;
-import io.github.atengk.design.mediator.WorkOrderMediator;
+import io.github.atengk.pattern.mediator.common.ApiResult;
+import io.github.atengk.pattern.mediator.order.dto.OrderSubmitRequest;
+import io.github.atengk.pattern.mediator.order.mediator.OrderSubmitMediator;
+import io.github.atengk.pattern.mediator.order.vo.OrderSubmitResultVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 工单控制器
+ * 订单提交接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/orders")
 @RequiredArgsConstructor
-@RequestMapping("/mediator/work-order")
-public class WorkOrderController {
+public class OrderSubmitController {
 
-    private final WorkOrderMediator workOrderMediator;
-
-    /**
-     * 创建工单
-     *
-     * @param title   工单标题
-     * @param userId  用户ID
-     * @param content 工单内容
-     * @return 工单协作响应
-     */
-    @PostMapping("/create")
-    public WorkOrderResponse create(@RequestParam String title,
-                                    @RequestParam Long userId,
-                                    @RequestParam String content) {
-        WorkOrderCommand command = new WorkOrderCommand(
-                "create",
-                null,
-                title,
-                userId,
-                null,
-                content
-        );
-
-        return workOrderMediator.handle(command);
-    }
+    private final OrderSubmitMediator orderSubmitMediator;
 
     /**
-     * 分配工单
+     * 提交订单
      *
-     * @param workOrderNo 工单号
-     * @param agentId     客服ID
-     * @return 工单协作响应
+     * @param request 订单提交请求
+     * @return 订单提交结果
      */
-    @PostMapping("/assign")
-    public WorkOrderResponse assign(@RequestParam String workOrderNo,
-                                    @RequestParam Long agentId) {
-        WorkOrderCommand command = new WorkOrderCommand(
-                "assign",
-                workOrderNo,
-                null,
-                null,
-                agentId,
-                null
-        );
-
-        return workOrderMediator.handle(command);
+    @PostMapping("/submit")
+    public ApiResult<OrderSubmitResultVO> submitOrder(@Valid @RequestBody OrderSubmitRequest request) {
+        return ApiResult.success(orderSubmitMediator.submitOrder(request));
     }
+
 }
 ```
 
-接口调用示例：
+## 使用方式
+
+启动项目后，调用订单提交接口即可触发中介者协调多个业务服务。
+
+接口信息：
+
+| 项目         | 内容                                                         |
+| ------------ | ------------------------------------------------------------ |
+| 请求路径     | `/orders/submit`                                             |
+| 请求方法     | `POST`                                                       |
+| Content-Type | `application/json`                                           |
+| 主要流程     | 用户校验 → 锁定库存 → 使用优惠券 → 创建订单 → 创建支付单 → 发送通知 |
+
+正常提交订单：
 
 ```bash
-curl -X POST "http://localhost:8080/mediator/work-order/create?title=订单支付异常&userId=10001&content=用户反馈订单支付后状态未更新"
-
-curl -X POST "http://localhost:8080/mediator/work-order/assign?workOrderNo=WO2019776866538487808&agentId=90001"
+curl -X POST "http://localhost:8080/orders/submit" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 1001,
+    "quantity": 2,
+    "amount": 199.90,
+    "couponCode": "FULL_100_20"
+  }'
 ```
 
-创建工单可能返回：
+返回示例：
 
 ```json
 {
-  "action": "create",
-  "workOrderNo": "WO2019776866538487808",
-  "agentId": 90001,
-  "success": true,
-  "message": "工单创建成功"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "orderNo": "OD1998948715737427968",
+    "payNo": "PAY1998948715737427969",
+    "stockLocked": true,
+    "couponUsed": true,
+    "discountAmount": 20,
+    "payableAmount": 179.90,
+    "message": "订单提交成功"
+  }
 }
 ```
 
-在这个结构中，`WorkOrderService`、`AgentService`、`NoticeService`、`AuditService` 不互相注入。它们之间的交互关系统一由 `DefaultWorkOrderMediator` 管理。
+不使用优惠券提交订单：
 
-## 扩展新的协作动作
-
-在中介者模式中，扩展新协作动作通常是在中介者中新增协调逻辑，或者将动作处理拆成独立处理器。下面以“关闭工单”为例，给出简化扩展方式。
-
-先在工单服务中新增关闭工单方法。
-
-文件位置：`src/main/java/io/github/atengk/design/service/WorkOrderService.java`
-
-```java
-/**
- * 关闭工单
- *
- * @param workOrderNo 工单号
- */
-void close(String workOrderNo);
+```bash
+curl -X POST "http://localhost:8080/orders/submit" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 1002,
+    "quantity": 1,
+    "amount": 59.90
+  }'
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/WorkOrderServiceImpl.java`
+返回示例：
 
-```java
-/**
- * 关闭工单
- *
- * @param workOrderNo 工单号
- */
-@Override
-public void close(String workOrderNo) {
-    if (StrUtil.isBlank(workOrderNo)) {
-        log.warn("关闭工单失败，工单号为空");
-        throw new IllegalArgumentException("工单号不能为空");
-    }
-
-    log.info("关闭工单成功，工单号：{}", workOrderNo);
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "orderNo": "OD1998948715737427970",
+    "payNo": "PAY1998948715737427971",
+    "stockLocked": true,
+    "couponUsed": false,
+    "discountAmount": 0,
+    "payableAmount": 59.90,
+    "message": "订单提交成功"
+  }
 }
 ```
 
-然后在中介者中增加动作常量和分支：
+库存不足请求：
 
-```java
-private static final String ACTION_CLOSE = "close";
-if (ACTION_CLOSE.equals(action)) {
-    return closeWorkOrder(command);
+```bash
+curl -X POST "http://localhost:8080/orders/submit" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 1003,
+    "quantity": 1,
+    "amount": 99.90,
+    "couponCode": "NEW_USER_10"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 500,
+  "message": "商品库存不足",
+  "data": null
 }
 ```
 
-新增关闭工单协调方法：
+优惠券门槛不足请求：
 
-```java
-/**
- * 关闭工单
- *
- * @param command 工单协作命令
- * @return 工单协作响应
- */
-private WorkOrderResponse closeWorkOrder(WorkOrderCommand command) {
-    if (StrUtil.isBlank(command.workOrderNo())) {
-        log.warn("关闭工单失败，工单号为空");
-        throw new IllegalArgumentException("工单号不能为空");
-    }
+```bash
+curl -X POST "http://localhost:8080/orders/submit" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "productId": 1001,
+    "quantity": 1,
+    "amount": 59.90,
+    "couponCode": "FULL_100_20"
+  }'
+```
 
-    workOrderService.close(command.workOrderNo());
-    auditService.record(ACTION_CLOSE, command.workOrderNo(), command.userId());
+返回示例：
 
-    log.info("中介者完成工单关闭协作，工单号：{}", command.workOrderNo());
-
-    return new WorkOrderResponse(
-            ACTION_CLOSE,
-            command.workOrderNo(),
-            null,
-            true,
-            "工单关闭成功"
-    );
+```json
+{
+  "code": 500,
+  "message": "订单金额未达到优惠券使用门槛",
+  "data": null
 }
 ```
-
-如果中介者中的动作越来越多，建议不要继续在一个类里堆 `if else`。可以把“动作分发”与“协作逻辑”拆开，组合命令模式或策略模式：
-
-```text
-WorkOrderMediator
-    -> WorkOrderActionHandler
-        -> CreateWorkOrderHandler
-        -> AssignWorkOrderHandler
-        -> CloseWorkOrderHandler
-```
-
-这种写法可以避免中介者变成新的上帝类。
-
-## 中介者模式和外观模式的区别
-
-中介者模式和外观模式都可能表现为“一个类调用多个服务”，但二者意图不同。
-
-| 对比项               | 中介者模式                 | 外观模式                     |
-| -------------------- | -------------------------- | ---------------------------- |
-| 核心目的             | 解耦多个对象之间的相互交互 | 给复杂子系统提供简单入口     |
-| 对象关系             | 多个同事对象通过中介者通信 | 调用方通过门面调用多个子系统 |
-| 关注点               | 对象之间如何协作           | 调用方如何更简单地使用系统   |
-| 是否强调对象互相解耦 | 强调                       | 不一定强调                   |
-| 典型场景             | 聊天室、组件联动、工单协同 | 下单门面、报表导出、文件处理 |
-
-简单理解：
-
-```text
-中介者模式：对象之间不要互相找对方，统一找中介者。
-外观模式：调用方不要了解复杂子系统，统一找门面入口。
-```
-
-如果重点是减少多个对象之间的互相依赖，使用中介者模式。如果重点是给外部调用方提供一个简洁入口，使用外观模式。
-
-## 中介者模式和观察者模式的区别
-
-中介者模式和观察者模式都可以用于对象间通信，但通信方式不同。
-
-| 对比项   | 中介者模式                   | 观察者模式                           |
-| -------- | ---------------------------- | ------------------------------------ |
-| 核心目的 | 集中协调对象交互             | 事件发布后通知订阅者                 |
-| 通信方向 | 通常由中介者主动协调         | 发布者不关心订阅者                   |
-| 控制逻辑 | 中介者掌握协作流程           | 观察者各自响应事件                   |
-| 耦合关系 | 同事对象依赖中介者           | 发布者依赖事件机制或主题             |
-| 典型场景 | 聊天室、UI组件联动、工单协同 | 用户注册事件、订单支付事件、消息订阅 |
-
-简单理解：
-
-```text
-中介者模式：中介者知道谁该和谁协作。
-观察者模式：发布事件，谁订阅谁处理。
-```
-
-如果需要一个中心对象明确控制协作顺序和参与者，使用中介者模式。如果只是某个事件发生后通知多个监听器，使用观察者模式。
-
-## 中介者模式和责任链模式的区别
-
-中介者模式和责任链模式都能降低主流程复杂度，但解决的问题不同。
-
-| 对比项       | 中介者模式                 | 责任链模式                     |
-| ------------ | -------------------------- | ------------------------------ |
-| 核心目的     | 协调多个对象之间的交互     | 多个处理器按顺序处理同一个请求 |
-| 结构关系     | 多个对象围绕一个中介者协作 | 多个处理器组成链               |
-| 是否强调顺序 | 可有顺序，但不是核心       | 强调执行顺序                   |
-| 是否强调中断 | 不强调                     | 强调中断或放行                 |
-| 典型场景     | 工单协同、聊天室、组件联动 | 参数校验、风控链、过滤链       |
-
-简单理解：
-
-```text
-中介者模式：多个对象之间怎么协作。
-责任链模式：一个请求经过哪些关卡。
-```
-
-工单创建后要协调客服、通知、审计，适合中介者模式。订单提交前依次校验参数、库存、金额、风控，适合责任链模式。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行创建工单接口：
-
-```bash
-curl -X POST "http://localhost:8080/mediator/work-order/create?title=订单支付异常&userId=10001&content=用户反馈订单支付后状态未更新"
-```
-
-执行分配工单接口：
-
-```bash
-curl -X POST "http://localhost:8080/mediator/work-order/assign?workOrderNo=WO2019776866538487808&agentId=90001"
-```
-
-如果中介者模式正常，可以看到类似日志：
+正常请求后，可以通过日志观察中介者统一协调流程：
 
 ```text
-创建工单成功，工单号：WO2019776866538487808，用户ID：10001，标题：订单支付异常
-查询可用客服成功，客服ID：90001
-分配工单成功，工单号：WO2019776866538487808，客服ID：90001
-发送工单创建通知，用户ID：10001，工单号：WO2019776866538487808
-发送工单分配通知，客服ID：90001，工单号：WO2019776866538487808
-记录工单审计日志，操作：create，工单号：WO2019776866538487808，操作人ID：10001
-中介者完成工单创建协作，工单号：WO2019776866538487808，用户ID：10001，客服ID：90001
+开始提交订单，userId：10001，productId：1001，quantity：2
+用户校验通过，userId：10001
+库存锁定成功，productId：1001，quantity：2，remainingStock：8
+优惠券使用成功，userId：10001，couponCode：FULL_100_20，discountAmount：20.00
+订单创建成功，orderNo：OD1998948715737427968，userId：10001，productId：1001，amount：199.90，discountAmount：20，payableAmount：179.90
+支付单创建成功，orderNo：OD1998948715737427968，payNo：PAY1998948715737427969，payableAmount：179.90
+订单创建通知发送成功，userId：10001，orderNo：OD1998948715737427968
+订单提交完成，orderNo：OD1998948715737427968，payNo：PAY1998948715737427969
 ```
 
-执行非法请求：
+从日志可以看到，所有模块的调用顺序都由 `OrderSubmitMediatorImpl` 管理，而不是由各个服务互相调用。
 
-```bash
-curl -X POST "http://localhost:8080/mediator/work-order/assign?workOrderNo=WO2019776866538487808&agentId=0"
-```
+## 扩展方式
 
-异常日志示例：
+如果后续订单提交需要增加“积分抵扣”，可以新增一个同事对象 `PointService`，然后只在中介者中增加对应编排逻辑。
 
-```text
-客服校验失败，客服ID不合法，客服ID：0
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
-
-## 注意事项
-
-中介者模式适合多个对象之间交互复杂的场景，但不要把所有业务都塞进中介者。中介者应该负责协调，而不是替代所有业务服务。
-
-适合使用中介者模式的场景：
-
-```text
-多个对象之间互相依赖严重
-对象协作流程经常变化
-想减少对象之间直接注入
-需要集中控制协作规则
-页面组件或业务组件需要统一协调
-```
-
-不太适合使用中介者模式的场景：
-
-```text
-对象之间交互很简单
-只有单向服务调用
-只是封装一个流程入口
-中介者会变成巨大流程类
-普通外观模式即可解决
-```
-
-不推荐多个服务互相注入形成网状依赖：
+新增接口：
 
 ```java
+package io.github.atengk.pattern.mediator.order.service;
+
+import java.math.BigDecimal;
+
+/**
+ * 积分服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface PointService {
+
+    /**
+     * 使用积分抵扣
+     *
+     * @param userId 用户ID
+     * @param orderAmount 订单金额
+     * @return 抵扣金额
+     */
+    BigDecimal usePoint(Long userId, BigDecimal orderAmount);
+
+}
+```
+
+新增实现：
+
+```java
+package io.github.atengk.pattern.mediator.order.service.impl;
+
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.mediator.order.service.PointService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+
+/**
+ * 积分服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
 @Service
-public class WorkOrderServiceImpl {
+public class PointServiceImpl implements PointService {
 
-    private final NoticeService noticeService;
-    private final AuditService auditService;
-    private final AgentService agentService;
+    /**
+     * 使用积分抵扣
+     *
+     * @param userId 用户ID
+     * @param orderAmount 订单金额
+     * @return 抵扣金额
+     */
+    @Override
+    public BigDecimal usePoint(Long userId, BigDecimal orderAmount) {
+        if (NumberUtil.isLess(orderAmount, BigDecimal.valueOf(50))) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal pointDiscountAmount = BigDecimal.valueOf(5);
+        log.info("积分抵扣成功，userId：{}，discountAmount：{}", userId, pointDiscountAmount);
+        return pointDiscountAmount;
+    }
+
 }
 ```
 
-推荐由中介者集中协调：
+然后在 `OrderSubmitMediatorImpl` 中注入 `PointService`，把积分抵扣纳入统一编排：
 
 ```java
-@Component
-public class DefaultWorkOrderMediator {
-
-    private final WorkOrderService workOrderService;
-    private final NoticeService noticeService;
-    private final AuditService auditService;
-    private final AgentService agentService;
-}
+private final PointService pointService;
+BigDecimal pointDiscountAmount = pointService.usePoint(request.getUserId(), request.getAmount());
+BigDecimal totalDiscountAmount = NumberUtil.add(discountAmount, pointDiscountAmount);
+BigDecimal payableAmount = calculatePayableAmount(request.getAmount(), totalDiscountAmount);
 ```
 
-但中介者也不能无限膨胀。如果一个中介者中出现大量动作分支、复杂状态判断和长事务流程，需要继续拆分。
+这样新增积分服务时，不需要让优惠券服务调用积分服务，也不需要让订单服务直接依赖积分服务，协作关系仍然集中在中介者中。
 
-不推荐：
+## 优点和注意事项
 
-```java
-public WorkOrderResponse handle(WorkOrderCommand command) {
-    // create 逻辑 100 行
-    // assign 逻辑 100 行
-    // close 逻辑 100 行
-    // reopen 逻辑 100 行
-    // transfer 逻辑 100 行
-    return null;
-}
-```
+中介者模式的核心价值是降低多个对象之间的耦合，把复杂协作逻辑集中管理。
 
-推荐结合命令模式或策略模式拆分：
+| 注意事项               | 说明                                                         |
+| ---------------------- | ------------------------------------------------------------ |
+| 中介者不要过度膨胀     | 中介者只负责编排流程，不要承载过多领域规则                   |
+| 同事对象保持职责单一   | 用户服务只处理用户，库存服务只处理库存，支付服务只处理支付   |
+| 需要注意事务边界       | 涉及数据库时，订单创建、库存锁定、优惠券使用需要明确事务策略 |
+| 远程调用要考虑失败补偿 | 如果库存、支付、优惠券是远程服务，需要设计补偿或最终一致性   |
+| 不适合简单流程         | 如果只有两个对象简单调用，直接调用即可，不需要引入中介者     |
+| 可以结合领域服务       | 中介者可以作为应用服务或流程编排服务，领域规则仍放在领域服务中 |
 
-```text
-WorkOrderMediator
-    -> CreateWorkOrderHandler
-    -> AssignWorkOrderHandler
-    -> CloseWorkOrderHandler
-```
+## 和外观模式的区别
 
-Spring Bean 默认是单例，中介者中不要保存请求级状态。
+中介者模式和外观模式都可能提供一个统一入口，但关注点不同。
 
-错误示例：
+| 模式       | 关注点                     | 典型场景                                   |
+| ---------- | -------------------------- | ------------------------------------------ |
+| 中介者模式 | 协调多个对象之间的交互关系 | 订单提交、审批协同、工作流编排、消息路由   |
+| 外观模式   | 对外屏蔽子系统复杂接口     | 文件服务封装、支付网关封装、第三方接口聚合 |
 
-```java
-private String currentWorkOrderNo;
-private Long currentUserId;
-private Long currentAgentId;
-```
+外观模式偏向“简化调用入口”，中介者模式偏向“管理对象协作关系”。
+如果核心问题是多个模块之间互相依赖、调用关系混乱，优先考虑中介者模式。
 
-推荐使用方法参数和局部变量：
+## 和责任链模式的区别
 
-```java
-public WorkOrderResponse handle(WorkOrderCommand command) {
-    String workOrderNo = workOrderService.create(command.title(), command.userId(), command.content());
-    return buildResponse(workOrderNo);
-}
-```
+中介者模式和责任链模式都能组织复杂流程，但流程结构不同。
 
-如果中介者协调的是核心业务流程，例如订单、支付、工单、审批，需要额外考虑事务边界、幂等、并发、消息可靠投递和失败补偿。中介者模式只解决对象协作结构问题，不自动保证业务一致性。
+| 模式       | 关注点                         | 典型场景                       |
+| ---------- | ------------------------------ | ------------------------------ |
+| 中介者模式 | 一个协调者统一调度多个对象     | 订单提交、支付流程、审批协同   |
+| 责任链模式 | 一个请求按顺序经过多个处理节点 | 校验链、风控链、过滤链、审批链 |
 
-生产环境中常见关注点包括：
+责任链更适合“节点顺序处理同一个请求”。
+中介者更适合“多个服务之间存在复杂协作，需要一个中心对象统一调度”。
 
-```text
-中介者是否过度集中
-协作流程是否可测试
-异常后是否需要补偿
-通知失败是否影响主流程
-审计失败是否阻断操作
-多服务调用是否需要事务
-是否需要异步消息解耦
-```
+## 小结
 
-如果某些协作动作不是强一致要求，例如通知发送、审计记录，可以考虑通过 MQ 或应用事件异步处理，避免中介者同步调用过多外部服务。
-
-## 总结
-
-在 JDK21 和 Spring Boot 3 项目中，中介者模式的实践重点是把多个对象之间的复杂交互集中到中介者中，让各业务对象只关注自身职责，避免互相直接依赖。
-
-普通 Java 中介者适合理解聊天室、组件联动等对象协作问题。Spring Boot 项目中更推荐使用“中介者接口 + 具体中介者 Bean + 多个独立业务服务”的结构。对于工单协同、审批协同、页面组件交互、任务调度协调等场景，中介者模式可以减少网状依赖，让对象协作关系更清晰。
-
-中介者模式不是为了替代所有 Service 编排，也不是为了把所有流程都集中到一个类中。它最适合处理“多个对象之间交互复杂，并且需要统一协调规则”的场景。实际落地时，需要控制中介者职责边界，必要时结合命令模式、策略模式、事件机制或消息队列，避免中介者演变成新的上帝类。
+中介者模式在 Spring Boot 项目中的常见落地方式是：定义一个流程协调接口，把多个业务服务作为同事对象，由具体中介者统一编排完整业务流程。
+在订单提交、支付、审批、工作流、消息路由等需要多模块协同的场景中，中介者模式可以减少服务之间的直接依赖，使业务流程更清晰、更容易扩展。

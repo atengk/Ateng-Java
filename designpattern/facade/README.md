@@ -1,38 +1,68 @@
-# 设计模式：外观模式
+# 外观模式
 
-外观模式也叫门面模式，用于为一组复杂子系统提供一个统一的高层入口，让调用方通过一个简单接口完成复杂流程。在 JDK21 和 Spring Boot 3 项目中，外观模式常用于下单流程、支付流程、报表导出、文件上传处理、用户注册、数据同步、第三方聚合调用、后台管理聚合接口等场景。
+外观模式属于结构型模式，核心作用是为复杂子系统提供统一入口，隐藏内部多个服务、组件或接口的调用细节。在当前设计模式文档体系中，外观模式位于结构型模式分类下，适合服务聚合、接口编排、复杂流程封装、第三方系统统一调用等 Spring Boot 项目场景。
 
-需要注意：外观模式关注的是“简化复杂子系统调用”。如果重点是接口不兼容转换，更适合适配器模式；如果重点是固定流程复用，更适合模板方法模式；如果重点是根据类型选择不同处理逻辑，更适合策略模式。
+本文以 **JDK21 + Spring Boot 3** 后端项目为背景，通过“订单下单结算流程”的示例，说明外观模式在真实项目中的落地方式。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例模拟一个电商下单接口。一次下单看起来只是一个 API 调用，但内部通常会涉及多个子系统：
 
-文件位置：`pom.xml`
+```text
+用户校验
+库存校验
+优惠券计算
+订单创建
+支付流水创建
+物流单预创建
+```
+
+如果 Controller 或上层业务直接依赖这些子系统，代码会变成这样：
+
+```java
+userAccountService.checkUser(userId);
+inventoryService.lockStock(skuId, quantity);
+couponService.calculate(...);
+orderService.createOrder(...);
+paymentService.createPayment(...);
+logisticsService.createDelivery(...);
+```
+
+这种写法会让调用方直接知道太多内部细节，后续流程调整、子系统替换、异常补偿都会影响调用方。
+
+外观模式的处理方式是：提供一个统一的 `OrderCheckoutFacade`，调用方只调用“提交订单”这一个入口，复杂流程由外观类内部完成编排。
+
+本示例需要以下依赖。
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证外观模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、集合、ID、金额等通用处理 -->
+    <!-- 参数校验：用于校验下单请求参数 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：用于字符串、金额、ID、集合等常用工具处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>${hutool.version}</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok：减少 DTO、VO、构造器等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- 测试依赖：用于单元测试和接口测试 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -41,414 +71,115 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+示例项目配置如下。
 
-## 核心概念
+```yaml
+server:
+  port: 8080 # 示例服务端口
 
-外观模式的核心目标是隐藏子系统复杂性，对外提供一个更简单、更稳定、更符合业务语义的入口。
+checkout:
+  payment-timeout-minutes: 30 # 支付超时时间，单位分钟
+```
 
-常见角色如下：
-
-| 角色      | 说明                                               |
-| --------- | -------------------------------------------------- |
-| Facade    | 外观类，对外提供统一入口，内部编排多个子系统       |
-| Subsystem | 子系统类，负责具体能力，例如库存、订单、支付、通知 |
-| Client    | 调用方，只调用外观类，不直接编排多个子系统         |
-| DTO       | 请求和响应对象，用于聚合多个子系统输入输出         |
-
-常见实现方式如下：
-
-| 实现方式                        | 是否推荐         | 适用场景                      |
-| ------------------------------- | ---------------- | ----------------------------- |
-| 普通 Java 外观类                | 推荐用于简单场景 | 本地工具、报表导出、文件处理  |
-| Spring Facade Bean              | 强烈推荐         | Spring Boot 业务流程编排      |
-| Controller 直接调用多个 Service | 不推荐           | Controller 过重，业务编排分散 |
-| Service 之间互相深度调用        | 谨慎使用         | 容易形成复杂依赖链            |
-| 外观类承担全部业务细节          | 不推荐           | 会变成上帝类，难维护          |
-
-在 Spring Boot 项目中，常见优先级通常是：
+本示例的核心文件结构如下。
 
 ```text
-Spring Facade Bean > 普通 Java 外观类 > Controller 直接编排多个 Service
-```
-
-外观类不是为了替代 Service，而是用于组织多个子系统之间的协作，让调用方不用了解复杂流程。
-
-## 普通 Java 外观
-
-普通 Java 外观适合不依赖 Spring 容器的流程封装。下面以报表导出为例，导出一个报表需要查询数据、生成文件、上传文件三个步骤。调用方不应该关心这些子步骤，只需要调用一个外观入口。
-
-整体流程如下：
-
-```text
-导出报表 -> 查询报表数据 -> 生成 Excel 文件 -> 上传文件 -> 返回下载地址
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/facade/simple/
-├── ReportExportRequest.java
-├── ReportExportResponse.java
-├── ReportDataQueryService.java
-├── ExcelGenerateService.java
-├── FileStorageService.java
-└── ReportExportFacade.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/facade/simple/ReportExportRequest.java`
-
-下面是报表导出请求对象。
-
-```java
-package io.github.atengk.design.facade.simple;
-
-/**
- * 报表导出请求
- *
- * @param reportType 报表类型
- * @param operatorId 操作人ID
- * @author Ateng
- * @since 2026-04-30
- */
-public record ReportExportRequest(String reportType, Long operatorId) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/facade/simple/ReportExportResponse.java`
-
-下面是报表导出响应对象。
-
-```java
-package io.github.atengk.design.facade.simple;
-
-/**
- * 报表导出响应
- *
- * @param exportNo    导出编号
- * @param fileName    文件名
- * @param downloadUrl 下载地址
- * @param message     结果消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record ReportExportResponse(String exportNo, String fileName, String downloadUrl, String message) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/facade/simple/ReportDataQueryService.java`
-
-下面是报表数据查询子系统，负责根据报表类型查询数据。
-
-```java
-package io.github.atengk.design.facade.simple;
-
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Map;
-
-/**
- * 报表数据查询服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class ReportDataQueryService {
-
-    /**
-     * 查询报表数据
-     *
-     * @param reportType 报表类型
-     * @return 报表数据
-     */
-    public List<Map<String, Object>> queryData(String reportType) {
-        if (StrUtil.isBlank(reportType)) {
-            log.warn("查询报表数据失败，报表类型为空");
-            throw new IllegalArgumentException("报表类型不能为空");
-        }
-
-        log.info("查询报表数据，报表类型：{}", reportType);
-
-        return List.of(
-                MapUtil.<String, Object>builder()
-                        .put("orderNo", "ORDER10001")
-                        .put("amount", "99.90")
-                        .put("status", "PAID")
-                        .build(),
-                MapUtil.<String, Object>builder()
-                        .put("orderNo", "ORDER10002")
-                        .put("amount", "66.60")
-                        .put("status", "CREATED")
-                        .build()
-        );
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/facade/simple/ExcelGenerateService.java`
-
-下面是 Excel 文件生成子系统，示例中只模拟生成文件名。
-
-```java
-package io.github.atengk.design.facade.simple;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Map;
-
-/**
- * Excel文件生成服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class ExcelGenerateService {
-
-    /**
-     * 生成Excel文件
-     *
-     * @param reportType 报表类型
-     * @param rows       报表数据
-     * @return 文件名
-     */
-    public String generateExcel(String reportType, List<Map<String, Object>> rows) {
-        if (StrUtil.isBlank(reportType)) {
-            log.warn("生成Excel失败，报表类型为空");
-            throw new IllegalArgumentException("报表类型不能为空");
-        }
-
-        if (CollUtil.isEmpty(rows)) {
-            log.warn("生成Excel失败，报表数据为空");
-            throw new IllegalArgumentException("报表数据不能为空");
-        }
-
-        String fileName = StrUtil.format("{}-{}.xlsx", reportType, DateUtil.format(DateUtil.date(), "yyyyMMddHHmmss"));
-        log.info("生成Excel文件成功，文件名：{}，数据量：{}", fileName, rows.size());
-        return fileName;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/facade/simple/FileStorageService.java`
-
-下面是文件存储子系统，示例中只模拟上传文件并返回下载地址。
-
-```java
-package io.github.atengk.design.facade.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 文件存储服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class FileStorageService {
-
-    /**
-     * 上传文件
-     *
-     * @param fileName 文件名
-     * @return 下载地址
-     */
-    public String upload(String fileName) {
-        if (StrUtil.isBlank(fileName)) {
-            log.warn("上传文件失败，文件名为空");
-            throw new IllegalArgumentException("文件名不能为空");
-        }
-
-        String downloadUrl = "https://file.example.com/report/" + fileName;
-        log.info("上传文件成功，文件名：{}，下载地址：{}", fileName, downloadUrl);
-        return downloadUrl;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/facade/simple/ReportExportFacade.java`
-
-下面是报表导出外观类。调用方只需要调用 `exportReport`，不用关心查询、生成、上传三个子步骤。
-
-```java
-package io.github.atengk.design.facade.simple;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Map;
-
-/**
- * 报表导出外观
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class ReportExportFacade {
-
-    private final ReportDataQueryService reportDataQueryService;
-    private final ExcelGenerateService excelGenerateService;
-    private final FileStorageService fileStorageService;
-
-    /**
-     * 创建报表导出外观
-     *
-     * @param reportDataQueryService 报表数据查询服务
-     * @param excelGenerateService   Excel文件生成服务
-     * @param fileStorageService     文件存储服务
-     */
-    public ReportExportFacade(ReportDataQueryService reportDataQueryService,
-                              ExcelGenerateService excelGenerateService,
-                              FileStorageService fileStorageService) {
-        this.reportDataQueryService = reportDataQueryService;
-        this.excelGenerateService = excelGenerateService;
-        this.fileStorageService = fileStorageService;
-    }
-
-    /**
-     * 导出报表
-     *
-     * @param request 报表导出请求
-     * @return 报表导出响应
-     */
-    public ReportExportResponse exportReport(ReportExportRequest request) {
-        validateRequest(request);
-
-        String exportNo = "EXPORT" + IdUtil.getSnowflakeNextId();
-        log.info("开始导出报表，导出编号：{}，报表类型：{}，操作人ID：{}",
-                exportNo, request.reportType(), request.operatorId());
-
-        List<Map<String, Object>> rows = reportDataQueryService.queryData(request.reportType());
-        if (CollUtil.isEmpty(rows)) {
-            log.warn("导出报表失败，查询结果为空，导出编号：{}", exportNo);
-            throw new IllegalStateException("报表数据为空");
-        }
-
-        String fileName = excelGenerateService.generateExcel(request.reportType(), rows);
-        String downloadUrl = fileStorageService.upload(fileName);
-
-        log.info("导出报表完成，导出编号：{}，文件名：{}，下载地址：{}", exportNo, fileName, downloadUrl);
-
-        return new ReportExportResponse(exportNo, fileName, downloadUrl, "导出成功");
-    }
-
-    /**
-     * 校验导出请求
-     *
-     * @param request 报表导出请求
-     */
-    private void validateRequest(ReportExportRequest request) {
-        if (request == null) {
-            log.warn("导出报表失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.reportType())) {
-            log.warn("导出报表失败，报表类型为空");
-            throw new IllegalArgumentException("报表类型不能为空");
-        }
-
-        if (request.operatorId() == null || request.operatorId() <= 0) {
-            log.warn("导出报表失败，操作人ID不合法，操作人ID：{}", request.operatorId());
-            throw new IllegalArgumentException("操作人ID必须大于0");
-        }
-    }
-}
-```
-
-使用方式：
-
-```java
-ReportExportFacade facade = new ReportExportFacade(
-        new ReportDataQueryService(),
-        new ExcelGenerateService(),
-        new FileStorageService()
-);
-
-ReportExportResponse response = facade.exportReport(new ReportExportRequest("order", 10001L));
-```
-
-调用方只依赖 `ReportExportFacade`，不需要直接调用 `ReportDataQueryService`、`ExcelGenerateService` 和 `FileStorageService`。
-
-## Spring Boot 外观
-
-Spring Boot 项目中更常见的写法，是把外观类注册为 Spring Bean，由外观类统一编排多个 Service。下面以下单结算为例，一个下单流程通常涉及用户校验、库存扣减、订单创建、支付预处理、通知发送等多个子系统。
-
-整体流程如下：
-
-```text
-提交订单 -> 校验用户 -> 校验并扣减库存 -> 创建订单 -> 创建支付单 -> 发送通知 -> 返回下单结果
-```
-
-示例中的子系统职责如下：
-
-```text
-UserService       用户校验
-InventoryService  库存校验和扣减
-OrderService      创建订单
-PaymentService    创建支付单
-NoticeService     发送通知
-OrderCheckoutFacade 统一编排下单流程
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/designpattern/facade
 ├── FacadeApplication.java
-├── controller/
+├── config
+│   └── CheckoutProperties.java
+├── controller
 │   └── OrderCheckoutController.java
-├── dto/
-│   ├── OrderCheckoutRequest.java
-│   ├── OrderCheckoutResponse.java
-│   ├── OrderCreateCommand.java
-│   └── PaymentCreateCommand.java
-├── facade/
-│   └── OrderCheckoutFacade.java
-└── service/
-    ├── UserService.java
-    ├── InventoryService.java
-    ├── OrderService.java
-    ├── PaymentService.java
-    ├── NoticeService.java
-    └── impl/
-        ├── UserServiceImpl.java
-        ├── InventoryServiceImpl.java
-        ├── OrderServiceImpl.java
-        ├── PaymentServiceImpl.java
-        └── NoticeServiceImpl.java
+├── dto
+│   └── OrderCheckoutRequest.java
+├── facade
+│   ├── OrderCheckoutFacade.java
+│   └── OrderCheckoutFacadeImpl.java
+├── service
+│   ├── UserAccountService.java
+│   ├── InventoryService.java
+│   ├── CouponService.java
+│   ├── OrderService.java
+│   ├── PaymentService.java
+│   └── LogisticsService.java
+├── vo
+│   ├── ApiResult.java
+│   ├── CouponCalculateResultVO.java
+│   ├── DeliveryPrepareResultVO.java
+│   ├── OrderCheckoutResultVO.java
+│   ├── OrderCreateResultVO.java
+│   ├── PaymentCreateResultVO.java
+│   └── ProductStockVO.java
+└── web
+    └── GlobalExceptionHandler.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/FacadeApplication.java`
+## 模式设计
 
-下面是 Spring Boot 启动类。
+外观模式不是把所有业务逻辑都塞进一个大类，而是为复杂子系统提供一个稳定、简洁的调用入口。
+
+在本示例中，Controller 不再直接编排用户、库存、优惠券、订单、支付、物流等服务，而是只依赖 `OrderCheckoutFacade`。
+
+| 角色     | 示例类                    | 说明                           |
+| -------- | ------------------------- | ------------------------------ |
+| 外观接口 | `OrderCheckoutFacade`     | 对外提供统一下单入口           |
+| 外观实现 | `OrderCheckoutFacadeImpl` | 负责编排多个子系统             |
+| 子系统   | `UserAccountService`      | 校验用户状态                   |
+| 子系统   | `InventoryService`        | 查询商品和锁定库存             |
+| 子系统   | `CouponService`           | 计算优惠金额                   |
+| 子系统   | `OrderService`            | 创建订单                       |
+| 子系统   | `PaymentService`          | 创建支付流水                   |
+| 子系统   | `LogisticsService`        | 预创建物流单                   |
+| 调用方   | `OrderCheckoutController` | 只调用外观接口，不关心内部流程 |
+
+核心流程如下。
+
+```text
+Controller
+    ↓
+OrderCheckoutFacade.submitOrder()
+    ↓
+校验用户
+    ↓
+查询商品与库存
+    ↓
+锁定库存
+    ↓
+计算优惠
+    ↓
+创建订单
+    ↓
+创建支付流水
+    ↓
+预创建物流单
+    ↓
+返回统一下单结果
+```
+
+外观模式的关键价值是降低调用方复杂度，但不应该破坏子系统自身边界。用户、库存、优惠券、订单、支付、物流仍然保持独立服务。
+
+## 核心代码
+
+下面给出外观模式在 Spring Boot 项目中的关键实现。示例使用内存数据和模拟逻辑，真实项目中可以把子系统替换为数据库、RPC、MQ 或第三方 API。
+
+项目启动类负责启动 Spring Boot 应用，并开启配置属性扫描。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/FacadeApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.designpattern.facade;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
- * 外观模式示例启动类
+ * 外观模式示例应用启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
+@ConfigurationPropertiesScan
 @SpringBootApplication
 public class FacadeApplication {
 
@@ -463,606 +194,912 @@ public class FacadeApplication {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCheckoutRequest.java`
+下单配置类用于控制下单流程中的通用参数。
 
-下面是下单结算请求对象。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 下单结算请求
- *
- * @param userId      用户ID
- * @param productId   商品ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param unitPrice   商品单价
- * @author Ateng
- * @since 2026-04-30
- */
-public record OrderCheckoutRequest(
-        Long userId,
-        Long productId,
-        String productName,
-        Integer quantity,
-        BigDecimal unitPrice
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCheckoutResponse.java`
-
-下面是下单结算响应对象。
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/config/CheckoutProperties.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.designpattern.facade.config;
 
-import java.math.BigDecimal;
-
-/**
- * 下单结算响应
- *
- * @param orderNo     订单号
- * @param payNo       支付单号
- * @param userId      用户ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param totalAmount 订单总金额
- * @param message     结果消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record OrderCheckoutResponse(
-        String orderNo,
-        String payNo,
-        Long userId,
-        String productName,
-        Integer quantity,
-        BigDecimal totalAmount,
-        String message
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderCreateCommand.java`
-
-下面是创建订单命令对象，用于外观类调用订单子系统。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 创建订单命令
- *
- * @param userId      用户ID
- * @param productId   商品ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param totalAmount 订单总金额
- * @author Ateng
- * @since 2026-04-30
- */
-public record OrderCreateCommand(
-        Long userId,
-        Long productId,
-        String productName,
-        Integer quantity,
-        BigDecimal totalAmount
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/PaymentCreateCommand.java`
-
-下面是创建支付单命令对象，用于外观类调用支付子系统。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 创建支付单命令
- *
- * @param orderNo 订单号
- * @param userId  用户ID
- * @param amount  支付金额
- * @author Ateng
- * @since 2026-04-30
- */
-public record PaymentCreateCommand(
-        String orderNo,
-        Long userId,
-        BigDecimal amount
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/UserService.java`
-
-下面是用户服务接口。
-
-```java
-package io.github.atengk.design.service;
-
-/**
- * 用户服务
+ * 下单结算配置
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface UserService {
+@Data
+@ConfigurationProperties(prefix = "checkout")
+public class CheckoutProperties {
 
     /**
-     * 校验用户是否可下单
-     *
-     * @param userId 用户ID
+     * 支付超时时间，单位分钟
      */
-    void checkUserCanOrder(Long userId);
+    private Integer paymentTimeoutMinutes = 30;
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/InventoryService.java`
+下单请求 DTO 用于承接外部提交订单参数。
 
-下面是库存服务接口。
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/dto/OrderCheckoutRequest.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.designpattern.facade.dto;
+
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+/**
+ * 订单下单请求
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class OrderCheckoutRequest {
+
+    /**
+     * 用户 ID
+     */
+    @NotBlank(message = "用户 ID 不能为空")
+    private String userId;
+
+    /**
+     * 商品 SKU ID
+     */
+    @NotBlank(message = "商品 SKU ID 不能为空")
+    private String skuId;
+
+    /**
+     * 购买数量
+     */
+    @NotNull(message = "购买数量不能为空")
+    @Min(value = 1, message = "购买数量必须大于 0")
+    private Integer quantity;
+
+    /**
+     * 优惠券 ID，可为空
+     */
+    private String couponId;
+
+    /**
+     * 收货地址 ID
+     */
+    @NotBlank(message = "收货地址 ID 不能为空")
+    private String addressId;
+}
+```
+
+商品库存 VO 用于承接库存子系统查询结果。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/vo/ProductStockVO.java`
+
+```java
+package io.github.atengk.designpattern.facade.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 商品库存返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class ProductStockVO {
+
+    /**
+     * 商品 SKU ID
+     */
+    private String skuId;
+
+    /**
+     * 商品名称
+     */
+    private String productName;
+
+    /**
+     * 商品单价
+     */
+    private BigDecimal price;
+
+    /**
+     * 可用库存
+     */
+    private Integer availableStock;
+}
+```
+
+优惠券计算结果 VO 用于返回优惠金额和应付金额。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/vo/CouponCalculateResultVO.java`
+
+```java
+package io.github.atengk.designpattern.facade.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 优惠券计算结果返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class CouponCalculateResultVO {
+
+    /**
+     * 订单原始金额
+     */
+    private BigDecimal originAmount;
+
+    /**
+     * 优惠金额
+     */
+    private BigDecimal discountAmount;
+
+    /**
+     * 应付金额
+     */
+    private BigDecimal payableAmount;
+
+    /**
+     * 优惠说明
+     */
+    private String description;
+}
+```
+
+订单创建结果 VO 表示订单子系统创建订单后的结果。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/vo/OrderCreateResultVO.java`
+
+```java
+package io.github.atengk.designpattern.facade.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 订单创建结果返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class OrderCreateResultVO {
+
+    /**
+     * 订单号
+     */
+    private String orderNo;
+
+    /**
+     * 用户 ID
+     */
+    private String userId;
+
+    /**
+     * 商品 SKU ID
+     */
+    private String skuId;
+
+    /**
+     * 购买数量
+     */
+    private Integer quantity;
+
+    /**
+     * 应付金额
+     */
+    private BigDecimal payableAmount;
+
+    /**
+     * 订单状态
+     */
+    private String orderStatus;
+}
+```
+
+支付创建结果 VO 表示支付子系统创建支付流水后的结果。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/vo/PaymentCreateResultVO.java`
+
+```java
+package io.github.atengk.designpattern.facade.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+/**
+ * 支付创建结果返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class PaymentCreateResultVO {
+
+    /**
+     * 支付流水号
+     */
+    private String paymentNo;
+
+    /**
+     * 支付状态
+     */
+    private String paymentStatus;
+
+    /**
+     * 支付过期时间
+     */
+    private LocalDateTime expireTime;
+}
+```
+
+物流预创建结果 VO 表示物流子系统预创建配送单后的结果。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/vo/DeliveryPrepareResultVO.java`
+
+```java
+package io.github.atengk.designpattern.facade.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+/**
+ * 物流预创建结果返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class DeliveryPrepareResultVO {
+
+    /**
+     * 配送单号
+     */
+    private String deliveryNo;
+
+    /**
+     * 配送状态
+     */
+    private String deliveryStatus;
+
+    /**
+     * 配送说明
+     */
+    private String message;
+}
+```
+
+最终下单结果 VO 聚合多个子系统的返回结果，是外观接口对调用方暴露的统一结果。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/vo/OrderCheckoutResultVO.java`
+
+```java
+package io.github.atengk.designpattern.facade.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+/**
+ * 订单下单结果返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class OrderCheckoutResultVO {
+
+    /**
+     * 订单号
+     */
+    private String orderNo;
+
+    /**
+     * 支付流水号
+     */
+    private String paymentNo;
+
+    /**
+     * 配送单号
+     */
+    private String deliveryNo;
+
+    /**
+     * 商品名称
+     */
+    private String productName;
+
+    /**
+     * 购买数量
+     */
+    private Integer quantity;
+
+    /**
+     * 订单原始金额
+     */
+    private BigDecimal originAmount;
+
+    /**
+     * 优惠金额
+     */
+    private BigDecimal discountAmount;
+
+    /**
+     * 应付金额
+     */
+    private BigDecimal payableAmount;
+
+    /**
+     * 订单状态
+     */
+    private String orderStatus;
+
+    /**
+     * 支付状态
+     */
+    private String paymentStatus;
+
+    /**
+     * 支付过期时间
+     */
+    private LocalDateTime paymentExpireTime;
+}
+```
+
+统一 API 返回对象用于包装接口响应。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/vo/ApiResult.java`
+
+```java
+package io.github.atengk.designpattern.facade.vo;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * API 统一返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    /**
+     * 业务状态码
+     */
+    private Integer code;
+
+    /**
+     * 返回消息
+     */
+    private String message;
+
+    /**
+     * 返回数据
+     */
+    private T data;
+
+    /**
+     * 成功返回
+     *
+     * @param data 返回数据
+     * @return API 返回对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return ApiResult.<T>builder()
+                .code(200)
+                .message("操作成功")
+                .data(data)
+                .build();
+    }
+
+    /**
+     * 失败返回
+     *
+     * @param message 失败消息
+     * @return API 返回对象
+     */
+    public static ApiResult<Void> fail(String message) {
+        return ApiResult.<Void>builder()
+                .code(500)
+                .message(message)
+                .build();
+    }
+}
+```
+
+用户账户服务模拟用户状态校验子系统。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/service/UserAccountService.java`
+
+```java
+package io.github.atengk.designpattern.facade.service;
+
+import cn.hutool.core.util.StrUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 用户账户服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class UserAccountService {
+
+    /**
+     * 校验用户是否允许下单
+     *
+     * @param userId 用户 ID
+     */
+    public void checkUserCanCheckout(String userId) {
+        if (StrUtil.equals("blocked-user", userId)) {
+            throw new IllegalStateException("当前用户已被冻结，不能下单");
+        }
+
+        log.info("用户下单资格校验通过，userId={}", userId);
+    }
+}
+```
+
+库存服务模拟商品查询和库存锁定子系统。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/service/InventoryService.java`
+
+```java
+package io.github.atengk.designpattern.facade.service;
+
+import cn.hutool.core.map.MapUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.facade.vo.ProductStockVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 库存服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface InventoryService {
+@Slf4j
+@Service
+public class InventoryService {
+
+    private final Map<String, ProductStockVO> stockMap = MapUtil.<String, ProductStockVO>builder(new HashMap<>())
+            .put("sku-1001", ProductStockVO.builder()
+                    .skuId("sku-1001")
+                    .productName("JDK21 实战课程")
+                    .price(new BigDecimal("99.90"))
+                    .availableStock(100)
+                    .build())
+            .put("sku-1002", ProductStockVO.builder()
+                    .skuId("sku-1002")
+                    .productName("Spring Boot 3 项目课程")
+                    .price(new BigDecimal("199.90"))
+                    .availableStock(50)
+                    .build())
+            .build();
 
     /**
-     * 扣减库存
+     * 查询商品库存
      *
-     * @param productId 商品ID
-     * @param quantity  扣减数量
+     * @param skuId 商品 SKU ID
+     * @return 商品库存信息
      */
-    void deductStock(Long productId, Integer quantity);
+    public ProductStockVO getProductStock(String skuId) {
+        ProductStockVO productStock = stockMap.get(skuId);
+        if (productStock == null) {
+            throw new IllegalArgumentException("商品不存在：" + skuId);
+        }
+
+        log.info("查询商品库存成功，skuId={}，stock={}", skuId, productStock.getAvailableStock());
+        return productStock;
+    }
+
+    /**
+     * 锁定库存
+     *
+     * @param skuId    商品 SKU ID
+     * @param quantity 购买数量
+     */
+    public void lockStock(String skuId, Integer quantity) {
+        ProductStockVO productStock = getProductStock(skuId);
+        if (productStock.getAvailableStock() < quantity) {
+            throw new IllegalStateException(StrUtil.format("商品库存不足，skuId={}，availableStock={}", skuId, productStock.getAvailableStock()));
+        }
+
+        log.info("库存锁定成功，skuId={}，quantity={}", skuId, quantity);
+    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/OrderService.java`
+优惠券服务模拟优惠计算子系统。
 
-下面是订单服务接口。
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/service/CouponService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.designpattern.facade.service;
 
-import io.github.atengk.design.dto.OrderCreateCommand;
+import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.facade.vo.CouponCalculateResultVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+
+/**
+ * 优惠券服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class CouponService {
+
+    /**
+     * 计算优惠金额
+     *
+     * @param couponId     优惠券 ID
+     * @param originAmount 订单原始金额
+     * @return 优惠计算结果
+     */
+    public CouponCalculateResultVO calculate(String couponId, BigDecimal originAmount) {
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        String description = "未使用优惠券";
+
+        if (StrUtil.isNotBlank(couponId)) {
+            if (StrUtil.equals("coupon-10", couponId)) {
+                discountAmount = NumberUtil.min(new BigDecimal("10.00"), originAmount);
+                description = "使用满减优惠券，优惠 10 元";
+            } else if (StrUtil.equals("coupon-30", couponId)) {
+                discountAmount = NumberUtil.min(new BigDecimal("30.00"), originAmount);
+                description = "使用满减优惠券，优惠 30 元";
+            } else {
+                throw new IllegalArgumentException("优惠券不存在或不可用：" + couponId);
+            }
+        }
+
+        BigDecimal payableAmount = originAmount.subtract(discountAmount);
+        log.info("优惠券计算完成，couponId={}，originAmount={}，discountAmount={}，payableAmount={}",
+                couponId, originAmount, discountAmount, payableAmount);
+
+        return CouponCalculateResultVO.builder()
+                .originAmount(originAmount)
+                .discountAmount(discountAmount)
+                .payableAmount(payableAmount)
+                .description(description)
+                .build();
+    }
+}
+```
+
+订单服务模拟订单创建子系统。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/service/OrderService.java`
+
+```java
+package io.github.atengk.designpattern.facade.service;
+
+import cn.hutool.core.util.IdUtil;
+import io.github.atengk.designpattern.facade.dto.OrderCheckoutRequest;
+import io.github.atengk.designpattern.facade.vo.CouponCalculateResultVO;
+import io.github.atengk.designpattern.facade.vo.OrderCreateResultVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 /**
  * 订单服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface OrderService {
+@Slf4j
+@Service
+public class OrderService {
 
     /**
      * 创建订单
      *
-     * @param command 创建订单命令
-     * @return 订单号
+     * @param request         下单请求
+     * @param calculateResult 优惠计算结果
+     * @return 订单创建结果
      */
-    String createOrder(OrderCreateCommand command);
+    public OrderCreateResultVO createOrder(OrderCheckoutRequest request, CouponCalculateResultVO calculateResult) {
+        String orderNo = "ORDER_" + IdUtil.fastSimpleUUID();
+
+        log.info("订单创建成功，orderNo={}，userId={}，skuId={}，quantity={}，payableAmount={}",
+                orderNo, request.getUserId(), request.getSkuId(), request.getQuantity(), calculateResult.getPayableAmount());
+
+        return OrderCreateResultVO.builder()
+                .orderNo(orderNo)
+                .userId(request.getUserId())
+                .skuId(request.getSkuId())
+                .quantity(request.getQuantity())
+                .payableAmount(calculateResult.getPayableAmount())
+                .orderStatus("WAIT_PAY")
+                .build();
+    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/PaymentService.java`
+支付服务模拟支付流水创建子系统。
 
-下面是支付服务接口。
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/service/PaymentService.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.designpattern.facade.service;
 
-import io.github.atengk.design.dto.PaymentCreateCommand;
+import cn.hutool.core.util.IdUtil;
+import io.github.atengk.designpattern.facade.config.CheckoutProperties;
+import io.github.atengk.designpattern.facade.vo.OrderCreateResultVO;
+import io.github.atengk.designpattern.facade.vo.PaymentCreateResultVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 
 /**
  * 支付服务
  *
  * @author Ateng
- * @since 2026-04-30
- */
-public interface PaymentService {
-
-    /**
-     * 创建支付单
-     *
-     * @param command 创建支付单命令
-     * @return 支付单号
-     */
-    String createPayment(PaymentCreateCommand command);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/NoticeService.java`
-
-下面是通知服务接口。
-
-```java
-package io.github.atengk.design.service;
-
-/**
- * 通知服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface NoticeService {
-
-    /**
-     * 发送下单通知
-     *
-     * @param userId  用户ID
-     * @param orderNo 订单号
-     */
-    void sendOrderCreatedNotice(Long userId, String orderNo);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/UserServiceImpl.java`
-
-下面是用户服务实现，负责用户下单资格校验。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import io.github.atengk.design.service.UserService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 用户服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class UserServiceImpl implements UserService {
-
-    /**
-     * 校验用户是否可下单
-     *
-     * @param userId 用户ID
-     */
-    @Override
-    public void checkUserCanOrder(Long userId) {
-        if (userId == null || userId <= 0) {
-            log.warn("用户下单校验失败，用户ID不合法，用户ID：{}", userId);
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        log.info("用户下单校验通过，用户ID：{}", userId);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/InventoryServiceImpl.java`
-
-下面是库存服务实现，负责库存扣减。示例中只打印日志，实际项目中应操作库存表或库存服务。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import io.github.atengk.design.service.InventoryService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 库存服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class InventoryServiceImpl implements InventoryService {
-
-    /**
-     * 扣减库存
-     *
-     * @param productId 商品ID
-     * @param quantity  扣减数量
-     */
-    @Override
-    public void deductStock(Long productId, Integer quantity) {
-        if (productId == null || productId <= 0) {
-            log.warn("扣减库存失败，商品ID不合法，商品ID：{}", productId);
-            throw new IllegalArgumentException("商品ID必须大于0");
-        }
-
-        if (quantity == null || quantity <= 0) {
-            log.warn("扣减库存失败，扣减数量不合法，数量：{}", quantity);
-            throw new IllegalArgumentException("扣减数量必须大于0");
-        }
-
-        log.info("扣减库存成功，商品ID：{}，扣减数量：{}", productId, quantity);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderServiceImpl.java`
-
-下面是订单服务实现，负责创建订单并返回订单号。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import cn.hutool.core.util.IdUtil;
-import io.github.atengk.design.dto.OrderCreateCommand;
-import io.github.atengk.design.service.OrderService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 订单服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class OrderServiceImpl implements OrderService {
-
-    /**
-     * 创建订单
-     *
-     * @param command 创建订单命令
-     * @return 订单号
-     */
-    @Override
-    public String createOrder(OrderCreateCommand command) {
-        String orderNo = "ORDER" + IdUtil.getSnowflakeNextId();
-
-        log.info("创建订单成功，订单号：{}，用户ID：{}，商品ID：{}，金额：{}",
-                orderNo, command.userId(), command.productId(), command.totalAmount());
-
-        return orderNo;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/PaymentServiceImpl.java`
-
-下面是支付服务实现，负责创建支付单并返回支付单号。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import cn.hutool.core.util.IdUtil;
-import io.github.atengk.design.dto.PaymentCreateCommand;
-import io.github.atengk.design.service.PaymentService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 支付服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class PaymentServiceImpl implements PaymentService {
-
-    /**
-     * 创建支付单
-     *
-     * @param command 创建支付单命令
-     * @return 支付单号
-     */
-    @Override
-    public String createPayment(PaymentCreateCommand command) {
-        String payNo = "PAY" + IdUtil.getSnowflakeNextId();
-
-        log.info("创建支付单成功，支付单号：{}，订单号：{}，用户ID：{}，金额：{}",
-                payNo, command.orderNo(), command.userId(), command.amount());
-
-        return payNo;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/NoticeServiceImpl.java`
-
-下面是通知服务实现，负责发送下单通知。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import io.github.atengk.design.service.NoticeService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 通知服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class NoticeServiceImpl implements NoticeService {
-
-    /**
-     * 发送下单通知
-     *
-     * @param userId  用户ID
-     * @param orderNo 订单号
-     */
-    @Override
-    public void sendOrderCreatedNotice(Long userId, String orderNo) {
-        log.info("发送下单通知，用户ID：{}，订单号：{}", userId, orderNo);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/facade/OrderCheckoutFacade.java`
-
-下面是下单结算外观类。它负责组织多个子系统调用，并对 Controller 暴露一个简洁入口。
-
-```java
-package io.github.atengk.design.facade;
-
-import cn.hutool.core.util.NumberUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderCheckoutRequest;
-import io.github.atengk.design.dto.OrderCheckoutResponse;
-import io.github.atengk.design.dto.OrderCreateCommand;
-import io.github.atengk.design.dto.PaymentCreateCommand;
-import io.github.atengk.design.service.InventoryService;
-import io.github.atengk.design.service.NoticeService;
-import io.github.atengk.design.service.OrderService;
-import io.github.atengk.design.service.PaymentService;
-import io.github.atengk.design.service.UserService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
-/**
- * 下单结算外观
- *
- * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OrderCheckoutFacade {
+public class PaymentService {
 
-    private final UserService userService;
-    private final InventoryService inventoryService;
-    private final OrderService orderService;
-    private final PaymentService paymentService;
-    private final NoticeService noticeService;
+    private final CheckoutProperties checkoutProperties;
+
+    /**
+     * 创建支付流水
+     *
+     * @param order 订单创建结果
+     * @return 支付创建结果
+     */
+    public PaymentCreateResultVO createPayment(OrderCreateResultVO order) {
+        String paymentNo = "PAY_" + IdUtil.fastSimpleUUID();
+        LocalDateTime expireTime = LocalDateTime.now().plusMinutes(checkoutProperties.getPaymentTimeoutMinutes());
+
+        log.info("支付流水创建成功，paymentNo={}，orderNo={}，amount={}，expireTime={}",
+                paymentNo, order.getOrderNo(), order.getPayableAmount(), expireTime);
+
+        return PaymentCreateResultVO.builder()
+                .paymentNo(paymentNo)
+                .paymentStatus("WAIT_PAY")
+                .expireTime(expireTime)
+                .build();
+    }
+}
+```
+
+物流服务模拟配送单预创建子系统。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/service/LogisticsService.java`
+
+```java
+package io.github.atengk.designpattern.facade.service;
+
+import cn.hutool.core.util.IdUtil;
+import io.github.atengk.designpattern.facade.dto.OrderCheckoutRequest;
+import io.github.atengk.designpattern.facade.vo.DeliveryPrepareResultVO;
+import io.github.atengk.designpattern.facade.vo.OrderCreateResultVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 物流服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class LogisticsService {
+
+    /**
+     * 预创建配送单
+     *
+     * @param request 下单请求
+     * @param order   订单创建结果
+     * @return 物流预创建结果
+     */
+    public DeliveryPrepareResultVO prepareDelivery(OrderCheckoutRequest request, OrderCreateResultVO order) {
+        String deliveryNo = "DELIVERY_" + IdUtil.fastSimpleUUID();
+
+        log.info("物流配送单预创建成功，deliveryNo={}，orderNo={}，addressId={}",
+                deliveryNo, order.getOrderNo(), request.getAddressId());
+
+        return DeliveryPrepareResultVO.builder()
+                .deliveryNo(deliveryNo)
+                .deliveryStatus("WAIT_PAY")
+                .message("支付成功后自动推送仓库发货")
+                .build();
+    }
+}
+```
+
+外观接口定义对外暴露的统一下单能力。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/facade/OrderCheckoutFacade.java`
+
+```java
+package io.github.atengk.designpattern.facade.facade;
+
+import io.github.atengk.designpattern.facade.dto.OrderCheckoutRequest;
+import io.github.atengk.designpattern.facade.vo.OrderCheckoutResultVO;
+
+/**
+ * 订单下单外观接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderCheckoutFacade {
 
     /**
      * 提交订单
      *
-     * @param request 下单结算请求
-     * @return 下单结算响应
+     * @param request 下单请求
+     * @return 下单结果
      */
-    public OrderCheckoutResponse checkout(OrderCheckoutRequest request) {
-        validateRequest(request);
-
-        BigDecimal totalAmount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()))
-                .setScale(2, RoundingMode.HALF_UP);
-
-        log.info("开始执行下单结算，用户ID：{}，商品ID：{}，数量：{}，金额：{}",
-                request.userId(), request.productId(), request.quantity(), totalAmount);
-
-        userService.checkUserCanOrder(request.userId());
-        inventoryService.deductStock(request.productId(), request.quantity());
-
-        OrderCreateCommand orderCreateCommand = new OrderCreateCommand(
-                request.userId(),
-                request.productId(),
-                request.productName(),
-                request.quantity(),
-                totalAmount
-        );
-        String orderNo = orderService.createOrder(orderCreateCommand);
-
-        PaymentCreateCommand paymentCreateCommand = new PaymentCreateCommand(
-                orderNo,
-                request.userId(),
-                totalAmount
-        );
-        String payNo = paymentService.createPayment(paymentCreateCommand);
-
-        noticeService.sendOrderCreatedNotice(request.userId(), orderNo);
-
-        log.info("下单结算完成，订单号：{}，支付单号：{}，用户ID：{}", orderNo, payNo, request.userId());
-
-        return new OrderCheckoutResponse(
-                orderNo,
-                payNo,
-                request.userId(),
-                request.productName(),
-                request.quantity(),
-                totalAmount,
-                "下单成功"
-        );
-    }
-
-    /**
-     * 校验下单结算请求
-     *
-     * @param request 下单结算请求
-     */
-    private void validateRequest(OrderCheckoutRequest request) {
-        if (request == null) {
-            log.warn("下单失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("下单失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (request.productId() == null || request.productId() <= 0) {
-            log.warn("下单失败，商品ID不合法，商品ID：{}", request.productId());
-            throw new IllegalArgumentException("商品ID必须大于0");
-        }
-
-        if (StrUtil.isBlank(request.productName())) {
-            log.warn("下单失败，商品名称为空");
-            throw new IllegalArgumentException("商品名称不能为空");
-        }
-
-        if (request.quantity() == null || request.quantity() <= 0) {
-            log.warn("下单失败，购买数量不合法，购买数量：{}", request.quantity());
-            throw new IllegalArgumentException("购买数量必须大于0");
-        }
-
-        if (request.unitPrice() == null || request.unitPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("下单失败，商品单价不合法，商品单价：{}", request.unitPrice());
-            throw new IllegalArgumentException("商品单价必须大于0");
-        }
-    }
+    OrderCheckoutResultVO submitOrder(OrderCheckoutRequest request);
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderCheckoutController.java`
+外观实现类负责编排多个子系统调用，并把结果组装成统一返回对象。
 
-下面是下单结算接口。Controller 只调用外观类，不直接编排多个子系统。
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/facade/OrderCheckoutFacadeImpl.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.designpattern.facade.facade;
 
-import io.github.atengk.design.dto.OrderCheckoutRequest;
-import io.github.atengk.design.dto.OrderCheckoutResponse;
-import io.github.atengk.design.facade.OrderCheckoutFacade;
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.designpattern.facade.dto.OrderCheckoutRequest;
+import io.github.atengk.designpattern.facade.service.CouponService;
+import io.github.atengk.designpattern.facade.service.InventoryService;
+import io.github.atengk.designpattern.facade.service.LogisticsService;
+import io.github.atengk.designpattern.facade.service.OrderService;
+import io.github.atengk.designpattern.facade.service.PaymentService;
+import io.github.atengk.designpattern.facade.service.UserAccountService;
+import io.github.atengk.designpattern.facade.vo.CouponCalculateResultVO;
+import io.github.atengk.designpattern.facade.vo.DeliveryPrepareResultVO;
+import io.github.atengk.designpattern.facade.vo.OrderCheckoutResultVO;
+import io.github.atengk.designpattern.facade.vo.OrderCreateResultVO;
+import io.github.atengk.designpattern.facade.vo.PaymentCreateResultVO;
+import io.github.atengk.designpattern.facade.vo.ProductStockVO;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
 /**
- * 下单结算控制器
+ * 订单下单外观实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class OrderCheckoutFacadeImpl implements OrderCheckoutFacade {
+
+    private final UserAccountService userAccountService;
+    private final InventoryService inventoryService;
+    private final CouponService couponService;
+    private final OrderService orderService;
+    private final PaymentService paymentService;
+    private final LogisticsService logisticsService;
+
+    /**
+     * 提交订单
+     *
+     * @param request 下单请求
+     * @return 下单结果
+     */
+    @Override
+    public OrderCheckoutResultVO submitOrder(OrderCheckoutRequest request) {
+        log.info("开始执行下单流程，userId={}，skuId={}，quantity={}，couponId={}",
+                request.getUserId(), request.getSkuId(), request.getQuantity(), request.getCouponId());
+
+        userAccountService.checkUserCanCheckout(request.getUserId());
+
+        ProductStockVO productStock = inventoryService.getProductStock(request.getSkuId());
+        inventoryService.lockStock(request.getSkuId(), request.getQuantity());
+
+        BigDecimal originAmount = NumberUtil.mul(productStock.getPrice(), new BigDecimal(request.getQuantity().toString()));
+        CouponCalculateResultVO calculateResult = couponService.calculate(request.getCouponId(), originAmount);
+
+        OrderCreateResultVO order = orderService.createOrder(request, calculateResult);
+        PaymentCreateResultVO payment = paymentService.createPayment(order);
+        DeliveryPrepareResultVO delivery = logisticsService.prepareDelivery(request, order);
+
+        log.info("下单流程执行完成，orderNo={}，paymentNo={}，deliveryNo={}",
+                order.getOrderNo(), payment.getPaymentNo(), delivery.getDeliveryNo());
+
+        return OrderCheckoutResultVO.builder()
+                .orderNo(order.getOrderNo())
+                .paymentNo(payment.getPaymentNo())
+                .deliveryNo(delivery.getDeliveryNo())
+                .productName(productStock.getProductName())
+                .quantity(order.getQuantity())
+                .originAmount(calculateResult.getOriginAmount())
+                .discountAmount(calculateResult.getDiscountAmount())
+                .payableAmount(calculateResult.getPayableAmount())
+                .orderStatus(order.getOrderStatus())
+                .paymentStatus(payment.getPaymentStatus())
+                .paymentExpireTime(payment.getExpireTime())
+                .build();
+    }
+}
+```
+
+Controller 只依赖外观接口，不直接依赖用户、库存、优惠券、订单、支付、物流等子系统。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/controller/OrderCheckoutController.java`
+
+```java
+package io.github.atengk.designpattern.facade.controller;
+
+import io.github.atengk.designpattern.facade.dto.OrderCheckoutRequest;
+import io.github.atengk.designpattern.facade.facade.OrderCheckoutFacade;
+import io.github.atengk.designpattern.facade.vo.ApiResult;
+import io.github.atengk.designpattern.facade.vo.OrderCheckoutResultVO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 订单下单接口控制器
+ *
+ * @author Ateng
+ * @since 2026-05-13
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/facade/order")
+@RequestMapping("/api/orders/checkout")
 public class OrderCheckoutController {
 
     private final OrderCheckoutFacade orderCheckoutFacade;
@@ -1070,368 +1107,349 @@ public class OrderCheckoutController {
     /**
      * 提交订单
      *
-     * @param userId      用户ID
-     * @param productId   商品ID
-     * @param productName 商品名称
-     * @param quantity    购买数量
-     * @param unitPrice   商品单价
-     * @return 下单结算响应
+     * @param request 下单请求
+     * @return 下单结果
      */
-    @PostMapping("/checkout")
-    public OrderCheckoutResponse checkout(@RequestParam Long userId,
-                                          @RequestParam Long productId,
-                                          @RequestParam String productName,
-                                          @RequestParam Integer quantity,
-                                          @RequestParam BigDecimal unitPrice) {
-        OrderCheckoutRequest request = new OrderCheckoutRequest(
-                userId,
-                productId,
-                productName,
-                quantity,
-                unitPrice
-        );
-        return orderCheckoutFacade.checkout(request);
+    @PostMapping
+    public ApiResult<OrderCheckoutResultVO> submitOrder(@Valid @RequestBody OrderCheckoutRequest request) {
+        return ApiResult.success(orderCheckoutFacade.submitOrder(request));
     }
 }
 ```
 
-接口调用示例：
+全局异常处理器用于统一处理参数校验异常和业务异常。
 
-```bash
-curl -X POST "http://localhost:8080/facade/order/checkout?userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00"
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/web/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.designpattern.facade.web;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.facade.vo.ApiResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ApiResult<Void> handleValidException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .findFirst()
+                .map(error -> StrUtil.format("{} {}", error.getField(), error.getDefaultMessage()))
+                .orElse("请求参数不合法");
+
+        log.warn("请求参数校验失败，message={}", message);
+        return ApiResult.fail(message);
+    }
+
+    /**
+     * 处理非法参数异常
+     *
+     * @param exception 非法参数异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ApiResult<Void> handleIllegalArgumentException(IllegalArgumentException exception) {
+        log.warn("请求参数错误，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理业务状态异常
+     *
+     * @param exception 业务状态异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ApiResult<Void> handleIllegalStateException(IllegalStateException exception) {
+        log.warn("业务处理失败，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统处理异常", exception);
+        return ApiResult.fail("系统处理异常");
+    }
+}
 ```
 
-可能返回：
+## 使用方式
+
+启动项目后，可以通过统一下单接口完成完整下单流程。调用方只需要提交下单参数，不需要分别调用用户、库存、优惠券、订单、支付和物流接口。
+
+正常下单请求：
+
+```bash
+curl -X POST 'http://localhost:8080/api/orders/checkout' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user-1001",
+    "skuId": "sku-1001",
+    "quantity": 2,
+    "couponId": "coupon-10",
+    "addressId": "address-1001"
+  }'
+```
+
+返回示例：
 
 ```json
 {
-  "orderNo": "ORDER2019776866538487808",
-  "payNo": "PAY2019776866538487809",
-  "userId": 10001,
-  "productName": "键盘",
-  "quantity": 2,
-  "totalAmount": 398.00,
-  "message": "下单成功"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "orderNo": "ORDER_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "paymentNo": "PAY_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "deliveryNo": "DELIVERY_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "productName": "JDK21 实战课程",
+    "quantity": 2,
+    "originAmount": 199.80,
+    "discountAmount": 10.00,
+    "payableAmount": 189.80,
+    "orderStatus": "WAIT_PAY",
+    "paymentStatus": "WAIT_PAY",
+    "paymentExpireTime": "2026-05-13T10:30:00"
+  }
 }
 ```
 
-这种方式的优点是 Controller 保持轻量，多个子系统的调用顺序和数据转换集中在 `OrderCheckoutFacade` 中，后续如果下单流程增加风控、优惠、积分、发票等步骤，也可以在外观层统一编排。
+不使用优惠券下单：
 
-## 扩展外观流程
+```bash
+curl -X POST 'http://localhost:8080/api/orders/checkout' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user-1002",
+    "skuId": "sku-1002",
+    "quantity": 1,
+    "addressId": "address-1002"
+  }'
+```
 
-在 Spring Boot 外观模式中，扩展流程通常是在外观类中新增对子系统的编排，而不是让 Controller 直接调用更多 Service。下面以新增优惠计算为例。
+库存不足请求示例：
 
-### 文件结构
+```bash
+curl -X POST 'http://localhost:8080/api/orders/checkout' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user-1001",
+    "skuId": "sku-1001",
+    "quantity": 999,
+    "couponId": "coupon-10",
+    "addressId": "address-1001"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 500,
+  "message": "商品库存不足，skuId=sku-1001，availableStock=100",
+  "data": null
+}
+```
+
+用户被冻结请求示例：
+
+```bash
+curl -X POST 'http://localhost:8080/api/orders/checkout' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "blocked-user",
+    "skuId": "sku-1001",
+    "quantity": 1,
+    "couponId": "coupon-10",
+    "addressId": "address-1001"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 500,
+  "message": "当前用户已被冻结，不能下单",
+  "data": null
+}
+```
+
+## 验证方式
+
+可以从下面几个角度验证外观模式是否落地成功。
+
+第一，Controller 没有直接依赖多个子系统。`OrderCheckoutController` 只依赖 `OrderCheckoutFacade`，不依赖 `UserAccountService`、`InventoryService`、`CouponService`、`OrderService`、`PaymentService`、`LogisticsService`。
+
+第二，复杂流程被收敛到外观类。下单流程的调用顺序、结果组装、日志记录都在 `OrderCheckoutFacadeImpl` 中完成，调用方不需要知道内部细节。
+
+第三，子系统仍然保持独立。库存服务只负责库存，优惠券服务只负责优惠计算，支付服务只负责支付流水创建，外观类只是编排它们，不替代它们的职责。
+
+第四，调整内部流程不影响外部接口。比如后续要在创建订单前增加风控校验，只需要在外观实现中增加 `RiskControlService` 调用，Controller 和前端请求格式可以保持不变。
+
+可以重点查看日志：
 
 ```text
-src/main/java/io/github/atengk/design/
-└── service/
-    ├── DiscountService.java
-    └── impl/
-        └── DiscountServiceImpl.java
+开始执行下单流程，userId=user-1001，skuId=sku-1001，quantity=2，couponId=coupon-10
+用户下单资格校验通过，userId=user-1001
+查询商品库存成功，skuId=sku-1001，stock=100
+库存锁定成功，skuId=sku-1001，quantity=2
+优惠券计算完成，couponId=coupon-10，originAmount=199.80，discountAmount=10.00，payableAmount=189.80
+订单创建成功，orderNo=ORDER_xxx，userId=user-1001，skuId=sku-1001，quantity=2，payableAmount=189.80
+支付流水创建成功，paymentNo=PAY_xxx，orderNo=ORDER_xxx，amount=189.80
+物流配送单预创建成功，deliveryNo=DELIVERY_xxx，orderNo=ORDER_xxx，addressId=address-1001
+下单流程执行完成，orderNo=ORDER_xxx，paymentNo=PAY_xxx，deliveryNo=DELIVERY_xxx
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/DiscountService.java`
+## 扩展风控校验
 
-下面是优惠服务接口。
+如果后续需要在下单流程中增加风控校验，可以新增一个子系统服务。
 
-```java
-package io.github.atengk.design.service;
-
-import java.math.BigDecimal;
-
-/**
- * 优惠服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface DiscountService {
-
-    /**
-     * 计算优惠后金额
-     *
-     * @param userId         用户ID
-     * @param originalAmount 原始金额
-     * @return 优惠后金额
-     */
-    BigDecimal calculateDiscountAmount(Long userId, BigDecimal originalAmount);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/DiscountServiceImpl.java`
-
-下面是优惠服务实现，示例中订单满 100 减 20。
+文件位置：`src/main/java/io/github/atengk/designpattern/facade/service/RiskControlService.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.designpattern.facade.service;
 
-import cn.hutool.core.util.NumberUtil;
-import io.github.atengk.design.service.DiscountService;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.facade.dto.OrderCheckoutRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
 /**
- * 优惠服务实现
+ * 风控服务
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
-public class DiscountServiceImpl implements DiscountService {
-
-    private static final BigDecimal THRESHOLD_AMOUNT = BigDecimal.valueOf(100);
-    private static final BigDecimal REDUCTION_AMOUNT = BigDecimal.valueOf(20);
+public class RiskControlService {
 
     /**
-     * 计算优惠后金额
+     * 校验下单风险
      *
-     * @param userId         用户ID
-     * @param originalAmount 原始金额
-     * @return 优惠后金额
+     * @param request 下单请求
      */
-    @Override
-    public BigDecimal calculateDiscountAmount(Long userId, BigDecimal originalAmount) {
-        BigDecimal payableAmount = originalAmount;
-
-        if (originalAmount.compareTo(THRESHOLD_AMOUNT) >= 0) {
-            payableAmount = NumberUtil.sub(originalAmount, REDUCTION_AMOUNT);
+    public void checkRisk(OrderCheckoutRequest request) {
+        if (StrUtil.equals("risk-address", request.getAddressId())) {
+            throw new IllegalStateException("当前收货地址存在风险，暂不允许下单");
         }
 
-        payableAmount = payableAmount.setScale(2, RoundingMode.HALF_UP);
-        log.info("计算优惠金额，用户ID：{}，原始金额：{}，优惠后金额：{}", userId, originalAmount, payableAmount);
-        return payableAmount;
+        log.info("下单风控校验通过，userId={}，addressId={}", request.getUserId(), request.getAddressId());
     }
 }
 ```
 
-在 `OrderCheckoutFacade` 中新增依赖：
+然后在 `OrderCheckoutFacadeImpl` 中注入并调用：
 
 ```java
-private final DiscountService discountService;
+private final RiskControlService riskControlService;
 ```
 
-然后将原始金额计算后，增加优惠计算：
+在用户校验后增加：
 
 ```java
-BigDecimal originalAmount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()))
-        .setScale(2, RoundingMode.HALF_UP);
-
-BigDecimal totalAmount = discountService.calculateDiscountAmount(request.userId(), originalAmount);
+riskControlService.checkRisk(request);
 ```
 
-扩展后，Controller 仍然只调用：
+这样 Controller 不需要修改，前端也不需要知道内部新增了风控子系统。外观模式的价值就在于把内部复杂度隔离在统一入口之后。
 
-```java
-return orderCheckoutFacade.checkout(request);
-```
+## 适用场景
 
-这体现了外观模式的价值：调用方入口稳定，内部流程可以持续演进。
+外观模式适合“调用方需要完成一个业务目标，但内部涉及多个子系统”的场景。
 
-## 外观模式和适配器模式的区别
+常见 Spring Boot 项目场景如下。
 
-外观模式和适配器模式都能隐藏复杂性，但关注点不同。
+| 场景       | 外观入口                | 内部子系统                             |
+| ---------- | ----------------------- | -------------------------------------- |
+| 电商下单   | `OrderCheckoutFacade`   | 用户、库存、优惠券、订单、支付、物流   |
+| 用户注册   | `UserRegisterFacade`    | 账号、短信、风控、积分、欢迎消息       |
+| 文件上传   | `FileUploadFacade`      | 文件校验、存储、元数据、病毒扫描、权限 |
+| 报表导出   | `ReportExportFacade`    | 查询、转换、模板、文件生成、对象存储   |
+| 支付回调   | `PaymentCallbackFacade` | 验签、支付单、订单、库存、通知、日志   |
+| 工作流审批 | `WorkflowApproveFacade` | 流程、任务、权限、消息、审计           |
+| 统一通知   | `NotificationFacade`    | 短信、邮件、站内信、企业微信、钉钉     |
 
-| 对比项           | 外观模式                         | 适配器模式                           |
-| ---------------- | -------------------------------- | ------------------------------------ |
-| 核心目的         | 简化复杂子系统调用               | 转换不兼容接口                       |
-| 关注点           | 流程编排、统一入口               | 参数转换、接口兼容、结果转换         |
-| 面向对象数量     | 通常封装多个子系统               | 通常适配一个外部对象或接口           |
-| 是否改变接口语义 | 通常不强调转换                   | 强调转换成目标接口                   |
-| 典型场景         | 下单结算、报表导出、文件处理流程 | 第三方支付、旧短信接口、多云存储接口 |
-
-简单理解：
+外观模式尤其适合以下特征明显的模块：
 
 ```text
-外观模式：接口太多、流程太复杂，我给你一个简单入口。
-适配器模式：接口不兼容，我帮你转换成能用的接口。
+调用方不应该关心内部流程
+内部依赖多个服务或第三方系统
+流程顺序比较稳定
+外部接口需要保持简洁稳定
+内部子系统可能持续调整
 ```
 
-下单流程中调用用户、库存、订单、支付、通知多个子系统，更适合外观模式。把支付宝、微信、银联不同支付接口统一成内部支付接口，更适合适配器模式。
+## 和其他模式的区别
 
-## 外观模式和模板方法模式的区别
+外观模式容易和中介者模式、适配器模式、代理模式、服务层编排混淆。区分时重点看模式解决的问题。
 
-外观模式和模板方法模式都可能组织一个业务流程，但二者结构不同。
+| 模式       | 关注点                 | 和外观模式的区别                            |
+| ---------- | ---------------------- | ------------------------------------------- |
+| 外观模式   | 简化复杂子系统调用     | 重点是给调用方提供统一入口                  |
+| 中介者模式 | 协调多个对象之间的交互 | 重点是减少对象之间网状依赖                  |
+| 适配器模式 | 转换不兼容接口         | 重点是让旧接口或第三方接口适配当前系统      |
+| 代理模式   | 控制对象访问           | 重点是权限、缓存、远程调用、事务等访问控制  |
+| 装饰器模式 | 动态增强对象能力       | 重点是给对象叠加额外功能                    |
+| 应用服务   | 业务用例编排           | 在 DDD 中常见，很多应用服务天然具有外观特征 |
 
-| 对比项       | 外观模式               | 模板方法模式                 |
-| ------------ | ---------------------- | ---------------------------- |
-| 核心目的     | 简化外部调用           | 固定流程，延迟变化步骤到子类 |
-| 实现方式     | 组合多个子系统         | 继承抽象父类                 |
-| 扩展方式     | 增加或调整子系统编排   | 子类覆盖抽象步骤或钩子方法   |
-| 流程控制位置 | 外观类                 | 抽象模板父类                 |
-| 典型场景     | 下单门面、报表导出门面 | 文件导入模板、订单处理模板   |
-
-简单理解：
-
-```text
-外观模式：我把多个服务调用封装成一个入口。
-模板方法模式：我定义固定步骤，具体步骤由子类实现。
-```
-
-如果业务重点是降低调用方复杂度，优先考虑外观模式。如果业务重点是多个子类复用同一套固定流程，优先考虑模板方法模式。
-
-## 验证方式
-
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行下单结算接口：
-
-```bash
-curl -X POST "http://localhost:8080/facade/order/checkout?userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00"
-```
-
-如果外观模式流程正常，可以看到类似日志：
-
-```text
-开始执行下单结算，用户ID：10001，商品ID：20001，数量：2，金额：398.00
-用户下单校验通过，用户ID：10001
-扣减库存成功，商品ID：20001，扣减数量：2
-创建订单成功，订单号：ORDER2019776866538487808，用户ID：10001，商品ID：20001，金额：398.00
-创建支付单成功，支付单号：PAY2019776866538487809，订单号：ORDER2019776866538487808，用户ID：10001，金额：398.00
-发送下单通知，用户ID：10001，订单号：ORDER2019776866538487808
-下单结算完成，订单号：ORDER2019776866538487808，支付单号：PAY2019776866538487809，用户ID：10001
-```
-
-执行异常请求：
-
-```bash
-curl -X POST "http://localhost:8080/facade/order/checkout?userId=10001&productId=20001&productName=键盘&quantity=0&unitPrice=199.00"
-```
-
-异常日志示例：
-
-```text
-下单失败，购买数量不合法，购买数量：0
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
+在 Spring Boot 项目中，很多 `ApplicationService` 或 `FacadeService` 本质上都承担了外观模式的职责。但如果它只是普通 CRUD 服务，就不一定需要刻意称为外观模式。
 
 ## 注意事项
 
-外观模式适合简化复杂流程，但不要让外观类变成“上帝类”。外观类应该负责流程编排和数据组装，不应该承担所有子系统的业务细节。
+外观类不应该变成上帝类。它可以编排流程，但不应该吞掉所有子系统职责。比如库存扣减规则应该在库存服务里，优惠计算规则应该在优惠券服务里，支付流水创建规则应该在支付服务里。
 
-推荐外观类承担这些职责：
+外观接口要稳定。比如 `submitOrder()` 应该表达业务目标，而不是暴露过多内部步骤，例如 `checkUserAndLockStockAndCreatePayment()`。外观方法名应该面向调用方语义。
 
-```text
-统一入口
-请求参数校验
-子系统调用顺序编排
-子系统输入输出转换
-聚合响应结果
-记录关键流程日志
-```
+外观模式不等于事务万能封装。真实下单流程中，库存、优惠券、订单、支付可能涉及本地事务、分布式事务、最终一致性、MQ 补偿等问题。外观类可以负责编排，但事务边界需要根据业务一致性要求单独设计。
 
-不推荐外观类承担这些职责：
+外观类要做好异常边界。某个子系统失败时，应该明确是直接失败、重试、补偿，还是记录待处理任务。示例中为了简洁直接抛出异常，生产项目中需要结合事务和补偿机制。
 
-```text
-直接写复杂库存扣减算法
-直接写支付渠道适配逻辑
-直接写大量数据库 CRUD
-直接写复杂营销规则
-直接处理所有异常补偿细节
-```
-
-错误示例：
-
-```java
-public OrderCheckoutResponse checkout(OrderCheckoutRequest request) {
-    // 校验用户
-    // 查询用户表
-    // 查询商品表
-    // 扣库存SQL
-    // 创建订单SQL
-    // 创建支付SQL
-    // 调第三方支付
-    // 发短信
-    // 发MQ
-    // 写审计
-    return null;
-}
-```
-
-推荐将具体能力拆给子系统，外观类只做编排：
-
-```java
-userService.checkUserCanOrder(request.userId());
-inventoryService.deductStock(request.productId(), request.quantity());
-String orderNo = orderService.createOrder(command);
-String payNo = paymentService.createPayment(paymentCommand);
-noticeService.sendOrderCreatedNotice(request.userId(), orderNo);
-```
-
-Controller 不建议直接编排多个子系统。
-
-不推荐写法：
-
-```java
-@PostMapping("/checkout")
-public OrderCheckoutResponse checkout(...) {
-    userService.checkUserCanOrder(userId);
-    inventoryService.deductStock(productId, quantity);
-    String orderNo = orderService.createOrder(command);
-    String payNo = paymentService.createPayment(paymentCommand);
-    noticeService.sendOrderCreatedNotice(userId, orderNo);
-    return response;
-}
-```
-
-推荐写法：
-
-```java
-@PostMapping("/checkout")
-public OrderCheckoutResponse checkout(...) {
-    OrderCheckoutRequest request = new OrderCheckoutRequest(userId, productId, productName, quantity, unitPrice);
-    return orderCheckoutFacade.checkout(request);
-}
-```
-
-Spring Bean 默认是单例，外观类中不要保存请求级状态。
-
-错误示例：
-
-```java
-private String currentOrderNo;
-private Long currentUserId;
-private BigDecimal currentAmount;
-```
-
-推荐使用方法参数和局部变量：
-
-```java
-public OrderCheckoutResponse checkout(OrderCheckoutRequest request) {
-    BigDecimal totalAmount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()));
-    String orderNo = orderService.createOrder(command);
-    return buildResponse(request, orderNo, totalAmount);
-}
-```
-
-如果外观类编排的是强一致业务流程，例如下单、支付、扣库存，需要结合事务、幂等、分布式锁、消息队列、补偿任务等机制。外观模式只解决调用复杂度问题，不自动保证事务一致性。
-
-生产环境中，下单流程通常需要额外考虑：
-
-```text
-接口幂等
-库存并发扣减
-订单事务提交
-支付单唯一性
-消息可靠投递
-异常补偿
-重复通知控制
-日志链路追踪
-```
+不要为了套模式而增加无意义外观。如果一个接口只调用一个服务，而且没有隐藏复杂性，额外加一层 Facade 可能只是增加样板代码。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，外观模式的实践重点是为复杂子系统提供一个简单、稳定、业务语义清晰的入口。
+外观模式的核心价值是为复杂子系统提供统一入口，让调用方不需要了解内部复杂流程。
 
-普通 Java 外观适合本地工具和简单流程封装。Spring Boot 外观适合下单结算、报表导出、文件处理、用户注册、支付聚合、后台管理聚合接口等场景。对于这些场景，推荐使用“Controller 调用 Facade，Facade 编排多个 Service，Service 负责具体能力”的结构。
+在本示例中：
 
-外观模式不是为了把所有代码集中到一个类中，而是为了降低调用方复杂度，让业务入口清晰，让子系统职责独立，让复杂流程更容易维护和演进。
+```text
+OrderCheckoutFacade 对外提供统一下单能力
+OrderCheckoutFacadeImpl 编排用户、库存、优惠券、订单、支付、物流子系统
+Controller 只依赖外观接口
+各子系统仍然保持自己的职责边界
+```
+
+最终效果是：
+
+```text
+调用方代码更简单
+复杂流程集中编排
+内部子系统变化不容易影响外部接口
+接口语义更贴近业务目标
+代码结构更清晰，也更容易维护
+```

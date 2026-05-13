@@ -15,39 +15,39 @@
     <packaging>pom</packaging>
     <!-- 项目包含的子模块 -->
     <modules>
-        <!-- P0：最高优先级，Spring Boot 项目最常用，建议优先掌握和沉淀 -->
+        <!-- GoF 创建型模式：关注对象如何创建 -->
         <module>singleton</module>
-        <module>strategy</module>
-        <module>template</module>
-        <module>proxy</module>
-        <module>factory</module>
         <module>factorymethod</module>
+        <module>abstractfactory</module>
         <module>builder</module>
-        <module>adapter</module>
-        <module>facade</module>
-        <module>chain</module>
+        <module>prototype</module>
 
-        <!-- P1：高优先级，业务复杂后非常常见 -->
+        <!-- Java 项目常用扩展创建型模式：不属于 GoF 23 种，但项目中非常常用 -->
+        <module>factory</module>
+
+        <!-- GoF 结构型模式：关注类或对象如何组合 -->
+        <module>adapter</module>
+        <module>bridge</module>
+        <module>composite</module>
+        <module>decorator</module>
+        <module>facade</module>
+        <module>flyweight</module>
+        <module>proxy</module>
+
+        <!-- GoF 行为型模式：关注对象之间如何协作 -->
+        <module>chain</module>
+        <module>command</module>
+        <module>interpreter</module>
+        <module>iterator</module>
+        <module>mediator</module>
+        <module>memento</module>
         <module>observer</module>
         <module>state</module>
-        <module>command</module>
-        <module>decorator</module>
-        <module>abstractfactory</module>
-        <module>composite</module>
-        <module>iterator</module>
-
-        <!-- P2：中优先级，适合特定业务结构或复杂扩展场景 -->
-        <module>bridge</module>
-        <module>mediator</module>
-        <module>prototype</module>
-        <module>memento</module>
+        <module>strategy</module>
+        <module>template</module>
         <module>visitor</module>
 
-        <!-- P3：低优先级，场景更窄，建议了解但不必优先落地 -->
-        <module>flyweight</module>
-        <module>interpreter</module>
-
-        <!-- 非 GoF，但 Spring Boot 项目常用 -->
+        <!-- Spring Boot 实战补充模式：关注工程实践、业务解耦和代码可维护性 -->
         <module>event-driven</module>
         <module>repository</module>
         <module>specification</module>

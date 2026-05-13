@@ -1,44 +1,63 @@
-# 设计模式：代理模式
+# 代理模式
 
-代理模式用于为目标对象提供一个代理对象，由代理对象控制对目标对象的访问，并在访问前后增加额外逻辑。在 JDK21 和 Spring Boot 3 项目中，代理模式常用于权限校验、日志记录、事务控制、远程调用、缓存控制、延迟加载、接口限流、方法耗时统计、异常包装等场景。
+代理模式属于结构型模式，核心作用是通过代理对象控制对真实对象的访问。在当前设计模式文档体系中，代理模式位于结构型模式分类下，常见于权限控制、缓存代理、审计日志、远程调用、事务、AOP、接口限流等 Spring Boot 项目场景。
 
-需要注意：代理模式关注的是“控制访问”。如果重点是给对象动态叠加多个增强能力，装饰器模式更合适；如果重点是根据业务类型切换不同实现，策略模式更合适；如果重点是通过代理对象统一拦截调用，代理模式更合适。
+本文以 **JDK21 + Spring Boot 3** 后端项目为背景，通过“商品详情查询代理”的示例，说明代理模式在真实项目中的落地方式。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例模拟一个商品详情查询接口。系统中真实的商品查询服务只负责查询商品数据，但接口调用前后还需要处理以下横切逻辑：
 
-文件位置：`pom.xml`
+```text
+查询前校验访问权限
+查询前优先读取缓存
+查询后写入缓存
+查询后记录审计日志
+异常时记录失败审计
+```
+
+如果把这些逻辑全部写进真实商品查询服务，会导致查询服务职责膨胀。后续如果缓存策略、权限规则、审计格式发生变化，也会影响核心查询逻辑。
+
+代理模式的处理方式是：真实对象只负责核心业务，代理对象和真实对象实现相同接口。调用方注入接口时拿到的是代理对象，由代理对象决定是否访问真实对象，以及访问前后做哪些控制。
+
+本示例需要以下依赖。
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证代理模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Spring Boot AOP，用于演示 Spring 代理机制 -->
+    <!-- 参数校验：用于校验商品查询请求参数 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-aop</artifactId>
+        <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、计时器、日期等通用处理 -->
+    <!-- Hutool：用于字符串、集合、日期、ID、金额等常用工具处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>${hutool.version}</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok：减少 DTO、VO、构造器等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- 配置元数据提示：让 IDE 能识别 @ConfigurationProperties -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-configuration-processor</artifactId>
+        <optional>true</optional>
+    </dependency>
+
+    <!-- 测试依赖：用于单元测试和接口测试 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -47,442 +66,114 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+示例项目配置如下。
 
-## 核心概念
+```yaml
+server:
+  port: 8080 # 示例服务端口
 
-代理模式的核心目标是让调用方不直接访问目标对象，而是通过代理对象访问目标对象。代理对象可以在调用前后加入控制逻辑。
+product:
+  proxy:
+    cache-enabled: true # 是否启用商品详情缓存代理
+    cache-expire-seconds: 60 # 本地缓存过期时间，单位秒
+    audit-enabled: true # 是否启用查询审计日志
+```
 
-常见角色如下：
-
-| 角色     | 说明                                   |
-| -------- | -------------------------------------- |
-| 抽象主题 | 定义目标对象和代理对象共同实现的接口   |
-| 真实主题 | 目标对象，负责核心业务逻辑             |
-| 代理对象 | 持有真实主题引用，控制对真实主题的访问 |
-| 调用方   | 面向抽象主题调用，不直接依赖真实主题   |
-
-常见代理方式如下：
-
-| 实现方式        | 是否推荐         | 适用场景                                             |
-| --------------- | ---------------- | ---------------------------------------------------- |
-| 静态代理        | 推荐用于理解原理 | 代理类手写，结构直观                                 |
-| JDK 动态代理    | 推荐用于接口代理 | 目标对象实现了接口                                   |
-| CGLIB 代理      | Spring 常用      | 目标对象没有接口时通过子类代理                       |
-| Spring AOP 代理 | 强烈推荐         | Spring Boot 项目中的日志、权限、事务、监控等横切逻辑 |
-| 直接修改目标类  | 不推荐           | 容易污染核心业务逻辑                                 |
-
-在 Spring Boot 项目中，常见优先级通常是：
+本示例的核心文件结构如下。
 
 ```text
-Spring AOP 代理 > JDK 动态代理 > 静态代理
-```
-
-静态代理适合理解模式结构；JDK 动态代理适合框架级接口增强；Spring AOP 代理适合真实业务项目中的横切增强。
-
-## 静态代理
-
-静态代理是最直观的代理实现方式。代理类和目标类实现同一个接口，代理类持有目标类对象，并在调用前后增加控制逻辑。
-
-下面以文档下载为例，真实服务只负责下载文档，代理服务负责权限校验和访问日志。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/proxy/staticproxy/
-├── DocumentDownloadService.java
-├── RealDocumentDownloadService.java
-└── DocumentDownloadServiceProxy.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/proxy/staticproxy/DocumentDownloadService.java`
-
-下面是文档下载服务接口，真实对象和代理对象都实现该接口。
-
-```java
-package io.github.atengk.design.proxy.staticproxy;
-
-/**
- * 文档下载服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface DocumentDownloadService {
-
-    /**
-     * 下载文档
-     *
-     * @param userId     用户ID
-     * @param documentId 文档ID
-     * @return 下载结果
-     */
-    String download(Long userId, Long documentId);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/proxy/staticproxy/RealDocumentDownloadService.java`
-
-下面是真实文档下载服务，只负责核心下载逻辑。
-
-```java
-package io.github.atengk.design.proxy.staticproxy;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 真实文档下载服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class RealDocumentDownloadService implements DocumentDownloadService {
-
-    /**
-     * 下载文档
-     *
-     * @param userId     用户ID
-     * @param documentId 文档ID
-     * @return 下载结果
-     */
-    @Override
-    public String download(Long userId, Long documentId) {
-        log.info("执行文档下载，用户ID：{}，文档ID：{}", userId, documentId);
-        return "文档下载成功，documentId=" + documentId;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/proxy/staticproxy/DocumentDownloadServiceProxy.java`
-
-下面是静态代理类，用于在下载前做权限校验，并记录访问日志。
-
-```java
-package io.github.atengk.design.proxy.staticproxy;
-
-import cn.hutool.core.util.ObjectUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 文档下载服务静态代理
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class DocumentDownloadServiceProxy implements DocumentDownloadService {
-
-    private final DocumentDownloadService target;
-
-    /**
-     * 创建文档下载服务代理
-     *
-     * @param target 目标文档下载服务
-     */
-    public DocumentDownloadServiceProxy(DocumentDownloadService target) {
-        if (target == null) {
-            throw new IllegalArgumentException("目标文档下载服务不能为空");
-        }
-        this.target = target;
-    }
-
-    /**
-     * 下载文档
-     *
-     * @param userId     用户ID
-     * @param documentId 文档ID
-     * @return 下载结果
-     */
-    @Override
-    public String download(Long userId, Long documentId) {
-        validateRequest(userId, documentId);
-        checkPermission(userId, documentId);
-
-        log.info("文档下载代理开始执行，用户ID：{}，文档ID：{}", userId, documentId);
-        String result = target.download(userId, documentId);
-        log.info("文档下载代理执行完成，用户ID：{}，文档ID：{}，结果：{}", userId, documentId, result);
-
-        return result;
-    }
-
-    /**
-     * 校验请求参数
-     *
-     * @param userId     用户ID
-     * @param documentId 文档ID
-     */
-    private void validateRequest(Long userId, Long documentId) {
-        if (ObjectUtil.hasNull(userId, documentId) || userId <= 0 || documentId <= 0) {
-            log.warn("文档下载参数校验失败，用户ID：{}，文档ID：{}", userId, documentId);
-            throw new IllegalArgumentException("用户ID和文档ID必须大于0");
-        }
-    }
-
-    /**
-     * 校验访问权限
-     *
-     * @param userId     用户ID
-     * @param documentId 文档ID
-     */
-    private void checkPermission(Long userId, Long documentId) {
-        log.info("校验文档下载权限，用户ID：{}，文档ID：{}", userId, documentId);
-    }
-}
-```
-
-使用方式：
-
-```java
-DocumentDownloadService downloadService = new DocumentDownloadServiceProxy(
-        new RealDocumentDownloadService()
-);
-
-String result = downloadService.download(10001L, 20001L);
-```
-
-静态代理的优点是结构清晰，容易理解。缺点是每个被代理接口都需要手写代理类，接口方法较多时维护成本高。
-
-## JDK 动态代理
-
-JDK 动态代理通过 `Proxy` 和 `InvocationHandler` 在运行时生成代理对象。它要求目标对象至少实现一个接口，适合对接口方法做统一增强。
-
-下面以用户查询服务为例，通过动态代理统一记录方法耗时和异常日志。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/proxy/jdk/
-├── UserQueryService.java
-├── UserQueryServiceImpl.java
-├── LogInvocationHandler.java
-└── JdkProxyFactory.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/proxy/jdk/UserQueryService.java`
-
-下面是用户查询服务接口。
-
-```java
-package io.github.atengk.design.proxy.jdk;
-
-/**
- * 用户查询服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface UserQueryService {
-
-    /**
-     * 根据用户ID查询用户名
-     *
-     * @param userId 用户ID
-     * @return 用户名
-     */
-    String getUsername(Long userId);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/proxy/jdk/UserQueryServiceImpl.java`
-
-下面是用户查询服务实现类。
-
-```java
-package io.github.atengk.design.proxy.jdk;
-
-import cn.hutool.core.util.ObjectUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 用户查询服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class UserQueryServiceImpl implements UserQueryService {
-
-    /**
-     * 根据用户ID查询用户名
-     *
-     * @param userId 用户ID
-     * @return 用户名
-     */
-    @Override
-    public String getUsername(Long userId) {
-        if (ObjectUtil.isNull(userId) || userId <= 0) {
-            log.warn("查询用户名失败，用户ID不合法，用户ID：{}", userId);
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        log.info("查询用户名，用户ID：{}", userId);
-        return "Ateng-" + userId;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/proxy/jdk/LogInvocationHandler.java`
-
-下面是动态代理调用处理器，统一处理方法调用前后的日志和耗时统计。
-
-```java
-package io.github.atengk.design.proxy.jdk;
-
-import cn.hutool.core.date.TimeInterval;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-
-/**
- * 日志调用处理器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class LogInvocationHandler implements InvocationHandler {
-
-    private final Object target;
-
-    /**
-     * 创建日志调用处理器
-     *
-     * @param target 目标对象
-     */
-    public LogInvocationHandler(Object target) {
-        if (target == null) {
-            throw new IllegalArgumentException("目标对象不能为空");
-        }
-        this.target = target;
-    }
-
-    /**
-     * 执行代理调用
-     *
-     * @param proxy  代理对象
-     * @param method 被调用方法
-     * @param args   方法参数
-     * @return 方法返回值
-     * @throws Throwable 调用异常
-     */
-    @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        TimeInterval timer = new TimeInterval();
-        String methodName = StrUtil.format("{}.{}", target.getClass().getSimpleName(), method.getName());
-
-        try {
-            log.info("开始执行代理方法，方法：{}", methodName);
-            Object result = method.invoke(target, args);
-            log.info("代理方法执行成功，方法：{}，耗时：{}ms", methodName, timer.interval());
-            return result;
-        } catch (InvocationTargetException exception) {
-            Throwable targetException = exception.getTargetException();
-            log.warn("代理方法执行失败，方法：{}，异常：{}", methodName, targetException.getMessage());
-            throw targetException;
-        }
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/proxy/jdk/JdkProxyFactory.java`
-
-下面是 JDK 动态代理工厂，用于创建接口代理对象。
-
-```java
-package io.github.atengk.design.proxy.jdk;
-
-import java.lang.reflect.Proxy;
-
-/**
- * JDK动态代理工厂
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public class JdkProxyFactory {
-
-    private JdkProxyFactory() {
-    }
-
-    /**
-     * 创建代理对象
-     *
-     * @param target        目标对象
-     * @param interfaceType 接口类型
-     * @param <T>           接口泛型
-     * @return 代理对象
-     */
-    public static <T> T createProxy(Object target, Class<T> interfaceType) {
-        Object proxy = Proxy.newProxyInstance(
-                interfaceType.getClassLoader(),
-                new Class[]{interfaceType},
-                new LogInvocationHandler(target)
-        );
-
-        return interfaceType.cast(proxy);
-    }
-}
-```
-
-使用方式：
-
-```java
-UserQueryService userQueryService = JdkProxyFactory.createProxy(
-        new UserQueryServiceImpl(),
-        UserQueryService.class
-);
-
-String username = userQueryService.getUsername(10001L);
-```
-
-JDK 动态代理的优点是不需要为每个接口手写代理类。缺点是只能代理接口方法，不能直接代理没有接口的普通类。
-
-## Spring Boot AOP 代理
-
-Spring Boot 项目中最常见的代理模式实践是 Spring AOP。Spring AOP 会为符合切点规则的 Bean 创建代理对象，调用方注入的通常不是原始对象，而是代理对象。
-
-下面以订单支付为例，业务服务只负责支付逻辑，AOP 代理统一做访问日志、耗时统计和异常记录。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/designpattern/proxy
 ├── ProxyApplication.java
-├── annotation/
-│   └── AccessLog.java
-├── aspect/
-│   └── AccessLogAspect.java
-├── controller/
-│   └── OrderPayController.java
-├── dto/
-│   ├── OrderPayRequest.java
-│   └── OrderPayResponse.java
-└── service/
-    ├── OrderPayService.java
-    └── impl/
-        └── OrderPayServiceImpl.java
+├── config
+│   └── ProductProxyProperties.java
+├── controller
+│   └── ProductController.java
+├── dto
+│   └── ProductQueryRequest.java
+├── proxy
+│   ├── ProductQueryService.java
+│   ├── RealProductQueryService.java
+│   └── ProductQueryProxyService.java
+├── repository
+│   └── ProductMemoryRepository.java
+├── service
+│   ├── ProductAuditService.java
+│   ├── ProductCacheService.java
+│   └── ProductPermissionService.java
+├── vo
+│   ├── ApiResult.java
+│   ├── ProductCacheStatsVO.java
+│   └── ProductDetailVO.java
+└── web
+    └── GlobalExceptionHandler.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/ProxyApplication.java`
+## 模式设计
 
-下面是 Spring Boot 启动类。
+代理模式的关键是：调用方不直接访问真实对象，而是访问代理对象。代理对象可以在真实对象访问前后增加控制逻辑，也可以在某些情况下不访问真实对象。
+
+本示例中的角色分工如下。
+
+| 角色     | 示例类                     | 说明                              |
+| -------- | -------------------------- | --------------------------------- |
+| 抽象主题 | `ProductQueryService`      | 定义商品详情查询接口              |
+| 真实主题 | `RealProductQueryService`  | 真正查询商品数据                  |
+| 代理主题 | `ProductQueryProxyService` | 控制真实查询服务的访问            |
+| 权限服务 | `ProductPermissionService` | 判断当前用户是否允许访问商品      |
+| 缓存服务 | `ProductCacheService`      | 读取和写入商品详情缓存            |
+| 审计服务 | `ProductAuditService`      | 记录查询成功或失败日志            |
+| 调用方   | `ProductController`        | 只依赖 `ProductQueryService` 接口 |
+
+核心流程如下。
+
+```text
+Controller
+    ↓
+ProductQueryService 接口
+    ↓
+ProductQueryProxyService 代理对象
+    ↓
+检查缓存
+    ↓
+缓存命中：校验权限后直接返回
+    ↓
+缓存未命中：调用 RealProductQueryService
+    ↓
+真实查询商品数据
+    ↓
+校验权限
+    ↓
+写入缓存
+    ↓
+记录审计日志
+    ↓
+返回商品详情
+```
+
+代理模式的重点不是“增强功能”本身，而是“控制访问”。缓存命中时，代理对象甚至可以不调用真实对象；权限不通过时，代理对象会直接拒绝访问真实对象的结果。
+
+## 核心代码
+
+下面给出代理模式在 Spring Boot 项目中的关键实现。示例使用内存仓储和本地缓存，真实项目中可以替换为 MyBatis-Plus、Redis、Caffeine、远程商品中心或 Elasticsearch。
+
+项目启动类负责启动 Spring Boot 应用，并开启配置属性扫描。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/ProxyApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.designpattern.proxy;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
- * 代理模式示例启动类
+ * 代理模式示例应用启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
+@ConfigurationPropertiesScan
 @SpringBootApplication
 public class ProxyApplication {
 
@@ -497,554 +188,1195 @@ public class ProxyApplication {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/annotation/AccessLog.java`
+代理配置类用于控制缓存代理和审计代理是否启用。
 
-下面是访问日志注解，用于标记需要被 AOP 代理增强的方法。
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/config/ProductProxyProperties.java`
 
 ```java
-package io.github.atengk.design.annotation;
+package io.github.atengk.designpattern.proxy.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * 商品查询代理配置
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@ConfigurationProperties(prefix = "product.proxy")
+public class ProductProxyProperties {
+
+    /**
+     * 是否启用缓存代理
+     */
+    private Boolean cacheEnabled = Boolean.TRUE;
+
+    /**
+     * 缓存过期时间，单位秒
+     */
+    private Integer cacheExpireSeconds = 60;
+
+    /**
+     * 是否启用审计日志
+     */
+    private Boolean auditEnabled = Boolean.TRUE;
+}
+```
+
+商品查询请求 DTO 用于承接接口查询参数。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/dto/ProductQueryRequest.java`
+
+```java
+package io.github.atengk.designpattern.proxy.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+/**
+ * 商品详情查询请求
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class ProductQueryRequest {
+
+    /**
+     * 当前用户 ID
+     */
+    @NotBlank(message = "用户 ID 不能为空")
+    private String userId;
+
+    /**
+     * 商品 ID
+     */
+    @NotBlank(message = "商品 ID 不能为空")
+    private String productId;
+
+    /**
+     * 是否强制刷新缓存
+     */
+    private Boolean forceRefresh = Boolean.FALSE;
+}
+```
+
+商品详情 VO 表示最终返回给调用方的商品数据。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/vo/ProductDetailVO.java`
+
+```java
+package io.github.atengk.designpattern.proxy.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 商品详情返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class ProductDetailVO {
+
+    /**
+     * 商品 ID
+     */
+    private String productId;
+
+    /**
+     * 商品名称
+     */
+    private String productName;
+
+    /**
+     * 商品价格
+     */
+    private BigDecimal price;
+
+    /**
+     * 商品可见范围：PUBLIC、INTERNAL
+     */
+    private String visibleScope;
+
+    /**
+     * 销售状态
+     */
+    private String saleStatus;
+
+    /**
+     * 商品描述
+     */
+    private String description;
+
+    /**
+     * 数据来源：DB、CACHE
+     */
+    private String source;
+
+    /**
+     * 复制商品详情并替换来源
+     *
+     * @param source 数据来源
+     * @return 商品详情
+     */
+    public ProductDetailVO copyWithSource(String source) {
+        return ProductDetailVO.builder()
+                .productId(productId)
+                .productName(productName)
+                .price(price)
+                .visibleScope(visibleScope)
+                .saleStatus(saleStatus)
+                .description(description)
+                .source(source)
+                .build();
+    }
+}
+```
+
+缓存统计 VO 用于验证代理缓存是否生效。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/vo/ProductCacheStatsVO.java`
+
+```java
+package io.github.atengk.designpattern.proxy.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+/**
+ * 商品缓存统计返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class ProductCacheStatsVO {
+
+    /**
+     * 缓存数量
+     */
+    private Integer cacheSize;
+
+    /**
+     * 缓存是否启用
+     */
+    private Boolean cacheEnabled;
+
+    /**
+     * 缓存过期时间，单位秒
+     */
+    private Integer cacheExpireSeconds;
+}
+```
+
+统一 API 返回对象用于包装接口响应。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/vo/ApiResult.java`
+
+```java
+package io.github.atengk.designpattern.proxy.vo;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * API 统一返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    /**
+     * 业务状态码
+     */
+    private Integer code;
+
+    /**
+     * 返回消息
+     */
+    private String message;
+
+    /**
+     * 返回数据
+     */
+    private T data;
+
+    /**
+     * 成功返回
+     *
+     * @param data 返回数据
+     * @return API 返回对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return ApiResult.<T>builder()
+                .code(200)
+                .message("操作成功")
+                .data(data)
+                .build();
+    }
+
+    /**
+     * 失败返回
+     *
+     * @param message 失败消息
+     * @return API 返回对象
+     */
+    public static ApiResult<Void> fail(String message) {
+        return ApiResult.<Void>builder()
+                .code(500)
+                .message(message)
+                .build();
+    }
+}
+```
+
+商品内存仓储模拟商品数据库。真实项目中可以替换为 Mapper、Repository 或远程商品服务。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/repository/ProductMemoryRepository.java`
+
+```java
+package io.github.atengk.designpattern.proxy.repository;
+
+import cn.hutool.core.map.MapUtil;
+import io.github.atengk.designpattern.proxy.vo.ProductDetailVO;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * 商品内存仓储
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Repository
+public class ProductMemoryRepository {
+
+    private final Map<String, ProductDetailVO> productMap = MapUtil.<String, ProductDetailVO>builder(new HashMap<>())
+            .put("product-1001", ProductDetailVO.builder()
+                    .productId("product-1001")
+                    .productName("JDK21 实战课程")
+                    .price(new BigDecimal("99.90"))
+                    .visibleScope("PUBLIC")
+                    .saleStatus("ON_SALE")
+                    .description("面向 Java 后端开发的 JDK21 实战课程")
+                    .source("DB")
+                    .build())
+            .put("product-1002", ProductDetailVO.builder()
+                    .productId("product-1002")
+                    .productName("Spring Boot 3 内部项目课")
+                    .price(new BigDecimal("199.90"))
+                    .visibleScope("INTERNAL")
+                    .saleStatus("ON_SALE")
+                    .description("仅内部用户可见的 Spring Boot 3 项目课程")
+                    .source("DB")
+                    .build())
+            .build();
+
+    /**
+     * 根据商品 ID 查询商品详情
+     *
+     * @param productId 商品 ID
+     * @return 商品详情
+     */
+    public ProductDetailVO getByProductId(String productId) {
+        ProductDetailVO product = productMap.get(productId);
+        if (product == null) {
+            throw new IllegalArgumentException("商品不存在：" + productId);
+        }
+        return product.copyWithSource("DB");
+    }
+}
+```
+
+抽象主题接口定义商品查询能力，代理对象和真实对象都实现这个接口。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/proxy/ProductQueryService.java`
+
+```java
+package io.github.atengk.designpattern.proxy.proxy;
+
+import io.github.atengk.designpattern.proxy.dto.ProductQueryRequest;
+import io.github.atengk.designpattern.proxy.vo.ProductDetailVO;
+
+/**
+ * 商品查询服务接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface ProductQueryService {
+
+    /**
+     * 查询商品详情
+     *
+     * @param request 商品查询请求
+     * @return 商品详情
+     */
+    ProductDetailVO queryDetail(ProductQueryRequest request);
+}
+```
+
+真实商品查询服务只负责核心查询，不处理缓存、权限、审计等代理逻辑。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/proxy/RealProductQueryService.java`
+
+```java
+package io.github.atengk.designpattern.proxy.proxy;
+
+import io.github.atengk.designpattern.proxy.dto.ProductQueryRequest;
+import io.github.atengk.designpattern.proxy.repository.ProductMemoryRepository;
+import io.github.atengk.designpattern.proxy.vo.ProductDetailVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 真实商品查询服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class RealProductQueryService implements ProductQueryService {
+
+    private final ProductMemoryRepository productMemoryRepository;
+
+    /**
+     * 查询商品详情
+     *
+     * @param request 商品查询请求
+     * @return 商品详情
+     */
+    @Override
+    public ProductDetailVO queryDetail(ProductQueryRequest request) {
+        log.info("访问真实商品查询服务，productId={}", request.getProductId());
+        return productMemoryRepository.getByProductId(request.getProductId());
+    }
+}
+```
+
+权限服务用于控制当前用户是否可以查看目标商品。这里用简单规则模拟：`INTERNAL` 商品只有 `admin` 用户可以查看。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/service/ProductPermissionService.java`
+
+```java
+package io.github.atengk.designpattern.proxy.service;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.proxy.vo.ProductDetailVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 商品访问权限服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class ProductPermissionService {
+
+    /**
+     * 校验用户是否可以查看商品
+     *
+     * @param userId  用户 ID
+     * @param product 商品详情
+     */
+    public void checkCanView(String userId, ProductDetailVO product) {
+        if (StrUtil.equals("INTERNAL", product.getVisibleScope()) && !StrUtil.equals("admin", userId)) {
+            throw new IllegalStateException("当前用户无权访问内部商品：" + product.getProductId());
+        }
+
+        log.info("商品访问权限校验通过，userId={}，productId={}", userId, product.getProductId());
+    }
+}
+```
+
+缓存服务用于模拟商品详情本地缓存。代理对象会优先访问缓存，缓存命中时可以避免访问真实对象。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/service/ProductCacheService.java`
+
+```java
+package io.github.atengk.designpattern.proxy.service;
+
+import cn.hutool.core.util.BooleanUtil;
+import io.github.atengk.designpattern.proxy.config.ProductProxyProperties;
+import io.github.atengk.designpattern.proxy.vo.ProductCacheStatsVO;
+import io.github.atengk.designpattern.proxy.vo.ProductDetailVO;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 商品详情缓存服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ProductCacheService {
+
+    private final ProductProxyProperties productProxyProperties;
+    private final Map<String, CacheValue> cache = new ConcurrentHashMap<>();
+
+    /**
+     * 从缓存中获取商品详情
+     *
+     * @param cacheKey 缓存 key
+     * @return 商品详情
+     */
+    public Optional<ProductDetailVO> get(String cacheKey) {
+        if (!BooleanUtil.isTrue(productProxyProperties.getCacheEnabled())) {
+            return Optional.empty();
+        }
+
+        CacheValue cacheValue = cache.get(cacheKey);
+        if (cacheValue == null) {
+            log.info("商品详情缓存未命中，cacheKey={}", cacheKey);
+            return Optional.empty();
+        }
+
+        if (cacheValue.getExpireTime().isBefore(LocalDateTime.now())) {
+            cache.remove(cacheKey);
+            log.info("商品详情缓存已过期，cacheKey={}", cacheKey);
+            return Optional.empty();
+        }
+
+        log.info("商品详情缓存命中，cacheKey={}", cacheKey);
+        return Optional.of(cacheValue.getValue().copyWithSource("CACHE"));
+    }
+
+    /**
+     * 写入商品详情缓存
+     *
+     * @param cacheKey 缓存 key
+     * @param value    商品详情
+     */
+    public void put(String cacheKey, ProductDetailVO value) {
+        if (!BooleanUtil.isTrue(productProxyProperties.getCacheEnabled())) {
+            return;
+        }
+
+        LocalDateTime expireTime = LocalDateTime.now()
+                .plusSeconds(productProxyProperties.getCacheExpireSeconds());
+
+        cache.put(cacheKey, new CacheValue(value.copyWithSource("DB"), expireTime));
+        log.info("商品详情缓存写入成功，cacheKey={}，expireTime={}", cacheKey, expireTime);
+    }
+
+    /**
+     * 查询缓存统计
+     *
+     * @return 缓存统计
+     */
+    public ProductCacheStatsVO stats() {
+        return ProductCacheStatsVO.builder()
+                .cacheSize(cache.size())
+                .cacheEnabled(productProxyProperties.getCacheEnabled())
+                .cacheExpireSeconds(productProxyProperties.getCacheExpireSeconds())
+                .build();
+    }
+
+    /**
+     * 缓存值
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    @AllArgsConstructor
+    private static class CacheValue {
+
+        /**
+         * 商品详情
+         */
+        private ProductDetailVO value;
+
+        /**
+         * 过期时间
+         */
+        private LocalDateTime expireTime;
+    }
+}
+```
+
+审计服务用于记录商品查询行为。代理对象会在查询成功、失败、缓存命中等场景中调用它。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/service/ProductAuditService.java`
+
+```java
+package io.github.atengk.designpattern.proxy.service;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 商品查询审计服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+public class ProductAuditService {
+
+    /**
+     * 记录商品查询审计日志
+     *
+     * @param userId    用户 ID
+     * @param productId 商品 ID
+     * @param success   是否成功
+     * @param source    数据来源
+     * @param message   审计消息
+     * @param costMs    耗时，单位毫秒
+     */
+    public void record(String userId, String productId, Boolean success, String source, String message, Long costMs) {
+        log.info("商品查询审计，userId={}，productId={}，success={}，source={}，message={}，costMs={}",
+                userId, productId, success, source, message, costMs);
+    }
+}
+```
+
+代理商品查询服务是真正暴露给 Controller 的实现。它和真实服务实现相同接口，并通过 `@Primary` 让 Spring 在注入 `ProductQueryService` 时优先注入代理对象。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/proxy/ProductQueryProxyService.java`
+
+```java
+package io.github.atengk.designpattern.proxy.proxy;
+
+import cn.hutool.core.util.BooleanUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.proxy.config.ProductProxyProperties;
+import io.github.atengk.designpattern.proxy.dto.ProductQueryRequest;
+import io.github.atengk.designpattern.proxy.service.ProductAuditService;
+import io.github.atengk.designpattern.proxy.service.ProductCacheService;
+import io.github.atengk.designpattern.proxy.service.ProductPermissionService;
+import io.github.atengk.designpattern.proxy.vo.ProductDetailVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Service;
+
+import java.util.Optional;
+
+/**
+ * 商品查询代理服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Primary
+@Service
+@RequiredArgsConstructor
+public class ProductQueryProxyService implements ProductQueryService {
+
+    private final RealProductQueryService realProductQueryService;
+    private final ProductPermissionService productPermissionService;
+    private final ProductCacheService productCacheService;
+    private final ProductAuditService productAuditService;
+    private final ProductProxyProperties productProxyProperties;
+
+    /**
+     * 查询商品详情
+     *
+     * @param request 商品查询请求
+     * @return 商品详情
+     */
+    @Override
+    public ProductDetailVO queryDetail(ProductQueryRequest request) {
+        long start = System.currentTimeMillis();
+        String cacheKey = buildCacheKey(request.getProductId());
+        String source = "UNKNOWN";
+
+        try {
+            if (canReadCache(request)) {
+                Optional<ProductDetailVO> cachedProduct = productCacheService.get(cacheKey);
+                if (cachedProduct.isPresent()) {
+                    ProductDetailVO product = cachedProduct.get();
+                    productPermissionService.checkCanView(request.getUserId(), product);
+                    source = product.getSource();
+
+                    log.info("代理服务返回缓存商品详情，userId={}，productId={}",
+                            request.getUserId(), request.getProductId());
+
+                    audit(request, true, source, "缓存命中", start);
+                    return product;
+                }
+            }
+
+            ProductDetailVO product = realProductQueryService.queryDetail(request);
+            productPermissionService.checkCanView(request.getUserId(), product);
+
+            productCacheService.put(cacheKey, product);
+            source = product.getSource();
+
+            log.info("代理服务返回真实商品详情，userId={}，productId={}",
+                    request.getUserId(), request.getProductId());
+
+            audit(request, true, source, "真实服务查询成功", start);
+            return product;
+        } catch (RuntimeException exception) {
+            audit(request, false, source, exception.getMessage(), start);
+            log.warn("代理服务拦截到商品查询异常，userId={}，productId={}，message={}",
+                    request.getUserId(), request.getProductId(), exception.getMessage());
+            throw exception;
+        }
+    }
+
+    /**
+     * 判断是否可以读取缓存
+     *
+     * @param request 商品查询请求
+     * @return 是否可以读取缓存
+     */
+    private boolean canReadCache(ProductQueryRequest request) {
+        return BooleanUtil.isTrue(productProxyProperties.getCacheEnabled())
+                && !BooleanUtil.isTrue(request.getForceRefresh());
+    }
+
+    /**
+     * 构建缓存 key
+     *
+     * @param productId 商品 ID
+     * @return 缓存 key
+     */
+    private String buildCacheKey(String productId) {
+        return StrUtil.format("product:detail:{}", productId);
+    }
+
+    /**
+     * 记录审计日志
+     *
+     * @param request 商品查询请求
+     * @param success 是否成功
+     * @param source  数据来源
+     * @param message 审计消息
+     * @param start   开始时间
+     */
+    private void audit(ProductQueryRequest request, Boolean success, String source, String message, long start) {
+        if (!BooleanUtil.isTrue(productProxyProperties.getAuditEnabled())) {
+            return;
+        }
+
+        productAuditService.record(
+                request.getUserId(),
+                request.getProductId(),
+                success,
+                source,
+                message,
+                System.currentTimeMillis() - start
+        );
+    }
+}
+```
+
+Controller 只依赖 `ProductQueryService` 接口。由于代理服务使用了 `@Primary`，这里实际注入的是 `ProductQueryProxyService`。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/controller/ProductController.java`
+
+```java
+package io.github.atengk.designpattern.proxy.controller;
+
+import io.github.atengk.designpattern.proxy.dto.ProductQueryRequest;
+import io.github.atengk.designpattern.proxy.proxy.ProductQueryService;
+import io.github.atengk.designpattern.proxy.service.ProductCacheService;
+import io.github.atengk.designpattern.proxy.vo.ApiResult;
+import io.github.atengk.designpattern.proxy.vo.ProductCacheStatsVO;
+import io.github.atengk.designpattern.proxy.vo.ProductDetailVO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 商品接口控制器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/products")
+public class ProductController {
+
+    private final ProductQueryService productQueryService;
+    private final ProductCacheService productCacheService;
+
+    /**
+     * 查询商品详情
+     *
+     * @param request 商品查询请求
+     * @return 商品详情
+     */
+    @PostMapping("/detail")
+    public ApiResult<ProductDetailVO> queryDetail(@Valid @RequestBody ProductQueryRequest request) {
+        return ApiResult.success(productQueryService.queryDetail(request));
+    }
+
+    /**
+     * 查询商品缓存统计
+     *
+     * @return 商品缓存统计
+     */
+    @GetMapping("/cache/stats")
+    public ApiResult<ProductCacheStatsVO> cacheStats() {
+        return ApiResult.success(productCacheService.stats());
+    }
+}
+```
+
+全局异常处理器用于统一处理参数校验异常和业务异常。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/web/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.designpattern.proxy.web;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.proxy.vo.ApiResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ApiResult<Void> handleValidException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .findFirst()
+                .map(error -> StrUtil.format("{} {}", error.getField(), error.getDefaultMessage()))
+                .orElse("请求参数不合法");
+
+        log.warn("请求参数校验失败，message={}", message);
+        return ApiResult.fail(message);
+    }
+
+    /**
+     * 处理非法参数异常
+     *
+     * @param exception 非法参数异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ApiResult<Void> handleIllegalArgumentException(IllegalArgumentException exception) {
+        log.warn("请求参数错误，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理业务状态异常
+     *
+     * @param exception 业务状态异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ApiResult<Void> handleIllegalStateException(IllegalStateException exception) {
+        log.warn("业务处理失败，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统处理异常", exception);
+        return ApiResult.fail("系统处理异常");
+    }
+}
+```
+
+## 使用方式
+
+启动项目后，可以通过统一商品详情接口测试代理模式的访问控制、缓存和审计。
+
+第一次查询公开商品，缓存未命中，会访问真实服务。
+
+```bash
+curl -X POST 'http://localhost:8080/api/products/detail' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user-1001",
+    "productId": "product-1001",
+    "forceRefresh": false
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "productId": "product-1001",
+    "productName": "JDK21 实战课程",
+    "price": 99.90,
+    "visibleScope": "PUBLIC",
+    "saleStatus": "ON_SALE",
+    "description": "面向 Java 后端开发的 JDK21 实战课程",
+    "source": "DB"
+  }
+}
+```
+
+第二次查询同一个商品，缓存命中，代理对象不会再访问真实商品查询服务。
+
+```bash
+curl -X POST 'http://localhost:8080/api/products/detail' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user-1001",
+    "productId": "product-1001",
+    "forceRefresh": false
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "productId": "product-1001",
+    "productName": "JDK21 实战课程",
+    "price": 99.90,
+    "visibleScope": "PUBLIC",
+    "saleStatus": "ON_SALE",
+    "description": "面向 Java 后端开发的 JDK21 实战课程",
+    "source": "CACHE"
+  }
+}
+```
+
+普通用户查询内部商品时，代理对象会拦截访问。
+
+```bash
+curl -X POST 'http://localhost:8080/api/products/detail' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user-1001",
+    "productId": "product-1002",
+    "forceRefresh": false
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 500,
+  "message": "当前用户无权访问内部商品：product-1002",
+  "data": null
+}
+```
+
+管理员查询内部商品时可以正常访问。
+
+```bash
+curl -X POST 'http://localhost:8080/api/products/detail' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "admin",
+    "productId": "product-1002",
+    "forceRefresh": false
+  }'
+```
+
+查看缓存统计：
+
+```bash
+curl -X GET 'http://localhost:8080/api/products/cache/stats'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "cacheSize": 2,
+    "cacheEnabled": true,
+    "cacheExpireSeconds": 60
+  }
+}
+```
+
+## 验证方式
+
+可以从下面几个角度验证代理模式是否落地成功。
+
+第一，Controller 只依赖接口，不直接依赖真实服务。`ProductController` 注入的是 `ProductQueryService`，实际运行时由 Spring 注入 `@Primary` 标记的 `ProductQueryProxyService`。
+
+第二，真实服务只负责核心查询。`RealProductQueryService` 只从仓储查询商品详情，不处理权限、缓存和审计。
+
+第三，代理对象可以控制是否访问真实对象。缓存命中时，`ProductQueryProxyService` 直接返回缓存数据，不调用 `RealProductQueryService`。
+
+第四，代理对象可以拒绝访问。普通用户访问内部商品时，代理对象会抛出异常并记录审计日志。
+
+可以重点查看日志：
+
+```text
+商品详情缓存未命中，cacheKey=product:detail:product-1001
+访问真实商品查询服务，productId=product-1001
+商品访问权限校验通过，userId=user-1001，productId=product-1001
+商品详情缓存写入成功，cacheKey=product:detail:product-1001，expireTime=2026-05-13T10:31:00
+商品查询审计，userId=user-1001，productId=product-1001，success=true，source=DB，message=真实服务查询成功，costMs=12
+
+商品详情缓存命中，cacheKey=product:detail:product-1001
+商品访问权限校验通过，userId=user-1001，productId=product-1001
+商品查询审计，userId=user-1001，productId=product-1001，success=true，source=CACHE，message=缓存命中，costMs=2
+```
+
+## 使用 Spring AOP 动态代理
+
+上面的示例属于静态代理：手动编写 `ProductQueryProxyService`。在 Spring Boot 项目中，事务、缓存、权限注解、日志切面通常使用 Spring AOP 动态代理完成。
+
+如果希望通过注解方式代理商品查询，可以新增一个审计注解。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/aop/ProductQueryAudit.java`
+
+```java
+package io.github.atengk.designpattern.proxy.aop;
 
 import java.lang.annotation.*;
 
 /**
- * 访问日志注解
+ * 商品查询审计注解
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface AccessLog {
+public @interface ProductQueryAudit {
 
     /**
      * 业务名称
      *
      * @return 业务名称
      */
-    String value();
+    String value() default "商品查询";
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/aspect/AccessLogAspect.java`
+然后新增 AOP 切面。
 
-下面是访问日志切面。它通过代理方式拦截带有 `@AccessLog` 的方法，并在方法执行前后记录日志。
+文件位置：`src/main/java/io/github/atengk/designpattern/proxy/aop/ProductQueryAuditAspect.java`
 
 ```java
-package io.github.atengk.design.aspect;
+package io.github.atengk.designpattern.proxy.aop;
 
-import cn.hutool.core.date.TimeInterval;
-import cn.hutool.core.util.ArrayUtil;
-import io.github.atengk.design.annotation.AccessLog;
+import io.github.atengk.designpattern.proxy.dto.ProductQueryRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
-import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.reflect.MethodSignature;
+import org.aspectj.lang.annotation.*;
 import org.springframework.stereotype.Component;
 
-import java.lang.reflect.Method;
-
 /**
- * 访问日志切面
+ * 商品查询审计切面
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Aspect
 @Component
-public class AccessLogAspect {
+public class ProductQueryAuditAspect {
 
     /**
-     * 环绕增强访问日志
+     * 环绕记录商品查询审计日志
      *
-     * @param joinPoint 连接点
+     * @param joinPoint 切点
+     * @param audit     审计注解
      * @return 方法返回值
-     * @throws Throwable 执行异常
+     * @throws Throwable 目标方法异常
      */
-    @Around("@annotation(io.github.atengk.design.annotation.AccessLog)")
-    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
-        TimeInterval timer = new TimeInterval();
-        Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
-        AccessLog accessLog = method.getAnnotation(AccessLog.class);
-
-        String methodName = method.getDeclaringClass().getSimpleName() + "." + method.getName();
-        Object[] args = joinPoint.getArgs();
+    @Around("@annotation(audit)")
+    public Object around(ProceedingJoinPoint joinPoint, ProductQueryAudit audit) throws Throwable {
+        long start = System.currentTimeMillis();
+        ProductQueryRequest request = findRequest(joinPoint.getArgs());
 
         try {
-            log.info("接口访问开始，业务：{}，方法：{}，参数数量：{}",
-                    accessLog.value(), methodName, ArrayUtil.length(args));
-
             Object result = joinPoint.proceed();
-
-            log.info("接口访问成功，业务：{}，方法：{}，耗时：{}ms",
-                    accessLog.value(), methodName, timer.interval());
-
+            log.info("AOP 商品查询审计成功，business={}，userId={}，productId={}，costMs={}",
+                    audit.value(),
+                    request == null ? null : request.getUserId(),
+                    request == null ? null : request.getProductId(),
+                    System.currentTimeMillis() - start);
             return result;
         } catch (Throwable throwable) {
-            log.warn("接口访问失败，业务：{}，方法：{}，耗时：{}ms，异常：{}",
-                    accessLog.value(), methodName, timer.interval(), throwable.getMessage());
+            log.warn("AOP 商品查询审计失败，business={}，userId={}，productId={}，message={}，costMs={}",
+                    audit.value(),
+                    request == null ? null : request.getUserId(),
+                    request == null ? null : request.getProductId(),
+                    throwable.getMessage(),
+                    System.currentTimeMillis() - start);
             throw throwable;
         }
     }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderPayRequest.java`
-
-下面是订单支付请求参数对象。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 订单支付请求
- *
- * @param orderNo 订单号
- * @param userId  用户ID
- * @param amount  支付金额
- * @author Ateng
- * @since 2026-04-30
- */
-public record OrderPayRequest(String orderNo, Long userId, BigDecimal amount) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderPayResponse.java`
-
-下面是订单支付响应结果。
-
-```java
-package io.github.atengk.design.dto;
-
-/**
- * 订单支付响应
- *
- * @param orderNo 订单号
- * @param payNo   支付流水号
- * @param message 结果消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record OrderPayResponse(String orderNo, String payNo, String message) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/OrderPayService.java`
-
-下面是订单支付服务接口。
-
-```java
-package io.github.atengk.design.service;
-
-import io.github.atengk.design.dto.OrderPayRequest;
-import io.github.atengk.design.dto.OrderPayResponse;
-
-/**
- * 订单支付服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface OrderPayService {
 
     /**
-     * 支付订单
+     * 从参数列表中查找商品查询请求
      *
-     * @param request 订单支付请求
-     * @return 订单支付响应
+     * @param args 方法参数
+     * @return 商品查询请求
      */
-    OrderPayResponse pay(OrderPayRequest request);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderPayServiceImpl.java`
-
-下面是订单支付服务实现类。业务方法只关注核心支付逻辑，访问日志由代理切面处理。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.annotation.AccessLog;
-import io.github.atengk.design.dto.OrderPayRequest;
-import io.github.atengk.design.dto.OrderPayResponse;
-import io.github.atengk.design.service.OrderPayService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-
-/**
- * 订单支付服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-public class OrderPayServiceImpl implements OrderPayService {
-
-    /**
-     * 支付订单
-     *
-     * @param request 订单支付请求
-     * @return 订单支付响应
-     */
-    @Override
-    @AccessLog("订单支付")
-    public OrderPayResponse pay(OrderPayRequest request) {
-        validateRequest(request);
-
-        String payNo = "PAY" + IdUtil.getSnowflakeNextId();
-        log.info("执行订单支付，订单号：{}，用户ID：{}，金额：{}，支付流水号：{}",
-                request.orderNo(), request.userId(), request.amount(), payNo);
-
-        return new OrderPayResponse(request.orderNo(), payNo, "支付成功");
-    }
-
-    /**
-     * 校验订单支付请求
-     *
-     * @param request 订单支付请求
-     */
-    private void validateRequest(OrderPayRequest request) {
-        if (request == null) {
-            log.warn("订单支付失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
+    private ProductQueryRequest findRequest(Object[] args) {
+        if (args == null) {
+            return null;
         }
 
-        if (StrUtil.isBlank(request.orderNo())) {
-            log.warn("订单支付失败，订单号为空");
-            throw new IllegalArgumentException("订单号不能为空");
+        for (Object arg : args) {
+            if (arg instanceof ProductQueryRequest request) {
+                return request;
+            }
         }
 
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("订单支付失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (request.amount() == null || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("订单支付失败，支付金额不合法，金额：{}", request.amount());
-            throw new IllegalArgumentException("支付金额必须大于0");
-        }
+        return null;
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderPayController.java`
-
-下面是订单支付接口，用于验证 Spring AOP 代理效果。
+使用方式是在目标方法上添加注解：
 
 ```java
-package io.github.atengk.design.controller;
-
-import io.github.atengk.design.dto.OrderPayRequest;
-import io.github.atengk.design.dto.OrderPayResponse;
-import io.github.atengk.design.service.OrderPayService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-
-/**
- * 订单支付控制器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/proxy/order")
-public class OrderPayController {
-
-    private final OrderPayService orderPayService;
-
-    /**
-     * 支付订单
-     *
-     * @param orderNo 订单号
-     * @param userId  用户ID
-     * @param amount  支付金额
-     * @return 订单支付响应
-     */
-    @PostMapping("/pay")
-    public OrderPayResponse pay(@RequestParam String orderNo,
-                                @RequestParam Long userId,
-                                @RequestParam BigDecimal amount) {
-        OrderPayRequest request = new OrderPayRequest(orderNo, userId, amount);
-        return orderPayService.pay(request);
-    }
+@ProductQueryAudit("商品详情查询")
+@Override
+public ProductDetailVO queryDetail(ProductQueryRequest request) {
+    return productMemoryRepository.getByProductId(request.getProductId());
 }
 ```
 
-接口调用示例：
+Spring AOP 动态代理更适合通用横切逻辑，例如日志、事务、权限注解、监控埋点。静态代理更适合业务语义明确、代理流程需要手动编排的场景。
 
-```bash
-curl -X POST "http://localhost:8080/proxy/order/pay?orderNo=ORDER10001&userId=10001&amount=99.90"
-```
+## 适用场景
 
-可能返回：
+代理模式适合“调用方不应该直接访问真实对象，访问过程需要被控制”的场景。
 
-```json
-{
-  "orderNo": "ORDER10001",
-  "payNo": "PAY2019776866538487808",
-  "message": "支付成功"
-}
-```
+常见 Spring Boot 项目场景如下。
 
-如果 AOP 代理正常，可以看到类似日志：
+| 场景         | 真实对象             | 代理职责               |
+| ------------ | -------------------- | ---------------------- |
+| 商品详情查询 | 商品查询服务         | 缓存、权限、审计       |
+| 文件下载     | 文件存储服务         | 权限校验、防盗链、限流 |
+| 远程接口调用 | 第三方 API 客户端    | 超时、重试、熔断、签名 |
+| 支付接口     | 支付渠道客户端       | 幂等、验签、风控、日志 |
+| 数据访问     | Mapper 或 Repository | 事务、读写分离、缓存   |
+| 后台操作     | 业务管理服务         | 操作权限、审计日志     |
+| 敏感数据查询 | 用户资料服务         | 脱敏、授权、访问记录   |
+
+代理模式尤其适合以下特征明显的模块：
 
 ```text
-接口访问开始，业务：订单支付，方法：OrderPayServiceImpl.pay，参数数量：1
-执行订单支付，订单号：ORDER10001，用户ID：10001，金额：99.90，支付流水号：PAY2019776866538487808
-接口访问成功，业务：订单支付，方法：OrderPayServiceImpl.pay，耗时：8ms
+真实对象职责需要保持纯粹
+调用真实对象前需要校验或控制
+调用真实对象后需要审计或转换
+部分场景可以不访问真实对象
+调用方不应该感知代理细节
 ```
 
-这种方式的优点是业务代码和横切逻辑分离。订单支付服务不需要关心日志增强逻辑，Spring 代理会在运行时完成拦截。
+## 和其他模式的区别
 
-## CGLIB 代理
+代理模式容易和装饰器模式、适配器模式、外观模式、责任链模式混淆。区分时重点看模式解决的问题。
 
-CGLIB 代理通过生成目标类的子类来实现代理，因此不要求目标对象实现接口。Spring AOP 在某些场景下会使用 CGLIB 代理，例如目标类没有接口，或者显式配置使用类代理。
+| 模式       | 关注点                 | 和代理模式的区别                           |
+| ---------- | ---------------------- | ------------------------------------------ |
+| 代理模式   | 控制真实对象访问       | 重点是访问控制、缓存、远程代理、权限、事务 |
+| 装饰器模式 | 动态增强对象能力       | 重点是功能叠加，通常不强调控制访问         |
+| 适配器模式 | 转换不兼容接口         | 重点是接口转换，不是控制访问               |
+| 外观模式   | 简化复杂子系统调用     | 重点是统一入口，不一定和真实对象同接口     |
+| 责任链模式 | 多个处理器顺序处理请求 | 重点是链式传递，节点之间通常是同级处理器   |
 
-在 Spring Boot 项目中可以通过配置强制使用 CGLIB 代理。
-
-文件位置：`src/main/resources/application.yml`
-
-```yaml
-spring:
-  aop:
-    # true 表示优先使用 CGLIB 基于类创建代理
-    proxy-target-class: true
-```
-
-需要注意：CGLIB 通过继承生成代理子类，所以不能代理 `final` 类，也不能代理 `final` 方法。
-
-示例：
-
-```java
-public final class FinalOrderService {
-    public String pay() {
-        return "success";
-    }
-}
-```
-
-这种类无法被 CGLIB 正常代理，因为 `final` 类不能被继承。
-
-在 Spring Boot 业务项目中，一般不需要手动使用 CGLIB API。多数情况下只需要使用 Spring AOP，由 Spring 根据目标对象情况选择代理方式。
-
-## 代理模式和装饰器模式的区别
-
-代理模式和装饰器模式结构相似，都是持有一个同接口对象，然后转发调用。但二者的意图不同。
-
-| 对比项   | 代理模式                                      | 装饰器模式                               |
-| -------- | --------------------------------------------- | ---------------------------------------- |
-| 核心目的 | 控制访问目标对象                              | 增强目标对象能力                         |
-| 关注点   | 访问控制、远程调用、延迟加载、权限、事务      | 日志、审计、缓存、重试、脱敏、加密、限流 |
-| 调用关系 | 通常代理一个目标对象                          | 可以多层叠加多个装饰器                   |
-| 典型应用 | Spring AOP、RPC 代理、Mapper 代理、懒加载代理 | 服务增强链、IO 流增强、业务能力叠加      |
-| 目标对象 | 可能被隐藏或延迟创建                          | 通常明确存在并被增强                     |
-
-简单理解：
-
-```text
-代理模式：你不能直接访问目标对象，需要通过代理对象访问。
-装饰器模式：目标对象可以直接用，但我给它额外加一些能力。
-```
-
-在 Spring Boot 中，AOP、事务、MyBatis Mapper 接口、Feign 客户端都体现了代理模式思想。手写服务增强链更接近装饰器模式。
-
-## Spring AOP 代理的常见失效场景
-
-Spring AOP 是基于代理对象实现的，因此调用是否经过代理对象非常关键。
-
-最常见的失效场景是类内部方法自调用。
-
-错误示例：
-
-```java
-@Service
-public class OrderService {
-
-    public void createOrder() {
-        // 内部直接调用，不经过 Spring 代理对象
-        this.payOrder();
-    }
-
-    @AccessLog("支付订单")
-    public void payOrder() {
-        // 这里的 AOP 可能不会生效
-    }
-}
-```
-
-原因是 `this.payOrder()` 调用的是当前对象方法，不是 Spring 容器中的代理对象。
-
-推荐做法之一是拆分到另一个 Spring Bean 中：
-
-```java
-@Service
-@RequiredArgsConstructor
-public class OrderService {
-
-    private final OrderPayService orderPayService;
-
-    public void createOrder() {
-        orderPayService.payOrder();
-    }
-}
-```
-
-被调用服务：
-
-```java
-@Service
-public class OrderPayService {
-
-    @AccessLog("支付订单")
-    public void payOrder() {
-        // 通过 Spring Bean 调用时，AOP 可以生效
-    }
-}
-```
-
-实际项目中，事务注解 `@Transactional` 的自调用失效也是同一个原因。
-
-## 验证方式
-
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行订单支付：
-
-```bash
-curl -X POST "http://localhost:8080/proxy/order/pay?orderNo=ORDER10001&userId=10001&amount=99.90"
-```
-
-如果代理模式生效，可以看到访问日志切面先执行，业务方法再执行，最后切面记录执行成功日志。
-
-正常日志示例：
-
-```text
-接口访问开始，业务：订单支付，方法：OrderPayServiceImpl.pay，参数数量：1
-执行订单支付，订单号：ORDER10001，用户ID：10001，金额：99.90，支付流水号：PAY2019776866538487808
-接口访问成功，业务：订单支付，方法：OrderPayServiceImpl.pay，耗时：8ms
-```
-
-异常请求示例：
-
-```bash
-curl -X POST "http://localhost:8080/proxy/order/pay?orderNo=ORDER10001&userId=10001&amount=0"
-```
-
-异常日志示例：
-
-```text
-接口访问开始，业务：订单支付，方法：OrderPayServiceImpl.pay，参数数量：1
-订单支付失败，支付金额不合法，金额：0
-接口访问失败，业务：订单支付，方法：OrderPayServiceImpl.pay，耗时：3ms，异常：支付金额必须大于0
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
+本示例中，`ProductQueryProxyService` 代理 `RealProductQueryService`，并决定是否访问真实查询服务，所以更符合代理模式。虽然它也做了缓存和审计增强，但核心目的仍然是控制对真实商品查询服务的访问。
 
 ## 注意事项
 
-代理模式适合控制访问，但不要把所有业务逻辑都放进代理层。代理层应该处理权限、日志、事务、缓存、远程调用、懒加载、限流等访问控制或横切逻辑，核心业务仍然应该放在真实主题对象中。
+代理对象和真实对象通常应该实现相同接口。这样调用方只依赖抽象接口，不需要知道自己拿到的是代理对象还是真实对象。
 
-不推荐把代理类写成这样：
+代理逻辑不要侵入真实对象。真实对象应该保持核心职责，例如本示例中真实服务只负责商品查询。权限、缓存、审计交给代理处理。
 
-```java
-@Override
-public String download(Long userId, Long documentId) {
-    // 权限校验
-    // 业务查询
-    // 数据计算
-    // 文件生成
-    // 审计日志
-    // 消息发送
-    return "success";
-}
-```
+缓存代理要注意权限边界。即使缓存命中，也不能绕过权限校验。示例中缓存命中后仍然调用 `ProductPermissionService.checkCanView()`，避免普通用户通过缓存访问内部商品。
 
-推荐将核心逻辑放在真实对象中，代理对象只负责访问控制：
+代理类不要过度膨胀。如果代理中同时堆积权限、缓存、限流、熔断、审计、脱敏、加密等大量逻辑，可以进一步拆分为多个协作服务，或改用 AOP、责任链、过滤器等结构。
 
-```java
-@Override
-public String download(Long userId, Long documentId) {
-    checkPermission(userId, documentId);
-    return target.download(userId, documentId);
-}
-```
+Spring AOP 代理有边界。默认情况下，同一个类内部方法自调用不会触发代理；`final` 类、`final` 方法也可能影响代理增强。涉及事务、缓存、权限注解时要特别注意代理是否真正生效。
 
-使用 JDK 动态代理时，目标类必须实现接口，否则无法创建接口代理。
-
-错误示例：
-
-```java
-public class UserQueryServiceImpl {
-    public String getUsername(Long userId) {
-        return "Ateng";
-    }
-}
-```
-
-推荐抽象接口：
-
-```java
-public interface UserQueryService {
-    String getUsername(Long userId);
-}
-```
-
-Spring AOP 中，不要依赖 `final` 类或 `final` 方法做增强。尤其在强制使用 CGLIB 代理时，`final` 会阻止子类代理。
-
-错误示例：
-
-```java
-@Service
-public final class OrderPayServiceImpl {
-
-    @AccessLog("订单支付")
-    public final void pay() {
-    }
-}
-```
-
-Spring AOP 只对 Spring 容器管理的 Bean 生效。手动 `new` 出来的对象不会被 Spring 创建代理。
-
-错误示例：
-
-```java
-OrderPayService orderPayService = new OrderPayServiceImpl();
-orderPayService.pay(request);
-```
-
-推荐通过 Spring 注入：
-
-```java
-@RequiredArgsConstructor
-@RestController
-public class OrderPayController {
-
-    private final OrderPayService orderPayService;
-}
-```
-
-如果代理逻辑涉及分布式缓存、分布式锁、远程调用或数据库事务，需要结合 Redis、数据库唯一约束、事务传播行为、超时控制和异常补偿机制，不能只依赖本地代理逻辑保证业务一致性。
+不要把代理模式和缓存工具混为一谈。缓存只是代理对象可以做的一种访问控制手段，代理模式的核心是代理对象代替调用方访问真实对象。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，代理模式的实践重点是通过代理对象控制目标对象访问，并把横切逻辑从核心业务中拆出来。
+代理模式的核心价值是通过代理对象控制真实对象的访问，让真实对象保持核心职责，访问控制逻辑集中在代理层。
 
-静态代理适合理解代理模式结构。JDK 动态代理适合接口级统一增强。Spring AOP 代理适合业务项目中的日志、权限、事务、监控、异常记录等横切能力。对于 Spring Boot 项目，推荐优先使用 Spring AOP 或框架内置代理机制，而不是手写大量代理类。
+在本示例中：
 
-代理模式不是为了替代业务分层，也不是为了把所有逻辑都放到代理对象中。它更适合在访问目标对象之前或之后，统一增加控制逻辑，让真实业务对象保持清晰、稳定和可维护。
+```text
+ProductQueryService 定义统一查询接口
+RealProductQueryService 负责真实商品查询
+ProductQueryProxyService 负责缓存、权限校验和审计日志
+ProductController 只依赖接口，不感知代理细节
+```
+
+最终效果是：
+
+```text
+真实查询服务职责更纯粹
+调用方不直接访问真实对象
+缓存命中时可以避免真实查询
+权限不通过时可以拒绝访问
+查询审计逻辑集中在代理层
+代码结构更清晰，也更容易扩展和维护
+```

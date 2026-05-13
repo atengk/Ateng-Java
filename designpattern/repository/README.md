@@ -1,520 +1,192 @@
-# 设计模式：仓储模式
+# 仓储模式
 
-仓储模式用于隔离领域对象和数据持久化细节，让业务层面向仓储接口编程，而不是直接依赖 Mapper、DAO、JPA Repository、RedisTemplate 或第三方存储 API。在 JDK21 和 Spring Boot 3 项目中，仓储模式常用于 DDD 聚合持久化、复杂查询封装、跨数据源读取、缓存与数据库组合、领域对象与数据库实体解耦等场景。
+仓储模式是 Spring Boot 项目中常用的工程实践模式，属于当前设计模式文档体系中的 **Spring Boot 实战补充模式**。它的核心作用是隔离业务层和持久化层，让业务层面向领域对象编程，而不是直接依赖数据库表、Mapper、SQL 或 ORM 细节。
 
-需要注意：仓储模式不是 GoF 23 种设计模式之一，属于这次设计模式文档里的“遗漏补充”。它在 Spring Boot 后端项目中非常常见，尤其适合业务复杂度较高、领域模型和数据库模型不希望强绑定的项目。
+在实际项目中，仓储模式常用于用户账户、订单、商品、库存、会员、支付流水等核心业务对象。它并不等同于 MyBatis Mapper，也不等同于 Spring Data Repository，而是业务层访问领域对象的一层抽象。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven、MyBatis-Plus、MySQL。示例包路径统一使用 `io.github.atengk`。
+本示例基于 **JDK 21 + Spring Boot 3 + MyBatis-Plus + MySQL**。MyBatis-Plus 在 Spring Boot 3 项目中应使用 `mybatis-plus-spring-boot3-starter`，Maven Central 当前可查询到该 Spring Boot 3 Starter 版本，例如 `3.5.16`。([Maven Central](https://central.sonatype.com/artifact/com.baomidou/mybatis-plus-spring-boot3-starter?utm_source=chatgpt.com))
+
+示例业务使用“用户账户”作为领域对象。业务层只依赖 `UserAccountRepository`，不直接依赖 `UserAccountMapper`，从而把业务规则和持久化实现隔离开。
+
+### 项目依赖
 
 文件位置：`pom.xml`
 
+下面配置 Web、Validation、MyBatis-Plus、MySQL、Hutool 和 Lombok。MyBatis-Plus 用于简化 CRUD，Hutool 用于字符串、ID、对象判断等常用处理。
+
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证仓储模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- MyBatis-Plus Spring Boot 3 Starter，用于数据库 CRUD 和分页查询 -->
+    <!-- Spring Validation：用于接口请求参数校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- MyBatis-Plus Spring Boot 3 Starter：简化 MyBatis 持久化开发 -->
     <dependency>
         <groupId>com.baomidou</groupId>
         <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-        <version>3.5.8</version>
+        <version>3.5.16</version>
     </dependency>
 
-    <!-- MySQL 驱动，用于连接 MySQL 数据库 -->
+    <!-- MySQL 驱动：连接 MySQL 数据库 -->
     <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
         <scope>runtime</scope>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、集合、金额等通用处理 -->
+    <!-- Hutool：常用工具类，简化字符串、ID、对象、集合等处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.35</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、Getter、Setter、构造方法等样板代码 -->
+    <!-- Lombok：减少 Getter、Setter、构造器等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
+### 应用配置
+
 文件位置：`src/main/resources/application.yml`
 
-```yaml
-server:
-  # 示例服务端口
-  port: 8080
+下面配置 MySQL 数据源、MyBatis-Plus 日志和下划线映射。真实项目中应把数据库账号密码放到环境变量或配置中心。
 
+```yaml
 spring:
+  application:
+    name: design-pattern-repository
+
   datasource:
-    # MySQL 连接地址，根据本地数据库调整
-    url: jdbc:mysql://localhost:3306/design_demo?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
-    # 数据库用户名
-    username: root
-    # 数据库密码
-    password: root
-    # MySQL 驱动类
     driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/design_pattern?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+
+server:
+  port: 8080
 
 mybatis-plus:
   configuration:
-    # 控制台输出 SQL，开发环境便于调试，生产环境建议关闭
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true  # 开启下划线字段到驼峰属性的自动映射
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 开发环境打印 SQL，生产环境建议关闭
   global-config:
     db-config:
-      # 主键策略，示例中使用雪花ID
-      id-type: assign_id
+      id-type: input  # 示例中使用业务 ID，由代码生成后写入数据库
 ```
 
-文件位置：`sql/product.sql`
+### 数据库表
+
+文件位置：`sql/user_account.sql`
+
+该表用于保存用户账户数据。领域对象 `UserAccount` 不直接绑定数据库注解，数据库映射由基础设施层的 `UserAccountDO` 承担。
 
 ```sql
-CREATE TABLE product (
-    id BIGINT PRIMARY KEY COMMENT '商品ID',
-    product_code VARCHAR(64) NOT NULL COMMENT '商品编码',
-    product_name VARCHAR(100) NOT NULL COMMENT '商品名称',
-    price DECIMAL(18, 2) NOT NULL COMMENT '商品价格',
-    stock INT NOT NULL DEFAULT 0 COMMENT '库存数量',
-    status VARCHAR(32) NOT NULL COMMENT '商品状态：DRAFT 草稿，ON_SHELF 上架，OFF_SHELF 下架',
+CREATE TABLE user_account (
+    account_id VARCHAR(64) NOT NULL COMMENT '账户ID',
+    user_id VARCHAR(64) NOT NULL COMMENT '用户ID',
+    username VARCHAR(100) NOT NULL COMMENT '用户名',
+    balance DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '账户余额',
+    status VARCHAR(32) NOT NULL COMMENT '账户状态：NORMAL-正常，FROZEN-冻结',
     create_time DATETIME NOT NULL COMMENT '创建时间',
     update_time DATETIME NOT NULL COMMENT '更新时间',
-    UNIQUE KEY uk_product_code (product_code),
-    KEY idx_status (status)
-) COMMENT='商品表';
-```
-
-这张表用于模拟商品聚合的持久化。业务层不直接操作 `product` 表，也不直接依赖 MyBatis-Plus 的 `BaseMapper`，而是通过 `ProductRepository` 访问商品聚合。
-
-## 核心概念
-
-仓储模式的核心目标是把“业务对象的存取”包装成一个类似集合的接口。业务层只关心“保存商品、按 ID 获取商品、分页查询商品”，不关心底层是 MySQL、Redis、Elasticsearch、远程接口，还是多个存储组合。
-
-常见角色如下：
-
-| 角色                      | 说明                                              |
-| ------------------------- | ------------------------------------------------- |
-| Domain Model              | 领域对象，承载业务状态和业务行为                  |
-| Repository Interface      | 仓储接口，定义领域对象的存取能力                  |
-| Repository Implementation | 仓储实现，封装 Mapper、缓存、远程接口等持久化细节 |
-| Persistence Entity        | 持久化实体，和数据库表结构对应                    |
-| Mapper / DAO              | 数据访问组件，负责具体 SQL 或 ORM 操作            |
-| Application Service       | 应用服务，调用仓储完成业务用例                    |
-
-典型结构如下：
-
-```text
-Controller
-    -> ProductApplicationService
-        -> ProductRepository
-            -> ProductMapper
-                -> product 表
-```
-
-仓储模式和 DAO、Mapper 的区别在于：
-
-| 对比项             | Repository         | Mapper / DAO       |
-| ------------------ | ------------------ | ------------------ |
-| 面向对象           | 面向领域对象       | 面向数据库表或 SQL |
-| 所在层次           | 业务与基础设施之间 | 数据访问层         |
-| 返回对象           | 领域对象、聚合对象 | Entity、PO、DO     |
-| 关注点             | 业务对象存取语义   | SQL、CRUD、表字段  |
-| 是否隔离持久化细节 | 是                 | 不一定             |
-
-简单理解：
-
-```text
-Mapper 关心表怎么查。
-Repository 关心业务对象怎么存取。
-```
-
-在简单 CRUD 项目中，Service 直接调用 Mapper 也可以接受。但在业务复杂、领域模型和数据库表结构不完全一致、需要缓存、需要跨表聚合、需要隔离基础设施时，仓储模式更合适。
-
-## 普通 Java 仓储模式
-
-普通 Java 仓储模式适合先理解仓储接口和领域对象之间的关系。下面用内存 Map 模拟商品仓储，业务层只依赖 `ProductRepository`，不关心数据存在哪里。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/repository/simple/
-├── ProductStatus.java
-├── Product.java
-├── ProductRepository.java
-└── InMemoryProductRepository.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/repository/simple/ProductStatus.java`
-
-下面是商品状态枚举。
-
-```java
-package io.github.atengk.design.repository.simple;
-
-/**
- * 商品状态
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public enum ProductStatus {
-
-    /**
-     * 草稿
-     */
-    DRAFT,
-
-    /**
-     * 上架
-     */
-    ON_SHELF,
-
-    /**
-     * 下架
-     */
-    OFF_SHELF
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/repository/simple/Product.java`
-
-下面是商品领域对象。它不仅保存字段，也包含上架、下架、改价等业务行为。
-
-```java
-package io.github.atengk.design.repository.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-
-/**
- * 商品领域对象
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Getter
-public class Product {
-
-    private final Long id;
-    private final String productCode;
-    private String productName;
-    private BigDecimal price;
-    private Integer stock;
-    private ProductStatus status;
-
-    /**
-     * 创建商品领域对象
-     *
-     * @param id          商品ID
-     * @param productCode 商品编码
-     * @param productName 商品名称
-     * @param price       商品价格
-     * @param stock       库存数量
-     */
-    public Product(Long id, String productCode, String productName, BigDecimal price, Integer stock) {
-        if (id == null || id <= 0) {
-            throw new IllegalArgumentException("商品ID必须大于0");
-        }
-        if (StrUtil.hasBlank(productCode, productName)) {
-            throw new IllegalArgumentException("商品编码和名称不能为空");
-        }
-        if (price == null || price.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("商品价格不能小于0");
-        }
-        if (stock == null || stock < 0) {
-            throw new IllegalArgumentException("库存数量不能小于0");
-        }
-
-        this.id = id;
-        this.productCode = productCode;
-        this.productName = productName;
-        this.price = price;
-        this.stock = stock;
-        this.status = ProductStatus.DRAFT;
-    }
-
-    /**
-     * 修改价格
-     *
-     * @param newPrice 新价格
-     */
-    public void changePrice(BigDecimal newPrice) {
-        if (newPrice == null || newPrice.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("修改商品价格失败，价格不合法，商品编码：{}，价格：{}", productCode, newPrice);
-            throw new IllegalArgumentException("商品价格不能小于0");
-        }
-
-        this.price = newPrice;
-        log.info("修改商品价格成功，商品编码：{}，新价格：{}", productCode, newPrice);
-    }
-
-    /**
-     * 上架商品
-     */
-    public void putOnShelf() {
-        if (stock <= 0) {
-            log.warn("商品上架失败，库存不足，商品编码：{}，库存：{}", productCode, stock);
-            throw new IllegalStateException("库存不足，不能上架");
-        }
-
-        this.status = ProductStatus.ON_SHELF;
-        log.info("商品上架成功，商品编码：{}", productCode);
-    }
-
-    /**
-     * 下架商品
-     */
-    public void takeOffShelf() {
-        this.status = ProductStatus.OFF_SHELF;
-        log.info("商品下架成功，商品编码：{}", productCode);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/repository/simple/ProductRepository.java`
-
-下面是商品仓储接口。业务层只依赖这个接口。
-
-```java
-package io.github.atengk.design.repository.simple;
-
-import java.util.List;
-import java.util.Optional;
-
-/**
- * 商品仓储接口
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface ProductRepository {
-
-    /**
-     * 保存商品
-     *
-     * @param product 商品领域对象
-     */
-    void save(Product product);
-
-    /**
-     * 根据商品ID查询商品
-     *
-     * @param productId 商品ID
-     * @return 商品领域对象
-     */
-    Optional<Product> findById(Long productId);
-
-    /**
-     * 根据商品编码查询商品
-     *
-     * @param productCode 商品编码
-     * @return 商品领域对象
-     */
-    Optional<Product> findByProductCode(String productCode);
-
-    /**
-     * 查询全部商品
-     *
-     * @return 商品列表
-     */
-    List<Product> findAll();
-
-    /**
-     * 删除商品
-     *
-     * @param productId 商品ID
-     */
-    void deleteById(Long productId);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/repository/simple/InMemoryProductRepository.java`
-
-下面是内存商品仓储实现。它隐藏了 `Map` 存储细节。
-
-```java
-package io.github.atengk.design.repository.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * 内存商品仓储实现
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class InMemoryProductRepository implements ProductRepository {
-
-    private final Map<Long, Product> productMap = new ConcurrentHashMap<>();
-
-    /**
-     * 保存商品
-     *
-     * @param product 商品领域对象
-     */
-    @Override
-    public void save(Product product) {
-        if (product == null) {
-            log.warn("保存商品失败，商品为空");
-            throw new IllegalArgumentException("商品不能为空");
-        }
-
-        productMap.put(product.getId(), product);
-        log.info("保存商品成功，商品ID：{}，商品编码：{}", product.getId(), product.getProductCode());
-    }
-
-    /**
-     * 根据商品ID查询商品
-     *
-     * @param productId 商品ID
-     * @return 商品领域对象
-     */
-    @Override
-    public Optional<Product> findById(Long productId) {
-        if (productId == null || productId <= 0) {
-            return Optional.empty();
-        }
-
-        return Optional.ofNullable(productMap.get(productId));
-    }
-
-    /**
-     * 根据商品编码查询商品
-     *
-     * @param productCode 商品编码
-     * @return 商品领域对象
-     */
-    @Override
-    public Optional<Product> findByProductCode(String productCode) {
-        if (StrUtil.isBlank(productCode)) {
-            return Optional.empty();
-        }
-
-        return productMap.values().stream()
-                .filter(product -> StrUtil.equals(product.getProductCode(), productCode))
-                .findFirst();
-    }
-
-    /**
-     * 查询全部商品
-     *
-     * @return 商品列表
-     */
-    @Override
-    public List<Product> findAll() {
-        return List.copyOf(productMap.values());
-    }
-
-    /**
-     * 删除商品
-     *
-     * @param productId 商品ID
-     */
-    @Override
-    public void deleteById(Long productId) {
-        if (productId == null || productId <= 0) {
-            return;
-        }
-
-        productMap.remove(productId);
-        log.info("删除商品成功，商品ID：{}", productId);
-    }
-}
-```
-
-使用方式：
-
-```java
-ProductRepository productRepository = new InMemoryProductRepository();
-
-Product product = new Product(1L, "P10001", "机械键盘", BigDecimal.valueOf(199.00), 100);
-product.putOnShelf();
-
-productRepository.save(product);
-
-Product savedProduct = productRepository.findByProductCode("P10001")
-        .orElseThrow(() -> new IllegalArgumentException("商品不存在"));
-```
-
-这里的业务代码不关心商品是存到 Map、MySQL、Redis 还是远程服务。只要仓储接口不变，底层实现可以替换。
-
-## Spring Boot 仓储模式
-
-Spring Boot 项目中，仓储模式更常见的写法是：领域对象和数据库实体分离，Service 依赖 Repository 接口，Repository 实现内部再使用 MyBatis-Plus Mapper。
-
-整体结构如下：
-
-```text
-Controller
-    -> ProductApplicationService
-        -> ProductRepository
-            -> ProductMapper
-                -> product 表
+    PRIMARY KEY (account_id),
+    UNIQUE KEY uk_user_account_user_id (user_id)
+) COMMENT = '用户账户表';
 ```
 
 ### 文件结构
 
+仓储模式建议把领域对象、仓储接口和持久化实现分开。业务层依赖 `domain.repository` 中的接口，基础设施层负责使用 MyBatis-Plus 实现接口。
+
 ```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/repository
 ├── RepositoryApplication.java
-├── controller/
-│   └── ProductController.java
-├── domain/
-│   ├── Product.java
-│   └── ProductStatus.java
-├── dto/
-│   ├── ProductCreateRequest.java
-│   ├── ProductChangePriceRequest.java
-│   ├── ProductPageQuery.java
-│   ├── ProductResponse.java
-│   └── PageResult.java
-├── entity/
-│   └── ProductEntity.java
-├── mapper/
-│   └── ProductMapper.java
-├── repository/
-│   ├── ProductRepository.java
-│   └── impl/
-│       └── MybatisProductRepository.java
-└── service/
-    ├── ProductApplicationService.java
-    └── impl/
-        └── ProductApplicationServiceImpl.java
+├── controller
+│   └── UserAccountController.java
+├── domain
+│   ├── model
+│   │   └── UserAccount.java
+│   └── repository
+│       └── UserAccountRepository.java
+├── dto
+│   ├── CreateUserAccountRequest.java
+│   └── ChangeBalanceRequest.java
+├── infrastructure
+│   ├── converter
+│   │   └── UserAccountConverter.java
+│   ├── entity
+│   │   └── UserAccountDO.java
+│   ├── mapper
+│   │   └── UserAccountMapper.java
+│   └── repository
+│       └── MybatisUserAccountRepository.java
+├── service
+│   ├── UserAccountService.java
+│   └── impl
+│       └── UserAccountServiceImpl.java
+└── vo
+    └── UserAccountVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/RepositoryApplication.java`
+## 模式说明
 
-下面是 Spring Boot 启动类，配置 MyBatis Mapper 扫描路径。
+仓储模式的重点不是“写一个 Mapper”，而是为业务层提供一个类似集合的对象访问入口。
+
+普通分层中，Service 往往直接依赖 Mapper：
+
+```text
+Controller
+ -> Service
+   -> Mapper
+     -> Database
+```
+
+使用仓储模式后，Service 依赖仓储接口，Mapper 被隐藏在仓储实现内部：
+
+```text
+Controller
+ -> Service
+   -> Repository Interface
+     -> Repository Implementation
+       -> Mapper
+         -> Database
+```
+
+这样做的好处是业务层不需要关心数据来自 MySQL、Redis、ES、远程接口还是本地缓存。后续即使持久化方式变化，业务层代码也可以保持稳定。
+
+## 核心代码
+
+这一节给出仓储模式的完整关键代码。示例重点体现三点：
+
+```text
+1. 领域对象 UserAccount 不直接依赖 MyBatis-Plus 注解。
+2. 业务层 UserAccountService 只依赖 UserAccountRepository 接口。
+3. 基础设施层 MybatisUserAccountRepository 负责调用 Mapper 并完成 DO 与领域对象转换。
+```
+
+### 启动类
+
+文件位置：`src/main/java/io/github/atengk/repository/RepositoryApplication.java`
+
+启动类用于启动 Spring Boot 项目，并扫描 MyBatis Mapper。
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.repository;
 
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
@@ -524,185 +196,245 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 仓储模式示例启动类
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-@MapperScan("io.github.atengk.design.mapper")
+@MapperScan("io.github.atengk.repository.infrastructure.mapper")
 @SpringBootApplication
 public class RepositoryApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(RepositoryApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/domain/ProductStatus.java`
+### 领域对象
 
-下面是商品状态枚举。
+文件位置：`src/main/java/io/github/atengk/repository/domain/model/UserAccount.java`
 
-```java
-package io.github.atengk.design.domain;
-
-/**
- * 商品状态
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public enum ProductStatus {
-
-    /**
-     * 草稿
-     */
-    DRAFT,
-
-    /**
-     * 上架
-     */
-    ON_SHELF,
-
-    /**
-     * 下架
-     */
-    OFF_SHELF
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/domain/Product.java`
-
-下面是商品领域对象。它包含业务行为，不直接绑定数据库表注解。
+该类是业务层使用的领域对象，包含账户创建、余额变更、冻结和解冻等业务行为。它不直接使用 `@TableName`、`@TableId` 等持久化注解。
 
 ```java
-package io.github.atengk.design.domain;
+package io.github.atengk.repository.domain.model;
 
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
- * 商品领域对象
+ * 用户账户领域对象
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-@Slf4j
 @Getter
-public class Product {
+public class UserAccount {
 
-    private final Long id;
-    private final String productCode;
-    private String productName;
-    private BigDecimal price;
-    private Integer stock;
-    private ProductStatus status;
+    private final String accountId;
+
+    private final String userId;
+
+    private String username;
+
+    private BigDecimal balance;
+
+    private String status;
+
+    private final LocalDateTime createTime;
+
+    private LocalDateTime updateTime;
+
+    private UserAccount(String accountId,
+                        String userId,
+                        String username,
+                        BigDecimal balance,
+                        String status,
+                        LocalDateTime createTime,
+                        LocalDateTime updateTime) {
+        this.accountId = accountId;
+        this.userId = userId;
+        this.username = username;
+        this.balance = balance;
+        this.status = status;
+        this.createTime = createTime;
+        this.updateTime = updateTime;
+    }
 
     /**
-     * 创建商品领域对象
+     * 创建新用户账户
      *
-     * @param id          商品ID
-     * @param productCode 商品编码
-     * @param productName 商品名称
-     * @param price       商品价格
-     * @param stock       库存数量
-     * @param status      商品状态
+     * @param userId 用户ID
+     * @param username 用户名
+     * @return 用户账户领域对象
      */
-    public Product(Long id,
-                   String productCode,
-                   String productName,
-                   BigDecimal price,
-                   Integer stock,
-                   ProductStatus status) {
-        if (id == null || id <= 0) {
-            throw new IllegalArgumentException("商品ID必须大于0");
+    public static UserAccount create(String userId, String username) {
+        if (StrUtil.isBlank(userId)) {
+            throw new IllegalArgumentException("用户ID不能为空");
         }
-        if (StrUtil.hasBlank(productCode, productName)) {
-            throw new IllegalArgumentException("商品编码和商品名称不能为空");
-        }
-        if (price == null || price.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("商品价格不能小于0");
-        }
-        if (stock == null || stock < 0) {
-            throw new IllegalArgumentException("库存数量不能小于0");
+        if (StrUtil.isBlank(username)) {
+            throw new IllegalArgumentException("用户名不能为空");
         }
 
-        this.id = id;
-        this.productCode = productCode;
-        this.productName = productName;
-        this.price = price;
-        this.stock = stock;
-        this.status = status == null ? ProductStatus.DRAFT : status;
+        LocalDateTime now = LocalDateTime.now();
+        return new UserAccount(
+                IdUtil.fastSimpleUUID(),
+                userId,
+                username,
+                BigDecimal.ZERO,
+                "NORMAL",
+                now,
+                now
+        );
     }
 
     /**
-     * 创建草稿商品
+     * 从持久化数据还原领域对象
      *
-     * @param id          商品ID
-     * @param productCode 商品编码
-     * @param productName 商品名称
-     * @param price       商品价格
-     * @param stock       库存数量
-     * @return 商品领域对象
+     * @param accountId 账户ID
+     * @param userId 用户ID
+     * @param username 用户名
+     * @param balance 账户余额
+     * @param status 账户状态
+     * @param createTime 创建时间
+     * @param updateTime 更新时间
+     * @return 用户账户领域对象
      */
-    public static Product createDraft(Long id,
-                                      String productCode,
-                                      String productName,
-                                      BigDecimal price,
-                                      Integer stock) {
-        return new Product(id, productCode, productName, price, stock, ProductStatus.DRAFT);
+    public static UserAccount restore(String accountId,
+                                      String userId,
+                                      String username,
+                                      BigDecimal balance,
+                                      String status,
+                                      LocalDateTime createTime,
+                                      LocalDateTime updateTime) {
+        return new UserAccount(accountId, userId, username, balance, status, createTime, updateTime);
     }
 
     /**
-     * 修改商品价格
+     * 变更账户余额
      *
-     * @param newPrice 新价格
+     * @param amount 变更金额，正数表示增加，负数表示扣减
      */
-    public void changePrice(BigDecimal newPrice) {
-        if (newPrice == null || newPrice.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("修改商品价格失败，价格不合法，商品编码：{}，价格：{}", productCode, newPrice);
-            throw new IllegalArgumentException("商品价格不能小于0");
+    public void changeBalance(BigDecimal amount) {
+        if (amount == null || BigDecimal.ZERO.compareTo(amount) == 0) {
+            throw new IllegalArgumentException("变更金额不能为空或0");
+        }
+        if (isFrozen()) {
+            throw new IllegalStateException("账户已冻结，不能变更余额");
         }
 
-        this.price = newPrice;
-        log.info("修改商品价格成功，商品编码：{}，新价格：{}", productCode, newPrice);
+        BigDecimal newBalance = this.balance.add(amount);
+        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalStateException("账户余额不足");
+        }
+
+        this.balance = newBalance;
+        this.updateTime = LocalDateTime.now();
     }
 
     /**
-     * 上架商品
+     * 冻结账户
      */
-    public void putOnShelf() {
-        if (stock <= 0) {
-            log.warn("商品上架失败，库存不足，商品编码：{}，库存：{}", productCode, stock);
-            throw new IllegalStateException("库存不足，不能上架");
+    public void freeze() {
+        if (isFrozen()) {
+            return;
         }
-
-        this.status = ProductStatus.ON_SHELF;
-        log.info("商品上架成功，商品编码：{}", productCode);
+        this.status = "FROZEN";
+        this.updateTime = LocalDateTime.now();
     }
 
     /**
-     * 下架商品
+     * 解冻账户
      */
-    public void takeOffShelf() {
-        this.status = ProductStatus.OFF_SHELF;
-        log.info("商品下架成功，商品编码：{}", productCode);
+    public void unfreeze() {
+        if (!isFrozen()) {
+            return;
+        }
+        this.status = "NORMAL";
+        this.updateTime = LocalDateTime.now();
     }
+
+    /**
+     * 判断账户是否冻结
+     *
+     * @return true 表示冻结
+     */
+    public boolean isFrozen() {
+        return StrUtil.equals("FROZEN", this.status);
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/entity/ProductEntity.java`
+### 仓储接口
 
-下面是商品持久化实体。它只和数据库表结构对应，不承载复杂业务行为。
+文件位置：`src/main/java/io/github/atengk/repository/domain/repository/UserAccountRepository.java`
+
+仓储接口属于领域层或业务抽象层。它描述业务需要什么数据访问能力，不描述 SQL 如何写。
 
 ```java
-package io.github.atengk.design.entity;
+package io.github.atengk.repository.domain.repository;
 
+import io.github.atengk.repository.domain.model.UserAccount;
+
+import java.util.Optional;
+
+/**
+ * 用户账户仓储接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface UserAccountRepository {
+
+    /**
+     * 保存用户账户
+     *
+     * @param userAccount 用户账户领域对象
+     * @return 保存后的用户账户领域对象
+     */
+    UserAccount save(UserAccount userAccount);
+
+    /**
+     * 根据账户ID查询账户
+     *
+     * @param accountId 账户ID
+     * @return 用户账户
+     */
+    Optional<UserAccount> findByAccountId(String accountId);
+
+    /**
+     * 根据用户ID查询账户
+     *
+     * @param userId 用户ID
+     * @return 用户账户
+     */
+    Optional<UserAccount> findByUserId(String userId);
+
+    /**
+     * 判断用户是否已经存在账户
+     *
+     * @param userId 用户ID
+     * @return true 表示已存在
+     */
+    boolean existsByUserId(String userId);
+
+}
+```
+
+### 持久化对象 DO
+
+文件位置：`src/main/java/io/github/atengk/repository/infrastructure/entity/UserAccountDO.java`
+
+该类负责和数据库表映射。它属于基础设施层，不应该泄露到 Controller 或业务规则代码中。
+
+```java
+package io.github.atengk.repository.infrastructure.entity;
+
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -711,1230 +443,840 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 商品持久化实体
+ * 用户账户持久化对象
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Data
-@TableName("product")
-public class ProductEntity {
+@TableName("user_account")
+public class UserAccountDO {
 
-    /**
-     * 商品ID
-     */
-    @TableId
-    private Long id;
+    @TableId(type = IdType.INPUT)
+    private String accountId;
 
-    /**
-     * 商品编码
-     */
-    private String productCode;
+    private String userId;
 
-    /**
-     * 商品名称
-     */
-    private String productName;
+    private String username;
 
-    /**
-     * 商品价格
-     */
-    private BigDecimal price;
+    private BigDecimal balance;
 
-    /**
-     * 库存数量
-     */
-    private Integer stock;
-
-    /**
-     * 商品状态
-     */
     private String status;
 
-    /**
-     * 创建时间
-     */
     private LocalDateTime createTime;
 
-    /**
-     * 更新时间
-     */
     private LocalDateTime updateTime;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/mapper/ProductMapper.java`
+### MyBatis-Plus Mapper
 
-下面是 MyBatis-Plus Mapper。它只负责数据库访问，不暴露给业务服务直接使用。
+文件位置：`src/main/java/io/github/atengk/repository/infrastructure/mapper/UserAccountMapper.java`
+
+Mapper 只负责数据库 CRUD，不承载业务规则。业务层不直接注入这个 Mapper。
 
 ```java
-package io.github.atengk.design.mapper;
+package io.github.atengk.repository.infrastructure.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import io.github.atengk.design.entity.ProductEntity;
+import io.github.atengk.repository.infrastructure.entity.UserAccountDO;
 
 /**
- * 商品Mapper
+ * 用户账户 Mapper
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public interface ProductMapper extends BaseMapper<ProductEntity> {
+public interface UserAccountMapper extends BaseMapper<UserAccountDO> {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/PageResult.java`
+### 转换器
 
-下面是通用分页结果对象。
+文件位置：`src/main/java/io/github/atengk/repository/infrastructure/converter/UserAccountConverter.java`
+
+转换器负责领域对象和持久化对象之间的转换，避免转换逻辑散落在 Service 或 Repository 实现中。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.repository.infrastructure.converter;
 
-import java.util.List;
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.repository.domain.model.UserAccount;
+import io.github.atengk.repository.infrastructure.entity.UserAccountDO;
 
 /**
- * 分页结果
+ * 用户账户对象转换器
  *
- * @param records  数据列表
- * @param pageNum  当前页码
- * @param pageSize 每页大小
- * @param total    总数量
- * @param <T>      数据类型
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public record PageResult<T>(
-        List<T> records,
-        Long pageNum,
-        Long pageSize,
-        Long total
-) {
+public final class UserAccountConverter {
+
+    private UserAccountConverter() {
+    }
+
+    /**
+     * 领域对象转换为持久化对象
+     *
+     * @param userAccount 用户账户领域对象
+     * @return 用户账户持久化对象
+     */
+    public static UserAccountDO toDO(UserAccount userAccount) {
+        if (ObjectUtil.isNull(userAccount)) {
+            return null;
+        }
+        return BeanUtil.copyProperties(userAccount, UserAccountDO.class);
+    }
+
+    /**
+     * 持久化对象转换为领域对象
+     *
+     * @param userAccountDO 用户账户持久化对象
+     * @return 用户账户领域对象
+     */
+    public static UserAccount toDomain(UserAccountDO userAccountDO) {
+        if (ObjectUtil.isNull(userAccountDO)) {
+            return null;
+        }
+
+        return UserAccount.restore(
+                userAccountDO.getAccountId(),
+                userAccountDO.getUserId(),
+                userAccountDO.getUsername(),
+                userAccountDO.getBalance(),
+                userAccountDO.getStatus(),
+                userAccountDO.getCreateTime(),
+                userAccountDO.getUpdateTime()
+        );
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/ProductPageQuery.java`
+### 仓储实现
 
-下面是商品分页查询对象。
+文件位置：`src/main/java/io/github/atengk/repository/infrastructure/repository/MybatisUserAccountRepository.java`
 
-```java
-package io.github.atengk.design.dto;
-
-/**
- * 商品分页查询
- *
- * @param pageNum     页码
- * @param pageSize    每页大小
- * @param productName 商品名称
- * @param status      商品状态
- * @author Ateng
- * @since 2026-05-01
- */
-public record ProductPageQuery(
-        Long pageNum,
-        Long pageSize,
-        String productName,
-        String status
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/repository/ProductRepository.java`
-
-下面是商品仓储接口。应用服务依赖该接口，而不是直接依赖 `ProductMapper`。
+该类是仓储接口的 MyBatis-Plus 实现。它屏蔽了 Mapper、查询条件和 DO 转换细节。
 
 ```java
-package io.github.atengk.design.repository;
+package io.github.atengk.repository.infrastructure.repository;
 
-import io.github.atengk.design.domain.Product;
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductPageQuery;
-
-import java.util.Optional;
-
-/**
- * 商品仓储接口
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface ProductRepository {
-
-    /**
-     * 保存商品
-     *
-     * @param product 商品领域对象
-     */
-    void save(Product product);
-
-    /**
-     * 根据商品ID查询商品
-     *
-     * @param productId 商品ID
-     * @return 商品领域对象
-     */
-    Optional<Product> findById(Long productId);
-
-    /**
-     * 根据商品编码查询商品
-     *
-     * @param productCode 商品编码
-     * @return 商品领域对象
-     */
-    Optional<Product> findByProductCode(String productCode);
-
-    /**
-     * 判断商品编码是否存在
-     *
-     * @param productCode 商品编码
-     * @return true 表示存在，false 表示不存在
-     */
-    boolean existsByProductCode(String productCode);
-
-    /**
-     * 分页查询商品
-     *
-     * @param query 分页查询条件
-     * @return 商品分页结果
-     */
-    PageResult<Product> page(ProductPageQuery query);
-
-    /**
-     * 删除商品
-     *
-     * @param productId 商品ID
-     */
-    void deleteById(Long productId);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/repository/impl/MybatisProductRepository.java`
-
-下面是基于 MyBatis-Plus 的商品仓储实现。它负责领域对象和持久化实体之间的转换，并隐藏查询细节。
-
-```java
-package io.github.atengk.design.repository.impl;
-
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import io.github.atengk.design.domain.Product;
-import io.github.atengk.design.domain.ProductStatus;
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductPageQuery;
-import io.github.atengk.design.entity.ProductEntity;
-import io.github.atengk.design.mapper.ProductMapper;
-import io.github.atengk.design.repository.ProductRepository;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import io.github.atengk.repository.domain.model.UserAccount;
+import io.github.atengk.repository.domain.repository.UserAccountRepository;
+import io.github.atengk.repository.infrastructure.converter.UserAccountConverter;
+import io.github.atengk.repository.infrastructure.entity.UserAccountDO;
+import io.github.atengk.repository.infrastructure.mapper.UserAccountMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 
 /**
- * MyBatis商品仓储实现
+ * 基于 MyBatis-Plus 的用户账户仓储实现
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Slf4j
 @Repository
 @RequiredArgsConstructor
-public class MybatisProductRepository implements ProductRepository {
+public class MybatisUserAccountRepository implements UserAccountRepository {
 
-    private final ProductMapper productMapper;
+    private final UserAccountMapper userAccountMapper;
 
     /**
-     * 保存商品
+     * 保存用户账户
      *
-     * @param product 商品领域对象
+     * @param userAccount 用户账户领域对象
+     * @return 保存后的用户账户领域对象
      */
     @Override
-    public void save(Product product) {
-        if (product == null) {
-            log.warn("保存商品失败，商品为空");
-            throw new IllegalArgumentException("商品不能为空");
+    public UserAccount save(UserAccount userAccount) {
+        if (ObjectUtil.isNull(userAccount)) {
+            throw new IllegalArgumentException("用户账户不能为空");
         }
 
-        ProductEntity oldEntity = productMapper.selectById(product.getId());
-        ProductEntity entity = toEntity(product);
+        UserAccountDO userAccountDO = UserAccountConverter.toDO(userAccount);
+        UserAccountDO exists = userAccountMapper.selectById(userAccount.getAccountId());
 
-        if (oldEntity == null) {
-            entity.setCreateTime(LocalDateTime.now());
-            entity.setUpdateTime(LocalDateTime.now());
-            productMapper.insert(entity);
-            log.info("新增商品成功，商品ID：{}，商品编码：{}", product.getId(), product.getProductCode());
-            return;
+        if (ObjectUtil.isNull(exists)) {
+            userAccountMapper.insert(userAccountDO);
+            log.info("新增用户账户成功，accountId={}，userId={}", userAccount.getAccountId(), userAccount.getUserId());
+        } else {
+            userAccountMapper.updateById(userAccountDO);
+            log.info("更新用户账户成功，accountId={}，userId={}", userAccount.getAccountId(), userAccount.getUserId());
         }
 
-        entity.setCreateTime(oldEntity.getCreateTime());
-        entity.setUpdateTime(LocalDateTime.now());
-        productMapper.updateById(entity);
-        log.info("更新商品成功，商品ID：{}，商品编码：{}", product.getId(), product.getProductCode());
+        return userAccount;
     }
 
     /**
-     * 根据商品ID查询商品
+     * 根据账户ID查询账户
      *
-     * @param productId 商品ID
-     * @return 商品领域对象
+     * @param accountId 账户ID
+     * @return 用户账户
      */
     @Override
-    public Optional<Product> findById(Long productId) {
-        if (productId == null || productId <= 0) {
+    public Optional<UserAccount> findByAccountId(String accountId) {
+        if (StrUtil.isBlank(accountId)) {
             return Optional.empty();
         }
 
-        return Optional.ofNullable(productMapper.selectById(productId))
-                .map(this::toDomain);
+        UserAccountDO userAccountDO = userAccountMapper.selectById(accountId);
+        return Optional.ofNullable(UserAccountConverter.toDomain(userAccountDO));
     }
 
     /**
-     * 根据商品编码查询商品
+     * 根据用户ID查询账户
      *
-     * @param productCode 商品编码
-     * @return 商品领域对象
+     * @param userId 用户ID
+     * @return 用户账户
      */
     @Override
-    public Optional<Product> findByProductCode(String productCode) {
-        if (StrUtil.isBlank(productCode)) {
+    public Optional<UserAccount> findByUserId(String userId) {
+        if (StrUtil.isBlank(userId)) {
             return Optional.empty();
         }
 
-        LambdaQueryWrapper<ProductEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(ProductEntity::getProductCode, productCode);
+        UserAccountDO userAccountDO = userAccountMapper.selectOne(
+                Wrappers.<UserAccountDO>lambdaQuery()
+                        .eq(UserAccountDO::getUserId, userId)
+                        .last("limit 1")
+        );
 
-        return Optional.ofNullable(productMapper.selectOne(wrapper))
-                .map(this::toDomain);
+        return Optional.ofNullable(UserAccountConverter.toDomain(userAccountDO));
     }
 
     /**
-     * 判断商品编码是否存在
+     * 判断用户是否已经存在账户
      *
-     * @param productCode 商品编码
-     * @return true 表示存在，false 表示不存在
+     * @param userId 用户ID
+     * @return true 表示已存在
      */
     @Override
-    public boolean existsByProductCode(String productCode) {
-        if (StrUtil.isBlank(productCode)) {
+    public boolean existsByUserId(String userId) {
+        if (StrUtil.isBlank(userId)) {
             return false;
         }
 
-        LambdaQueryWrapper<ProductEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(ProductEntity::getProductCode, productCode);
-
-        boolean exists = productMapper.selectCount(wrapper) > 0;
-        log.info("校验商品编码是否存在，商品编码：{}，结果：{}", productCode, exists);
-        return exists;
-    }
-
-    /**
-     * 分页查询商品
-     *
-     * @param query 分页查询条件
-     * @return 商品分页结果
-     */
-    @Override
-    public PageResult<Product> page(ProductPageQuery query) {
-        long pageNum = query == null || query.pageNum() == null || query.pageNum() <= 0 ? 1L : query.pageNum();
-        long pageSize = query == null || query.pageSize() == null || query.pageSize() <= 0 ? 10L : query.pageSize();
-
-        LambdaQueryWrapper<ProductEntity> wrapper = new LambdaQueryWrapper<>();
-        if (query != null && StrUtil.isNotBlank(query.productName())) {
-            wrapper.like(ProductEntity::getProductName, query.productName());
-        }
-        if (query != null && StrUtil.isNotBlank(query.status())) {
-            wrapper.eq(ProductEntity::getStatus, query.status());
-        }
-
-        wrapper.orderByDesc(ProductEntity::getCreateTime);
-
-        Page<ProductEntity> entityPage = productMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
-        List<Product> records = entityPage.getRecords().stream()
-                .map(this::toDomain)
-                .toList();
-
-        log.info("分页查询商品完成，页码：{}，每页大小：{}，总数：{}", pageNum, pageSize, entityPage.getTotal());
-
-        return new PageResult<>(
-                records,
-                entityPage.getCurrent(),
-                entityPage.getSize(),
-                entityPage.getTotal()
+        Long count = userAccountMapper.selectCount(
+                Wrappers.<UserAccountDO>lambdaQuery()
+                        .eq(UserAccountDO::getUserId, userId)
         );
+
+        return count != null && count > 0;
     }
 
-    /**
-     * 删除商品
-     *
-     * @param productId 商品ID
-     */
-    @Override
-    public void deleteById(Long productId) {
-        if (productId == null || productId <= 0) {
-            log.warn("删除商品失败，商品ID不合法，商品ID：{}", productId);
-            throw new IllegalArgumentException("商品ID必须大于0");
-        }
-
-        productMapper.deleteById(productId);
-        log.info("删除商品成功，商品ID：{}", productId);
-    }
-
-    /**
-     * 转换为持久化实体
-     *
-     * @param product 商品领域对象
-     * @return 商品持久化实体
-     */
-    private ProductEntity toEntity(Product product) {
-        ProductEntity entity = new ProductEntity();
-        entity.setId(product.getId());
-        entity.setProductCode(product.getProductCode());
-        entity.setProductName(product.getProductName());
-        entity.setPrice(product.getPrice());
-        entity.setStock(product.getStock());
-        entity.setStatus(product.getStatus().name());
-        return entity;
-    }
-
-    /**
-     * 转换为领域对象
-     *
-     * @param entity 商品持久化实体
-     * @return 商品领域对象
-     */
-    private Product toDomain(ProductEntity entity) {
-        if (entity == null) {
-            throw new IllegalArgumentException("商品持久化实体不能为空");
-        }
-
-        return new Product(
-                entity.getId(),
-                entity.getProductCode(),
-                entity.getProductName(),
-                entity.getPrice(),
-                entity.getStock(),
-                ProductStatus.valueOf(entity.getStatus())
-        );
-    }
 }
 ```
 
-## 应用服务和接口
+### 请求 DTO
 
-应用服务负责业务用例编排。它调用仓储接口获取领域对象，再调用领域对象执行业务行为，最后通过仓储保存。
+文件位置：`src/main/java/io/github/atengk/repository/dto/CreateUserAccountRequest.java`
 
-文件位置：`src/main/java/io/github/atengk/design/dto/ProductCreateRequest.java`
-
-下面是商品创建请求对象。
+该 DTO 用于创建用户账户。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.repository.dto;
 
-import java.math.BigDecimal;
+import jakarta.validation.constraints.NotBlank;
 
 /**
- * 商品创建请求
+ * 创建用户账户请求
  *
- * @param productCode 商品编码
- * @param productName 商品名称
- * @param price       商品价格
- * @param stock       库存数量
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public record ProductCreateRequest(
-        String productCode,
-        String productName,
-        BigDecimal price,
-        Integer stock
+public record CreateUserAccountRequest(
+
+        @NotBlank(message = "用户ID不能为空")
+        String userId,
+
+        @NotBlank(message = "用户名不能为空")
+        String username
+
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/ProductChangePriceRequest.java`
+文件位置：`src/main/java/io/github/atengk/repository/dto/ChangeBalanceRequest.java`
 
-下面是商品改价请求对象。
+该 DTO 用于账户余额变更。`amount` 为正数表示增加余额，为负数表示扣减余额。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.repository.dto;
+
+import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
 /**
- * 商品改价请求
+ * 账户余额变更请求
  *
- * @param productId 商品ID
- * @param newPrice  新价格
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public record ProductChangePriceRequest(
-        Long productId,
-        BigDecimal newPrice
+public record ChangeBalanceRequest(
+
+        @NotNull(message = "变更金额不能为空")
+        BigDecimal amount
+
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/ProductResponse.java`
+### 响应 VO
 
-下面是商品响应对象。
+文件位置：`src/main/java/io/github/atengk/repository/vo/UserAccountVO.java`
+
+该 VO 用于接口返回，避免直接把领域对象暴露给外部调用方。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.repository.vo;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
- * 商品响应
+ * 用户账户响应对象
  *
- * @param id          商品ID
- * @param productCode 商品编码
- * @param productName 商品名称
- * @param price       商品价格
- * @param stock       库存数量
- * @param status      商品状态
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public record ProductResponse(
-        Long id,
-        String productCode,
-        String productName,
-        BigDecimal price,
-        Integer stock,
-        String status
+public record UserAccountVO(
+
+        String accountId,
+
+        String userId,
+
+        String username,
+
+        BigDecimal balance,
+
+        String status,
+
+        LocalDateTime createTime,
+
+        LocalDateTime updateTime
+
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/ProductApplicationService.java`
+### Service 接口
 
-下面是商品应用服务接口。
+文件位置：`src/main/java/io/github/atengk/repository/service/UserAccountService.java`
+
+该接口定义账户业务能力。外部接口层不直接感知仓储实现。
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.repository.service;
 
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductChangePriceRequest;
-import io.github.atengk.design.dto.ProductCreateRequest;
-import io.github.atengk.design.dto.ProductPageQuery;
-import io.github.atengk.design.dto.ProductResponse;
+import io.github.atengk.repository.dto.ChangeBalanceRequest;
+import io.github.atengk.repository.dto.CreateUserAccountRequest;
+import io.github.atengk.repository.vo.UserAccountVO;
 
 /**
- * 商品应用服务
+ * 用户账户业务接口
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public interface ProductApplicationService {
+public interface UserAccountService {
 
     /**
-     * 创建商品
+     * 创建用户账户
      *
-     * @param request 商品创建请求
-     * @return 商品响应
+     * @param request 创建用户账户请求
+     * @return 用户账户响应
      */
-    ProductResponse create(ProductCreateRequest request);
+    UserAccountVO createAccount(CreateUserAccountRequest request);
 
     /**
-     * 修改商品价格
+     * 查询用户账户
      *
-     * @param request 商品改价请求
-     * @return 商品响应
+     * @param accountId 账户ID
+     * @return 用户账户响应
      */
-    ProductResponse changePrice(ProductChangePriceRequest request);
+    UserAccountVO getAccount(String accountId);
 
     /**
-     * 上架商品
+     * 变更账户余额
      *
-     * @param productId 商品ID
-     * @return 商品响应
+     * @param accountId 账户ID
+     * @param request 余额变更请求
+     * @return 用户账户响应
      */
-    ProductResponse putOnShelf(Long productId);
+    UserAccountVO changeBalance(String accountId, ChangeBalanceRequest request);
 
-    /**
-     * 根据商品ID查询商品
-     *
-     * @param productId 商品ID
-     * @return 商品响应
-     */
-    ProductResponse getById(Long productId);
-
-    /**
-     * 分页查询商品
-     *
-     * @param query 商品分页查询
-     * @return 商品分页结果
-     */
-    PageResult<ProductResponse> page(ProductPageQuery query);
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/ProductApplicationServiceImpl.java`
+### Service 实现
 
-下面是商品应用服务实现。它只依赖 `ProductRepository`，不直接操作 Mapper。
+文件位置：`src/main/java/io/github/atengk/repository/service/impl/UserAccountServiceImpl.java`
+
+该实现类只依赖 `UserAccountRepository`，不直接依赖 `UserAccountMapper`。这就是仓储模式在业务层的关键体现。
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.repository.service.impl;
 
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.domain.Product;
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductChangePriceRequest;
-import io.github.atengk.design.dto.ProductCreateRequest;
-import io.github.atengk.design.dto.ProductPageQuery;
-import io.github.atengk.design.dto.ProductResponse;
-import io.github.atengk.design.repository.ProductRepository;
-import io.github.atengk.design.service.ProductApplicationService;
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.repository.domain.model.UserAccount;
+import io.github.atengk.repository.domain.repository.UserAccountRepository;
+import io.github.atengk.repository.dto.ChangeBalanceRequest;
+import io.github.atengk.repository.dto.CreateUserAccountRequest;
+import io.github.atengk.repository.service.UserAccountService;
+import io.github.atengk.repository.vo.UserAccountVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 商品应用服务实现
+ * 用户账户业务实现
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ProductApplicationServiceImpl implements ProductApplicationService {
+public class UserAccountServiceImpl implements UserAccountService {
 
-    private final ProductRepository productRepository;
+    private final UserAccountRepository userAccountRepository;
 
     /**
-     * 创建商品
+     * 创建用户账户
      *
-     * @param request 商品创建请求
-     * @return 商品响应
+     * @param request 创建用户账户请求
+     * @return 用户账户响应
      */
     @Override
-    public ProductResponse create(ProductCreateRequest request) {
-        validateCreateRequest(request);
-
-        if (productRepository.existsByProductCode(request.productCode())) {
-            log.warn("创建商品失败，商品编码已存在，商品编码：{}", request.productCode());
-            throw new IllegalArgumentException("商品编码已存在：" + request.productCode());
+    @Transactional(rollbackFor = Exception.class)
+    public UserAccountVO createAccount(CreateUserAccountRequest request) {
+        if (userAccountRepository.existsByUserId(request.userId())) {
+            throw new IllegalArgumentException("该用户已经存在账户");
         }
 
-        Product product = Product.createDraft(
-                IdUtil.getSnowflakeNextId(),
-                request.productCode(),
-                request.productName(),
-                request.price(),
-                request.stock()
-        );
+        UserAccount userAccount = UserAccount.create(request.userId(), request.username());
+        UserAccount savedAccount = userAccountRepository.save(userAccount);
 
-        productRepository.save(product);
-        log.info("创建商品完成，商品ID：{}，商品编码：{}", product.getId(), product.getProductCode());
-
-        return toResponse(product);
+        log.info("创建用户账户完成，accountId={}，userId={}", savedAccount.getAccountId(), savedAccount.getUserId());
+        return toVO(savedAccount);
     }
 
     /**
-     * 修改商品价格
+     * 查询用户账户
      *
-     * @param request 商品改价请求
-     * @return 商品响应
+     * @param accountId 账户ID
+     * @return 用户账户响应
      */
     @Override
-    public ProductResponse changePrice(ProductChangePriceRequest request) {
-        validateChangePriceRequest(request);
+    public UserAccountVO getAccount(String accountId) {
+        UserAccount userAccount = userAccountRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("用户账户不存在"));
 
-        Product product = productRepository.findById(request.productId())
-                .orElseThrow(() -> {
-                    log.warn("修改商品价格失败，商品不存在，商品ID：{}", request.productId());
-                    return new IllegalArgumentException("商品不存在：" + request.productId());
-                });
-
-        product.changePrice(request.newPrice());
-        productRepository.save(product);
-
-        log.info("修改商品价格完成，商品ID：{}，新价格：{}", product.getId(), product.getPrice());
-        return toResponse(product);
+        return toVO(userAccount);
     }
 
     /**
-     * 上架商品
+     * 变更账户余额
      *
-     * @param productId 商品ID
-     * @return 商品响应
+     * @param accountId 账户ID
+     * @param request 余额变更请求
+     * @return 用户账户响应
      */
     @Override
-    public ProductResponse putOnShelf(Long productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> {
-                    log.warn("上架商品失败，商品不存在，商品ID：{}", productId);
-                    return new IllegalArgumentException("商品不存在：" + productId);
-                });
+    @Transactional(rollbackFor = Exception.class)
+    public UserAccountVO changeBalance(String accountId, ChangeBalanceRequest request) {
+        UserAccount userAccount = userAccountRepository.findByAccountId(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("用户账户不存在"));
 
-        product.putOnShelf();
-        productRepository.save(product);
+        userAccount.changeBalance(request.amount());
+        UserAccount savedAccount = userAccountRepository.save(userAccount);
 
-        log.info("上架商品完成，商品ID：{}，商品编码：{}", product.getId(), product.getProductCode());
-        return toResponse(product);
+        log.info("账户余额变更完成，accountId={}，amount={}，balance={}",
+                savedAccount.getAccountId(), request.amount(), savedAccount.getBalance());
+
+        return toVO(savedAccount);
     }
 
     /**
-     * 根据商品ID查询商品
+     * 领域对象转换为响应对象
      *
-     * @param productId 商品ID
-     * @return 商品响应
+     * @param userAccount 用户账户领域对象
+     * @return 用户账户响应对象
      */
-    @Override
-    public ProductResponse getById(Long productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> {
-                    log.warn("查询商品失败，商品不存在，商品ID：{}", productId);
-                    return new IllegalArgumentException("商品不存在：" + productId);
-                });
+    private UserAccountVO toVO(UserAccount userAccount) {
+        if (ObjectUtil.isNull(userAccount)) {
+            return null;
+        }
 
-        return toResponse(product);
-    }
-
-    /**
-     * 分页查询商品
-     *
-     * @param query 商品分页查询
-     * @return 商品分页结果
-     */
-    @Override
-    public PageResult<ProductResponse> page(ProductPageQuery query) {
-        PageResult<Product> pageResult = productRepository.page(query);
-
-        return new PageResult<>(
-                pageResult.records().stream().map(this::toResponse).toList(),
-                pageResult.pageNum(),
-                pageResult.pageSize(),
-                pageResult.total()
+        return new UserAccountVO(
+                userAccount.getAccountId(),
+                userAccount.getUserId(),
+                userAccount.getUsername(),
+                userAccount.getBalance(),
+                userAccount.getStatus(),
+                userAccount.getCreateTime(),
+                userAccount.getUpdateTime()
         );
     }
 
-    /**
-     * 转换为商品响应
-     *
-     * @param product 商品领域对象
-     * @return 商品响应
-     */
-    private ProductResponse toResponse(Product product) {
-        return new ProductResponse(
-                product.getId(),
-                product.getProductCode(),
-                product.getProductName(),
-                product.getPrice(),
-                product.getStock(),
-                product.getStatus().name()
-        );
-    }
-
-    /**
-     * 校验商品创建请求
-     *
-     * @param request 商品创建请求
-     */
-    private void validateCreateRequest(ProductCreateRequest request) {
-        if (request == null) {
-            log.warn("创建商品失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.hasBlank(request.productCode(), request.productName())) {
-            log.warn("创建商品失败，商品编码或商品名称为空");
-            throw new IllegalArgumentException("商品编码和商品名称不能为空");
-        }
-
-        if (request.price() == null || request.price().compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("创建商品失败，商品价格不合法，价格：{}", request.price());
-            throw new IllegalArgumentException("商品价格不能小于0");
-        }
-
-        if (request.stock() == null || request.stock() < 0) {
-            log.warn("创建商品失败，库存数量不合法，库存：{}", request.stock());
-            throw new IllegalArgumentException("库存数量不能小于0");
-        }
-    }
-
-    /**
-     * 校验商品改价请求
-     *
-     * @param request 商品改价请求
-     */
-    private void validateChangePriceRequest(ProductChangePriceRequest request) {
-        if (request == null) {
-            log.warn("修改商品价格失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (request.productId() == null || request.productId() <= 0) {
-            log.warn("修改商品价格失败，商品ID不合法，商品ID：{}", request.productId());
-            throw new IllegalArgumentException("商品ID必须大于0");
-        }
-
-        if (request.newPrice() == null || request.newPrice().compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("修改商品价格失败，新价格不合法，价格：{}", request.newPrice());
-            throw new IllegalArgumentException("商品价格不能小于0");
-        }
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/ProductController.java`
+### Controller 接口
 
-下面是商品接口，用于验证仓储模式的创建、改价、上架、查询和分页能力。
+文件位置：`src/main/java/io/github/atengk/repository/controller/UserAccountController.java`
+
+该 Controller 提供账户创建、查询和余额变更接口。
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.repository.controller;
 
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductChangePriceRequest;
-import io.github.atengk.design.dto.ProductCreateRequest;
-import io.github.atengk.design.dto.ProductPageQuery;
-import io.github.atengk.design.dto.ProductResponse;
-import io.github.atengk.design.service.ProductApplicationService;
+import io.github.atengk.repository.dto.ChangeBalanceRequest;
+import io.github.atengk.repository.dto.CreateUserAccountRequest;
+import io.github.atengk.repository.service.UserAccountService;
+import io.github.atengk.repository.vo.UserAccountVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-
 /**
- * 商品控制器
+ * 用户账户接口
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/accounts")
 @RequiredArgsConstructor
-@RequestMapping("/repository/product")
-public class ProductController {
+public class UserAccountController {
 
-    private final ProductApplicationService productApplicationService;
+    private final UserAccountService userAccountService;
 
     /**
-     * 创建商品
+     * 创建用户账户
      *
-     * @param productCode 商品编码
-     * @param productName 商品名称
-     * @param price       商品价格
-     * @param stock       库存数量
-     * @return 商品响应
+     * @param request 创建用户账户请求
+     * @return 用户账户响应
      */
-    @PostMapping("/create")
-    public ProductResponse create(@RequestParam String productCode,
-                                  @RequestParam String productName,
-                                  @RequestParam BigDecimal price,
-                                  @RequestParam Integer stock) {
-        ProductCreateRequest request = new ProductCreateRequest(productCode, productName, price, stock);
-        return productApplicationService.create(request);
+    @PostMapping
+    public UserAccountVO createAccount(@Valid @RequestBody CreateUserAccountRequest request) {
+        return userAccountService.createAccount(request);
     }
 
     /**
-     * 修改商品价格
+     * 查询用户账户
      *
-     * @param productId 商品ID
-     * @param newPrice  新价格
-     * @return 商品响应
+     * @param accountId 账户ID
+     * @return 用户账户响应
      */
-    @PostMapping("/change-price")
-    public ProductResponse changePrice(@RequestParam Long productId,
-                                       @RequestParam BigDecimal newPrice) {
-        ProductChangePriceRequest request = new ProductChangePriceRequest(productId, newPrice);
-        return productApplicationService.changePrice(request);
+    @GetMapping("/{accountId}")
+    public UserAccountVO getAccount(@PathVariable String accountId) {
+        return userAccountService.getAccount(accountId);
     }
 
     /**
-     * 上架商品
+     * 变更账户余额
      *
-     * @param productId 商品ID
-     * @return 商品响应
+     * @param accountId 账户ID
+     * @param request 余额变更请求
+     * @return 用户账户响应
      */
-    @PostMapping("/put-on-shelf")
-    public ProductResponse putOnShelf(@RequestParam Long productId) {
-        return productApplicationService.putOnShelf(productId);
+    @PostMapping("/{accountId}/balance")
+    public UserAccountVO changeBalance(@PathVariable String accountId,
+                                        @Valid @RequestBody ChangeBalanceRequest request) {
+        return userAccountService.changeBalance(accountId, request);
     }
 
-    /**
-     * 根据商品ID查询商品
-     *
-     * @param productId 商品ID
-     * @return 商品响应
-     */
-    @GetMapping("/detail")
-    public ProductResponse getById(@RequestParam Long productId) {
-        return productApplicationService.getById(productId);
-    }
-
-    /**
-     * 分页查询商品
-     *
-     * @param pageNum     页码
-     * @param pageSize    每页大小
-     * @param productName 商品名称
-     * @param status      商品状态
-     * @return 商品分页结果
-     */
-    @GetMapping("/page")
-    public PageResult<ProductResponse> page(@RequestParam(defaultValue = "1") Long pageNum,
-                                            @RequestParam(defaultValue = "10") Long pageSize,
-                                            @RequestParam(required = false) String productName,
-                                            @RequestParam(required = false) String status) {
-        ProductPageQuery query = new ProductPageQuery(pageNum, pageSize, productName, status);
-        return productApplicationService.page(query);
-    }
 }
 ```
 
 ## 使用方式
 
-启动项目之前，先创建数据库和表结构。
+本示例提供三个接口：创建账户、查询账户、变更余额。调用链中，Controller 调用 Service，Service 调用 Repository 接口，Repository 实现再调用 MyBatis-Plus Mapper。
+
+### 创建账户
+
+接口信息：
+
+| 项目     | 内容         |
+| -------- | ------------ |
+| 请求路径 | `/accounts`  |
+| 请求方法 | `POST`       |
+| 主要作用 | 创建用户账户 |
+
+请求示例：
 
 ```bash
-mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS design_demo DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -uroot -proot design_demo < sql/product.sql
+curl -X POST 'http://localhost:8080/accounts' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "10001",
+    "username": "张三"
+  }'
 ```
 
-这里 `-uroot -proot` 根据本地 MySQL 账号密码调整。`design_demo` 是示例数据库名，和 `application.yml` 中的连接地址保持一致。
+响应示例：
 
-启动 Spring Boot 项目：
+```json
+{
+  "accountId": "5f4dcc3b5aa765d61d8327deb882cf99",
+  "userId": "10001",
+  "username": "张三",
+  "balance": 0.00,
+  "status": "NORMAL",
+  "createTime": "2026-05-13T10:30:00",
+  "updateTime": "2026-05-13T10:30:00"
+}
+```
+
+### 查询账户
+
+接口信息：
+
+| 项目     | 内容                    |
+| -------- | ----------------------- |
+| 请求路径 | `/accounts/{accountId}` |
+| 请求方法 | `GET`                   |
+| 主要作用 | 根据账户ID查询账户      |
+
+请求示例：
+
+```bash
+curl -X GET 'http://localhost:8080/accounts/5f4dcc3b5aa765d61d8327deb882cf99'
+```
+
+### 增加余额
+
+接口信息：
+
+| 项目     | 内容                            |
+| -------- | ------------------------------- |
+| 请求路径 | `/accounts/{accountId}/balance` |
+| 请求方法 | `POST`                          |
+| 主要作用 | 增加或扣减账户余额              |
+
+增加余额请求示例：
+
+```bash
+curl -X POST 'http://localhost:8080/accounts/5f4dcc3b5aa765d61d8327deb882cf99/balance' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "amount": 100.00
+  }'
+```
+
+扣减余额请求示例：
+
+```bash
+curl -X POST 'http://localhost:8080/accounts/5f4dcc3b5aa765d61d8327deb882cf99/balance' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "amount": -20.00
+  }'
+```
+
+## 验证方式
+
+可以通过数据库记录、接口响应和日志验证仓储模式是否生效。
+
+启动项目：
 
 ```bash
 mvn spring-boot:run
 ```
 
-创建商品：
+创建账户后查询数据库：
 
-```bash
-curl -X POST "http://localhost:8080/repository/product/create?productCode=P10001&productName=机械键盘&price=199.00&stock=100"
+```sql
+SELECT
+    account_id,
+    user_id,
+    username,
+    balance,
+    status,
+    create_time,
+    update_time
+FROM user_account
+WHERE user_id = '10001';
 ```
 
-可能返回：
-
-```json
-{
-  "id": 2020123456789017600,
-  "productCode": "P10001",
-  "productName": "机械键盘",
-  "price": 199.00,
-  "stock": 100,
-  "status": "DRAFT"
-}
-```
-
-修改价格：
-
-```bash
-curl -X POST "http://localhost:8080/repository/product/change-price?productId=2020123456789017600&newPrice=189.00"
-```
-
-上架商品：
-
-```bash
-curl -X POST "http://localhost:8080/repository/product/put-on-shelf?productId=2020123456789017600"
-```
-
-查询商品详情：
-
-```bash
-curl "http://localhost:8080/repository/product/detail?productId=2020123456789017600"
-```
-
-分页查询商品：
-
-```bash
-curl "http://localhost:8080/repository/product/page?pageNum=1&pageSize=10&productName=键盘&status=ON_SHELF"
-```
-
-如果仓储模式正常，可以看到类似日志：
+验证点：
 
 ```text
-校验商品编码是否存在，商品编码：P10001，结果：false
-新增商品成功，商品ID：2020123456789017600，商品编码：P10001
-创建商品完成，商品ID：2020123456789017600，商品编码：P10001
-修改商品价格成功，商品编码：P10001，新价格：189.00
-更新商品成功，商品ID：2020123456789017600，商品编码：P10001
-商品上架成功，商品编码：P10001
-更新商品成功，商品ID：2020123456789017600，商品编码：P10001
-分页查询商品完成，页码：1，每页大小：10，总数：1
+1. ServiceImpl 中没有注入 UserAccountMapper。
+2. ServiceImpl 只依赖 UserAccountRepository 接口。
+3. MybatisUserAccountRepository 内部负责调用 UserAccountMapper。
+4. Controller 返回的是 UserAccountVO，而不是 UserAccountDO。
+5. UserAccount 领域对象不包含 @TableName、@TableId 等数据库映射注解。
 ```
 
-## 仓储模式和 Mapper 的区别
+如果启动失败，重点检查：
 
-仓储模式经常被误解为“给 Mapper 套一层壳”。如果仓储层只是机械转发 Mapper 方法，没有封装领域语义，价值会很低。
-
-不推荐：
-
-```java
-public interface ProductRepository {
-
-    int insert(ProductEntity entity);
-
-    int updateById(ProductEntity entity);
-
-    ProductEntity selectById(Long id);
-}
+```text
+1. 数据库 design_pattern 是否已经创建。
+2. user_account 表是否已经执行建表 SQL。
+3. application.yml 中数据库账号、密码、地址是否正确。
+4. @MapperScan 路径是否和 UserAccountMapper 包路径一致。
+5. MyBatis-Plus Starter 是否使用 Spring Boot 3 对应的 artifactId。
 ```
 
-这只是换了一个名字的 Mapper。推荐让仓储接口表达业务对象存取语义：
+## 适用场景
 
-```java
-public interface ProductRepository {
+仓储模式适合业务对象较重要、业务规则较多、持久化细节容易变化的场景。
 
-    void save(Product product);
+常见适用场景：
 
-    Optional<Product> findById(Long productId);
+```text
+订单领域：
+- 根据订单ID查询订单聚合
+- 保存订单主表和订单明细
+- 隐藏订单表、明细表、支付表的组合查询细节
 
-    Optional<Product> findByProductCode(String productCode);
+用户账户领域：
+- 查询账户
+- 冻结账户
+- 变更余额
+- 隐藏数据库表结构和缓存读取逻辑
 
-    PageResult<Product> page(ProductPageQuery query);
-}
+商品库存领域：
+- 查询库存
+- 扣减库存
+- 回滚库存
+- 屏蔽 MySQL、Redis、库存流水表的组合操作
+
+支付流水领域：
+- 根据支付单号查询流水
+- 保存支付结果
+- 防止业务层直接操作支付流水表
 ```
 
-Mapper 负责表，Repository 负责业务对象。Mapper 可以返回 `ProductEntity`，Repository 应该尽量返回 `Product` 这类领域对象。
+## 不适用场景
 
-## 仓储模式和 DAO 模式的区别
+仓储模式会增加一层抽象。对于非常简单的 CRUD 后台管理功能，直接使用 Service + Mapper 可能更直接。
 
-DAO 模式通常更靠近数据库访问，强调封装数据访问逻辑。仓储模式更靠近领域层，强调用集合语义管理聚合对象。
+不建议过度使用的场景：
 
-| 对比项     | DAO 模式                     | 仓储模式                         |
-| ---------- | ---------------------------- | -------------------------------- |
-| 关注点     | 数据访问                     | 领域对象存取                     |
-| 常见对象   | Entity、PO、DO               | Aggregate、Domain Model          |
-| 接口语义   | `insert`、`update`、`select` | `save`、`findById`、`findByCode` |
-| 业务表达   | 较弱                         | 较强                             |
-| DDD 中位置 | 基础设施层                   | 领域层接口，基础设施层实现       |
+```text
+1. 只有简单单表 CRUD，没有明显业务规则。
+2. 项目不是领域模型驱动，只是普通数据管理系统。
+3. 团队对分层边界没有共识，强行引入会增加理解成本。
+4. Repository 只是机械转发 Mapper 方法，没有任何抽象价值。
+5. 每张表都无脑创建 Repository，导致类数量膨胀。
+```
+
+## 和 Mapper 的区别
+
+仓储模式最容易和 MyBatis Mapper 混淆。二者职责不同。
+
+| 对比项             | Repository                          | Mapper                                  |
+| ------------------ | ----------------------------------- | --------------------------------------- |
+| 所属层次           | 领域层接口或业务抽象层              | 基础设施层                              |
+| 面向对象           | 领域对象、聚合对象                  | 数据库表、SQL 结果                      |
+| 关注点             | 业务需要什么数据访问能力            | SQL 如何执行                            |
+| 是否暴露给 Service | 推荐暴露 Repository 接口            | 不推荐核心业务直接依赖                  |
+| 返回对象           | `UserAccount`、`Order` 等领域对象   | `UserAccountDO`、`OrderDO` 等持久化对象 |
+| 是否包含业务语义   | 可以包含业务语义，如 `findByUserId` | 更偏数据库操作                          |
 
 简单理解：
 
 ```text
-DAO：我帮你访问数据库。
-Repository：我帮你存取领域对象。
+Mapper 是数据库访问工具。
+Repository 是业务层访问领域对象的入口。
 ```
 
-在简单 CRUD 项目中，DAO 或 Mapper 已经足够。在复杂领域模型中，Repository 更能保护业务层，避免业务代码被数据库表结构牵着走。
+## 和 DAO 的区别
 
-## 仓储模式和 Service 的边界
+DAO 通常更偏数据访问对象，直接围绕表和 SQL 组织。Repository 更偏领域对象访问，强调屏蔽持久化细节。
 
-仓储层不应该承载业务流程。仓储只负责对象存取，应用服务负责业务用例编排，领域对象负责核心业务规则。
+| 对比项   | DAO               | Repository                      |
+| -------- | ----------------- | ------------------------------- |
+| 关注点   | 数据库访问        | 领域对象持久化                  |
+| 常见命名 | UserDao、OrderDao | UserRepository、OrderRepository |
+| 返回对象 | Entity、DO、Map   | Domain Model、Aggregate         |
+| 抽象程度 | 较低              | 较高                            |
+| 适合场景 | 数据密集型 CRUD   | 业务规则较多的领域对象          |
 
-不推荐把业务流程塞进仓储：
+在普通 Spring Boot 项目中，如果没有 DDD 分层，也可以把 Repository 理解为比 Mapper 更靠近业务语义的一层数据访问抽象。
 
-```java
-public void createProductAndSendNotice(Product product) {
-    // 保存商品
-    // 发送通知
-    // 写审计日志
-}
-```
+## 项目落地建议
 
-推荐职责拆分：
+在真实项目中使用仓储模式时，应避免把它写成“Mapper 的壳”。仓储接口应该围绕业务对象设计，而不是照搬数据库表操作。
+
+建议：
 
 ```text
-ProductApplicationService
-    -> ProductRepository.save(product)
-    -> EventPublisher.publish(ProductCreatedEvent)
+1. Repository 接口放在 domain.repository 或业务抽象层中。
+2. Repository 实现放在 infrastructure.repository 中。
+3. Service 依赖 Repository 接口，不直接依赖 Mapper。
+4. Mapper、DO、SQL、缓存实现都放在基础设施层。
+5. Repository 返回领域对象，不返回数据库 DO。
+6. 复杂聚合查询可以在 Repository 内部组合多个 Mapper。
+7. 简单后台 CRUD 不必强行套用 Repository。
+8. Repository 方法命名应体现业务语义，而不是 SQL 语义。
 ```
 
-仓储中可以做的事情：
+推荐命名：
 
 ```text
-领域对象和 Entity 转换
-查询条件封装
-分页查询封装
-缓存读取和回写
-跨表组装领域对象
-隐藏 Mapper 或远程接口
+findByAccountId
+findByUserId
+save
+remove
+existsByUserId
+findEnabledAccounts
+findPendingOrders
 ```
 
-仓储中不建议做的事情：
+不推荐命名：
 
 ```text
-发送短信
-发布 MQ
-处理审批流
-执行支付
-编排多个业务服务
-处理 Controller 参数
+selectOne
+selectList
+insertDO
+updateByWrapper
+queryByMap
 ```
 
-## 扩展缓存仓储
+## 常见问题
 
-仓储模式很适合扩展缓存，因为业务层依赖的是仓储接口，不关心数据来自缓存还是数据库。可以在仓储实现中组合 Redis 和 MyBatis。
+### Repository 是否可以调用多个 Mapper
 
-示例结构：
+可以。Repository 的职责就是屏蔽持久化细节。如果一个订单聚合需要读取订单主表、订单明细表、支付表和物流表，可以由 `OrderRepository` 在内部组合多个 Mapper，然后返回完整的订单领域对象。
+
+### Repository 是否可以使用 Redis
+
+可以。Repository 不限定数据来源。它可以内部先查 Redis，未命中再查 MySQL，也可以保存时同时更新缓存。
+
+例如：
 
 ```text
-CachedProductRepository
-    -> RedisTemplate
-    -> ProductMapper
+UserAccountRepository
+ -> 先查 Redis
+ -> 未命中查 MySQL
+ -> 转换为 UserAccount
+ -> 回写 Redis
+ -> 返回领域对象
 ```
 
-简化示例：
+业务层不需要知道数据到底来自 Redis 还是 MySQL。
 
-```java
-@Repository
-@RequiredArgsConstructor
-public class CachedProductRepository implements ProductRepository {
+### 每张表都需要一个 Repository 吗
 
-    private final ProductMapper productMapper;
-    private final RedisTemplate<String, Product> redisTemplate;
+不需要。Repository 应该围绕业务对象或聚合设计，而不是围绕数据库表设计。
 
-    public Optional<Product> findById(Long productId) {
-        String cacheKey = "product:" + productId;
-        Product cachedProduct = redisTemplate.opsForValue().get(cacheKey);
-        if (cachedProduct != null) {
-            return Optional.of(cachedProduct);
-        }
-
-        Product product = Optional.ofNullable(productMapper.selectById(productId))
-                .map(this::toDomain)
-                .orElse(null);
-
-        if (product != null) {
-            redisTemplate.opsForValue().set(cacheKey, product, Duration.ofMinutes(10));
-        }
-
-        return Optional.ofNullable(product);
-    }
-}
-```
-
-如果要在同一个项目中同时存在 `MybatisProductRepository` 和 `CachedProductRepository`，需要用 `@Primary` 或 `@Qualifier` 指定注入哪个实现。
-
-```java
-@Primary
-@Repository
-public class CachedProductRepository implements ProductRepository {
-}
-```
-
-缓存仓储要重点处理一致性问题。保存商品后，需要更新或删除缓存：
-
-```text
-save(product)
-    -> update database
-    -> delete cache
-```
-
-通常推荐写库后删除缓存，而不是直接更新缓存，降低并发不一致风险。
-
-## 验证方式
-
-仓储模式是否落地正确，可以从依赖方向、业务行为、数据库结果三个角度验证。
-
-检查依赖方向：
-
-```text
-Controller 只能依赖 Service
-Service 只能依赖 Repository
-Repository 实现依赖 Mapper
-Mapper 不暴露给 Controller 和 Service
-```
-
-检查代码中是否出现以下不推荐情况：
-
-```text
-Controller 直接注入 Mapper
-Service 直接调用 ProductMapper
-业务层直接操作 ProductEntity
-领域对象中出现 @TableName
-Repository 接口暴露 insert、selectById 这类数据库语义
-```
-
-执行接口后，可以查询数据库确认结果：
-
-```sql
-SELECT id, product_code, product_name, price, stock, status, create_time, update_time
-FROM product
-ORDER BY create_time DESC;
-```
-
-如果创建、改价、上架都正常，数据库中应该能看到：
-
-```text
-product_code = P10001
-price = 189.00
-status = ON_SHELF
-```
-
-## 注意事项
-
-仓储模式适合业务复杂度较高的项目，不适合所有简单 CRUD 都强行套一层。简单后台管理系统如果只是表单增删改查，Service 直接使用 MyBatis-Plus 的 ServiceImpl 也可以。
-
-适合使用仓储模式的场景：
-
-```text
-DDD 聚合持久化
-领域模型和数据库模型需要解耦
-需要隐藏复杂查询
-需要组合数据库和缓存
-需要跨表组装业务对象
-需要替换底层存储实现
-需要隔离 Mapper 对业务层的污染
-```
-
-不太适合使用仓储模式的场景：
-
-```text
-纯 CRUD 后台
-没有领域模型
-表结构和接口模型完全一致
-项目规模很小
-Repository 只是机械转发 Mapper
-```
-
-仓储接口不要过度泛化。下面这种通用仓储看似复用，实际容易丢失业务语义：
-
-```java
-public interface BaseRepository<T, ID> {
-
-    void save(T entity);
-
-    T findById(ID id);
-
-    void deleteById(ID id);
-}
-```
-
-更推荐按聚合设计具体仓储：
-
-```java
-public interface ProductRepository {
-
-    void save(Product product);
-
-    Optional<Product> findByProductCode(String productCode);
-}
-```
-
-仓储实现中要控制对象转换复杂度。如果转换逻辑变多，可以单独抽出转换器：
-
-```text
-ProductConverter
-    -> toEntity(Product)
-    -> toDomain(ProductEntity)
-```
-
-如果仓储返回的是领域对象，就不要让业务层再接触 `ProductEntity`。否则仓储模式的隔离价值会被破坏。
-
-不推荐：
-
-```java
-ProductEntity entity = productMapper.selectById(productId);
-```
-
-推荐：
-
-```java
-Product product = productRepository.findById(productId)
-        .orElseThrow();
-```
-
-如果一个聚合需要多张表组装，仓储可以在内部完成，但要注意查询性能和事务边界。例如订单聚合可能涉及：
+例如订单业务中可能有以下表：
 
 ```text
 order_main
@@ -1943,14 +1285,24 @@ order_payment
 order_delivery
 ```
 
-这种情况下，`OrderRepository.findById(orderId)` 可以组装完整订单聚合，但不建议在 Controller 或 Service 中散落多次 Mapper 查询。
+但不一定需要四个 Repository。更常见的是提供一个 `OrderRepository`，内部组合多个 Mapper，向业务层返回完整订单对象。
 
-仓储层可以处理数据访问异常包装，但不要吞掉异常。生产环境中可以把数据库异常转换为业务可理解的异常，并记录日志。
+### Repository 里面能不能写业务规则
+
+一般不建议写核心业务规则。核心业务规则应放在领域对象或 Service 中。Repository 可以包含和数据访问相关的规则，例如是否过滤逻辑删除数据、是否只查询启用状态数据、是否组合缓存和数据库等。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，仓储模式的实践重点是隔离业务层和持久化层，让业务层面向领域对象和仓储接口编程，而不是直接依赖 Mapper、Entity 或数据库表结构。
+仓储模式在 Spring Boot 项目中的核心价值是隔离业务层和持久化层。业务层通过 Repository 操作领域对象，不直接依赖 Mapper、DO、SQL 或数据库表结构。
 
-普通 Java 仓储模式适合理解“像集合一样存取领域对象”的思想。Spring Boot 项目中更推荐使用“领域对象 + 持久化实体 + Mapper + Repository 接口 + Repository 实现 + 应用服务”的结构。对于 DDD 聚合、复杂查询、缓存组合、跨表组装、领域模型和数据库模型解耦等场景，仓储模式可以显著提升代码可维护性。
+推荐落地方式：
 
-仓储模式不是给 Mapper 换名字，也不是所有 CRUD 的必选项。它最适合处理“业务层不应该知道数据怎么存、表怎么查、缓存怎么用”的场景。实际落地时，需要重点控制 Repository 和 Mapper 的边界、领域对象和 Entity 的转换、缓存一致性、查询性能和事务边界。
+```text
+业务层：
+Service -> UserAccountRepository -> UserAccount
+
+基础设施层：
+MybatisUserAccountRepository -> UserAccountMapper -> user_account 表
+```
+
+当项目只是简单 CRUD 时，直接使用 Service + Mapper 更简单。当项目存在核心业务对象、复杂聚合、缓存组合、持久化实现变化或 DDD 分层诉求时，仓储模式可以明显提升代码边界清晰度、可维护性和可测试性。

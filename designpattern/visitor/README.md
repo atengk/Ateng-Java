@@ -1,686 +1,297 @@
-# 设计模式：访问者模式
+# 访问者模式
 
-访问者模式用于在不修改对象结构类的前提下，为一组对象新增操作逻辑。在 JDK21 和 Spring Boot 3 项目中，访问者模式常用于报表导出、规则巡检、对象结构遍历、复杂对象审计、权限树扫描、订单聚合校验、AST 语法树处理、流程节点分析等场景。
+访问者模式用于把“数据结构”和“作用在数据结构上的操作”分离。
+当对象结构相对稳定，但需要频繁新增不同处理逻辑时，可以使用访问者模式。
 
-需要注意：访问者模式关注的是“对象结构稳定，但操作经常扩展”。如果对象类型经常变化，访问者模式会导致所有访问者都要修改；如果只是根据类型选择一个算法，更适合策略模式；如果只是遍历集合元素，更适合迭代器模式；如果需要对树形结构统一处理，可以和组合模式一起使用。
+在 Spring Boot 项目中，访问者模式常用于订单费用处理、报表统计、审计日志、规则检查、表达式节点处理、文件结构扫描、复杂对象导出等场景。
+
+本文以“订单费用明细多维处理”为例。订单由商品明细、优惠券抵扣、运费、积分抵扣等多个明细元素组成。系统需要对这些元素执行不同操作，例如金额计算、审计文本生成、风控检查。使用访问者模式后，订单明细对象只负责接收访问，具体处理逻辑由不同访问者实现。
+
+## 适用场景
+
+访问者模式适合处理“对象结构稳定，但操作经常变化”的场景。
+
+订单结算明细中通常包含多类元素：
+
+| 元素       | 说明             |
+| ---------- | ---------------- |
+| 商品明细   | 计算商品金额     |
+| 优惠券抵扣 | 计算优惠金额     |
+| 运费明细   | 计算配送费用     |
+| 积分抵扣   | 计算积分抵扣金额 |
+
+同一批订单明细可能需要多种处理动作：
+
+| 访问者         | 职责                             |
+| -------------- | -------------------------------- |
+| 金额计算访问者 | 计算商品金额、优惠金额、应付金额 |
+| 审计文本访问者 | 生成订单费用审计说明             |
+| 风控检查访问者 | 检查异常金额、异常数量、异常抵扣 |
+
+如果把这些逻辑都写在订单明细类中，明细类会不断膨胀。
+如果全部写在 Service 中，又会出现大量 `instanceof` 判断。访问者模式可以让每类处理逻辑独立扩展。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 Spring Boot 3，使用 Hutool、Lombok 和 Validation。Hutool 用于集合判断、对象判断、金额计算和字符串处理，Validation 用于接口参数基础校验。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证访问者模式行为 -->
+    <!-- Spring Boot Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、集合、金额等通用处理 -->
+    <!-- Spring Boot Validation：用于接口参数基础校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：提供集合、对象、金额计算、字符串处理等常用工具 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.29</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法、Getter 等样板代码 -->
+    <!-- Lombok：简化 Getter、Setter、构造器、日志对象等代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
-
-## 核心概念
-
-访问者模式的核心目标是把“数据结构”和“作用于数据结构上的操作”拆开。元素类只负责暴露 `accept` 方法，具体操作由访问者实现。
-
-常见角色如下：
-
-| 角色            | 说明                                       |
-| --------------- | ------------------------------------------ |
-| Visitor         | 访问者接口，为不同元素类型定义访问方法     |
-| ConcreteVisitor | 具体访问者，实现具体操作逻辑               |
-| Element         | 元素接口，定义 `accept` 方法               |
-| ConcreteElement | 具体元素，调用访问者的对应 `visit` 方法    |
-| ObjectStructure | 对象结构，保存一组元素并统一接受访问者访问 |
-| Client          | 调用方，选择访问者并触发访问               |
-
-典型结构如下：
+建议目录结构如下：
 
 ```text
-ReportElement
-├── TextElement
-├── TableElement
-└── ChartElement
-
-ReportVisitor
-├── MarkdownExportVisitor
-└── PlainTextExportVisitor
+src/main/java/io/github/atengk/pattern/visitor
+├── VisitorApplication.java
+├── common
+│   ├── ApiResult.java
+│   ├── BizException.java
+│   └── GlobalExceptionHandler.java
+└── order
+    ├── controller
+    │   └── OrderPreviewController.java
+    ├── dto
+    │   ├── OrderPreviewRequest.java
+    │   └── ProductItemRequest.java
+    ├── model
+    │   ├── CouponDiscountItem.java
+    │   ├── FreightLineItem.java
+    │   ├── OrderElement.java
+    │   ├── PointDeductionItem.java
+    │   └── ProductLineItem.java
+    ├── service
+    │   ├── OrderPreviewService.java
+    │   └── impl
+    │       └── OrderPreviewServiceImpl.java
+    ├── visitor
+    │   ├── AmountCalculateVisitor.java
+    │   ├── AuditTextVisitor.java
+    │   ├── OrderElementVisitor.java
+    │   ├── OrderVisitorFactory.java
+    │   └── RiskCheckVisitor.java
+    └── vo
+        └── OrderPreviewResultVO.java
 ```
 
-访问者模式的关键是“双分派”。调用方先调用元素的 `accept(visitor)`，具体元素再回调访问者的 `visit(this)`。这样访问者可以根据真实元素类型执行不同逻辑。
+## 核心设计
 
-```text
-element.accept(visitor)
-    -> visitor.visit(textElement)
-    -> visitor.visit(tableElement)
-    -> visitor.visit(chartElement)
-```
+本示例把访问者模式拆成四个核心角色：
 
-在 Spring Boot 项目中，常见优先级通常是：
+| 角色            | 项目中的类                                                   | 说明                                 |
+| --------------- | ------------------------------------------------------------ | ------------------------------------ |
+| Element         | `OrderElement`                                               | 订单明细元素接口，定义 `accept` 方法 |
+| ConcreteElement | `ProductLineItem`、`CouponDiscountItem` 等                   | 具体订单明细元素                     |
+| Visitor         | `OrderElementVisitor`                                        | 访问者接口，定义访问不同元素的方法   |
+| ConcreteVisitor | `AmountCalculateVisitor`、`AuditTextVisitor`、`RiskCheckVisitor` | 具体访问者，实现不同处理逻辑         |
 
-```text
-对象结构稳定 + 操作经常扩展：访问者模式
-对象类型经常扩展 + 操作稳定：普通多态或策略模式
-```
-
-访问者模式适合对象类型较稳定的结构。例如订单由订单信息、支付信息、物流信息组成，这些结构不经常变化；但对订单的操作可能有摘要生成、风控巡检、审计导出、统计分析等多种访问逻辑。
-
-## 普通 Java 访问者模式
-
-普通 Java 访问者模式适合不依赖 Spring 容器的对象结构访问。下面以报表导出为例，报表中有文本、表格、图表三种元素。元素结构稳定，但导出格式可能不断增加。
-
-示例支持两种访问者：
-
-```text
-MarkdownExportVisitor   导出 Markdown
-PlainTextExportVisitor  导出纯文本
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/visitor/simple/
-├── ReportElement.java
-├── ReportVisitor.java
-├── TextElement.java
-├── TableElement.java
-├── ChartElement.java
-├── MarkdownExportVisitor.java
-├── PlainTextExportVisitor.java
-└── ReportDocument.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/ReportElement.java`
-
-下面是报表元素接口，所有具体报表元素都实现 `accept` 方法。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-/**
- * 报表元素
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface ReportElement {
-
-    /**
-     * 接受访问者访问
-     *
-     * @param visitor 报表访问者
-     */
-    void accept(ReportVisitor visitor);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/ReportVisitor.java`
-
-下面是报表访问者接口，为每一种报表元素定义访问方法。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-/**
- * 报表访问者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface ReportVisitor {
-
-    /**
-     * 访问文本元素
-     *
-     * @param element 文本元素
-     */
-    void visit(TextElement element);
-
-    /**
-     * 访问表格元素
-     *
-     * @param element 表格元素
-     */
-    void visit(TableElement element);
-
-    /**
-     * 访问图表元素
-     *
-     * @param element 图表元素
-     */
-    void visit(ChartElement element);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/TextElement.java`
-
-下面是文本元素，保存标题和正文内容。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 文本报表元素
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-public class TextElement implements ReportElement {
-
-    private final String title;
-    private final String content;
-
-    /**
-     * 创建文本报表元素
-     *
-     * @param title   标题
-     * @param content 内容
-     */
-    public TextElement(String title, String content) {
-        if (StrUtil.hasBlank(title, content)) {
-            log.warn("创建文本元素失败，标题或内容为空");
-            throw new IllegalArgumentException("标题和内容不能为空");
-        }
-
-        this.title = title;
-        this.content = content;
-    }
-
-    /**
-     * 接受访问者访问
-     *
-     * @param visitor 报表访问者
-     */
-    @Override
-    public void accept(ReportVisitor visitor) {
-        if (visitor == null) {
-            throw new IllegalArgumentException("报表访问者不能为空");
-        }
-
-        visitor.visit(this);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/TableElement.java`
-
-下面是表格元素，保存表格名称、表头和行数。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-
-/**
- * 表格报表元素
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-public class TableElement implements ReportElement {
-
-    private final String tableName;
-    private final List<String> headers;
-    private final Integer rowCount;
-
-    /**
-     * 创建表格报表元素
-     *
-     * @param tableName 表格名称
-     * @param headers   表头列表
-     * @param rowCount  行数
-     */
-    public TableElement(String tableName, List<String> headers, Integer rowCount) {
-        if (StrUtil.isBlank(tableName)) {
-            log.warn("创建表格元素失败，表格名称为空");
-            throw new IllegalArgumentException("表格名称不能为空");
-        }
-
-        if (CollUtil.isEmpty(headers)) {
-            log.warn("创建表格元素失败，表头为空，表格名称：{}", tableName);
-            throw new IllegalArgumentException("表头不能为空");
-        }
-
-        if (rowCount == null || rowCount < 0) {
-            log.warn("创建表格元素失败，行数不合法，表格名称：{}，行数：{}", tableName, rowCount);
-            throw new IllegalArgumentException("行数不能小于0");
-        }
-
-        this.tableName = tableName;
-        this.headers = List.copyOf(headers);
-        this.rowCount = rowCount;
-    }
-
-    /**
-     * 接受访问者访问
-     *
-     * @param visitor 报表访问者
-     */
-    @Override
-    public void accept(ReportVisitor visitor) {
-        if (visitor == null) {
-            throw new IllegalArgumentException("报表访问者不能为空");
-        }
-
-        visitor.visit(this);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/ChartElement.java`
-
-下面是图表元素，保存图表名称、图表类型和数据点数量。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 图表报表元素
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-public class ChartElement implements ReportElement {
-
-    private final String chartName;
-    private final String chartType;
-    private final Integer dataPointCount;
-
-    /**
-     * 创建图表报表元素
-     *
-     * @param chartName      图表名称
-     * @param chartType      图表类型
-     * @param dataPointCount 数据点数量
-     */
-    public ChartElement(String chartName, String chartType, Integer dataPointCount) {
-        if (StrUtil.hasBlank(chartName, chartType)) {
-            log.warn("创建图表元素失败，图表名称或类型为空");
-            throw new IllegalArgumentException("图表名称和类型不能为空");
-        }
-
-        if (dataPointCount == null || dataPointCount < 0) {
-            log.warn("创建图表元素失败，数据点数量不合法，图表名称：{}，数据点数量：{}", chartName, dataPointCount);
-            throw new IllegalArgumentException("数据点数量不能小于0");
-        }
-
-        this.chartName = chartName;
-        this.chartType = chartType;
-        this.dataPointCount = dataPointCount;
-    }
-
-    /**
-     * 接受访问者访问
-     *
-     * @param visitor 报表访问者
-     */
-    @Override
-    public void accept(ReportVisitor visitor) {
-        if (visitor == null) {
-            throw new IllegalArgumentException("报表访问者不能为空");
-        }
-
-        visitor.visit(this);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/MarkdownExportVisitor.java`
-
-下面是 Markdown 导出访问者，用于把不同报表元素导出为 Markdown 文本。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * Markdown报表导出访问者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class MarkdownExportVisitor implements ReportVisitor {
-
-    private final StringBuilder builder = new StringBuilder();
-
-    /**
-     * 访问文本元素
-     *
-     * @param element 文本元素
-     */
-    @Override
-    public void visit(TextElement element) {
-        builder.append("## ")
-                .append(element.getTitle())
-                .append(System.lineSeparator())
-                .append(System.lineSeparator())
-                .append(element.getContent())
-                .append(System.lineSeparator())
-                .append(System.lineSeparator());
-
-        log.info("导出Markdown文本元素，标题：{}", element.getTitle());
-    }
-
-    /**
-     * 访问表格元素
-     *
-     * @param element 表格元素
-     */
-    @Override
-    public void visit(TableElement element) {
-        builder.append("## 表格：")
-                .append(element.getTableName())
-                .append(System.lineSeparator())
-                .append(System.lineSeparator())
-                .append("- 表头：")
-                .append(StrUtil.join("、", element.getHeaders()))
-                .append(System.lineSeparator())
-                .append("- 行数：")
-                .append(element.getRowCount())
-                .append(System.lineSeparator())
-                .append(System.lineSeparator());
-
-        log.info("导出Markdown表格元素，表格名称：{}", element.getTableName());
-    }
-
-    /**
-     * 访问图表元素
-     *
-     * @param element 图表元素
-     */
-    @Override
-    public void visit(ChartElement element) {
-        builder.append("## 图表：")
-                .append(element.getChartName())
-                .append(System.lineSeparator())
-                .append(System.lineSeparator())
-                .append("- 类型：")
-                .append(element.getChartType())
-                .append(System.lineSeparator())
-                .append("- 数据点数量：")
-                .append(element.getDataPointCount())
-                .append(System.lineSeparator())
-                .append(System.lineSeparator());
-
-        log.info("导出Markdown图表元素，图表名称：{}", element.getChartName());
-    }
-
-    /**
-     * 获取导出结果
-     *
-     * @return Markdown文本
-     */
-    public String exportText() {
-        return builder.toString();
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/PlainTextExportVisitor.java`
-
-下面是纯文本导出访问者，用于把不同报表元素导出为普通文本。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 纯文本报表导出访问者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class PlainTextExportVisitor implements ReportVisitor {
-
-    private final StringBuilder builder = new StringBuilder();
-
-    /**
-     * 访问文本元素
-     *
-     * @param element 文本元素
-     */
-    @Override
-    public void visit(TextElement element) {
-        builder.append("文本：")
-                .append(element.getTitle())
-                .append("，内容：")
-                .append(element.getContent())
-                .append(System.lineSeparator());
-
-        log.info("导出纯文本元素，标题：{}", element.getTitle());
-    }
-
-    /**
-     * 访问表格元素
-     *
-     * @param element 表格元素
-     */
-    @Override
-    public void visit(TableElement element) {
-        builder.append("表格：")
-                .append(element.getTableName())
-                .append("，表头：")
-                .append(StrUtil.join("、", element.getHeaders()))
-                .append("，行数：")
-                .append(element.getRowCount())
-                .append(System.lineSeparator());
-
-        log.info("导出纯文本表格元素，表格名称：{}", element.getTableName());
-    }
-
-    /**
-     * 访问图表元素
-     *
-     * @param element 图表元素
-     */
-    @Override
-    public void visit(ChartElement element) {
-        builder.append("图表：")
-                .append(element.getChartName())
-                .append("，类型：")
-                .append(element.getChartType())
-                .append("，数据点数量：")
-                .append(element.getDataPointCount())
-                .append(System.lineSeparator());
-
-        log.info("导出纯文本图表元素，图表名称：{}", element.getChartName());
-    }
-
-    /**
-     * 获取导出结果
-     *
-     * @return 纯文本
-     */
-    public String exportText() {
-        return builder.toString();
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/simple/ReportDocument.java`
-
-下面是报表文档对象结构，负责保存报表元素并统一接受访问者访问。
-
-```java
-package io.github.atengk.design.visitor.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * 报表文档对象结构
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class ReportDocument {
-
-    private final List<ReportElement> elements = new ArrayList<>();
-
-    /**
-     * 添加报表元素
-     *
-     * @param element 报表元素
-     */
-    public void addElement(ReportElement element) {
-        if (element == null) {
-            log.warn("添加报表元素失败，元素为空");
-            throw new IllegalArgumentException("报表元素不能为空");
-        }
-
-        elements.add(element);
-        log.info("添加报表元素成功，当前元素数量：{}", elements.size());
-    }
-
-    /**
-     * 接受访问者访问
-     *
-     * @param visitor 报表访问者
-     */
-    public void accept(ReportVisitor visitor) {
-        if (visitor == null) {
-            log.warn("访问报表文档失败，访问者为空");
-            throw new IllegalArgumentException("报表访问者不能为空");
-        }
-
-        for (ReportElement element : elements) {
-            element.accept(visitor);
-        }
-
-        log.info("报表文档访问完成，元素数量：{}", elements.size());
-    }
-}
-```
-
-使用方式：
-
-```java
-ReportDocument document = new ReportDocument();
-document.addElement(new TextElement("订单报表", "本报表统计订单核心指标"));
-document.addElement(new TableElement("订单明细", List.of("订单号", "金额", "状态"), 120));
-document.addElement(new ChartElement("订单金额趋势", "line", 30));
-
-MarkdownExportVisitor markdownVisitor = new MarkdownExportVisitor();
-document.accept(markdownVisitor);
-String markdownText = markdownVisitor.exportText();
-
-PlainTextExportVisitor plainTextVisitor = new PlainTextExportVisitor();
-document.accept(plainTextVisitor);
-String plainText = plainTextVisitor.exportText();
-```
-
-如果以后新增导出为 HTML、PDF、Excel 的操作，只需要新增新的访问者。报表元素类不用修改。
-
-## Spring Boot 访问者模式
-
-Spring Boot 项目中，访问者模式适合处理结构稳定的复杂业务对象。下面以订单巡检为例，订单巡检对象由订单信息、支付信息、物流信息三类元素组成。元素结构相对稳定，但访问操作可能有摘要生成、风险检查、审计导出等多种类型。
-
-示例支持两种访问者：
-
-```text
-summary  生成订单摘要
-risk     执行订单风险检查
-```
-
-整体流程如下：
+执行流程如下：
 
 ```text
 Controller
-    -> OrderInspectionService
-        -> 构建订单元素列表
-        -> OrderInspectionVisitorContext 选择访问者
-        -> 元素 accept(visitor, result)
-        -> 返回巡检结果
+  -> OrderPreviewService
+    -> 构建订单明细元素集合
+      -> ProductLineItem
+      -> CouponDiscountItem
+      -> FreightLineItem
+      -> PointDeductionItem
+    -> 创建多个访问者
+      -> AmountCalculateVisitor
+      -> AuditTextVisitor
+      -> RiskCheckVisitor
+    -> 每个元素依次接受访问者访问
+    -> 汇总预览结果
 ```
 
-本示例中的访问者设计为无状态 Spring Bean，把结果放到 `OrderInspectionResult` 中，避免 Spring 单例 Bean 保存请求级状态。
+访问者模式的重点是：订单明细元素结构相对稳定，新增处理动作时新增访问者即可；不需要修改订单预览主流程。
 
-### 文件结构
+## 公共代码
 
-```text
-src/main/java/io/github/atengk/design/
-├── VisitorApplication.java
-├── controller/
-│   └── OrderInspectionController.java
-├── context/
-│   └── OrderInspectionVisitorContext.java
-├── dto/
-│   ├── OrderInspectionRequest.java
-│   ├── OrderInspectionResponse.java
-│   └── OrderInspectionResult.java
-├── element/
-│   ├── OrderInspectionElement.java
-│   ├── OrderInfoElement.java
-│   ├── PaymentInfoElement.java
-│   └── DeliveryInfoElement.java
-├── visitor/
-│   ├── OrderInspectionVisitor.java
-│   ├── SummaryOrderInspectionVisitor.java
-│   └── RiskOrderInspectionVisitor.java
-└── service/
-    ├── OrderInspectionService.java
-    └── impl/
-        └── OrderInspectionServiceImpl.java
-```
+公共响应对象、业务异常和全局异常处理用于统一接口返回。实际项目中可以复用已有基础包。
 
-文件位置：`src/main/java/io/github/atengk/design/VisitorApplication.java`
-
-下面是 Spring Boot 启动类。
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/common/ApiResult.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.visitor.common;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 统一接口响应对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    /**
+     * 返回成功结果
+     *
+     * @param data 响应数据
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(200, "操作成功", data);
+    }
+
+    /**
+     * 返回失败结果
+     *
+     * @param message 错误信息
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> fail(String message) {
+        return new ApiResult<>(500, message, null);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/common/BizException.java`
+
+```java
+package io.github.atengk.pattern.visitor.common;
+
+/**
+ * 业务异常
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class BizException extends RuntimeException {
+
+    /**
+     * 创建业务异常
+     *
+     * @param message 异常信息
+     */
+    public BizException(String message) {
+        super(message);
+    }
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/common/GlobalExceptionHandler.java`
+
+```java
+package io.github.atengk.pattern.visitor.common;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理业务异常
+     *
+     * @param exception 业务异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(BizException.class)
+    public ApiResult<Void> handleBizException(BizException exception) {
+        log.warn("业务处理失败：{}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ApiResult<Void> handleValidException(Exception exception) {
+        log.warn("接口参数校验失败：{}", exception.getMessage());
+        return ApiResult.fail("请求参数不合法");
+    }
+
+    /**
+     * 处理请求体解析异常
+     *
+     * @param exception 请求体解析异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResult<Void> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("请求体解析失败：{}", exception.getMessage());
+        return ApiResult.fail("请求体格式不正确");
+    }
+
+    /**
+     * 处理系统异常
+     *
+     * @param exception 系统异常
+     * @return 统一响应对象
+     */
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统异常", exception);
+        return ApiResult.fail("系统繁忙，请稍后重试");
+    }
+
+}
+```
+
+## 完整代码
+
+下面给出访问者模式的核心实现。示例中访问者对象是有状态对象，例如金额计算访问者会累计金额，所以每次请求都应该创建新的访问者实例，不能直接把有状态访问者注册成单例 Bean 复用。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/VisitorApplication.java`
+
+```java
+package io.github.atengk.pattern.visitor;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -689,1284 +300,1404 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 访问者模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class VisitorApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(VisitorApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderInspectionRequest.java`
+## 请求对象和响应对象
 
-下面是订单巡检请求对象，包含订单、支付和物流三类数据。
+请求对象用于接收订单预览参数，包括商品明细、优惠券金额、运费和积分抵扣金额。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/dto/ProductItemRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.visitor.order.dto;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单巡检请求
+ * 商品明细请求参数
  *
- * @param visitorType      访问者类型
- * @param orderNo          订单号
- * @param userId           用户ID
- * @param orderStatus      订单状态
- * @param orderAmount      订单金额
- * @param paid             是否已支付
- * @param payAmount        支付金额
- * @param shipped          是否已发货
- * @param deliveryCompany  物流公司
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderInspectionRequest(
-        String visitorType,
-        String orderNo,
-        Long userId,
-        String orderStatus,
-        BigDecimal orderAmount,
-        Boolean paid,
-        BigDecimal payAmount,
-        Boolean shipped,
-        String deliveryCompany
-) {
+@Data
+public class ProductItemRequest {
+
+    @NotNull(message = "商品ID不能为空")
+    private Long productId;
+
+    @NotBlank(message = "商品名称不能为空")
+    private String productName;
+
+    @Min(value = 1, message = "购买数量必须大于0")
+    private Integer quantity;
+
+    @NotNull(message = "商品单价不能为空")
+    @DecimalMin(value = "0.01", message = "商品单价必须大于0")
+    private BigDecimal unitPrice;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderInspectionResult.java`
-
-下面是订单巡检结果上下文，访问者会把摘要和风险信息写入该对象。
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/dto/OrderPreviewRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.visitor.order.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * 订单预览请求参数
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class OrderPreviewRequest {
+
+    @NotNull(message = "用户ID不能为空")
+    private Long userId;
+
+    private String userLevel;
+
+    @Valid
+    @NotEmpty(message = "商品明细不能为空")
+    private List<ProductItemRequest> productItems;
+
+    private String couponCode;
+
+    @DecimalMin(value = "0.00", message = "优惠券金额不能小于0")
+    private BigDecimal couponAmount;
+
+    @DecimalMin(value = "0.00", message = "运费不能小于0")
+    private BigDecimal freightAmount;
+
+    @DecimalMin(value = "0.00", message = "积分抵扣金额不能小于0")
+    private BigDecimal pointDeductionAmount;
+
+    private Integer pointCount;
+
+    private String region;
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/vo/OrderPreviewResultVO.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * 订单预览结果
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class OrderPreviewResultVO {
+
+    private Long userId;
+
+    private BigDecimal productAmount;
+
+    private BigDecimal discountAmount;
+
+    private BigDecimal freightAmount;
+
+    private BigDecimal pointDeductionAmount;
+
+    private BigDecimal payableAmount;
+
+    private Boolean riskPassed;
+
+    private List<String> auditMessages;
+
+    private List<String> riskMessages;
+
+}
+```
+
+## 元素接口和具体元素
+
+订单元素接口定义 `accept` 方法，表示当前元素可以接受访问者访问。
+每个具体元素只负责把自己交给访问者，不直接处理金额计算、审计、风控等逻辑。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/model/OrderElement.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.model;
+
+import io.github.atengk.pattern.visitor.order.visitor.OrderElementVisitor;
+
+/**
+ * 订单明细元素接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderElement {
+
+    /**
+     * 接受访问者访问
+     *
+     * @param visitor 订单元素访问者
+     */
+    void accept(OrderElementVisitor visitor);
+
+}
+```
+
+商品明细元素保存商品 ID、商品名称、数量和单价。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/model/ProductLineItem.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.model;
+
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.visitor.order.visitor.OrderElementVisitor;
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 商品明细元素
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class ProductLineItem implements OrderElement {
+
+    private Long productId;
+
+    private String productName;
+
+    private Integer quantity;
+
+    private BigDecimal unitPrice;
+
+    /**
+     * 接受访问者访问
+     *
+     * @param visitor 订单元素访问者
+     */
+    @Override
+    public void accept(OrderElementVisitor visitor) {
+        visitor.visit(this);
+    }
+
+    /**
+     * 计算商品行金额
+     *
+     * @return 商品行金额
+     */
+    public BigDecimal getLineAmount() {
+        return NumberUtil.mul(unitPrice, quantity);
+    }
+
+}
+```
+
+优惠券抵扣元素保存优惠券编码和优惠金额。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/model/CouponDiscountItem.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.model;
+
+import io.github.atengk.pattern.visitor.order.visitor.OrderElementVisitor;
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 优惠券抵扣元素
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class CouponDiscountItem implements OrderElement {
+
+    private String couponCode;
+
+    private BigDecimal discountAmount;
+
+    /**
+     * 接受访问者访问
+     *
+     * @param visitor 订单元素访问者
+     */
+    @Override
+    public void accept(OrderElementVisitor visitor) {
+        visitor.visit(this);
+    }
+
+}
+```
+
+运费元素保存配送地区和运费金额。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/model/FreightLineItem.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.model;
+
+import io.github.atengk.pattern.visitor.order.visitor.OrderElementVisitor;
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 运费明细元素
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class FreightLineItem implements OrderElement {
+
+    private String region;
+
+    private BigDecimal freightAmount;
+
+    /**
+     * 接受访问者访问
+     *
+     * @param visitor 订单元素访问者
+     */
+    @Override
+    public void accept(OrderElementVisitor visitor) {
+        visitor.visit(this);
+    }
+
+}
+```
+
+积分抵扣元素保存积分数量和抵扣金额。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/model/PointDeductionItem.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.model;
+
+import io.github.atengk.pattern.visitor.order.visitor.OrderElementVisitor;
+import lombok.Builder;
+import lombok.Data;
+
+import java.math.BigDecimal;
+
+/**
+ * 积分抵扣元素
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class PointDeductionItem implements OrderElement {
+
+    private Integer pointCount;
+
+    private BigDecimal deductionAmount;
+
+    /**
+     * 接受访问者访问
+     *
+     * @param visitor 订单元素访问者
+     */
+    @Override
+    public void accept(OrderElementVisitor visitor) {
+        visitor.visit(this);
+    }
+
+}
+```
+
+## 访问者接口
+
+访问者接口为每一种订单元素定义一个访问方法。
+新增一种操作时，只需要新增访问者实现类；新增一种元素时，需要扩展访问者接口和所有访问者实现，这是访问者模式的典型取舍。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/visitor/OrderElementVisitor.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.visitor;
+
+import io.github.atengk.pattern.visitor.order.model.CouponDiscountItem;
+import io.github.atengk.pattern.visitor.order.model.FreightLineItem;
+import io.github.atengk.pattern.visitor.order.model.PointDeductionItem;
+import io.github.atengk.pattern.visitor.order.model.ProductLineItem;
+
+/**
+ * 订单元素访问者接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderElementVisitor {
+
+    /**
+     * 访问商品明细元素
+     *
+     * @param item 商品明细元素
+     */
+    void visit(ProductLineItem item);
+
+    /**
+     * 访问优惠券抵扣元素
+     *
+     * @param item 优惠券抵扣元素
+     */
+    void visit(CouponDiscountItem item);
+
+    /**
+     * 访问运费明细元素
+     *
+     * @param item 运费明细元素
+     */
+    void visit(FreightLineItem item);
+
+    /**
+     * 访问积分抵扣元素
+     *
+     * @param item 积分抵扣元素
+     */
+    void visit(PointDeductionItem item);
+
+}
+```
+
+## 金额计算访问者
+
+金额计算访问者负责遍历订单元素并计算商品金额、优惠金额、运费、积分抵扣和应付金额。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/visitor/AmountCalculateVisitor.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.visitor;
+
+import cn.hutool.core.util.NumberUtil;
+import io.github.atengk.pattern.visitor.order.model.CouponDiscountItem;
+import io.github.atengk.pattern.visitor.order.model.FreightLineItem;
+import io.github.atengk.pattern.visitor.order.model.PointDeductionItem;
+import io.github.atengk.pattern.visitor.order.model.ProductLineItem;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+/**
+ * 订单金额计算访问者
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Getter
+public class AmountCalculateVisitor implements OrderElementVisitor {
+
+    private static final BigDecimal MIN_PAYABLE_AMOUNT = BigDecimal.valueOf(0.01);
+
+    private BigDecimal productAmount = BigDecimal.ZERO;
+
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    private BigDecimal freightAmount = BigDecimal.ZERO;
+
+    private BigDecimal pointDeductionAmount = BigDecimal.ZERO;
+
+    /**
+     * 访问商品明细元素并累计商品金额
+     *
+     * @param item 商品明细元素
+     */
+    @Override
+    public void visit(ProductLineItem item) {
+        BigDecimal lineAmount = item.getLineAmount();
+        productAmount = NumberUtil.add(productAmount, lineAmount);
+
+        log.info("访问商品明细计算金额，productId：{}，lineAmount：{}，productAmount：{}",
+                item.getProductId(), lineAmount, productAmount);
+    }
+
+    /**
+     * 访问优惠券抵扣元素并累计优惠金额
+     *
+     * @param item 优惠券抵扣元素
+     */
+    @Override
+    public void visit(CouponDiscountItem item) {
+        discountAmount = NumberUtil.add(discountAmount, item.getDiscountAmount());
+
+        log.info("访问优惠券抵扣计算金额，couponCode：{}，discountAmount：{}",
+                item.getCouponCode(), discountAmount);
+    }
+
+    /**
+     * 访问运费明细元素并累计运费
+     *
+     * @param item 运费明细元素
+     */
+    @Override
+    public void visit(FreightLineItem item) {
+        freightAmount = NumberUtil.add(freightAmount, item.getFreightAmount());
+
+        log.info("访问运费明细计算金额，region：{}，freightAmount：{}",
+                item.getRegion(), freightAmount);
+    }
+
+    /**
+     * 访问积分抵扣元素并累计抵扣金额
+     *
+     * @param item 积分抵扣元素
+     */
+    @Override
+    public void visit(PointDeductionItem item) {
+        pointDeductionAmount = NumberUtil.add(pointDeductionAmount, item.getDeductionAmount());
+
+        log.info("访问积分抵扣计算金额，pointCount：{}，pointDeductionAmount：{}",
+                item.getPointCount(), pointDeductionAmount);
+    }
+
+    /**
+     * 获取应付金额
+     *
+     * @return 应付金额
+     */
+    public BigDecimal getPayableAmount() {
+        BigDecimal amount = NumberUtil.add(productAmount, freightAmount);
+        amount = NumberUtil.sub(amount, discountAmount);
+        amount = NumberUtil.sub(amount, pointDeductionAmount);
+
+        if (NumberUtil.isLessOrEqual(amount, BigDecimal.ZERO)) {
+            return MIN_PAYABLE_AMOUNT;
+        }
+
+        return scaleAmount(amount);
+    }
+
+    /**
+     * 获取格式化后的商品金额
+     *
+     * @return 商品金额
+     */
+    public BigDecimal getProductAmount() {
+        return scaleAmount(productAmount);
+    }
+
+    /**
+     * 获取格式化后的优惠金额
+     *
+     * @return 优惠金额
+     */
+    public BigDecimal getDiscountAmount() {
+        return scaleAmount(discountAmount);
+    }
+
+    /**
+     * 获取格式化后的运费金额
+     *
+     * @return 运费金额
+     */
+    public BigDecimal getFreightAmount() {
+        return scaleAmount(freightAmount);
+    }
+
+    /**
+     * 获取格式化后的积分抵扣金额
+     *
+     * @return 积分抵扣金额
+     */
+    public BigDecimal getPointDeductionAmount() {
+        return scaleAmount(pointDeductionAmount);
+    }
+
+    /**
+     * 金额保留两位小数
+     *
+     * @param amount 金额
+     * @return 格式化金额
+     */
+    private BigDecimal scaleAmount(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+}
+```
+
+## 审计文本访问者
+
+审计文本访问者负责把订单明细转换成人可读的审计说明。它不参与金额计算，只生成文本。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/visitor/AuditTextVisitor.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.visitor;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.visitor.order.model.CouponDiscountItem;
+import io.github.atengk.pattern.visitor.order.model.FreightLineItem;
+import io.github.atengk.pattern.visitor.order.model.PointDeductionItem;
+import io.github.atengk.pattern.visitor.order.model.ProductLineItem;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 订单审计文本访问者
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Getter
+public class AuditTextVisitor implements OrderElementVisitor {
+
+    private final List<String> auditMessages = new ArrayList<>();
+
+    /**
+     * 访问商品明细元素并生成审计文本
+     *
+     * @param item 商品明细元素
+     */
+    @Override
+    public void visit(ProductLineItem item) {
+        String message = StrUtil.format("商品[{}]，数量{}，单价{}，小计{}",
+                item.getProductName(),
+                item.getQuantity(),
+                item.getUnitPrice(),
+                item.getLineAmount());
+
+        auditMessages.add(message);
+        log.info("生成商品审计文本：{}", message);
+    }
+
+    /**
+     * 访问优惠券抵扣元素并生成审计文本
+     *
+     * @param item 优惠券抵扣元素
+     */
+    @Override
+    public void visit(CouponDiscountItem item) {
+        String message = StrUtil.format("使用优惠券[{}]，优惠金额{}",
+                item.getCouponCode(),
+                item.getDiscountAmount());
+
+        auditMessages.add(message);
+        log.info("生成优惠券审计文本：{}", message);
+    }
+
+    /**
+     * 访问运费明细元素并生成审计文本
+     *
+     * @param item 运费明细元素
+     */
+    @Override
+    public void visit(FreightLineItem item) {
+        String message = StrUtil.format("配送地区[{}]，运费{}",
+                item.getRegion(),
+                item.getFreightAmount());
+
+        auditMessages.add(message);
+        log.info("生成运费审计文本：{}", message);
+    }
+
+    /**
+     * 访问积分抵扣元素并生成审计文本
+     *
+     * @param item 积分抵扣元素
+     */
+    @Override
+    public void visit(PointDeductionItem item) {
+        String message = StrUtil.format("使用积分{}，抵扣金额{}",
+                item.getPointCount(),
+                item.getDeductionAmount());
+
+        auditMessages.add(message);
+        log.info("生成积分审计文本：{}", message);
+    }
+
+}
+```
+
+## 风控检查访问者
+
+风控检查访问者负责扫描订单元素，识别异常数量、异常金额和异常抵扣。它和金额计算、审计文本互不影响。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/visitor/RiskCheckVisitor.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.visitor;
+
+import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.visitor.order.model.CouponDiscountItem;
+import io.github.atengk.pattern.visitor.order.model.FreightLineItem;
+import io.github.atengk.pattern.visitor.order.model.PointDeductionItem;
+import io.github.atengk.pattern.visitor.order.model.ProductLineItem;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 订单风控检查访问者
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Getter
+public class RiskCheckVisitor implements OrderElementVisitor {
+
+    private final List<String> riskMessages = new ArrayList<>();
+
+    /**
+     * 访问商品明细元素并执行风控检查
+     *
+     * @param item 商品明细元素
+     */
+    @Override
+    public void visit(ProductLineItem item) {
+        if (item.getQuantity() > 100) {
+            addRiskMessage(StrUtil.format("商品[{}]购买数量异常：{}", item.getProductId(), item.getQuantity()));
+        }
+
+        if (NumberUtil.isGreater(item.getLineAmount(), BigDecimal.valueOf(10000))) {
+            addRiskMessage(StrUtil.format("商品[{}]单行金额过高：{}", item.getProductId(), item.getLineAmount()));
+        }
+    }
+
+    /**
+     * 访问优惠券抵扣元素并执行风控检查
+     *
+     * @param item 优惠券抵扣元素
+     */
+    @Override
+    public void visit(CouponDiscountItem item) {
+        if (NumberUtil.isGreater(item.getDiscountAmount(), BigDecimal.valueOf(500))) {
+            addRiskMessage(StrUtil.format("优惠券[{}]抵扣金额过高：{}",
+                    item.getCouponCode(), item.getDiscountAmount()));
+        }
+    }
+
+    /**
+     * 访问运费明细元素并执行风控检查
+     *
+     * @param item 运费明细元素
+     */
+    @Override
+    public void visit(FreightLineItem item) {
+        if (NumberUtil.isGreater(item.getFreightAmount(), BigDecimal.valueOf(200))) {
+            addRiskMessage(StrUtil.format("地区[{}]运费异常：{}",
+                    item.getRegion(), item.getFreightAmount()));
+        }
+    }
+
+    /**
+     * 访问积分抵扣元素并执行风控检查
+     *
+     * @param item 积分抵扣元素
+     */
+    @Override
+    public void visit(PointDeductionItem item) {
+        if (NumberUtil.isGreater(item.getDeductionAmount(), BigDecimal.valueOf(300))) {
+            addRiskMessage(StrUtil.format("积分抵扣金额过高：{}，pointCount：{}",
+                    item.getDeductionAmount(), item.getPointCount()));
+        }
+    }
+
+    /**
+     * 判断风控是否通过
+     *
+     * @return 是否通过
+     */
+    public boolean isPassed() {
+        return riskMessages.isEmpty();
+    }
+
+    /**
+     * 添加风控提示
+     *
+     * @param message 风控提示
+     */
+    private void addRiskMessage(String message) {
+        riskMessages.add(message);
+        log.warn("订单风控命中：{}", message);
+    }
+
+}
+```
+
+## 访问者工厂
+
+访问者对象通常会保存本次访问的累计结果，因此不建议直接注册为 Spring 单例 Bean。这里使用工厂按请求创建新的访问者实例。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/visitor/OrderVisitorFactory.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.visitor;
+
+import org.springframework.stereotype.Component;
+
+/**
+ * 订单访问者工厂
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Component
+public class OrderVisitorFactory {
+
+    /**
+     * 创建金额计算访问者
+     *
+     * @return 金额计算访问者
+     */
+    public AmountCalculateVisitor createAmountCalculateVisitor() {
+        return new AmountCalculateVisitor();
+    }
+
+    /**
+     * 创建审计文本访问者
+     *
+     * @return 审计文本访问者
+     */
+    public AuditTextVisitor createAuditTextVisitor() {
+        return new AuditTextVisitor();
+    }
+
+    /**
+     * 创建风控检查访问者
+     *
+     * @return 风控检查访问者
+     */
+    public RiskCheckVisitor createRiskCheckVisitor() {
+        return new RiskCheckVisitor();
+    }
+
+}
+```
+
+## 业务服务
+
+业务服务负责构建订单元素集合，并让每个元素依次接受多个访问者访问。
+可以看到，金额计算、审计文本、风控检查都没有写在订单元素类中，也没有堆在 Service 的 `if-else` 中。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/service/OrderPreviewService.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.service;
+
+import io.github.atengk.pattern.visitor.order.dto.OrderPreviewRequest;
+import io.github.atengk.pattern.visitor.order.vo.OrderPreviewResultVO;
+
+/**
+ * 订单预览服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderPreviewService {
+
+    /**
+     * 预览订单费用
+     *
+     * @param request 订单预览请求
+     * @return 订单预览结果
+     */
+    OrderPreviewResultVO preview(OrderPreviewRequest request);
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/service/impl/OrderPreviewServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.service.impl;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.visitor.common.BizException;
+import io.github.atengk.pattern.visitor.order.dto.OrderPreviewRequest;
+import io.github.atengk.pattern.visitor.order.dto.ProductItemRequest;
+import io.github.atengk.pattern.visitor.order.model.CouponDiscountItem;
+import io.github.atengk.pattern.visitor.order.model.FreightLineItem;
+import io.github.atengk.pattern.visitor.order.model.OrderElement;
+import io.github.atengk.pattern.visitor.order.model.PointDeductionItem;
+import io.github.atengk.pattern.visitor.order.model.ProductLineItem;
+import io.github.atengk.pattern.visitor.order.service.OrderPreviewService;
+import io.github.atengk.pattern.visitor.order.visitor.AmountCalculateVisitor;
+import io.github.atengk.pattern.visitor.order.visitor.AuditTextVisitor;
+import io.github.atengk.pattern.visitor.order.visitor.OrderVisitorFactory;
+import io.github.atengk.pattern.visitor.order.visitor.RiskCheckVisitor;
+import io.github.atengk.pattern.visitor.order.vo.OrderPreviewResultVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 订单预览服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class OrderPreviewServiceImpl implements OrderPreviewService {
+
+    private final OrderVisitorFactory orderVisitorFactory;
+
+    /**
+     * 预览订单费用
+     *
+     * @param request 订单预览请求
+     * @return 订单预览结果
+     */
+    @Override
+    public OrderPreviewResultVO preview(OrderPreviewRequest request) {
+        checkRequest(request);
+
+        List<OrderElement> elements = buildOrderElements(request);
+
+        AmountCalculateVisitor amountVisitor = orderVisitorFactory.createAmountCalculateVisitor();
+        AuditTextVisitor auditTextVisitor = orderVisitorFactory.createAuditTextVisitor();
+        RiskCheckVisitor riskCheckVisitor = orderVisitorFactory.createRiskCheckVisitor();
+
+        for (OrderElement element : elements) {
+            element.accept(amountVisitor);
+            element.accept(auditTextVisitor);
+            element.accept(riskCheckVisitor);
+        }
+
+        log.info("订单预览完成，userId：{}，elementCount：{}，payableAmount：{}，riskPassed：{}",
+                request.getUserId(), elements.size(), amountVisitor.getPayableAmount(), riskCheckVisitor.isPassed());
+
+        return OrderPreviewResultVO.builder()
+                .userId(request.getUserId())
+                .productAmount(amountVisitor.getProductAmount())
+                .discountAmount(amountVisitor.getDiscountAmount())
+                .freightAmount(amountVisitor.getFreightAmount())
+                .pointDeductionAmount(amountVisitor.getPointDeductionAmount())
+                .payableAmount(amountVisitor.getPayableAmount())
+                .riskPassed(riskCheckVisitor.isPassed())
+                .auditMessages(auditTextVisitor.getAuditMessages())
+                .riskMessages(riskCheckVisitor.getRiskMessages())
+                .build();
+    }
+
+    /**
+     * 校验订单预览请求
+     *
+     * @param request 订单预览请求
+     */
+    private void checkRequest(OrderPreviewRequest request) {
+        if (request == null) {
+            throw new BizException("订单预览请求不能为空");
+        }
+
+        if (ObjectUtil.isNull(request.getUserId()) || request.getUserId() <= 0) {
+            throw new BizException("用户ID不合法");
+        }
+
+        if (CollUtil.isEmpty(request.getProductItems())) {
+            throw new BizException("商品明细不能为空");
+        }
+    }
+
+    /**
+     * 构建订单元素集合
+     *
+     * @param request 订单预览请求
+     * @return 订单元素集合
+     */
+    private List<OrderElement> buildOrderElements(OrderPreviewRequest request) {
+        List<OrderElement> elements = new ArrayList<>();
+
+        for (ProductItemRequest productItem : request.getProductItems()) {
+            elements.add(ProductLineItem.builder()
+                    .productId(productItem.getProductId())
+                    .productName(productItem.getProductName())
+                    .quantity(productItem.getQuantity())
+                    .unitPrice(productItem.getUnitPrice())
+                    .build());
+        }
+
+        if (NumberUtil.isGreater(defaultAmount(request.getCouponAmount()), BigDecimal.ZERO)) {
+            elements.add(CouponDiscountItem.builder()
+                    .couponCode(StrUtil.blankToDefault(request.getCouponCode(), "UNKNOWN_COUPON"))
+                    .discountAmount(request.getCouponAmount())
+                    .build());
+        }
+
+        if (NumberUtil.isGreater(defaultAmount(request.getFreightAmount()), BigDecimal.ZERO)) {
+            elements.add(FreightLineItem.builder()
+                    .region(StrUtil.blankToDefault(request.getRegion(), "UNKNOWN_REGION"))
+                    .freightAmount(request.getFreightAmount())
+                    .build());
+        }
+
+        if (NumberUtil.isGreater(defaultAmount(request.getPointDeductionAmount()), BigDecimal.ZERO)) {
+            elements.add(PointDeductionItem.builder()
+                    .pointCount(ObjectUtil.defaultIfNull(request.getPointCount(), 0))
+                    .deductionAmount(request.getPointDeductionAmount())
+                    .build());
+        }
+
+        log.info("订单元素构建完成，userId：{}，elementCount：{}", request.getUserId(), elements.size());
+        return elements;
+    }
+
+    /**
+     * 获取默认金额
+     *
+     * @param amount 金额
+     * @return 非空金额
+     */
+    private BigDecimal defaultAmount(BigDecimal amount) {
+        return ObjectUtil.defaultIfNull(amount, BigDecimal.ZERO);
+    }
+
+}
+```
+
+## 控制器接口
+
+控制器提供订单预览入口。调用方传入订单明细后，服务层通过访问者模式生成金额、审计和风控结果。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/controller/OrderPreviewController.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.controller;
+
+import io.github.atengk.pattern.visitor.common.ApiResult;
+import io.github.atengk.pattern.visitor.order.dto.OrderPreviewRequest;
+import io.github.atengk.pattern.visitor.order.service.OrderPreviewService;
+import io.github.atengk.pattern.visitor.order.vo.OrderPreviewResultVO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 订单预览接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@RestController
+@RequestMapping("/order-previews")
+@RequiredArgsConstructor
+public class OrderPreviewController {
+
+    private final OrderPreviewService orderPreviewService;
+
+    /**
+     * 预览订单费用
+     *
+     * @param request 订单预览请求
+     * @return 订单预览结果
+     */
+    @PostMapping
+    public ApiResult<OrderPreviewResultVO> preview(@Valid @RequestBody OrderPreviewRequest request) {
+        return ApiResult.success(orderPreviewService.preview(request));
+    }
+
+}
+```
+
+## 使用方式
+
+启动项目后，调用订单预览接口即可触发访问者模式。
+
+接口信息：
+
+| 项目         | 内容                                                         |
+| ------------ | ------------------------------------------------------------ |
+| 请求路径     | `/order-previews`                                            |
+| 请求方法     | `POST`                                                       |
+| Content-Type | `application/json`                                           |
+| 主要流程     | 构建订单元素 → 多个访问者访问元素 → 汇总金额、审计、风控结果 |
+
+正常订单预览请求：
+
+```bash
+curl -X POST "http://localhost:8080/order-previews" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10001,
+    "userLevel": "VIP",
+    "productItems": [
+      {
+        "productId": 20001,
+        "productName": "机械键盘",
+        "quantity": 2,
+        "unitPrice": 299.90
+      },
+      {
+        "productId": 20002,
+        "productName": "无线鼠标",
+        "quantity": 1,
+        "unitPrice": 129.90
+      }
+    ],
+    "couponCode": "FULL_500_50",
+    "couponAmount": 50.00,
+    "freightAmount": 12.00,
+    "pointDeductionAmount": 20.00,
+    "pointCount": 2000,
+    "region": "CN"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "userId": 10001,
+    "productAmount": 729.70,
+    "discountAmount": 50.00,
+    "freightAmount": 12.00,
+    "pointDeductionAmount": 20.00,
+    "payableAmount": 671.70,
+    "riskPassed": true,
+    "auditMessages": [
+      "商品[机械键盘]，数量2，单价299.90，小计599.80",
+      "商品[无线鼠标]，数量1，单价129.90，小计129.90",
+      "使用优惠券[FULL_500_50]，优惠金额50.00",
+      "配送地区[CN]，运费12.00",
+      "使用积分2000，抵扣金额20.00"
+    ],
+    "riskMessages": []
+  }
+}
+```
+
+风控命中请求：
+
+```bash
+curl -X POST "http://localhost:8080/order-previews" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": 10002,
+    "productItems": [
+      {
+        "productId": 30001,
+        "productName": "企业服务器",
+        "quantity": 2,
+        "unitPrice": 8999.00
+      }
+    ],
+    "couponCode": "BIG_COUPON",
+    "couponAmount": 800.00,
+    "freightAmount": 260.00,
+    "pointDeductionAmount": 350.00,
+    "pointCount": 35000,
+    "region": "REMOTE"
+  }'
+```
+
+返回示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "userId": 10002,
+    "productAmount": 17998.00,
+    "discountAmount": 800.00,
+    "freightAmount": 260.00,
+    "pointDeductionAmount": 350.00,
+    "payableAmount": 17108.00,
+    "riskPassed": false,
+    "auditMessages": [
+      "商品[企业服务器]，数量2，单价8999.00，小计17998.00",
+      "使用优惠券[BIG_COUPON]，优惠金额800.00",
+      "配送地区[REMOTE]，运费260.00",
+      "使用积分35000，抵扣金额350.00"
+    ],
+    "riskMessages": [
+      "商品[30001]单行金额过高：17998.00",
+      "优惠券[BIG_COUPON]抵扣金额过高：800.00",
+      "地区[REMOTE]运费异常：260.00",
+      "积分抵扣金额过高：350.00，pointCount：35000"
+    ]
+  }
+}
+```
+
+## 验证方式
+
+正常请求后，可以通过日志观察元素被多个访问者访问的过程：
+
+```text
+订单元素构建完成，userId：10001，elementCount：5
+访问商品明细计算金额，productId：20001，lineAmount：599.80，productAmount：599.80
+生成商品审计文本：商品[机械键盘]，数量2，单价299.90，小计599.80
+访问商品明细计算金额，productId：20002，lineAmount：129.90，productAmount：729.70
+生成商品审计文本：商品[无线鼠标]，数量1，单价129.90，小计129.90
+访问优惠券抵扣计算金额，couponCode：FULL_500_50，discountAmount：50.00
+生成优惠券审计文本：使用优惠券[FULL_500_50]，优惠金额50.00
+访问运费明细计算金额，region：CN，freightAmount：12.00
+生成运费审计文本：配送地区[CN]，运费12.00
+访问积分抵扣计算金额，pointCount：2000，pointDeductionAmount：20.00
+生成积分审计文本：使用积分2000，抵扣金额20.00
+订单预览完成，userId：10001，elementCount：5，payableAmount：671.70，riskPassed：true
+```
+
+风控命中时，可以看到风险日志：
+
+```text
+订单风控命中：商品[30001]单行金额过高：17998.00
+订单风控命中：优惠券[BIG_COUPON]抵扣金额过高：800.00
+订单风控命中：地区[REMOTE]运费异常：260.00
+订单风控命中：积分抵扣金额过高：350.00，pointCount：35000
+```
+
+## 扩展方式
+
+如果后续需要新增一种处理动作，例如“订单明细导出访问者”，只需要新增一个访问者实现类，不需要修改订单元素类。
+
+文件位置：`src/main/java/io/github/atengk/pattern/visitor/order/visitor/ExportTextVisitor.java`
+
+```java
+package io.github.atengk.pattern.visitor.order.visitor;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.visitor.order.model.CouponDiscountItem;
+import io.github.atengk.pattern.visitor.order.model.FreightLineItem;
+import io.github.atengk.pattern.visitor.order.model.PointDeductionItem;
+import io.github.atengk.pattern.visitor.order.model.ProductLineItem;
 import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 订单巡检结果
+ * 订单导出文本访问者
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Getter
-public class OrderInspectionResult {
+public class ExportTextVisitor implements OrderElementVisitor {
 
-    private final List<String> summaries = new ArrayList<>();
-    private final List<String> risks = new ArrayList<>();
+    private final List<String> exportRows = new ArrayList<>();
 
     /**
-     * 添加摘要信息
+     * 访问商品明细元素并生成导出行
      *
-     * @param summary 摘要信息
+     * @param item 商品明细元素
      */
-    public void addSummary(String summary) {
-        summaries.add(summary);
+    @Override
+    public void visit(ProductLineItem item) {
+        exportRows.add(StrUtil.format("PRODUCT,{},{},{},{}",
+                item.getProductId(),
+                item.getProductName(),
+                item.getQuantity(),
+                item.getLineAmount()));
     }
 
     /**
-     * 添加风险信息
+     * 访问优惠券抵扣元素并生成导出行
      *
-     * @param risk 风险信息
+     * @param item 优惠券抵扣元素
      */
-    public void addRisk(String risk) {
-        risks.add(risk);
+    @Override
+    public void visit(CouponDiscountItem item) {
+        exportRows.add(StrUtil.format("COUPON,{},{}", item.getCouponCode(), item.getDiscountAmount()));
     }
 
     /**
-     * 判断是否存在风险
+     * 访问运费明细元素并生成导出行
      *
-     * @return true 表示存在风险，false 表示无风险
+     * @param item 运费明细元素
      */
-    public boolean hasRisk() {
-        return !risks.isEmpty();
+    @Override
+    public void visit(FreightLineItem item) {
+        exportRows.add(StrUtil.format("FREIGHT,{},{}", item.getRegion(), item.getFreightAmount()));
     }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderInspectionResponse.java`
-
-下面是订单巡检响应对象。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.util.List;
-
-/**
- * 订单巡检响应
- *
- * @param visitorType 访问者类型
- * @param orderNo     订单号
- * @param summaries   摘要信息
- * @param risks       风险信息
- * @param passed      是否通过
- * @param message     响应消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record OrderInspectionResponse(
-        String visitorType,
-        String orderNo,
-        List<String> summaries,
-        List<String> risks,
-        Boolean passed,
-        String message
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/element/OrderInspectionElement.java`
-
-下面是订单巡检元素接口，所有具体元素都通过该接口接受访问者访问。
-
-```java
-package io.github.atengk.design.element;
-
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.visitor.OrderInspectionVisitor;
-
-/**
- * 订单巡检元素
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface OrderInspectionElement {
 
     /**
-     * 接受订单巡检访问者访问
+     * 访问积分抵扣元素并生成导出行
      *
-     * @param visitor 订单巡检访问者
-     * @param result  订单巡检结果
+     * @param item 积分抵扣元素
      */
-    void accept(OrderInspectionVisitor visitor, OrderInspectionResult result);
+    @Override
+    public void visit(PointDeductionItem item) {
+        exportRows.add(StrUtil.format("POINT,{},{}", item.getPointCount(), item.getDeductionAmount()));
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/element/OrderInfoElement.java`
-
-下面是订单信息元素，保存订单号、用户、状态和订单金额。
+然后在业务服务中创建该访问者，并让元素接受访问：
 
 ```java
-package io.github.atengk.design.element;
+ExportTextVisitor exportTextVisitor = new ExportTextVisitor();
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.visitor.OrderInspectionVisitor;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
+for (OrderElement element : elements) {
+    element.accept(exportTextVisitor);
+}
+
+List<String> exportRows = exportTextVisitor.getExportRows();
+```
+
+这样新增“导出文本”能力时，不需要修改 `ProductLineItem`、`CouponDiscountItem`、`FreightLineItem` 和 `PointDeductionItem`。
+
+## 新增元素的影响
+
+访问者模式适合“元素类型稳定，操作经常新增”的场景。
+如果需要新增一个元素，例如“包装费元素”，就需要修改访问者接口和所有访问者实现类。
+
+新增元素示例：
+
+```java
+package io.github.atengk.pattern.visitor.order.model;
+
+import io.github.atengk.pattern.visitor.order.visitor.OrderElementVisitor;
+import lombok.Builder;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单信息元素
+ * 包装费元素
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Getter
-public class OrderInfoElement implements OrderInspectionElement {
+@Data
+@Builder
+public class PackageFeeItem implements OrderElement {
 
-    private final String orderNo;
-    private final Long userId;
-    private final String orderStatus;
-    private final BigDecimal orderAmount;
+    private String packageType;
 
-    /**
-     * 创建订单信息元素
-     *
-     * @param orderNo     订单号
-     * @param userId      用户ID
-     * @param orderStatus 订单状态
-     * @param orderAmount 订单金额
-     */
-    public OrderInfoElement(String orderNo, Long userId, String orderStatus, BigDecimal orderAmount) {
-        if (StrUtil.hasBlank(orderNo, orderStatus)) {
-            log.warn("创建订单信息元素失败，订单号或订单状态为空");
-            throw new IllegalArgumentException("订单号和订单状态不能为空");
-        }
-
-        if (userId == null || userId <= 0) {
-            log.warn("创建订单信息元素失败，用户ID不合法，用户ID：{}", userId);
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (orderAmount == null || orderAmount.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("创建订单信息元素失败，订单金额不合法，订单号：{}，金额：{}", orderNo, orderAmount);
-            throw new IllegalArgumentException("订单金额不能小于0");
-        }
-
-        this.orderNo = orderNo;
-        this.userId = userId;
-        this.orderStatus = orderStatus;
-        this.orderAmount = orderAmount;
-    }
+    private BigDecimal packageFee;
 
     /**
-     * 接受订单巡检访问者访问
+     * 接受访问者访问
      *
-     * @param visitor 订单巡检访问者
-     * @param result  订单巡检结果
+     * @param visitor 订单元素访问者
      */
     @Override
-    public void accept(OrderInspectionVisitor visitor, OrderInspectionResult result) {
-        if (visitor == null || result == null) {
-            throw new IllegalArgumentException("访问者和结果对象不能为空");
-        }
-
-        visitor.visit(this, result);
+    public void accept(OrderElementVisitor visitor) {
+        visitor.visit(this);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/element/PaymentInfoElement.java`
-
-下面是支付信息元素，保存支付状态和支付金额。
+此时 `OrderElementVisitor` 需要新增方法：
 
 ```java
-package io.github.atengk.design.element;
-
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.visitor.OrderInspectionVisitor;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-
-/**
- * 支付信息元素
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Getter
-public class PaymentInfoElement implements OrderInspectionElement {
-
-    private final Boolean paid;
-    private final BigDecimal payAmount;
-
-    /**
-     * 创建支付信息元素
-     *
-     * @param paid      是否已支付
-     * @param payAmount 支付金额
-     */
-    public PaymentInfoElement(Boolean paid, BigDecimal payAmount) {
-        if (paid == null) {
-            log.warn("创建支付信息元素失败，支付状态为空");
-            throw new IllegalArgumentException("支付状态不能为空");
-        }
-
-        if (payAmount == null || payAmount.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("创建支付信息元素失败，支付金额不合法，金额：{}", payAmount);
-            throw new IllegalArgumentException("支付金额不能小于0");
-        }
-
-        this.paid = paid;
-        this.payAmount = payAmount;
-    }
-
-    /**
-     * 接受订单巡检访问者访问
-     *
-     * @param visitor 订单巡检访问者
-     * @param result  订单巡检结果
-     */
-    @Override
-    public void accept(OrderInspectionVisitor visitor, OrderInspectionResult result) {
-        if (visitor == null || result == null) {
-            throw new IllegalArgumentException("访问者和结果对象不能为空");
-        }
-
-        visitor.visit(this, result);
-    }
-}
+void visit(PackageFeeItem item);
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/element/DeliveryInfoElement.java`
+同时 `AmountCalculateVisitor`、`AuditTextVisitor`、`RiskCheckVisitor` 都要实现该方法。
+这也是访问者模式的主要限制：新增操作容易，新增元素成本较高。
 
-下面是物流信息元素，保存发货状态和物流公司。
+## 优点和注意事项
 
-```java
-package io.github.atengk.design.element;
+访问者模式的核心价值是把作用在对象结构上的操作拆出来，避免对象类不断堆积各种不相关逻辑。
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.visitor.OrderInspectionVisitor;
-import lombok.Getter;
+| 注意事项           | 说明                                               |
+| ------------------ | -------------------------------------------------- |
+| 适合元素稳定场景   | 元素类型经常变化时，访问者模式维护成本较高         |
+| 适合操作频繁新增   | 新增金额计算、审计、导出、风控等操作时比较方便     |
+| 访问者不要复用状态 | 有累计结果的访问者应每次请求新建实例               |
+| 元素类保持简单     | 元素类只保存数据和 `accept`，不要塞入大量处理逻辑  |
+| 访问者职责要单一   | 一个访问者只做一类处理，例如金额、审计、风控       |
+| 注意双分派理解成本 | 访问者模式对团队成员有一定理解门槛，需配合文档说明 |
 
-/**
- * 物流信息元素
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Getter
-public class DeliveryInfoElement implements OrderInspectionElement {
+## 和策略模式的区别
 
-    private final Boolean shipped;
-    private final String deliveryCompany;
+访问者模式和策略模式都能把处理逻辑拆分成独立类，但关注点不同。
 
-    /**
-     * 创建物流信息元素
-     *
-     * @param shipped         是否已发货
-     * @param deliveryCompany 物流公司
-     */
-    public DeliveryInfoElement(Boolean shipped, String deliveryCompany) {
-        if (shipped == null) {
-            throw new IllegalArgumentException("发货状态不能为空");
-        }
+| 模式       | 关注点                         | 典型场景                               |
+| ---------- | ------------------------------ | -------------------------------------- |
+| 访问者模式 | 对一组不同类型元素执行某类操作 | 订单明细统计、AST 节点处理、文件树扫描 |
+| 策略模式   | 从多种算法中选择一种执行       | 优惠计算、支付渠道、导出格式、登录方式 |
 
-        if (Boolean.TRUE.equals(shipped) && StrUtil.isBlank(deliveryCompany)) {
-            throw new IllegalArgumentException("已发货订单必须填写物流公司");
-        }
+如果核心问题是“一组元素需要被多种操作处理”，优先考虑访问者模式。
+如果核心问题是“同一个输入选择一种算法处理”，优先考虑策略模式。
 
-        this.shipped = shipped;
-        this.deliveryCompany = StrUtil.nullToDefault(deliveryCompany, "");
-    }
+## 和迭代器模式的区别
 
-    /**
-     * 接受订单巡检访问者访问
-     *
-     * @param visitor 订单巡检访问者
-     * @param result  订单巡检结果
-     */
-    @Override
-    public void accept(OrderInspectionVisitor visitor, OrderInspectionResult result) {
-        if (visitor == null || result == null) {
-            throw new IllegalArgumentException("访问者和结果对象不能为空");
-        }
+访问者模式和迭代器模式经常一起出现，但解决的问题不同。
 
-        visitor.visit(this, result);
-    }
-}
-```
+| 模式       | 关注点                   | 典型场景                     |
+| ---------- | ------------------------ | ---------------------------- |
+| 访问者模式 | 元素被访问后执行什么操作 | 金额计算、审计、导出、风控   |
+| 迭代器模式 | 如何顺序访问一组元素     | 分页遍历、集合遍历、批量处理 |
 
-文件位置：`src/main/java/io/github/atengk/design/visitor/OrderInspectionVisitor.java`
+在本示例中，`for (OrderElement element : elements)` 是普通遍历；如果元素来源很大，也可以结合迭代器模式分批读取元素，再让访问者处理。
 
-下面是订单巡检访问者接口，为每一种订单元素定义访问方法。
+## 和模板方法模式的区别
 
-```java
-package io.github.atengk.design.visitor;
+访问者模式和模板方法模式都能组织复杂处理逻辑，但结构不同。
 
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.element.DeliveryInfoElement;
-import io.github.atengk.design.element.OrderInfoElement;
-import io.github.atengk.design.element.PaymentInfoElement;
+| 模式         | 关注点                             | 典型场景                         |
+| ------------ | ---------------------------------- | -------------------------------- |
+| 访问者模式   | 不同访问者对同一批元素执行不同操作 | 统计、审计、导出、风控           |
+| 模板方法模式 | 父类固定流程，子类实现部分步骤     | 导入流程、导出流程、任务执行流程 |
 
-/**
- * 订单巡检访问者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface OrderInspectionVisitor {
+模板方法模式强调“流程骨架固定”。
+访问者模式强调“对象结构稳定，操作可扩展”。
 
-    /**
-     * 获取访问者类型
-     *
-     * @return 访问者类型
-     */
-    String visitorType();
+## 小结
 
-    /**
-     * 访问订单信息元素
-     *
-     * @param element 订单信息元素
-     * @param result  巡检结果
-     */
-    void visit(OrderInfoElement element, OrderInspectionResult result);
-
-    /**
-     * 访问支付信息元素
-     *
-     * @param element 支付信息元素
-     * @param result  巡检结果
-     */
-    void visit(PaymentInfoElement element, OrderInspectionResult result);
-
-    /**
-     * 访问物流信息元素
-     *
-     * @param element 物流信息元素
-     * @param result  巡检结果
-     */
-    void visit(DeliveryInfoElement element, OrderInspectionResult result);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/SummaryOrderInspectionVisitor.java`
-
-下面是摘要访问者，用于生成订单摘要信息。
-
-```java
-package io.github.atengk.design.visitor;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.element.DeliveryInfoElement;
-import io.github.atengk.design.element.OrderInfoElement;
-import io.github.atengk.design.element.PaymentInfoElement;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 订单摘要巡检访问者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class SummaryOrderInspectionVisitor implements OrderInspectionVisitor {
-
-    /**
-     * 获取访问者类型
-     *
-     * @return 访问者类型
-     */
-    @Override
-    public String visitorType() {
-        return "summary";
-    }
-
-    /**
-     * 访问订单信息元素
-     *
-     * @param element 订单信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(OrderInfoElement element, OrderInspectionResult result) {
-        String summary = StrUtil.format("订单摘要：订单号={}，用户ID={}，状态={}，金额={}",
-                element.getOrderNo(), element.getUserId(), element.getOrderStatus(), element.getOrderAmount());
-
-        result.addSummary(summary);
-        log.info("生成订单信息摘要，订单号：{}", element.getOrderNo());
-    }
-
-    /**
-     * 访问支付信息元素
-     *
-     * @param element 支付信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(PaymentInfoElement element, OrderInspectionResult result) {
-        String summary = StrUtil.format("支付摘要：是否已支付={}，支付金额={}",
-                element.getPaid(), element.getPayAmount());
-
-        result.addSummary(summary);
-        log.info("生成支付信息摘要，是否已支付：{}", element.getPaid());
-    }
-
-    /**
-     * 访问物流信息元素
-     *
-     * @param element 物流信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(DeliveryInfoElement element, OrderInspectionResult result) {
-        String summary = StrUtil.format("物流摘要：是否已发货={}，物流公司={}",
-                element.getShipped(), StrUtil.blankToDefault(element.getDeliveryCompany(), "无"));
-
-        result.addSummary(summary);
-        log.info("生成物流信息摘要，是否已发货：{}", element.getShipped());
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/RiskOrderInspectionVisitor.java`
-
-下面是风险访问者，用于检查订单、支付和物流之间是否存在风险。
-
-```java
-package io.github.atengk.design.visitor;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.element.DeliveryInfoElement;
-import io.github.atengk.design.element.OrderInfoElement;
-import io.github.atengk.design.element.PaymentInfoElement;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-
-/**
- * 订单风险巡检访问者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class RiskOrderInspectionVisitor implements OrderInspectionVisitor {
-
-    /**
-     * 获取访问者类型
-     *
-     * @return 访问者类型
-     */
-    @Override
-    public String visitorType() {
-        return "risk";
-    }
-
-    /**
-     * 访问订单信息元素
-     *
-     * @param element 订单信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(OrderInfoElement element, OrderInspectionResult result) {
-        if (element.getOrderAmount().compareTo(BigDecimal.valueOf(10000)) > 0) {
-            result.addRisk(StrUtil.format("订单金额较高，订单号={}，金额={}", element.getOrderNo(), element.getOrderAmount()));
-            log.warn("发现订单金额风险，订单号：{}，金额：{}", element.getOrderNo(), element.getOrderAmount());
-        }
-
-        if (StrUtil.equalsIgnoreCase(element.getOrderStatus(), "CANCELED")) {
-            result.addRisk(StrUtil.format("订单已取消，需要确认后续支付和物流状态，订单号={}", element.getOrderNo()));
-            log.warn("发现取消订单风险，订单号：{}", element.getOrderNo());
-        }
-    }
-
-    /**
-     * 访问支付信息元素
-     *
-     * @param element 支付信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(PaymentInfoElement element, OrderInspectionResult result) {
-        if (Boolean.FALSE.equals(element.getPaid()) && element.getPayAmount().compareTo(BigDecimal.ZERO) > 0) {
-            result.addRisk(StrUtil.format("支付状态异常，未支付但存在支付金额={}", element.getPayAmount()));
-            log.warn("发现支付状态风险，支付金额：{}", element.getPayAmount());
-        }
-
-        if (Boolean.TRUE.equals(element.getPaid()) && element.getPayAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            result.addRisk("支付状态异常，已支付但支付金额小于等于0");
-            log.warn("发现支付金额风险，支付状态已支付但金额异常");
-        }
-    }
-
-    /**
-     * 访问物流信息元素
-     *
-     * @param element 物流信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(DeliveryInfoElement element, OrderInspectionResult result) {
-        if (Boolean.TRUE.equals(element.getShipped()) && StrUtil.isBlank(element.getDeliveryCompany())) {
-            result.addRisk("物流状态异常，已发货但物流公司为空");
-            log.warn("发现物流信息风险，已发货但物流公司为空");
-        }
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/context/OrderInspectionVisitorContext.java`
-
-下面是访问者上下文，负责根据访问者类型选择具体访问者。
-
-```java
-package io.github.atengk.design.context;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.visitor.OrderInspectionVisitor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-/**
- * 订单巡检访问者上下文
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class OrderInspectionVisitorContext {
-
-    private final Map<String, OrderInspectionVisitor> visitorMap;
-
-    /**
-     * 创建订单巡检访问者上下文
-     *
-     * @param visitors 订单巡检访问者列表
-     */
-    public OrderInspectionVisitorContext(List<OrderInspectionVisitor> visitors) {
-        if (CollUtil.isEmpty(visitors)) {
-            log.warn("订单巡检访问者列表为空");
-            this.visitorMap = Map.of();
-            return;
-        }
-
-        this.visitorMap = visitors.stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        visitor -> StrUtil.trim(visitor.visitorType()).toLowerCase(),
-                        Function.identity()
-                ));
-
-        log.info("初始化订单巡检访问者上下文，支持访问者类型：{}", visitorMap.keySet());
-    }
-
-    /**
-     * 获取访问者
-     *
-     * @param visitorType 访问者类型
-     * @return 订单巡检访问者
-     */
-    public OrderInspectionVisitor getVisitor(String visitorType) {
-        if (StrUtil.isBlank(visitorType)) {
-            log.warn("获取订单巡检访问者失败，访问者类型为空");
-            throw new IllegalArgumentException("访问者类型不能为空");
-        }
-
-        OrderInspectionVisitor visitor = visitorMap.get(StrUtil.trim(visitorType).toLowerCase());
-        if (visitor == null) {
-            log.warn("获取订单巡检访问者失败，不支持的访问者类型：{}", visitorType);
-            throw new IllegalArgumentException("不支持的访问者类型：" + visitorType);
-        }
-
-        return visitor;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/OrderInspectionService.java`
-
-下面是订单巡检服务接口。
-
-```java
-package io.github.atengk.design.service;
-
-import io.github.atengk.design.dto.OrderInspectionRequest;
-import io.github.atengk.design.dto.OrderInspectionResponse;
-
-/**
- * 订单巡检服务
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface OrderInspectionService {
-
-    /**
-     * 巡检订单
-     *
-     * @param request 订单巡检请求
-     * @return 订单巡检响应
-     */
-    OrderInspectionResponse inspect(OrderInspectionRequest request);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/OrderInspectionServiceImpl.java`
-
-下面是订单巡检服务实现，负责构建对象结构并触发访问者访问。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.context.OrderInspectionVisitorContext;
-import io.github.atengk.design.dto.OrderInspectionRequest;
-import io.github.atengk.design.dto.OrderInspectionResponse;
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.element.DeliveryInfoElement;
-import io.github.atengk.design.element.OrderInfoElement;
-import io.github.atengk.design.element.OrderInspectionElement;
-import io.github.atengk.design.element.PaymentInfoElement;
-import io.github.atengk.design.service.OrderInspectionService;
-import io.github.atengk.design.visitor.OrderInspectionVisitor;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.math.BigDecimal;
-import java.util.List;
-
-/**
- * 订单巡检服务实现
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Service
-@RequiredArgsConstructor
-public class OrderInspectionServiceImpl implements OrderInspectionService {
-
-    private final OrderInspectionVisitorContext visitorContext;
-
-    /**
-     * 巡检订单
-     *
-     * @param request 订单巡检请求
-     * @return 订单巡检响应
-     */
-    @Override
-    public OrderInspectionResponse inspect(OrderInspectionRequest request) {
-        validateRequest(request);
-
-        List<OrderInspectionElement> elements = List.of(
-                new OrderInfoElement(request.orderNo(), request.userId(), request.orderStatus(), request.orderAmount()),
-                new PaymentInfoElement(request.paid(), request.payAmount()),
-                new DeliveryInfoElement(request.shipped(), request.deliveryCompany())
-        );
-
-        OrderInspectionVisitor visitor = visitorContext.getVisitor(request.visitorType());
-        OrderInspectionResult result = new OrderInspectionResult();
-
-        for (OrderInspectionElement element : elements) {
-            element.accept(visitor, result);
-        }
-
-        boolean passed = !result.hasRisk();
-        log.info("订单巡检完成，访问者类型：{}，订单号：{}，是否通过：{}",
-                visitor.visitorType(), request.orderNo(), passed);
-
-        return new OrderInspectionResponse(
-                visitor.visitorType(),
-                request.orderNo(),
-                result.getSummaries(),
-                result.getRisks(),
-                passed,
-                passed ? "巡检通过" : "巡检存在风险"
-        );
-    }
-
-    /**
-     * 校验订单巡检请求
-     *
-     * @param request 订单巡检请求
-     */
-    private void validateRequest(OrderInspectionRequest request) {
-        if (request == null) {
-            log.warn("订单巡检失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.hasBlank(request.visitorType(), request.orderNo(), request.orderStatus())) {
-            log.warn("订单巡检失败，访问者类型、订单号或订单状态为空");
-            throw new IllegalArgumentException("访问者类型、订单号和订单状态不能为空");
-        }
-
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("订单巡检失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (request.orderAmount() == null || request.orderAmount().compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("订单巡检失败，订单金额不合法，订单号：{}，金额：{}", request.orderNo(), request.orderAmount());
-            throw new IllegalArgumentException("订单金额不能小于0");
-        }
-
-        if (request.paid() == null || request.shipped() == null) {
-            log.warn("订单巡检失败，支付状态或发货状态为空，订单号：{}", request.orderNo());
-            throw new IllegalArgumentException("支付状态和发货状态不能为空");
-        }
-
-        if (request.payAmount() == null || request.payAmount().compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("订单巡检失败，支付金额不合法，订单号：{}，金额：{}", request.orderNo(), request.payAmount());
-            throw new IllegalArgumentException("支付金额不能小于0");
-        }
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderInspectionController.java`
-
-下面是订单巡检接口，用于验证访问者模式效果。
-
-```java
-package io.github.atengk.design.controller;
-
-import io.github.atengk.design.dto.OrderInspectionRequest;
-import io.github.atengk.design.dto.OrderInspectionResponse;
-import io.github.atengk.design.service.OrderInspectionService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-
-/**
- * 订单巡检控制器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/visitor/order-inspection")
-public class OrderInspectionController {
-
-    private final OrderInspectionService orderInspectionService;
-
-    /**
-     * 巡检订单
-     *
-     * @param visitorType     访问者类型
-     * @param orderNo         订单号
-     * @param userId          用户ID
-     * @param orderStatus     订单状态
-     * @param orderAmount     订单金额
-     * @param paid            是否已支付
-     * @param payAmount       支付金额
-     * @param shipped         是否已发货
-     * @param deliveryCompany 物流公司
-     * @return 订单巡检响应
-     */
-    @GetMapping("/inspect")
-    public OrderInspectionResponse inspect(@RequestParam String visitorType,
-                                           @RequestParam String orderNo,
-                                           @RequestParam Long userId,
-                                           @RequestParam String orderStatus,
-                                           @RequestParam BigDecimal orderAmount,
-                                           @RequestParam Boolean paid,
-                                           @RequestParam BigDecimal payAmount,
-                                           @RequestParam Boolean shipped,
-                                           @RequestParam(required = false) String deliveryCompany) {
-        OrderInspectionRequest request = new OrderInspectionRequest(
-                visitorType,
-                orderNo,
-                userId,
-                orderStatus,
-                orderAmount,
-                paid,
-                payAmount,
-                shipped,
-                deliveryCompany
-        );
-
-        return orderInspectionService.inspect(request);
-    }
-}
-```
-
-接口调用示例：
-
-```bash
-curl "http://localhost:8080/visitor/order-inspection/inspect?visitorType=summary&orderNo=ORDER10001&userId=10001&orderStatus=PAID&orderAmount=199.00&paid=true&payAmount=199.00&shipped=false"
-
-curl "http://localhost:8080/visitor/order-inspection/inspect?visitorType=risk&orderNo=ORDER10002&userId=10002&orderStatus=CANCELED&orderAmount=19999.00&paid=false&payAmount=10.00&shipped=false"
-```
-
-摘要访问者可能返回：
-
-```json
-{
-  "visitorType": "summary",
-  "orderNo": "ORDER10001",
-  "summaries": [
-    "订单摘要：订单号=ORDER10001，用户ID=10001，状态=PAID，金额=199.00",
-    "支付摘要：是否已支付=true，支付金额=199.00",
-    "物流摘要：是否已发货=false，物流公司=无"
-  ],
-  "risks": [],
-  "passed": true,
-  "message": "巡检通过"
-}
-```
-
-风险访问者可能返回：
-
-```json
-{
-  "visitorType": "risk",
-  "orderNo": "ORDER10002",
-  "summaries": [],
-  "risks": [
-    "订单金额较高，订单号=ORDER10002，金额=19999.00",
-    "订单已取消，需要确认后续支付和物流状态，订单号=ORDER10002",
-    "支付状态异常，未支付但存在支付金额=10.00"
-  ],
-  "passed": false,
-  "message": "巡检存在风险"
-}
-```
-
-这种方式的优点是订单元素结构不需要随着操作类型增加而变化。新增“审计导出”“统计分析”“合规检查”时，只需要新增访问者 Bean。
-
-## 扩展一个新访问者
-
-访问者模式最适合扩展新的操作。下面以“审计导出访问者”为例，新增访问者类型 `audit`。新增后，订单信息、支付信息、物流信息都可以按审计格式输出。
-
-文件位置：`src/main/java/io/github/atengk/design/visitor/AuditOrderInspectionVisitor.java`
-
-下面是审计导出访问者。它会把不同元素转换成审计摘要。
-
-```java
-package io.github.atengk.design.visitor;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderInspectionResult;
-import io.github.atengk.design.element.DeliveryInfoElement;
-import io.github.atengk.design.element.OrderInfoElement;
-import io.github.atengk.design.element.PaymentInfoElement;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 订单审计导出访问者
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class AuditOrderInspectionVisitor implements OrderInspectionVisitor {
-
-    /**
-     * 获取访问者类型
-     *
-     * @return 访问者类型
-     */
-    @Override
-    public String visitorType() {
-        return "audit";
-    }
-
-    /**
-     * 访问订单信息元素
-     *
-     * @param element 订单信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(OrderInfoElement element, OrderInspectionResult result) {
-        result.addSummary(StrUtil.format("AUDIT_ORDER|orderNo={}|userId={}|status={}|amount={}",
-                element.getOrderNo(), element.getUserId(), element.getOrderStatus(), element.getOrderAmount()));
-
-        log.info("导出订单审计信息，订单号：{}", element.getOrderNo());
-    }
-
-    /**
-     * 访问支付信息元素
-     *
-     * @param element 支付信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(PaymentInfoElement element, OrderInspectionResult result) {
-        result.addSummary(StrUtil.format("AUDIT_PAYMENT|paid={}|payAmount={}",
-                element.getPaid(), element.getPayAmount()));
-
-        log.info("导出支付审计信息，是否已支付：{}", element.getPaid());
-    }
-
-    /**
-     * 访问物流信息元素
-     *
-     * @param element 物流信息元素
-     * @param result  巡检结果
-     */
-    @Override
-    public void visit(DeliveryInfoElement element, OrderInspectionResult result) {
-        result.addSummary(StrUtil.format("AUDIT_DELIVERY|shipped={}|deliveryCompany={}",
-                element.getShipped(), StrUtil.blankToDefault(element.getDeliveryCompany(), "NONE")));
-
-        log.info("导出物流审计信息，是否已发货：{}", element.getShipped());
-    }
-}
-```
-
-调用示例：
-
-```bash
-curl "http://localhost:8080/visitor/order-inspection/inspect?visitorType=audit&orderNo=ORDER10003&userId=10003&orderStatus=SHIPPED&orderAmount=299.00&paid=true&payAmount=299.00&shipped=true&deliveryCompany=顺丰速运"
-```
-
-新增 `AuditOrderInspectionVisitor` 后，`OrderInspectionController`、`OrderInspectionServiceImpl`、订单元素类都不需要修改。Spring 会自动把新的访问者加入 `OrderInspectionVisitorContext`。
-
-## 扩展一个新元素类型
-
-访问者模式扩展新操作很方便，但扩展新元素类型比较麻烦。比如订单巡检对象新增“售后信息元素”后，访问者接口必须新增一个访问方法。
-
-示例新增元素：
-
-```java
-void visit(AfterSaleInfoElement element, OrderInspectionResult result);
-```
-
-然后所有访问者都必须实现该方法：
-
-```text
-SummaryOrderInspectionVisitor  需要新增 visit(AfterSaleInfoElement)
-RiskOrderInspectionVisitor     需要新增 visit(AfterSaleInfoElement)
-AuditOrderInspectionVisitor    需要新增 visit(AfterSaleInfoElement)
-```
-
-这就是访问者模式的典型缺点：新增访问者容易，新增元素类型困难。
-
-因此在使用访问者模式前，需要判断对象结构是否稳定。如果元素类型经常变化，比如订单对象隔三差五新增支付分账元素、优惠元素、会员元素、发票元素，访问者模式的维护成本会明显升高。
-
-## 访问者模式和策略模式的区别
-
-访问者模式和策略模式都可以把业务操作从主流程中抽离出来，但二者关注点不同。
-
-| 对比项       | 访问者模式                           | 策略模式                     |
-| ------------ | ------------------------------------ | ---------------------------- |
-| 核心目的     | 对一组不同元素执行某种操作           | 从多个算法中选择一个执行     |
-| 操作对象     | 通常是一组异构对象                   | 通常是同一种输入上下文       |
-| 扩展操作     | 很方便，新增访问者即可               | 很方便，新增策略即可         |
-| 扩展元素类型 | 较麻烦，需要修改所有访问者           | 通常不涉及元素类型           |
-| 典型场景     | AST 遍历、报表元素导出、订单结构巡检 | 优惠计算、物流计费、支付渠道 |
-
-简单理解：
-
-```text
-访问者模式：一组不同类型的元素，需要新增一类统一操作。
-策略模式：同一个业务输入，需要选择一种算法执行。
-```
-
-如果是订单结构中有订单信息、支付信息、物流信息，并且要对它们做摘要、审计、风险检查，适合访问者模式。如果只是根据优惠类型选择满减、折扣、立减算法，适合策略模式。
-
-## 访问者模式和组合模式的关系
-
-访问者模式经常和组合模式一起使用。组合模式负责组织树形结构，访问者模式负责对树中不同节点执行操作。
-
-例如权限树：
-
-```text
-目录节点
-├── 菜单节点
-│   ├── 按钮节点
-│   └── API节点
-```
-
-组合模式解决“节点如何组织成树”，访问者模式解决“如何遍历并对不同节点执行不同操作”。
-
-常见访问者包括：
-
-```text
-权限编码采集访问者
-权限树导出访问者
-权限风险扫描访问者
-权限菜单统计访问者
-```
-
-如果树节点类型稳定，但后续需要不断增加遍历操作，组合模式 + 访问者模式会比较合适。
-
-## 访问者模式和迭代器模式的区别
-
-访问者模式和迭代器模式都可能遍历对象结构，但目的不同。
-
-| 对比项           | 访问者模式                          | 迭代器模式                   |
-| ---------------- | ----------------------------------- | ---------------------------- |
-| 核心目的         | 对不同元素执行不同访问操作          | 顺序访问集合元素             |
-| 关注点           | 操作扩展                            | 遍历方式                     |
-| 是否关心元素类型 | 关心                                | 通常不关心                   |
-| 典型方法         | `accept(visitor)`、`visit(element)` | `hasNext()`、`next()`        |
-| 典型场景         | 报表导出、AST 分析、结构审计        | 分页扫描、集合遍历、游标查询 |
-
-简单理解：
-
-```text
-迭代器模式：一个一个取元素。
-访问者模式：取到元素后，根据元素类型执行访问逻辑。
-```
-
-实际项目中二者可以组合。迭代器负责遍历元素集合，访问者负责对每个元素执行操作。
-
-## 验证方式
-
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行摘要巡检：
-
-```bash
-curl "http://localhost:8080/visitor/order-inspection/inspect?visitorType=summary&orderNo=ORDER10001&userId=10001&orderStatus=PAID&orderAmount=199.00&paid=true&payAmount=199.00&shipped=false"
-```
-
-执行风险巡检：
-
-```bash
-curl "http://localhost:8080/visitor/order-inspection/inspect?visitorType=risk&orderNo=ORDER10002&userId=10002&orderStatus=CANCELED&orderAmount=19999.00&paid=false&payAmount=10.00&shipped=false"
-```
-
-执行审计导出：
-
-```bash
-curl "http://localhost:8080/visitor/order-inspection/inspect?visitorType=audit&orderNo=ORDER10003&userId=10003&orderStatus=SHIPPED&orderAmount=299.00&paid=true&payAmount=299.00&shipped=true&deliveryCompany=顺丰速运"
-```
-
-如果访问者模式正常，可以看到类似日志：
-
-```text
-初始化订单巡检访问者上下文，支持访问者类型：[summary, risk, audit]
-生成订单信息摘要，订单号：ORDER10001
-生成支付信息摘要，是否已支付：true
-生成物流信息摘要，是否已发货：false
-订单巡检完成，访问者类型：summary，订单号：ORDER10001，是否通过：true
-```
-
-执行不支持的访问者类型：
-
-```bash
-curl "http://localhost:8080/visitor/order-inspection/inspect?visitorType=unknown&orderNo=ORDER10001&userId=10001&orderStatus=PAID&orderAmount=199.00&paid=true&payAmount=199.00&shipped=false"
-```
-
-异常日志示例：
-
-```text
-获取订单巡检访问者失败，不支持的访问者类型：unknown
-```
-
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
-
-## 注意事项
-
-访问者模式适合对象结构稳定、操作容易增加的场景。它不适合元素类型经常变化的业务模型，因为每新增一个元素类型，都需要修改访问者接口和所有具体访问者。
-
-适合使用访问者模式的场景：
-
-```text
-报表元素导出
-权限树扫描
-AST语法树分析
-订单聚合结构巡检
-流程节点统计
-复杂对象审计导出
-文件结构分析
-对象结构稳定但操作经常增加
-```
-
-不太适合使用访问者模式的场景：
-
-```text
-元素类型频繁变化
-对象结构很简单
-只有一种操作
-业务人员难以理解双分派
-普通多态或策略模式即可解决
-```
-
-不要为了少量 `if else` 强行引入访问者模式。如果元素只有一两个类型、操作也不扩展，访问者模式会增加类数量。
-
-不推荐在元素中堆积所有操作：
-
-```java
-public class OrderInfoElement {
-
-    public String buildSummary() {
-        return null;
-    }
-
-    public String exportAudit() {
-        return null;
-    }
-
-    public String checkRisk() {
-        return null;
-    }
-}
-```
-
-这种写法会让元素类越来越胖。推荐把操作拆成访问者：
-
-```java
-public class SummaryOrderInspectionVisitor implements OrderInspectionVisitor {
-}
-
-public class RiskOrderInspectionVisitor implements OrderInspectionVisitor {
-}
-
-public class AuditOrderInspectionVisitor implements OrderInspectionVisitor {
-}
-```
-
-访问者如果注册为 Spring 单例 Bean，不要在访问者中保存请求级可变状态。
-
-错误示例：
-
-```java
-private List<String> currentSummaries;
-private List<String> currentRisks;
-private String currentOrderNo;
-```
-
-推荐使用方法参数传递结果上下文：
-
-```java
-public void visit(OrderInfoElement element, OrderInspectionResult result) {
-    result.addSummary("订单摘要");
-}
-```
-
-访问者模式容易让接口变重。元素类型很多时，访问者接口会出现大量 `visit` 方法。
-
-示例：
-
-```text
-visit(OrderInfoElement)
-visit(PaymentInfoElement)
-visit(DeliveryInfoElement)
-visit(InvoiceInfoElement)
-visit(CouponInfoElement)
-visit(MemberInfoElement)
-visit(AfterSaleInfoElement)
-```
-
-如果元素类型不稳定，建议重新评估是否应该使用访问者模式，或者把元素按更稳定的抽象分类。
-
-访问者模式中的访问逻辑应该尽量保持单一职责。摘要访问者只生成摘要，风险访问者只做风险检查，审计访问者只生成审计内容。不要把多个无关操作塞进一个访问者。
-
-不推荐：
-
-```java
-public class AllInOneOrderVisitor implements OrderInspectionVisitor {
-    // 生成摘要
-    // 检查风险
-    // 写数据库
-    // 发送消息
-    // 导出文件
-}
-```
-
-推荐：
-
-```text
-SummaryOrderInspectionVisitor
-RiskOrderInspectionVisitor
-AuditOrderInspectionVisitor
-```
-
-如果访问操作涉及数据库更新、外部接口调用、消息发送，需要谨慎控制副作用。访问者模式更适合分析、转换、校验、导出这类操作。如果访问过程中修改业务状态，要明确事务边界和失败补偿。
-
-## 总结
-
-在 JDK21 和 Spring Boot 3 项目中，访问者模式的实践重点是把对象结构和作用于对象结构的操作分离，让新增操作时尽量不修改元素类。
-
-普通 Java 访问者模式适合理解双分派、元素接口和访问者接口。Spring Boot 项目中更推荐使用“元素接口 + 多个具体元素 + 访问者接口 + 多个访问者 Bean + 访问者上下文”的结构。对于订单巡检、报表导出、权限树扫描、AST 分析、流程节点统计等对象结构稳定但操作频繁扩展的场景，访问者模式可以让操作扩展更加清晰。
-
-访问者模式不是为了替代所有多态和策略。它最适合处理“元素结构稳定、访问操作多变、需要对不同元素类型执行不同逻辑”的场景。实际落地时，需要重点关注元素类型扩展成本、访问者单例线程安全、操作副作用和职责边界。
+访问者模式在 Spring Boot 项目中的常见落地方式是：定义元素接口和访问者接口，让具体元素通过 `accept` 接收访问者，再由不同访问者实现不同业务操作。
+在订单费用明细、报表统计、审计文本、风控检查、表达式树处理、文件结构扫描等场景中，访问者模式可以把数据结构和处理逻辑解耦，使新增处理动作更清晰、更容易维护。

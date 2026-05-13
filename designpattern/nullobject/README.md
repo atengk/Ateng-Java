@@ -1,426 +1,182 @@
-# 设计模式：空对象模式
+# 空对象模式
 
-空对象模式用于用一个“什么也不做但行为安全”的对象代替 `null`，从而减少大量空判断和空指针风险。在 JDK21 和 Spring Boot 3 项目中，空对象模式常用于默认策略、默认处理器、默认配置、空用户、空订单、空支付回调、空通知发送器、空权限对象、空查询结果等场景。
+空对象模式是 Spring Boot 项目中常用的工程实践模式，属于当前设计模式文档体系中的 **Spring Boot 实战补充模式**。它的核心作用是用一个安全的默认对象替代 `null`，减少空判断、降低空指针风险，并让调用方可以用统一方式处理正常对象和缺省对象。
 
-需要注意：空对象模式不是 GoF 23 种设计模式之一，属于这次设计模式文档里的“遗漏补充”。它适合“没有对象时仍然希望调用方可以安全调用统一接口”的场景，但不适合掩盖本来应该暴露的业务异常。
+在实际项目中，空对象模式常用于用户未登录、查询不到配置、缺省会员信息、默认支付策略、默认通知渠道、空权限集合、默认优惠规则、缺省风控结果等场景。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 **JDK 21 + Spring Boot 3**，使用 Spring Web 提供接口，使用 Hutool 简化字符串、对象和金额处理，使用 Lombok 简化日志和构造器代码。
+
+示例业务以“会员权益展示”为场景：
+
+```text
+1. 如果用户存在会员信息，返回真实会员权益。
+2. 如果用户不存在会员信息，不返回 null，而是返回游客会员对象。
+3. Service 和 Controller 不需要反复判断 memberProfile == null。
+4. 前端始终能拿到结构稳定的响应。
+```
+
+普通写法中，查询用户会员信息经常会出现大量空判断：
+
+```java
+MemberProfile memberProfile = repository.findByUserId(userId);
+if (memberProfile == null) {
+    // 返回游客默认权益
+}
+```
+
+使用空对象模式后，调用方始终拿到一个 `MemberProfile`：
+
+```java
+MemberProfile memberProfile = repository.findByUserIdOrDefault(userId);
+```
+
+这样真实会员对象和游客默认对象可以通过同一套接口访问。
+
+### 项目依赖
 
 文件位置：`pom.xml`
 
+下面配置 Web、Validation、Hutool 和 Lombok。当前示例使用内存数据模拟会员信息，暂不引入数据库。
+
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证空对象模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、集合等通用处理 -->
+    <!-- Spring Validation：用于接口参数校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：常用工具类，简化字符串、对象、金额等处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.35</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、Getter、构造方法等样板代码 -->
+    <!-- Lombok：减少构造器、日志对象等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+### 应用配置
 
-## 核心概念
+文件位置：`src/main/resources/application.yml`
 
-空对象模式的核心目标是让调用方不再频繁判断对象是否为 `null`。当真实对象不存在时，返回一个实现了相同接口的空对象。调用方继续调用接口方法，空对象内部提供安全的默认行为。
+示例只需要基础应用配置。真实项目中可以把会员数据改为来自 MySQL、Redis、远程会员中心或配置中心。
 
-常见角色如下：
+```yaml
+spring:
+  application:
+    name: design-pattern-null-object
 
-| 角色           | 说明                         |
-| -------------- | ---------------------------- |
-| AbstractObject | 抽象对象，定义统一行为       |
-| RealObject     | 真实对象，执行业务逻辑       |
-| NullObject     | 空对象，提供安全默认行为     |
-| Client         | 调用方，统一面向抽象对象调用 |
-
-典型结构如下：
-
-```text
-Client
-    -> UserProfile
-        -> RealUserProfile
-        -> NullUserProfile
-```
-
-没有空对象模式时，调用方经常写成：
-
-```java
-UserProfile profile = userProfileService.getProfile(userId);
-if (profile != null) {
-    String nickname = profile.nickname();
-} else {
-    String nickname = "游客";
-}
-```
-
-使用空对象模式后，调用方只需要面向统一接口：
-
-```java
-UserProfile profile = userProfileService.getProfile(userId);
-String nickname = profile.nickname();
-```
-
-空对象模式适合默认行为明确的场景。如果对象不存在本身就是错误，例如支付单不存在、订单不存在、权限记录不存在，就不应该返回空对象掩盖异常。
-
-## 普通 Java 空对象模式
-
-普通 Java 空对象模式适合先理解“真实对象”和“空对象”实现同一接口。下面以用户资料为例，系统可能查到真实用户，也可能查不到用户。查不到用户时返回一个游客资料对象，避免调用方判空。
-
-整体关系如下：
-
-```text
-UserProfile
-├── RealUserProfile
-└── NullUserProfile
-
-UserProfileService
-    -> 查到用户返回 RealUserProfile
-    -> 查不到用户返回 NullUserProfile
+server:
+  port: 8080
 ```
 
 ### 文件结构
 
+空对象模式建议先定义统一抽象，再分别提供真实对象和空对象实现。业务层只依赖抽象，不直接处理 `null`。
+
 ```text
-src/main/java/io/github/atengk/design/nullobject/simple/
-├── UserProfile.java
-├── RealUserProfile.java
-├── NullUserProfile.java
-└── UserProfileService.java
+src/main/java/io/github/atengk/nullobject
+├── NullObjectApplication.java
+├── controller
+│   └── MemberBenefitController.java
+├── domain
+│   └── model
+│       ├── MemberProfile.java
+│       ├── NullMemberProfile.java
+│       └── RealMemberProfile.java
+├── repository
+│   ├── MemberProfileRepository.java
+│   └── impl
+│       └── InMemoryMemberProfileRepository.java
+├── service
+│   ├── MemberBenefitService.java
+│   └── impl
+│       └── MemberBenefitServiceImpl.java
+└── vo
+    └── MemberBenefitVO.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/nullobject/simple/UserProfile.java`
+## 模式说明
 
-下面是用户资料接口，真实用户和空用户都实现该接口。
+空对象模式的核心思想是：当业务对象不存在时，不返回 `null`，而是返回一个实现了相同接口的默认对象。
 
-```java
-package io.github.atengk.design.nullobject.simple;
-
-/**
- * 用户资料接口
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface UserProfile {
-
-    /**
-     * 获取用户ID
-     *
-     * @return 用户ID
-     */
-    Long userId();
-
-    /**
-     * 获取用户昵称
-     *
-     * @return 用户昵称
-     */
-    String nickname();
-
-    /**
-     * 获取手机号
-     *
-     * @return 手机号
-     */
-    String mobile();
-
-    /**
-     * 判断是否为空对象
-     *
-     * @return true 表示空对象，false 表示真实对象
-     */
-    boolean isNull();
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/nullobject/simple/RealUserProfile.java`
-
-下面是真实用户资料对象。
-
-```java
-package io.github.atengk.design.nullobject.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.Getter;
-
-/**
- * 真实用户资料
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Getter
-public class RealUserProfile implements UserProfile {
-
-    private final Long userId;
-    private final String nickname;
-    private final String mobile;
-
-    /**
-     * 创建真实用户资料
-     *
-     * @param userId   用户ID
-     * @param nickname 用户昵称
-     * @param mobile   手机号
-     */
-    public RealUserProfile(Long userId, String nickname, String mobile) {
-        if (userId == null || userId <= 0) {
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-        if (StrUtil.hasBlank(nickname, mobile)) {
-            throw new IllegalArgumentException("用户昵称和手机号不能为空");
-        }
-
-        this.userId = userId;
-        this.nickname = nickname;
-        this.mobile = mobile;
-    }
-
-    /**
-     * 获取用户ID
-     *
-     * @return 用户ID
-     */
-    @Override
-    public Long userId() {
-        return userId;
-    }
-
-    /**
-     * 获取用户昵称
-     *
-     * @return 用户昵称
-     */
-    @Override
-    public String nickname() {
-        return nickname;
-    }
-
-    /**
-     * 获取手机号
-     *
-     * @return 手机号
-     */
-    @Override
-    public String mobile() {
-        return mobile;
-    }
-
-    /**
-     * 判断是否为空对象
-     *
-     * @return false 表示真实对象
-     */
-    @Override
-    public boolean isNull() {
-        return false;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/nullobject/simple/NullUserProfile.java`
-
-下面是空用户资料对象。它不会返回 `null`，而是返回安全默认值。
-
-```java
-package io.github.atengk.design.nullobject.simple;
-
-/**
- * 空用户资料
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public final class NullUserProfile implements UserProfile {
-
-    /**
-     * 空用户资料单例
-     */
-    public static final NullUserProfile INSTANCE = new NullUserProfile();
-
-    /**
-     * 创建空用户资料
-     */
-    private NullUserProfile() {
-    }
-
-    /**
-     * 获取用户ID
-     *
-     * @return 默认用户ID
-     */
-    @Override
-    public Long userId() {
-        return 0L;
-    }
-
-    /**
-     * 获取用户昵称
-     *
-     * @return 默认昵称
-     */
-    @Override
-    public String nickname() {
-        return "游客";
-    }
-
-    /**
-     * 获取手机号
-     *
-     * @return 默认手机号
-     */
-    @Override
-    public String mobile() {
-        return "";
-    }
-
-    /**
-     * 判断是否为空对象
-     *
-     * @return true 表示空对象
-     */
-    @Override
-    public boolean isNull() {
-        return true;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/nullobject/simple/UserProfileService.java`
-
-下面是用户资料服务。查不到用户时返回空对象，而不是返回 `null`。
-
-```java
-package io.github.atengk.design.nullobject.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * 用户资料服务
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class UserProfileService {
-
-    private final Map<Long, UserProfile> userMap = new ConcurrentHashMap<>();
-
-    /**
-     * 创建用户资料服务
-     */
-    public UserProfileService() {
-        userMap.put(10001L, new RealUserProfile(10001L, "Ateng", "13800138000"));
-        userMap.put(10002L, new RealUserProfile(10002L, "Blair", "13900139000"));
-    }
-
-    /**
-     * 根据用户ID获取用户资料
-     *
-     * @param userId 用户ID
-     * @return 用户资料，查不到时返回空用户资料
-     */
-    public UserProfile getProfile(Long userId) {
-        if (userId == null || userId <= 0) {
-            log.warn("获取用户资料失败，用户ID不合法，用户ID：{}", userId);
-            return NullUserProfile.INSTANCE;
-        }
-
-        UserProfile profile = userMap.getOrDefault(userId, NullUserProfile.INSTANCE);
-        log.info("获取用户资料完成，用户ID：{}，是否空对象：{}", userId, profile.isNull());
-        return profile;
-    }
-}
-```
-
-使用方式：
-
-```java
-UserProfileService userProfileService = new UserProfileService();
-
-UserProfile realProfile = userProfileService.getProfile(10001L);
-String realNickname = realProfile.nickname();
-
-UserProfile nullProfile = userProfileService.getProfile(99999L);
-String defaultNickname = nullProfile.nickname();
-```
-
-调用方不需要写 `profile == null` 判断。查不到用户时，`nickname()` 会返回 `游客`，`mobile()` 会返回空字符串。
-
-## Spring Boot 空对象模式
-
-Spring Boot 项目中，空对象模式常用于默认处理器、默认策略、默认通知器等场景。下面以通知发送为例，系统支持短信、邮件、站内信。如果传入未知通知渠道，不直接返回 `null` 或抛空指针，而是返回一个空通知发送器，记录日志并安全返回。
-
-整体流程如下：
+普通写法：
 
 ```text
 Controller
-    -> NoticeService
-        -> NoticeSenderContext
-            -> SmsNoticeSender
-            -> EmailNoticeSender
-            -> SiteNoticeSender
-            -> NullNoticeSender
+ -> Service
+   -> Repository
+     -> 查询不到返回 null
+   -> Service 判断 null
+   -> Controller 可能继续判断 null
 ```
 
-空对象在这里的意义是：未知渠道不会导致空指针，系统可以安全降级。但生产业务中是否允许未知渠道静默降级，需要根据业务决定。
-
-### 文件结构
+空对象模式写法：
 
 ```text
-src/main/java/io/github/atengk/design/
-├── NullObjectApplication.java
-├── controller/
-│   └── NoticeController.java
-├── dto/
-│   ├── NoticeSendRequest.java
-│   └── NoticeSendResponse.java
-├── sender/
-│   ├── NoticeSender.java
-│   ├── SmsNoticeSender.java
-│   ├── EmailNoticeSender.java
-│   ├── SiteNoticeSender.java
-│   └── NullNoticeSender.java
-├── context/
-│   └── NoticeSenderContext.java
-└── service/
-    ├── NoticeService.java
-    └── impl/
-        └── NoticeServiceImpl.java
+Controller
+ -> Service
+   -> Repository
+     -> 查询不到返回 NullMemberProfile
+   -> Service 统一调用 MemberProfile
+   -> Controller 统一返回 VO
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/NullObjectApplication.java`
+空对象不是随便创建一个空壳对象，而是一个具备安全默认行为的对象。它应该明确表达“没有真实对象，但可以安全使用”。
 
-下面是 Spring Boot 启动类。
+例如：
+
+```text
+真实会员对象：
+- 昵称：张三
+- 等级：3
+- 折扣：0.85
+- 优惠券数量：5
+- 是否游客：false
+
+空会员对象：
+- 昵称：游客用户
+- 等级：0
+- 折扣：1.00
+- 优惠券数量：0
+- 是否游客：true
+```
+
+调用方不需要关心对象是否为 `null`，只需要根据 `isGuest()` 判断是否游客即可。
+
+## 核心代码
+
+这一节给出空对象模式的完整关键代码。示例重点体现三点：
+
+```text
+1. 使用 MemberProfile 抽象统一真实对象和空对象。
+2. NullMemberProfile 提供安全默认值，不返回 null。
+3. Service 不再堆叠 memberProfile == null 判断。
+```
+
+### 启动类
+
+文件位置：`src/main/java/io/github/atengk/nullobject/NullObjectApplication.java`
+
+启动类用于启动 Spring Boot 应用。
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.nullobject;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -429,1164 +185,842 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 空对象模式示例启动类
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class NullObjectApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(NullObjectApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/NoticeSendRequest.java`
+### 会员信息抽象
 
-下面是通知发送请求对象。
+文件位置：`src/main/java/io/github/atengk/nullobject/domain/model/MemberProfile.java`
+
+该接口定义会员信息的统一访问方式。真实会员对象和空会员对象都实现这个接口。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.nullobject.domain.model;
+
+import java.math.BigDecimal;
 
 /**
- * 通知发送请求
+ * 会员信息抽象
  *
- * @param channel  通知渠道
- * @param receiver 接收人
- * @param title    标题
- * @param content  内容
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public record NoticeSendRequest(
-        String channel,
-        String receiver,
-        String title,
-        String content
-) {
+public interface MemberProfile {
+
+    String userId();
+
+    String nickname();
+
+    Integer memberLevel();
+
+    BigDecimal discountRate();
+
+    Integer couponCount();
+
+    boolean isGuest();
+
+    default String levelName() {
+        return switch (memberLevel()) {
+            case 5 -> "钻石会员";
+            case 4 -> "铂金会员";
+            case 3 -> "黄金会员";
+            case 2 -> "白银会员";
+            case 1 -> "普通会员";
+            default -> "游客用户";
+        };
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/NoticeSendResponse.java`
+### 真实会员对象
 
-下面是通知发送响应对象。
+文件位置：`src/main/java/io/github/atengk/nullobject/domain/model/RealMemberProfile.java`
 
-```java
-package io.github.atengk.design.dto;
-
-/**
- * 通知发送响应
- *
- * @param channel  通知渠道
- * @param receiver 接收人
- * @param success  是否成功
- * @param message  响应消息
- * @param bizId    业务ID
- * @author Ateng
- * @since 2026-05-01
- */
-public record NoticeSendResponse(
-        String channel,
-        String receiver,
-        Boolean success,
-        String message,
-        String bizId
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/sender/NoticeSender.java`
-
-下面是通知发送器接口。真实发送器和空发送器都实现该接口。
+该对象表示真实存在的会员信息。
 
 ```java
-package io.github.atengk.design.sender;
+package io.github.atengk.nullobject.domain.model;
 
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
+import cn.hutool.core.util.StrUtil;
+
+import java.math.BigDecimal;
 
 /**
- * 通知发送器
+ * 真实会员信息
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public interface NoticeSender {
+public record RealMemberProfile(
 
-    /**
-     * 获取支持的通知渠道
-     *
-     * @return 通知渠道
-     */
-    String supportChannel();
+        String userId,
 
-    /**
-     * 发送通知
-     *
-     * @param request 通知发送请求
-     * @return 通知发送响应
-     */
-    NoticeSendResponse send(NoticeSendRequest request);
+        String nickname,
 
-    /**
-     * 判断是否为空发送器
-     *
-     * @return true 表示空对象
-     */
-    default boolean isNull() {
+        Integer memberLevel,
+
+        BigDecimal discountRate,
+
+        Integer couponCount
+
+) implements MemberProfile {
+
+    public RealMemberProfile {
+        if (StrUtil.isBlank(userId)) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+        if (StrUtil.isBlank(nickname)) {
+            throw new IllegalArgumentException("用户昵称不能为空");
+        }
+        if (memberLevel == null || memberLevel < 1) {
+            throw new IllegalArgumentException("会员等级不合法");
+        }
+        if (discountRate == null || discountRate.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("会员折扣不合法");
+        }
+        if (couponCount == null || couponCount < 0) {
+            throw new IllegalArgumentException("优惠券数量不合法");
+        }
+    }
+
+    @Override
+    public boolean isGuest() {
         return false;
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/sender/SmsNoticeSender.java`
+### 空会员对象
 
-下面是短信通知发送器。
+文件位置：`src/main/java/io/github/atengk/nullobject/domain/model/NullMemberProfile.java`
 
-```java
-package io.github.atengk.design.sender;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 短信通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class SmsNoticeSender implements NoticeSender {
-
-    /**
-     * 获取支持的通知渠道
-     *
-     * @return 通知渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "sms";
-    }
-
-    /**
-     * 发送短信通知
-     *
-     * @param request 通知发送请求
-     * @return 通知发送响应
-     */
-    @Override
-    public NoticeSendResponse send(NoticeSendRequest request) {
-        if (request == null || StrUtil.hasBlank(request.receiver(), request.content())) {
-            log.warn("短信通知发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("短信接收人和内容不能为空");
-        }
-
-        String bizId = "SMS" + IdUtil.getSnowflakeNextId();
-        log.info("短信通知发送成功，接收人：{}，标题：{}，业务ID：{}",
-                request.receiver(), request.title(), bizId);
-
-        return new NoticeSendResponse(supportChannel(), request.receiver(), true, "短信发送成功", bizId);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/sender/EmailNoticeSender.java`
-
-下面是邮件通知发送器。
+该对象表示查询不到会员信息时的安全默认对象。它不是异常对象，而是一个可正常参与业务展示的默认对象。
 
 ```java
-package io.github.atengk.design.sender;
+package io.github.atengk.nullobject.domain.model;
 
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import java.math.BigDecimal;
 
 /**
- * 邮件通知发送器
+ * 空会员信息
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-@Slf4j
-@Component
-public class EmailNoticeSender implements NoticeSender {
+public final class NullMemberProfile implements MemberProfile {
 
-    /**
-     * 获取支持的通知渠道
-     *
-     * @return 通知渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "email";
+    public static final NullMemberProfile INSTANCE = new NullMemberProfile();
+
+    private NullMemberProfile() {
     }
 
-    /**
-     * 发送邮件通知
-     *
-     * @param request 通知发送请求
-     * @return 通知发送响应
-     */
     @Override
-    public NoticeSendResponse send(NoticeSendRequest request) {
-        if (request == null || StrUtil.hasBlank(request.receiver(), request.title(), request.content())) {
-            log.warn("邮件通知发送失败，接收人、标题或内容为空");
-            throw new IllegalArgumentException("邮件接收人、标题和内容不能为空");
-        }
-
-        String bizId = "EMAIL" + IdUtil.getSnowflakeNextId();
-        log.info("邮件通知发送成功，接收人：{}，标题：{}，业务ID：{}",
-                request.receiver(), request.title(), bizId);
-
-        return new NoticeSendResponse(supportChannel(), request.receiver(), true, "邮件发送成功", bizId);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/sender/SiteNoticeSender.java`
-
-下面是站内信通知发送器。
-
-```java
-package io.github.atengk.design.sender;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 站内信通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class SiteNoticeSender implements NoticeSender {
-
-    /**
-     * 获取支持的通知渠道
-     *
-     * @return 通知渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "site";
+    public String userId() {
+        return "GUEST";
     }
 
-    /**
-     * 发送站内信通知
-     *
-     * @param request 通知发送请求
-     * @return 通知发送响应
-     */
     @Override
-    public NoticeSendResponse send(NoticeSendRequest request) {
-        if (request == null || StrUtil.hasBlank(request.receiver(), request.content())) {
-            log.warn("站内信通知发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("站内信接收人和内容不能为空");
-        }
-
-        String bizId = "SITE" + IdUtil.getSnowflakeNextId();
-        log.info("站内信通知发送成功，接收人：{}，标题：{}，业务ID：{}",
-                request.receiver(), request.title(), bizId);
-
-        return new NoticeSendResponse(supportChannel(), request.receiver(), true, "站内信发送成功", bizId);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/sender/NullNoticeSender.java`
-
-下面是空通知发送器。它不执行真实发送，只记录降级日志并返回安全响应。
-
-```java
-package io.github.atengk.design.sender;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 空通知发送器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class NullNoticeSender implements NoticeSender {
-
-    /**
-     * 获取支持的通知渠道
-     *
-     * @return 通知渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "null";
+    public String nickname() {
+        return "游客用户";
     }
 
-    /**
-     * 执行空通知发送
-     *
-     * @param request 通知发送请求
-     * @return 通知发送响应
-     */
     @Override
-    public NoticeSendResponse send(NoticeSendRequest request) {
-        String channel = request == null ? "unknown" : StrUtil.blankToDefault(request.channel(), "unknown");
-        String receiver = request == null ? "" : StrUtil.blankToDefault(request.receiver(), "");
-
-        log.warn("通知渠道未匹配，使用空通知发送器降级处理，渠道：{}，接收人：{}", channel, receiver);
-
-        return new NoticeSendResponse(
-                channel,
-                receiver,
-                false,
-                "通知渠道不支持，已安全跳过",
-                ""
-        );
+    public Integer memberLevel() {
+        return 0;
     }
 
-    /**
-     * 判断是否为空发送器
-     *
-     * @return true 表示空对象
-     */
     @Override
-    public boolean isNull() {
+    public BigDecimal discountRate() {
+        return BigDecimal.ONE;
+    }
+
+    @Override
+    public Integer couponCount() {
+        return 0;
+    }
+
+    @Override
+    public boolean isGuest() {
         return true;
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/context/NoticeSenderContext.java`
+## 仓储层代码
 
-下面是通知发送器上下文。找不到真实发送器时返回空发送器。
+这一节使用内存数据模拟会员查询。真实项目中，`InMemoryMemberProfileRepository` 可以替换为 MyBatis-Plus、JPA、Redis 或远程会员服务实现。
+
+### 仓储接口
+
+文件位置：`src/main/java/io/github/atengk/nullobject/repository/MemberProfileRepository.java`
+
+仓储接口直接提供 `findByUserIdOrDefault` 方法，明确表达“查询不到时返回默认对象”。
 
 ```java
-package io.github.atengk.design.context;
+package io.github.atengk.nullobject.repository;
 
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.sender.NoticeSender;
-import io.github.atengk.design.sender.NullNoticeSender;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import io.github.atengk.nullobject.domain.model.MemberProfile;
 
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.Optional;
 
 /**
- * 通知发送器上下文
+ * 会员信息仓储接口
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
+ */
+public interface MemberProfileRepository {
+
+    Optional<MemberProfile> findByUserId(String userId);
+
+    MemberProfile findByUserIdOrDefault(String userId);
+
+}
+```
+
+### 内存仓储实现
+
+文件位置：`src/main/java/io/github/atengk/nullobject/repository/impl/InMemoryMemberProfileRepository.java`
+
+该实现类模拟从数据源查询会员信息。查询不到时返回 `NullMemberProfile.INSTANCE`。
+
+```java
+package io.github.atengk.nullobject.repository.impl;
+
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.nullobject.domain.model.MemberProfile;
+import io.github.atengk.nullobject.domain.model.NullMemberProfile;
+import io.github.atengk.nullobject.domain.model.RealMemberProfile;
+import io.github.atengk.nullobject.repository.MemberProfileRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * 基于内存的会员信息仓储实现
+ *
+ * @author Ateng
+ * @since 2026-05-13
  */
 @Slf4j
-@Component
-public class NoticeSenderContext {
+@Repository
+public class InMemoryMemberProfileRepository implements MemberProfileRepository {
 
-    private final Map<String, NoticeSender> senderMap;
-    private final NullNoticeSender nullNoticeSender;
+    private static final Map<String, MemberProfile> MEMBER_PROFILE_MAP = new HashMap<>();
 
-    /**
-     * 创建通知发送器上下文
-     *
-     * @param senders          通知发送器列表
-     * @param nullNoticeSender 空通知发送器
-     */
-    public NoticeSenderContext(List<NoticeSender> senders, NullNoticeSender nullNoticeSender) {
-        this.nullNoticeSender = nullNoticeSender;
+    static {
+        MEMBER_PROFILE_MAP.put("10001", new RealMemberProfile(
+                "10001",
+                "张三",
+                3,
+                new BigDecimal("0.85"),
+                5
+        ));
 
-        if (CollUtil.isEmpty(senders)) {
-            log.warn("通知发送器列表为空");
-            this.senderMap = Map.of();
-            return;
-        }
+        MEMBER_PROFILE_MAP.put("10002", new RealMemberProfile(
+                "10002",
+                "李四",
+                1,
+                new BigDecimal("0.95"),
+                1
+        ));
 
-        this.senderMap = senders.stream()
-                .filter(sender -> !sender.isNull())
-                .collect(Collectors.toUnmodifiableMap(
-                        sender -> StrUtil.trim(sender.supportChannel()).toLowerCase(),
-                        Function.identity()
-                ));
-
-        log.info("初始化通知发送器上下文完成，支持渠道：{}", senderMap.keySet());
+        MEMBER_PROFILE_MAP.put("10003", new RealMemberProfile(
+                "10003",
+                "王五",
+                5,
+                new BigDecimal("0.75"),
+                12
+        ));
     }
 
-    /**
-     * 根据渠道获取通知发送器
-     *
-     * @param channel 通知渠道
-     * @return 通知发送器，找不到时返回空发送器
-     */
-    public NoticeSender getSender(String channel) {
-        if (StrUtil.isBlank(channel)) {
-            log.warn("获取通知发送器失败，渠道为空，返回空通知发送器");
-            return nullNoticeSender;
+    @Override
+    public Optional<MemberProfile> findByUserId(String userId) {
+        if (StrUtil.isBlank(userId)) {
+            return Optional.empty();
         }
-
-        NoticeSender sender = senderMap.get(StrUtil.trim(channel).toLowerCase());
-        if (sender == null) {
-            log.warn("获取通知发送器失败，不支持的渠道：{}，返回空通知发送器", channel);
-            return nullNoticeSender;
-        }
-
-        return sender;
+        return Optional.ofNullable(MEMBER_PROFILE_MAP.get(userId));
     }
+
+    @Override
+    public MemberProfile findByUserIdOrDefault(String userId) {
+        if (StrUtil.isBlank(userId)) {
+            log.warn("用户ID为空，返回空会员对象");
+            return NullMemberProfile.INSTANCE;
+        }
+
+        MemberProfile memberProfile = MEMBER_PROFILE_MAP.get(userId);
+        if (memberProfile == null) {
+            log.info("会员信息不存在，返回空会员对象，userId={}", userId);
+            return NullMemberProfile.INSTANCE;
+        }
+
+        return memberProfile;
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/NoticeService.java`
+## 业务层代码
 
-下面是通知服务接口。
+业务层不再处理 `null`，只面对 `MemberProfile` 抽象。真实会员和游客会员都能走同一段代码。
+
+### 响应 VO
+
+文件位置：`src/main/java/io/github/atengk/nullobject/vo/MemberBenefitVO.java`
+
+该 VO 用于接口返回会员权益信息。
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.nullobject.vo;
 
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
+import java.math.BigDecimal;
 
 /**
- * 通知服务
+ * 会员权益响应对象
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public interface NoticeService {
+public record MemberBenefitVO(
 
-    /**
-     * 发送通知
-     *
-     * @param request 通知发送请求
-     * @return 通知发送响应
-     */
-    NoticeSendResponse send(NoticeSendRequest request);
+        String userId,
+
+        String nickname,
+
+        Integer memberLevel,
+
+        String levelName,
+
+        BigDecimal discountRate,
+
+        Integer couponCount,
+
+        Boolean guest,
+
+        String benefitText
+
+) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/NoticeServiceImpl.java`
+### Service 接口
 
-下面是通知服务实现。它不再判断发送器是否为 `null`，而是统一调用发送器接口。
+文件位置：`src/main/java/io/github/atengk/nullobject/service/MemberBenefitService.java`
+
+该接口定义会员权益查询能力。
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.nullobject.service;
 
+import io.github.atengk.nullobject.vo.MemberBenefitVO;
+
+/**
+ * 会员权益业务接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface MemberBenefitService {
+
+    MemberBenefitVO getBenefitSummary(String userId);
+
+}
+```
+
+### Service 实现
+
+文件位置：`src/main/java/io/github/atengk/nullobject/service/impl/MemberBenefitServiceImpl.java`
+
+该实现类通过空对象模式统一处理真实会员和游客会员。这里没有 `memberProfile == null` 判断。
+
+```java
+package io.github.atengk.nullobject.service.impl;
+
+import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.context.NoticeSenderContext;
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
-import io.github.atengk.design.sender.NoticeSender;
-import io.github.atengk.design.service.NoticeService;
+import io.github.atengk.nullobject.domain.model.MemberProfile;
+import io.github.atengk.nullobject.repository.MemberProfileRepository;
+import io.github.atengk.nullobject.service.MemberBenefitService;
+import io.github.atengk.nullobject.vo.MemberBenefitVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+
 /**
- * 通知服务实现
+ * 会员权益业务实现
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class NoticeServiceImpl implements NoticeService {
+public class MemberBenefitServiceImpl implements MemberBenefitService {
 
-    private final NoticeSenderContext noticeSenderContext;
+    private final MemberProfileRepository memberProfileRepository;
 
-    /**
-     * 发送通知
-     *
-     * @param request 通知发送请求
-     * @return 通知发送响应
-     */
     @Override
-    public NoticeSendResponse send(NoticeSendRequest request) {
-        validateRequest(request);
+    public MemberBenefitVO getBenefitSummary(String userId) {
+        MemberProfile memberProfile = memberProfileRepository.findByUserIdOrDefault(userId);
 
-        NoticeSender sender = noticeSenderContext.getSender(request.channel());
-        NoticeSendResponse response = sender.send(request);
+        String benefitText = buildBenefitText(memberProfile);
+        log.info("查询会员权益完成，requestUserId={}，actualUserId={}，guest={}",
+                userId, memberProfile.userId(), memberProfile.isGuest());
 
-        log.info("通知发送流程完成，渠道：{}，接收人：{}，是否空发送器：{}，结果：{}",
-                request.channel(), request.receiver(), sender.isNull(), response.success());
-
-        return response;
+        return new MemberBenefitVO(
+                memberProfile.userId(),
+                memberProfile.nickname(),
+                memberProfile.memberLevel(),
+                memberProfile.levelName(),
+                memberProfile.discountRate(),
+                memberProfile.couponCount(),
+                memberProfile.isGuest(),
+                benefitText
+        );
     }
 
-    /**
-     * 校验通知发送请求
-     *
-     * @param request 通知发送请求
-     */
-    private void validateRequest(NoticeSendRequest request) {
-        if (request == null) {
-            log.warn("发送通知失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
+    private String buildBenefitText(MemberProfile memberProfile) {
+        BigDecimal discount = NumberUtil.mul(memberProfile.discountRate(), new BigDecimal("10"));
+
+        if (memberProfile.isGuest()) {
+            return "当前为游客用户，可登录后查看会员权益";
         }
 
-        if (StrUtil.hasBlank(request.receiver(), request.content())) {
-            log.warn("发送通知失败，接收人或内容为空");
-            throw new IllegalArgumentException("接收人和内容不能为空");
-        }
+        return StrUtil.format(
+                "尊敬的{}，您当前是{}，购物可享{}折，可用优惠券{}张",
+                memberProfile.nickname(),
+                memberProfile.levelName(),
+                discount.stripTrailingZeros().toPlainString(),
+                memberProfile.couponCount()
+        );
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/NoticeController.java`
+## 接口层代码
 
-下面是通知接口，用于验证空对象模式效果。
+Controller 只负责接收请求并返回结果，不处理会员是否存在的细节。
+
+### Controller 接口
+
+文件位置：`src/main/java/io/github/atengk/nullobject/controller/MemberBenefitController.java`
+
+该 Controller 提供会员权益查询接口。
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.nullobject.controller;
 
-import io.github.atengk.design.dto.NoticeSendRequest;
-import io.github.atengk.design.dto.NoticeSendResponse;
-import io.github.atengk.design.service.NoticeService;
+import io.github.atengk.nullobject.service.MemberBenefitService;
+import io.github.atengk.nullobject.vo.MemberBenefitVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 通知控制器
+ * 会员权益接口
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/members")
 @RequiredArgsConstructor
-@RequestMapping("/null-object/notice")
-public class NoticeController {
+public class MemberBenefitController {
 
-    private final NoticeService noticeService;
+    private final MemberBenefitService memberBenefitService;
 
-    /**
-     * 发送通知
-     *
-     * @param channel  通知渠道
-     * @param receiver 接收人
-     * @param title    标题
-     * @param content  内容
-     * @return 通知发送响应
-     */
-    @PostMapping("/send")
-    public NoticeSendResponse send(@RequestParam String channel,
-                                   @RequestParam String receiver,
-                                   @RequestParam(required = false) String title,
-                                   @RequestParam String content) {
-        NoticeSendRequest request = new NoticeSendRequest(channel, receiver, title, content);
-        return noticeService.send(request);
+    @GetMapping("/{userId}/benefit-summary")
+    public MemberBenefitVO getBenefitSummary(@PathVariable String userId) {
+        return memberBenefitService.getBenefitSummary(userId);
     }
+
 }
 ```
 
 ## 使用方式
 
-启动 Spring Boot 项目：
+本示例提供一个会员权益查询接口。无论用户是否存在，接口都会返回结构稳定的响应对象。
+
+### 查询真实会员权益
+
+接口信息：
+
+| 项目     | 内容                                |
+| -------- | ----------------------------------- |
+| 请求路径 | `/members/{userId}/benefit-summary` |
+| 请求方法 | `GET`                               |
+| 主要作用 | 查询会员权益摘要                    |
+
+请求示例：
+
+```bash
+curl -X GET 'http://localhost:8080/members/10001/benefit-summary'
+```
+
+响应示例：
+
+```json
+{
+  "userId": "10001",
+  "nickname": "张三",
+  "memberLevel": 3,
+  "levelName": "黄金会员",
+  "discountRate": 0.85,
+  "couponCount": 5,
+  "guest": false,
+  "benefitText": "尊敬的张三，您当前是黄金会员，购物可享8.5折，可用优惠券5张"
+}
+```
+
+### 查询不存在用户权益
+
+请求示例：
+
+```bash
+curl -X GET 'http://localhost:8080/members/99999/benefit-summary'
+```
+
+响应示例：
+
+```json
+{
+  "userId": "GUEST",
+  "nickname": "游客用户",
+  "memberLevel": 0,
+  "levelName": "游客用户",
+  "discountRate": 1,
+  "couponCount": 0,
+  "guest": true,
+  "benefitText": "当前为游客用户，可登录后查看会员权益"
+}
+```
+
+可以看到，用户不存在时接口没有返回 `null`，也没有报错，而是返回了一个安全的游客对象。
+
+## 验证方式
+
+可以通过接口响应和日志验证空对象模式是否生效。
+
+启动项目：
 
 ```bash
 mvn spring-boot:run
 ```
 
-发送短信通知：
+查询真实会员：
 
 ```bash
-curl -X POST "http://localhost:8080/null-object/notice/send?channel=sms&receiver=13800138000&title=注册成功&content=欢迎注册"
+curl -X GET 'http://localhost:8080/members/10003/benefit-summary'
 ```
 
-可能返回：
-
-```json
-{
-  "channel": "sms",
-  "receiver": "13800138000",
-  "success": true,
-  "message": "短信发送成功",
-  "bizId": "SMS2020123456789017600"
-}
-```
-
-发送未知渠道通知：
+查询不存在用户：
 
 ```bash
-curl -X POST "http://localhost:8080/null-object/notice/send?channel=dingding&receiver=ateng&title=系统通知&content=这是一条测试通知"
+curl -X GET 'http://localhost:8080/members/99999/benefit-summary'
 ```
 
-可能返回：
-
-```json
-{
-  "channel": "dingding",
-  "receiver": "ateng",
-  "success": false,
-  "message": "通知渠道不支持，已安全跳过",
-  "bizId": ""
-}
-```
-
-如果空对象模式正常，可以看到类似日志：
+验证点：
 
 ```text
-初始化通知发送器上下文完成，支持渠道：[sms, email, site]
-获取通知发送器失败，不支持的渠道：dingding，返回空通知发送器
-通知渠道未匹配，使用空通知发送器降级处理，渠道：dingding，接收人：ateng
-通知发送流程完成，渠道：dingding，接收人：ateng，是否空发送器：true，结果：false
+1. 查询不存在用户时，接口仍然返回完整 JSON。
+2. Service 中没有 memberProfile == null 判断。
+3. Repository 查询不到数据时返回 NullMemberProfile.INSTANCE。
+4. NullMemberProfile 中所有方法都有安全默认值。
+5. 前端可以通过 guest 字段判断是否游客用户。
 ```
 
-重点观察未知渠道请求。它不会出现空指针异常，也不需要调用方写 `if (sender == null)`。
-
-## 默认策略场景
-
-空对象模式经常和策略模式一起使用。策略不存在时，不返回 `null`，而是返回默认策略或空策略。
-
-下面以折扣计算为例。未知折扣类型时返回 `NoDiscountPolicy`，表示不打折。
-
-### 文件结构
+如果接口异常，重点检查：
 
 ```text
-src/main/java/io/github/atengk/design/discount/
-├── DiscountPolicy.java
-├── FullReductionDiscountPolicy.java
-├── PercentDiscountPolicy.java
-├── NoDiscountPolicy.java
-└── DiscountPolicyContext.java
+1. Controller 路径是否为 /members/{userId}/benefit-summary。
+2. InMemoryMemberProfileRepository 是否添加 @Repository。
+3. MemberBenefitServiceImpl 是否添加 @Service。
+4. NullMemberProfile 的方法是否返回了非 null 的安全默认值。
+5. RealMemberProfile 的构造参数是否合法。
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/discount/DiscountPolicy.java`
+## 适用场景
 
-下面是折扣策略接口。
+空对象模式适合“对象不存在但业务可以继续执行”的场景。
 
-```java
-package io.github.atengk.design.discount;
-
-import java.math.BigDecimal;
-
-/**
- * 折扣策略
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface DiscountPolicy {
-
-    /**
-     * 获取折扣类型
-     *
-     * @return 折扣类型
-     */
-    String discountType();
-
-    /**
-     * 计算折后金额
-     *
-     * @param originAmount 原始金额
-     * @return 折后金额
-     */
-    BigDecimal calculate(BigDecimal originAmount);
-
-    /**
-     * 判断是否为空策略
-     *
-     * @return true 表示空策略
-     */
-    default boolean isNull() {
-        return false;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/discount/FullReductionDiscountPolicy.java`
-
-下面是满减折扣策略。
-
-```java
-package io.github.atengk.design.discount;
-
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-
-/**
- * 满减折扣策略
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class FullReductionDiscountPolicy implements DiscountPolicy {
-
-    /**
-     * 获取折扣类型
-     *
-     * @return 折扣类型
-     */
-    @Override
-    public String discountType() {
-        return "full_reduction";
-    }
-
-    /**
-     * 计算满减后金额
-     *
-     * @param originAmount 原始金额
-     * @return 折后金额
-     */
-    @Override
-    public BigDecimal calculate(BigDecimal originAmount) {
-        if (originAmount == null || originAmount.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("满减折扣计算失败，原始金额不合法，金额：{}", originAmount);
-            throw new IllegalArgumentException("原始金额不能小于0");
-        }
-
-        BigDecimal result = originAmount.compareTo(BigDecimal.valueOf(100)) >= 0
-                ? originAmount.subtract(BigDecimal.TEN)
-                : originAmount;
-
-        log.info("满减折扣计算完成，原始金额：{}，折后金额：{}", originAmount, result);
-        return result;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/discount/PercentDiscountPolicy.java`
-
-下面是百分比折扣策略。
-
-```java
-package io.github.atengk.design.discount;
-
-import cn.hutool.core.util.NumberUtil;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-
-/**
- * 百分比折扣策略
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class PercentDiscountPolicy implements DiscountPolicy {
-
-    /**
-     * 获取折扣类型
-     *
-     * @return 折扣类型
-     */
-    @Override
-    public String discountType() {
-        return "percent";
-    }
-
-    /**
-     * 计算百分比折扣后金额
-     *
-     * @param originAmount 原始金额
-     * @return 折后金额
-     */
-    @Override
-    public BigDecimal calculate(BigDecimal originAmount) {
-        if (originAmount == null || originAmount.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("百分比折扣计算失败，原始金额不合法，金额：{}", originAmount);
-            throw new IllegalArgumentException("原始金额不能小于0");
-        }
-
-        BigDecimal result = NumberUtil.mul(originAmount, BigDecimal.valueOf(0.9));
-        log.info("百分比折扣计算完成，原始金额：{}，折后金额：{}", originAmount, result);
-        return result;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/discount/NoDiscountPolicy.java`
-
-下面是空折扣策略。它不做任何优惠，直接返回原始金额。
-
-```java
-package io.github.atengk.design.discount;
-
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-
-/**
- * 无折扣空策略
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class NoDiscountPolicy implements DiscountPolicy {
-
-    /**
-     * 获取折扣类型
-     *
-     * @return 折扣类型
-     */
-    @Override
-    public String discountType() {
-        return "none";
-    }
-
-    /**
-     * 计算无折扣金额
-     *
-     * @param originAmount 原始金额
-     * @return 原始金额
-     */
-    @Override
-    public BigDecimal calculate(BigDecimal originAmount) {
-        if (originAmount == null || originAmount.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("无折扣计算失败，原始金额不合法，金额：{}", originAmount);
-            throw new IllegalArgumentException("原始金额不能小于0");
-        }
-
-        log.info("使用无折扣空策略，原始金额：{}", originAmount);
-        return originAmount;
-    }
-
-    /**
-     * 判断是否为空策略
-     *
-     * @return true 表示空策略
-     */
-    @Override
-    public boolean isNull() {
-        return true;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/discount/DiscountPolicyContext.java`
-
-下面是折扣策略上下文。找不到策略时返回无折扣空策略。
-
-```java
-package io.github.atengk.design.discount;
-
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-/**
- * 折扣策略上下文
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Component
-public class DiscountPolicyContext {
-
-    private final Map<String, DiscountPolicy> policyMap;
-    private final NoDiscountPolicy noDiscountPolicy;
-
-    /**
-     * 创建折扣策略上下文
-     *
-     * @param policies         折扣策略列表
-     * @param noDiscountPolicy 无折扣空策略
-     */
-    public DiscountPolicyContext(List<DiscountPolicy> policies, NoDiscountPolicy noDiscountPolicy) {
-        this.noDiscountPolicy = noDiscountPolicy;
-
-        if (CollUtil.isEmpty(policies)) {
-            log.warn("折扣策略列表为空");
-            this.policyMap = Map.of();
-            return;
-        }
-
-        this.policyMap = policies.stream()
-                .filter(policy -> !policy.isNull())
-                .collect(Collectors.toUnmodifiableMap(
-                        policy -> StrUtil.trim(policy.discountType()).toLowerCase(),
-                        Function.identity()
-                ));
-
-        log.info("初始化折扣策略上下文完成，支持折扣类型：{}", policyMap.keySet());
-    }
-
-    /**
-     * 获取折扣策略
-     *
-     * @param discountType 折扣类型
-     * @return 折扣策略
-     */
-    public DiscountPolicy getPolicy(String discountType) {
-        if (StrUtil.isBlank(discountType)) {
-            log.warn("折扣类型为空，返回无折扣空策略");
-            return noDiscountPolicy;
-        }
-
-        DiscountPolicy policy = policyMap.get(StrUtil.trim(discountType).toLowerCase());
-        if (policy == null) {
-            log.warn("折扣类型不支持，返回无折扣空策略，折扣类型：{}", discountType);
-            return noDiscountPolicy;
-        }
-
-        return policy;
-    }
-}
-```
-
-这种写法适合“没有匹配策略时可以安全使用默认行为”的场景。对折扣来说，未知折扣类型按无折扣处理是可接受的。但对支付、退款、库存扣减这类核心业务，未知类型通常应该抛异常，而不是静默返回空对象。
-
-## 空对象模式和 Optional 的区别
-
-空对象模式和 `Optional` 都能减少空指针问题，但语义不同。
-
-| 对比项           | 空对象模式                   | Optional               |
-| ---------------- | ---------------------------- | ---------------------- |
-| 核心目的         | 提供安全默认行为             | 显式表达可能不存在     |
-| 调用方式         | 继续调用统一接口             | 调用方处理存在或不存在 |
-| 适合场景         | 默认处理器、默认策略、空用户 | 查询结果可能不存在     |
-| 是否有行为       | 有行为，只是行为为空或默认   | 通常只是容器           |
-| 是否可能掩盖错误 | 可能                         | 较少                   |
-
-简单理解：
+常见适用场景：
 
 ```text
-空对象模式：给你一个不会炸的默认对象。
-Optional：明确告诉你对象可能不存在。
+用户信息：
+- 未登录用户返回游客对象
+- 查询不到会员返回默认会员对象
+- 查询不到头像返回默认头像对象
+
+配置读取：
+- 查询不到租户配置返回默认配置
+- 查询不到功能开关返回关闭配置
+- 查询不到计费规则返回默认计费规则
+
+权限系统：
+- 查询不到角色返回空角色
+- 查询不到菜单返回空菜单集合
+- 查询不到权限返回无权限对象
+
+通知系统：
+- 查询不到通知渠道返回空通知器
+- 用户未绑定邮箱时返回 NoOpEmailSender
+- 用户未绑定手机号时返回 NoOpSmsSender
+
+优惠和风控：
+- 查询不到优惠策略返回无优惠策略
+- 查询不到风控规则返回通过或拒绝的默认规则
+- 查询不到黑名单记录返回非黑名单对象
 ```
 
-如果调用方确实需要区分存在和不存在，`Optional` 更清晰。
-如果调用方只需要统一调用行为，空对象模式更简洁。
+## 不适用场景
+
+空对象模式不能替代所有空值处理。对于必须显式报错的业务，不应该用空对象掩盖问题。
+
+不建议使用的场景：
+
+```text
+1. 数据不存在就是业务异常，例如订单不存在、支付单不存在。
+2. 缺少对象会导致资金、库存、权限等关键风险。
+3. 调用方必须明确知道数据不存在，并做特殊处理。
+4. 空对象默认行为不清晰，容易误导业务结果。
+5. 使用空对象只是为了隐藏错误，而不是表达合理默认行为。
+```
+
+例如支付业务中，查询不到支付单通常应该报错：
+
+```text
+支付单不存在 -> 应该返回异常或失败结果
+```
+
+不应该返回一个“空支付单”继续扣款、退款或对账。
+
+## 和 Optional 的区别
+
+空对象模式和 `Optional` 都可以减少空指针风险，但二者表达的业务含义不同。
+
+| 对比项   | 空对象模式                     | Optional                            |
+| -------- | ------------------------------ | ----------------------------------- |
+| 核心含义 | 不存在时仍可用默认对象继续执行 | 明确表达结果可能不存在              |
+| 返回值   | 统一接口对象                   | 容器对象                            |
+| 调用方式 | 直接调用对象方法               | 需要 `map`、`orElse`、`orElseThrow` |
+| 适合场景 | 有合理默认行为                 | 需要调用方决定如何处理不存在        |
+| 风险     | 默认行为不合理时可能掩盖问题   | 调用方仍需处理不存在分支            |
 
 示例：
 
 ```java
-Optional<UserProfile> profile = userRepository.findById(userId);
+Optional<MemberProfile> memberProfile = repository.findByUserId(userId);
 ```
 
-适合表达“用户可能不存在”。
+这种写法表达“会员可能不存在，需要调用方决定怎么处理”。
 
 ```java
-NoticeSender sender = noticeSenderContext.getSender(channel);
-sender.send(request);
+MemberProfile memberProfile = repository.findByUserIdOrDefault(userId);
 ```
 
-适合表达“找不到发送器时走空发送器安全跳过”。
+这种写法表达“会员不存在也可以使用默认会员对象继续执行”。
 
-## 空对象模式和默认策略的区别
-
-空对象模式经常表现为默认策略。默认策略不一定是空对象，但空对象通常可以作为一种默认策略。
-
-| 对比项         | 空对象                 | 默认策略                      |
-| -------------- | ---------------------- | ----------------------------- |
-| 核心语义       | 什么也不做或返回默认值 | 使用默认业务算法              |
-| 是否表示不存在 | 通常表示不存在         | 不一定                        |
-| 示例           | `NullNoticeSender`     | `DefaultPriceCalculatePolicy` |
-| 结果           | 安全跳过、默认空值     | 正常业务结果                  |
-| 风险           | 可能静默吞掉错误       | 可能业务语义不准确            |
-
-如果默认行为是“无操作”，通常更接近空对象。
-如果默认行为是“标准算法”，通常更接近默认策略。
-
-## 空对象模式和异常处理的边界
-
-空对象模式不能替代异常处理。对象不存在时到底返回空对象还是抛异常，取决于业务语义。
-
-适合返回空对象：
-
-```text
-游客用户资料
-默认通知发送器
-默认折扣策略
-空权限集合
-空购物车
-空报表数据
-无操作审计器
-```
-
-适合抛异常：
-
-```text
-订单不存在
-支付单不存在
-库存记录不存在
-用户登录态不存在
-退款记录不存在
-核心配置不存在
-不支持的支付渠道
-```
-
-简单判断原则：
-
-```text
-不存在是正常业务分支：可以使用空对象。
-不存在是业务错误：应该抛异常。
-```
-
-例如查询用户头像时，用户没有头像可以返回默认头像对象。
-但支付时找不到支付渠道，通常不应该返回空支付渠道并继续成功，而应该明确失败。
-
-## 验证方式
-
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-发送支持的短信通知：
-
-```bash
-curl -X POST "http://localhost:8080/null-object/notice/send?channel=sms&receiver=13800138000&title=注册成功&content=欢迎注册"
-```
-
-发送不支持的通知渠道：
-
-```bash
-curl -X POST "http://localhost:8080/null-object/notice/send?channel=dingding&receiver=ateng&title=系统通知&content=这是一条测试通知"
-```
-
-如果空对象模式正常，可以看到类似日志：
-
-```text
-初始化通知发送器上下文完成，支持渠道：[sms, email, site]
-短信通知发送成功，接收人：13800138000，标题：注册成功，业务ID：SMS2020123456789017600
-通知发送流程完成，渠道：sms，接收人：13800138000，是否空发送器：false，结果：true
-获取通知发送器失败，不支持的渠道：dingding，返回空通知发送器
-通知渠道未匹配，使用空通知发送器降级处理，渠道：dingding，接收人：ateng
-通知发送流程完成，渠道：dingding，接收人：ateng，是否空发送器：true，结果：false
-```
-
-重点验证两个结果：
-
-```text
-支持渠道：执行真实发送器
-未知渠道：执行空发送器，不出现 NullPointerException
-```
-
-## 注意事项
-
-空对象模式适合提供安全默认行为，但不要滥用。过度使用空对象可能掩盖真实错误，让问题延迟暴露。
-
-适合使用空对象模式的场景：
-
-```text
-默认通知发送器
-默认折扣策略
-空用户资料
-空购物车
-空权限集合
-空报表结果
-无操作审计器
-无操作回调处理器
-```
-
-不太适合使用空对象模式的场景：
-
-```text
-核心业务对象必须存在
-不存在应该阻断流程
-调用方必须知道失败原因
-空对象会导致数据被误认为成功
-后续流程依赖真实对象状态
-```
-
-不要让空对象返回看似成功的结果。空对象可以安全跳过，但最好明确标记 `success=false` 或 `isNull=true`。
-
-不推荐：
+二者可以同时存在。Repository 可以提供两个方法：
 
 ```java
-return new NoticeSendResponse(channel, receiver, true, "发送成功", "");
+Optional<MemberProfile> findByUserId(String userId);
+
+MemberProfile findByUserIdOrDefault(String userId);
 ```
 
-推荐：
+这样调用方可以按业务语义选择。
+
+## 和默认值的区别
+
+空对象不是简单默认值。默认值通常只处理单个字段，而空对象处理的是一组行为。
+
+简单默认值：
 
 ```java
-return new NoticeSendResponse(channel, receiver, false, "通知渠道不支持，已安全跳过", "");
+String nickname = StrUtil.blankToDefault(user.getNickname(), "游客用户");
 ```
 
-空对象最好设计为不可变、无状态、线程安全。Spring Bean 默认单例，空对象中不要保存请求级状态。
-
-错误示例：
+空对象：
 
 ```java
-private String currentReceiver;
-private String currentChannel;
+MemberProfile memberProfile = memberProfileRepository.findByUserIdOrDefault(userId);
+
+memberProfile.nickname();
+memberProfile.memberLevel();
+memberProfile.discountRate();
+memberProfile.couponCount();
+memberProfile.isGuest();
 ```
 
-推荐使用方法参数：
+如果只有一个字段需要默认值，用 Hutool 或简单三元表达式就够了。如果一整个对象都需要默认行为，才更适合空对象模式。
+
+## 和策略模式的结合
+
+空对象模式经常和策略模式结合使用。例如通知发送场景中，用户没有绑定手机号时，可以返回一个 `NoOpSmsSender`，表示什么都不做的短信发送策略。
+
+示意结构：
+
+```text
+NotifySender
+├── SmsNotifySender
+├── EmailNotifySender
+└── NoOpNotifySender
+```
+
+调用方统一执行：
 
 ```java
-public NoticeSendResponse send(NoticeSendRequest request) {
-    String channel = request.channel();
-    return new NoticeSendResponse(channel, request.receiver(), false, "已跳过", "");
+notifySender.send(message);
+```
+
+如果当前没有可用通知渠道，返回 `NoOpNotifySender`，它的 `send` 方法只记录日志，不执行真实外部调用。
+
+这种方式可以避免调用方写成：
+
+```java
+if (notifySender != null) {
+    notifySender.send(message);
 }
 ```
 
-空对象需要有明显命名，建议使用 `Null`、`Noop`、`Empty` 前缀。
+但要注意，`NoOpNotifySender` 必须有清晰日志，否则容易造成“业务看起来执行了，但实际什么都没发生”的问题。
 
-常见命名：
+## 项目落地建议
+
+在 Spring Boot 项目中使用空对象模式时，重点是让默认行为合理、明确、可观察。
+
+建议：
 
 ```text
-NullNoticeSender
-NoopAuditLogger
-EmptyCart
-NullUserProfile
-NoDiscountPolicy
+1. 空对象类命名使用 Null、Empty、Default 或 NoOp 前缀。
+2. 空对象必须实现和真实对象相同的接口。
+3. 空对象的方法返回安全默认值，不要继续返回 null。
+4. 空对象适合表达“无数据但可继续”，不适合隐藏异常。
+5. 重要空对象行为要记录日志，便于排查。
+6. 对资金、库存、权限等关键业务要谨慎使用空对象。
+7. 空对象可以做成单例，避免重复创建无状态对象。
+8. Repository 可以同时提供 Optional 查询和默认对象查询。
+```
+
+推荐命名：
+
+```text
+NullMemberProfile
 EmptyPermissionSet
+DefaultTenantConfig
+NoOpNotifySender
+EmptyMenuTree
+DefaultDiscountPolicy
 ```
 
-不同命名语义略有区别：
+不推荐命名：
 
 ```text
-Null：强调对象不存在
-Noop：强调什么也不做
-Empty：强调空集合或空结果
-Default：强调默认业务行为
+FakeUser
+TempObject
+NoneData
+BlankThing
+UnknownModel
 ```
 
-如果空对象的处理需要被监控，建议记录日志或指标。特别是未知渠道、未知策略、未知处理器这类情况，不能完全静默。
+这些命名不够明确，后续维护人员很难判断它们是测试对象、临时对象还是业务默认对象。
 
-推荐日志：
+## 常见问题
+
+### 空对象是否一定要单例
+
+不一定。如果空对象无状态，可以做成单例，例如：
 
 ```java
-log.warn("通知渠道未匹配，使用空通知发送器降级处理，渠道：{}", channel);
+public static final NullMemberProfile INSTANCE = new NullMemberProfile();
 ```
 
-如果未知类型频繁出现，说明调用方参数、配置或路由可能有问题，需要尽早排查。
+如果空对象需要携带上下文信息，例如请求用户 ID、租户 ID、缺省原因，则可以每次创建新对象：
+
+```java
+new NullMemberProfile(requestUserId, "会员不存在");
+```
+
+但大多数无状态空对象使用单例即可。
+
+### 空对象里面能不能抛异常
+
+一般不建议。空对象的价值在于提供安全默认行为。如果大部分方法都抛异常，它就不再是空对象，而更像异常占位对象。
+
+但在少数危险操作中，可以抛异常。例如空支付账户不允许扣款：
+
+```text
+NullPaymentAccount.debit()
+ -> 抛出“支付账户不存在，不能扣款”
+```
+
+这类行为需要谨慎设计，避免调用方误以为空对象什么都能安全执行。
+
+### 空对象是否会掩盖数据问题
+
+会有这个风险。因此空对象只适合“业务允许默认处理”的场景。
+
+例如：
+
+```text
+查询不到会员信息 -> 可以返回游客会员
+查询不到租户配置 -> 可以返回默认配置
+查询不到通知渠道 -> 可以返回 NoOp 通知器
+```
+
+但下面这些场景不应随便使用空对象：
+
+```text
+查询不到订单 -> 应该提示订单不存在
+查询不到支付单 -> 应该提示支付单不存在
+查询不到库存记录 -> 应该阻止扣减库存
+查询不到权限记录 -> 应该拒绝访问
+```
+
+### 前端如何区分真实对象和空对象
+
+推荐在 VO 中显式返回标识字段，例如：
+
+```json
+{
+  "guest": true
+}
+```
+
+不要让前端通过 `userId == "GUEST"`、`memberLevel == 0` 这类隐式规则判断。显式字段更稳定，也更容易扩展。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，空对象模式的实践重点是用一个行为安全的对象代替 `null`，让调用方统一面向接口编程，减少空判断和空指针异常。
+空对象模式适合在 Spring Boot 项目中处理“对象不存在但业务可以继续执行”的场景。它通过安全默认对象替代 `null`，减少空判断和空指针风险，让调用链更加稳定。
 
-普通 Java 空对象模式适合理解真实对象和空对象实现同一接口。Spring Boot 项目中更常见的是“接口 + 多个真实实现 + 空实现 + 上下文选择器”的结构。对于通知发送器、折扣策略、默认处理器、空用户资料、空权限集合等场景，空对象模式可以让代码更稳定、更简洁。
+推荐落地方式：
 
-空对象模式不是异常处理的替代品。它最适合处理“不存在是正常业务分支，并且有明确安全默认行为”的场景。实际落地时，需要重点关注是否会掩盖业务错误、空对象返回值是否清晰、是否记录降级日志、是否保存请求级状态，以及调用方是否需要感知对象不存在。
+```text
+Controller
+ -> Service
+   -> Repository
+     -> 查询到真实对象：RealMemberProfile
+     -> 查询不到对象：NullMemberProfile
+   -> Service 统一调用 MemberProfile
+```
+
+当业务需要明确报错时，不要使用空对象模式。当业务存在合理默认行为，例如游客用户、默认配置、空权限集合、无操作通知器时，空对象模式可以让代码更清晰、更稳定，也更容易测试。

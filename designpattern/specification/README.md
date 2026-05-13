@@ -1,646 +1,169 @@
-# 设计模式：规格模式
+# 规格模式
 
-规格模式用于把业务规则封装成可复用、可组合、可测试的规格对象。在 JDK21 和 Spring Boot 3 项目中，规格模式常用于优惠券领取规则、订单风控规则、商品上下架条件、会员权益判断、动态查询条件、领域对象校验、权限规则组合等场景。
+规格模式是 Spring Boot 项目中常用的业务规则组织方式，属于当前设计模式文档体系中的 **Spring Boot 实战补充模式**。它的核心作用是把业务规则封装成可组合、可复用的规格对象，尤其适合处理复杂判断条件、准入规则、优惠规则、风控规则和查询条件组合。
 
-需要注意：规格模式不是 GoF 23 种设计模式之一，属于这次设计模式文档里的“遗漏补充”。它在领域建模、DDD、复杂查询、复杂业务校验中非常常见，尤其适合规则较多、规则需要组合、规则不希望散落在大量 `if else` 中的项目。
+在实际项目中，规格模式常用于优惠券领取资格、订单风控校验、会员权益判断、商品上下架条件、审批准入条件、用户分群规则等场景。它的重点不是减少代码行数，而是把散落在 `if else` 中的规则拆成独立对象，让规则可以组合、复用、测试和扩展。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven、MyBatis-Plus、MySQL。示例包路径统一使用 `io.github.atengk`。
+本示例基于 **JDK 21 + Spring Boot 3**，使用 Spring Web 提供接口，使用 Validation 做请求参数校验，使用 Hutool 简化字符串、对象和集合处理。示例业务以“优惠券领取资格校验”为场景。
+
+优惠券领取规则如下：
+
+```text
+1. 优惠券必须可用。
+2. 用户必须是正常状态。
+3. 用户会员等级必须满足优惠券要求。
+4. 用户历史订单数必须满足要求。
+5. 用户历史消费金额必须满足要求。
+```
+
+如果把这些规则全部写在 Service 中，代码会快速变成大量 `if else`。使用规格模式后，每个规则都是一个独立规格对象，Service 只负责组装上下文、调用规格并处理结果。
+
+### 项目依赖
 
 文件位置：`pom.xml`
 
+下面配置 Web、Validation、Hutool 和 Lombok，满足接口、参数校验、工具类和日志对象使用需求。
+
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证规格模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- MyBatis-Plus Spring Boot 3 Starter，用于动态查询规格示例 -->
+    <!-- Spring Validation：用于接口请求参数校验 -->
     <dependency>
-        <groupId>com.baomidou</groupId>
-        <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-        <version>3.5.8</version>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
 
-    <!-- MySQL 驱动，用于连接 MySQL 数据库 -->
-    <dependency>
-        <groupId>com.mysql</groupId>
-        <artifactId>mysql-connector-j</artifactId>
-        <scope>runtime</scope>
-    </dependency>
-
-    <!-- Hutool 工具类，用于字符串、集合、金额等通用处理 -->
+    <!-- Hutool：常用工具类，简化字符串、对象、集合、日期等处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.35</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、Getter、Setter、构造方法等样板代码 -->
+    <!-- Lombok：减少构造器、日志对象、Getter 等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
+### 应用配置
+
 文件位置：`src/main/resources/application.yml`
 
+本示例先使用内存数据模拟用户和优惠券模板，暂不引入数据库。真实项目中可以把用户、优惠券、订单统计数据改为从 Repository、Mapper、Redis 或远程服务读取。
+
 ```yaml
-server:
-  # 示例服务端口
-  port: 8080
-
 spring:
-  datasource:
-    # MySQL 连接地址，根据本地数据库调整
-    url: jdbc:mysql://localhost:3306/design_demo?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
-    # 数据库用户名
-    username: root
-    # 数据库密码
-    password: root
-    # MySQL 驱动类
-    driver-class-name: com.mysql.cj.jdbc.Driver
+  application:
+    name: design-pattern-specification
 
-mybatis-plus:
-  configuration:
-    # 开发环境输出 SQL，便于观察动态查询规格生成的条件
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-  global-config:
-    db-config:
-      # 示例使用雪花ID
-      id-type: assign_id
-```
-
-文件位置：`sql/product.sql`
-
-```sql
-CREATE TABLE product (
-    id BIGINT PRIMARY KEY COMMENT '商品ID',
-    product_code VARCHAR(64) NOT NULL COMMENT '商品编码',
-    product_name VARCHAR(100) NOT NULL COMMENT '商品名称',
-    category_code VARCHAR(64) NOT NULL COMMENT '分类编码',
-    price DECIMAL(18, 2) NOT NULL COMMENT '商品价格',
-    stock INT NOT NULL DEFAULT 0 COMMENT '库存数量',
-    status VARCHAR(32) NOT NULL COMMENT '商品状态：DRAFT 草稿，ON_SHELF 上架，OFF_SHELF 下架',
-    create_time DATETIME NOT NULL COMMENT '创建时间',
-    update_time DATETIME NOT NULL COMMENT '更新时间',
-    UNIQUE KEY uk_product_code (product_code),
-    KEY idx_category_code (category_code),
-    KEY idx_status (status),
-    KEY idx_price (price)
-) COMMENT='商品表';
-```
-
-这张表用于演示“查询规格模式”。业务规则规格不依赖数据库，查询规格则通过 MyBatis-Plus 的 `LambdaQueryWrapper` 动态拼接查询条件。
-
-## 核心概念
-
-规格模式的核心目标是把一个判断条件封装成独立对象，并让规格之间可以通过 `and`、`or`、`not` 组合成更复杂的规则。
-
-常见角色如下：
-
-| 角色                   | 说明                                           |
-| ---------------------- | ---------------------------------------------- |
-| Specification          | 规格接口，定义对象是否满足规格                 |
-| ConcreteSpecification  | 具体规格，实现某一个业务条件                   |
-| CompositeSpecification | 组合规格，用于 `and`、`or`、`not` 组合         |
-| Candidate              | 被判断的候选对象，例如订单、商品、用户、优惠券 |
-| Client                 | 调用方，组合规格并执行判断                     |
-
-典型结构如下：
-
-```text
-CouponSpecification
-├── AmountReachedSpecification
-├── UserLevelSpecification
-├── CouponActiveSpecification
-└── StockEnoughSpecification
-
-finalSpec = activeSpec
-    .and(stockEnoughSpec)
-    .and(amountReachedSpec)
-    .and(userLevelSpec)
-```
-
-规格模式最常见的两类用法：
-
-```text
-业务规则规格：判断某个对象是否满足规则
-查询条件规格：把筛选条件封装成可组合查询条件
-```
-
-在 Spring Boot 项目中，常见优先级通常是：
-
-```text
-业务规则可组合：规格模式
-动态查询条件可复用：查询规格模式
-只有一个简单分支：普通 if 判断即可
-算法互斥选择：策略模式更合适
-```
-
-规格模式不是为了消灭所有 `if`。它适合规则多、规则复用频繁、规则需要组合、规则需要单独测试的场景。
-
-## 普通 Java 规格模式
-
-普通 Java 规格模式适合先理解“规则对象化”和“规则组合”。下面以优惠券可用性为例，订单需要同时满足金额门槛、用户等级、首单要求等条件。
-
-整体关系如下：
-
-```text
-OrderContext
-    -> Specification<OrderContext>
-        -> AmountReachedSpecification
-        -> UserLevelSpecification
-        -> FirstOrderSpecification
-        -> AndSpecification / OrSpecification / NotSpecification
+server:
+  port: 8080
 ```
 
 ### 文件结构
 
-```text
-src/main/java/io/github/atengk/design/specification/simple/
-├── Specification.java
-├── AbstractSpecification.java
-├── AndSpecification.java
-├── OrSpecification.java
-├── NotSpecification.java
-├── OrderContext.java
-├── AmountReachedSpecification.java
-├── UserLevelSpecification.java
-└── FirstOrderSpecification.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/Specification.java`
-
-下面是通用规格接口，定义候选对象是否满足规则。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-/**
- * 通用规格接口
- *
- * @param <T> 候选对象类型
- * @author Ateng
- * @since 2026-05-01
- */
-public interface Specification<T> {
-
-    /**
-     * 判断候选对象是否满足规格
-     *
-     * @param candidate 候选对象
-     * @return true 表示满足，false 表示不满足
-     */
-    boolean isSatisfiedBy(T candidate);
-
-    /**
-     * 与规格组合
-     *
-     * @param other 其他规格
-     * @return 组合后的规格
-     */
-    default Specification<T> and(Specification<T> other) {
-        return new AndSpecification<>(this, other);
-    }
-
-    /**
-     * 或规格组合
-     *
-     * @param other 其他规格
-     * @return 组合后的规格
-     */
-    default Specification<T> or(Specification<T> other) {
-        return new OrSpecification<>(this, other);
-    }
-
-    /**
-     * 非规格组合
-     *
-     * @return 组合后的规格
-     */
-    default Specification<T> not() {
-        return new NotSpecification<>(this);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/AndSpecification.java`
-
-下面是逻辑与规格，两个规格都满足时才返回 true。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 逻辑与规格
- *
- * @param <T> 候选对象类型
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class AndSpecification<T> implements Specification<T> {
-
-    private final Specification<T> left;
-    private final Specification<T> right;
-
-    /**
-     * 创建逻辑与规格
-     *
-     * @param left  左规格
-     * @param right 右规格
-     */
-    public AndSpecification(Specification<T> left, Specification<T> right) {
-        if (left == null || right == null) {
-            throw new IllegalArgumentException("左右规格不能为空");
-        }
-
-        this.left = left;
-        this.right = right;
-    }
-
-    /**
-     * 判断候选对象是否满足规格
-     *
-     * @param candidate 候选对象
-     * @return true 表示满足
-     */
-    @Override
-    public boolean isSatisfiedBy(T candidate) {
-        boolean leftResult = left.isSatisfiedBy(candidate);
-        if (!leftResult) {
-            log.info("逻辑与规格短路返回 false");
-            return false;
-        }
-
-        boolean rightResult = right.isSatisfiedBy(candidate);
-        return rightResult;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/OrSpecification.java`
-
-下面是逻辑或规格，任意一个规格满足就返回 true。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 逻辑或规格
- *
- * @param <T> 候选对象类型
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class OrSpecification<T> implements Specification<T> {
-
-    private final Specification<T> left;
-    private final Specification<T> right;
-
-    /**
-     * 创建逻辑或规格
-     *
-     * @param left  左规格
-     * @param right 右规格
-     */
-    public OrSpecification(Specification<T> left, Specification<T> right) {
-        if (left == null || right == null) {
-            throw new IllegalArgumentException("左右规格不能为空");
-        }
-
-        this.left = left;
-        this.right = right;
-    }
-
-    /**
-     * 判断候选对象是否满足规格
-     *
-     * @param candidate 候选对象
-     * @return true 表示满足
-     */
-    @Override
-    public boolean isSatisfiedBy(T candidate) {
-        boolean leftResult = left.isSatisfiedBy(candidate);
-        if (leftResult) {
-            log.info("逻辑或规格短路返回 true");
-            return true;
-        }
-
-        return right.isSatisfiedBy(candidate);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/NotSpecification.java`
-
-下面是逻辑非规格，用于对原规格结果取反。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-/**
- * 逻辑非规格
- *
- * @param <T> 候选对象类型
- * @author Ateng
- * @since 2026-05-01
- */
-public class NotSpecification<T> implements Specification<T> {
-
-    private final Specification<T> specification;
-
-    /**
-     * 创建逻辑非规格
-     *
-     * @param specification 原规格
-     */
-    public NotSpecification(Specification<T> specification) {
-        if (specification == null) {
-            throw new IllegalArgumentException("规格不能为空");
-        }
-
-        this.specification = specification;
-    }
-
-    /**
-     * 判断候选对象是否满足规格
-     *
-     * @param candidate 候选对象
-     * @return true 表示满足取反后的规格
-     */
-    @Override
-    public boolean isSatisfiedBy(T candidate) {
-        return !specification.isSatisfiedBy(candidate);
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/OrderContext.java`
-
-下面是订单上下文，作为规格判断的候选对象。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-import java.math.BigDecimal;
-
-/**
- * 订单上下文
- *
- * @param orderNo    订单号
- * @param userId     用户ID
- * @param userLevel  用户等级
- * @param amount     订单金额
- * @param firstOrder 是否首单
- * @author Ateng
- * @since 2026-05-01
- */
-public record OrderContext(
-        String orderNo,
-        Long userId,
-        String userLevel,
-        BigDecimal amount,
-        Boolean firstOrder
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/AmountReachedSpecification.java`
-
-下面是订单金额达标规格。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-
-/**
- * 订单金额达标规格
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class AmountReachedSpecification implements Specification<OrderContext> {
-
-    private final BigDecimal thresholdAmount;
-
-    /**
-     * 创建订单金额达标规格
-     *
-     * @param thresholdAmount 门槛金额
-     */
-    public AmountReachedSpecification(BigDecimal thresholdAmount) {
-        if (thresholdAmount == null || thresholdAmount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("门槛金额不能小于0");
-        }
-
-        this.thresholdAmount = thresholdAmount;
-    }
-
-    /**
-     * 判断订单是否满足金额门槛
-     *
-     * @param candidate 订单上下文
-     * @return true 表示满足
-     */
-    @Override
-    public boolean isSatisfiedBy(OrderContext candidate) {
-        if (candidate == null || candidate.amount() == null) {
-            log.warn("金额规格校验失败，订单上下文或金额为空");
-            return false;
-        }
-
-        boolean result = candidate.amount().compareTo(thresholdAmount) >= 0;
-        log.info("金额规格校验完成，订单号：{}，订单金额：{}，门槛金额：{}，结果：{}",
-                candidate.orderNo(), candidate.amount(), thresholdAmount, result);
-        return result;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/UserLevelSpecification.java`
-
-下面是用户等级规格。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 用户等级规格
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class UserLevelSpecification implements Specification<OrderContext> {
-
-    private final String requiredUserLevel;
-
-    /**
-     * 创建用户等级规格
-     *
-     * @param requiredUserLevel 要求用户等级
-     */
-    public UserLevelSpecification(String requiredUserLevel) {
-        if (StrUtil.isBlank(requiredUserLevel)) {
-            throw new IllegalArgumentException("要求用户等级不能为空");
-        }
-
-        this.requiredUserLevel = requiredUserLevel;
-    }
-
-    /**
-     * 判断订单用户等级是否满足要求
-     *
-     * @param candidate 订单上下文
-     * @return true 表示满足
-     */
-    @Override
-    public boolean isSatisfiedBy(OrderContext candidate) {
-        if (candidate == null || StrUtil.isBlank(candidate.userLevel())) {
-            log.warn("用户等级规格校验失败，订单上下文或用户等级为空");
-            return false;
-        }
-
-        boolean result = StrUtil.equalsIgnoreCase(candidate.userLevel(), requiredUserLevel);
-        log.info("用户等级规格校验完成，订单号：{}，当前等级：{}，要求等级：{}，结果：{}",
-                candidate.orderNo(), candidate.userLevel(), requiredUserLevel, result);
-        return result;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/specification/simple/FirstOrderSpecification.java`
-
-下面是首单规格。
-
-```java
-package io.github.atengk.design.specification.simple;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 首单规格
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class FirstOrderSpecification implements Specification<OrderContext> {
-
-    /**
-     * 判断订单是否为首单
-     *
-     * @param candidate 订单上下文
-     * @return true 表示满足
-     */
-    @Override
-    public boolean isSatisfiedBy(OrderContext candidate) {
-        boolean result = candidate != null && Boolean.TRUE.equals(candidate.firstOrder());
-        log.info("首单规格校验完成，订单号：{}，结果：{}",
-                candidate == null ? null : candidate.orderNo(), result);
-        return result;
-    }
-}
-```
-
-使用方式：
-
-```java
-Specification<OrderContext> specification = new AmountReachedSpecification(BigDecimal.valueOf(100))
-        .and(new UserLevelSpecification("VIP"))
-        .or(new FirstOrderSpecification());
-
-OrderContext context = new OrderContext(
-        "ORDER10001",
-        10001L,
-        "NORMAL",
-        BigDecimal.valueOf(120),
-        true
-);
-
-boolean satisfied = specification.isSatisfiedBy(context);
-```
-
-这条规则表示：
+规格模式建议把通用规格接口、组合规格、业务规格和业务调用方分开。这样规则既可以独立测试，也可以被多个业务流程复用。
 
 ```text
-订单金额 >= 100 且用户等级是 VIP，或者订单是首单
-```
-
-规格模式的价值在于：金额规则、用户等级规则、首单规则都可以单独复用和单独测试。
-
-## Spring Boot 业务规则规格
-
-Spring Boot 项目中，规格模式常用于复杂业务规则校验。下面以优惠券领取为例，领取优惠券需要满足：优惠券有效、库存充足、用户等级符合、订单金额达到门槛。
-
-整体流程如下：
-
-```text
-Controller
-    -> CouponReceiveService
-        -> 构建 CouponReceiveContext
-        -> CouponReceiveSpecificationFactory
-        -> specification.isSatisfiedBy(context)
-        -> 通过后执行领取
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
+src/main/java/io/github/atengk/specification
 ├── SpecificationApplication.java
-├── controller/
-│   └── CouponReceiveController.java
-├── dto/
-│   ├── CouponReceiveRequest.java
-│   └── CouponReceiveResponse.java
-├── spec/
-│   ├── Specification.java
-│   ├── AndSpecification.java
-│   ├── CouponReceiveContext.java
-│   ├── CouponActiveSpecification.java
-│   ├── CouponStockSpecification.java
-│   ├── CouponUserLevelSpecification.java
-│   ├── CouponAmountSpecification.java
-│   └── CouponReceiveSpecificationFactory.java
-└── service/
-    ├── CouponReceiveService.java
-    └── impl/
-        └── CouponReceiveServiceImpl.java
+├── controller
+│   └── CouponController.java
+├── domain
+│   ├── model
+│   │   ├── CouponReceiveContext.java
+│   │   ├── CouponTemplate.java
+│   │   └── UserProfile.java
+│   └── specification
+│       ├── AndSpecification.java
+│       ├── NotSpecification.java
+│       ├── OrSpecification.java
+│       ├── Specification.java
+│       └── SpecificationResult.java
+├── dto
+│   └── CouponReceiveRequest.java
+├── service
+│   ├── CouponReceiveService.java
+│   └── impl
+│       └── CouponReceiveServiceImpl.java
+├── specification
+│   ├── CouponAvailableSpecification.java
+│   ├── CouponReceiveSpecificationFactory.java
+│   ├── MemberLevelSpecification.java
+│   ├── OrderCountSpecification.java
+│   ├── TotalAmountSpecification.java
+│   └── UserStatusSpecification.java
+└── vo
+    └── CouponReceiveResponse.java
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/SpecificationApplication.java`
+## 模式说明
 
-下面是 Spring Boot 启动类。
+规格模式的核心思想是：把一个业务条件封装成一个规格对象，然后通过 `and`、`or`、`not` 等方式组合多个规格。
+
+普通写法通常是：
+
+```text
+Service
+ -> if 优惠券不可用，返回失败
+ -> if 用户状态异常，返回失败
+ -> if 会员等级不足，返回失败
+ -> if 订单数不足，返回失败
+ -> if 消费金额不足，返回失败
+ -> 领取优惠券
+```
+
+规格模式写法是：
+
+```text
+Service
+ -> 构建 CouponReceiveContext
+ -> 调用 CouponReceiveSpecification
+ -> 返回校验结果
+ -> 校验通过后领取优惠券
+```
+
+规则本身拆成：
+
+```text
+CouponAvailableSpecification
+UserStatusSpecification
+MemberLevelSpecification
+OrderCountSpecification
+TotalAmountSpecification
+```
+
+每个规格只负责一个判断条件。新增规则时，通常只需要新增一个规格类，并在工厂类中组合进去，不需要在 Service 中继续堆叠复杂分支。
+
+## 核心代码
+
+这一节给出规格模式的完整关键代码。示例重点体现三点：
+
+```text
+1. 单个规则封装为独立 Specification。
+2. 多个规则通过 AndSpecification、OrSpecification、NotSpecification 组合。
+3. Service 只负责调用规格，不直接堆叠复杂 if else。
+```
+
+### 启动类
+
+文件位置：`src/main/java/io/github/atengk/specification/SpecificationApplication.java`
+
+启动类用于启动 Spring Boot 应用。
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.specification;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -649,1382 +172,1331 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 规格模式示例启动类
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @SpringBootApplication
 public class SpecificationApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(SpecificationApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/spec/Specification.java`
+### 规格结果对象
 
-下面是 Spring Boot 示例中的通用规格接口。
+文件位置：`src/main/java/io/github/atengk/specification/domain/specification/SpecificationResult.java`
+
+该对象用于表达规格校验结果。相比只返回 `boolean`，它可以携带失败原因，更适合接口返回、日志记录和问题排查。
 
 ```java
-package io.github.atengk.design.spec;
+package io.github.atengk.specification.domain.specification;
+
+import cn.hutool.core.util.StrUtil;
 
 /**
- * 通用规格接口
+ * 规格校验结果
  *
- * @param <T> 候选对象类型
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
+ */
+public record SpecificationResult(
+
+        boolean passed,
+
+        String message
+
+) {
+
+    public static SpecificationResult pass() {
+        return new SpecificationResult(true, "校验通过");
+    }
+
+    public static SpecificationResult fail(String message) {
+        return new SpecificationResult(false, StrUtil.blankToDefault(message, "校验未通过"));
+    }
+
+    public static SpecificationResult fail(String messageTemplate, Object... params) {
+        return fail(StrUtil.format(messageTemplate, params));
+    }
+
+}
+```
+
+### 规格接口
+
+文件位置：`src/main/java/io/github/atengk/specification/domain/specification/Specification.java`
+
+该接口是规格模式的核心抽象。所有具体规则都实现它，组合规格也实现它。
+
+```java
+package io.github.atengk.specification.domain.specification;
+
+import java.util.Arrays;
+
+/**
+ * 规格接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
  */
 public interface Specification<T> {
 
-    /**
-     * 判断候选对象是否满足规格
-     *
-     * @param candidate 候选对象
-     * @return true 表示满足，false 表示不满足
-     */
-    boolean isSatisfiedBy(T candidate);
+    SpecificationResult check(T context);
 
-    /**
-     * 与规格组合
-     *
-     * @param other 其他规格
-     * @return 组合规格
-     */
     default Specification<T> and(Specification<T> other) {
-        return new AndSpecification<>(this, other);
+        return Specification.allOf(this, other);
     }
+
+    default Specification<T> or(Specification<T> other) {
+        return Specification.anyOf(this, other);
+    }
+
+    default Specification<T> not(String message) {
+        return new NotSpecification<>(this, message);
+    }
+
+    @SafeVarargs
+    static <T> Specification<T> allOf(Specification<T>... specifications) {
+        return new AndSpecification<>(Arrays.asList(specifications));
+    }
+
+    @SafeVarargs
+    static <T> Specification<T> anyOf(Specification<T>... specifications) {
+        return new OrSpecification<>(Arrays.asList(specifications));
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/spec/AndSpecification.java`
+### AND 组合规格
 
-下面是逻辑与规格，用于组合优惠券多个领取条件。
+文件位置：`src/main/java/io/github/atengk/specification/domain/specification/AndSpecification.java`
+
+该规格用于表达多个规则必须全部满足的场景。优惠券领取资格通常就是 AND 组合。
 
 ```java
-package io.github.atengk.design.spec;
+package io.github.atengk.specification.domain.specification;
+
+import cn.hutool.core.collection.CollUtil;
+
+import java.util.List;
 
 /**
- * 逻辑与规格
+ * AND 组合规格
  *
- * @param <T> 候选对象类型
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 public class AndSpecification<T> implements Specification<T> {
 
-    private final Specification<T> left;
-    private final Specification<T> right;
+    private final List<Specification<T>> specifications;
 
-    /**
-     * 创建逻辑与规格
-     *
-     * @param left  左规格
-     * @param right 右规格
-     */
-    public AndSpecification(Specification<T> left, Specification<T> right) {
-        if (left == null || right == null) {
-            throw new IllegalArgumentException("左右规格不能为空");
+    public AndSpecification(List<Specification<T>> specifications) {
+        this.specifications = CollUtil.emptyIfNull(specifications);
+    }
+
+    @Override
+    public SpecificationResult check(T context) {
+        if (CollUtil.isEmpty(specifications)) {
+            return SpecificationResult.pass();
         }
 
-        this.left = left;
-        this.right = right;
+        for (Specification<T> specification : specifications) {
+            if (specification == null) {
+                continue;
+            }
+
+            SpecificationResult result = specification.check(context);
+            if (!result.passed()) {
+                return result;
+            }
+        }
+
+        return SpecificationResult.pass();
     }
 
-    /**
-     * 判断候选对象是否满足规格
-     *
-     * @param candidate 候选对象
-     * @return true 表示满足
-     */
-    @Override
-    public boolean isSatisfiedBy(T candidate) {
-        return left.isSatisfiedBy(candidate) && right.isSatisfiedBy(candidate);
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/spec/CouponReceiveContext.java`
+### OR 组合规格
 
-下面是优惠券领取上下文，承载规则判断需要的全部数据。
+文件位置：`src/main/java/io/github/atengk/specification/domain/specification/OrSpecification.java`
+
+该规格用于表达多个规则满足任意一个即可通过的场景，例如“会员等级满足或白名单用户满足”。
 
 ```java
-package io.github.atengk.design.spec;
+package io.github.atengk.specification.domain.specification;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import cn.hutool.core.collection.CollUtil;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * 优惠券领取上下文
+ * OR 组合规格
  *
- * @param couponNo          优惠券编号
- * @param userId            用户ID
- * @param userLevel         用户等级
- * @param orderAmount       订单金额
- * @param couponStock       优惠券库存
- * @param requiredUserLevel 要求用户等级
- * @param thresholdAmount   使用门槛金额
- * @param beginTime         生效时间
- * @param endTime           失效时间
- * @param currentTime       当前时间
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-public record CouponReceiveContext(
-        String couponNo,
-        Long userId,
-        String userLevel,
-        BigDecimal orderAmount,
-        Integer couponStock,
-        String requiredUserLevel,
-        BigDecimal thresholdAmount,
-        LocalDateTime beginTime,
-        LocalDateTime endTime,
-        LocalDateTime currentTime
+public class OrSpecification<T> implements Specification<T> {
+
+    private final List<Specification<T>> specifications;
+
+    public OrSpecification(List<Specification<T>> specifications) {
+        this.specifications = CollUtil.emptyIfNull(specifications);
+    }
+
+    @Override
+    public SpecificationResult check(T context) {
+        if (CollUtil.isEmpty(specifications)) {
+            return SpecificationResult.fail("没有可用的 OR 规格");
+        }
+
+        List<String> failMessages = new ArrayList<>();
+        for (Specification<T> specification : specifications) {
+            if (specification == null) {
+                continue;
+            }
+
+            SpecificationResult result = specification.check(context);
+            if (result.passed()) {
+                return SpecificationResult.pass();
+            }
+            failMessages.add(result.message());
+        }
+
+        return SpecificationResult.fail("所有可选规格均未满足：{}", CollUtil.join(failMessages, "；"));
+    }
+
+}
+```
+
+### NOT 组合规格
+
+文件位置：`src/main/java/io/github/atengk/specification/domain/specification/NotSpecification.java`
+
+该规格用于表达反向规则，例如“不能是黑名单用户”“不能是已领取用户”。
+
+```java
+package io.github.atengk.specification.domain.specification;
+
+import cn.hutool.core.util.StrUtil;
+
+/**
+ * NOT 组合规格
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class NotSpecification<T> implements Specification<T> {
+
+    private final Specification<T> specification;
+
+    private final String message;
+
+    public NotSpecification(Specification<T> specification, String message) {
+        this.specification = specification;
+        this.message = StrUtil.blankToDefault(message, "不满足取反规格");
+    }
+
+    @Override
+    public SpecificationResult check(T context) {
+        if (specification == null) {
+            return SpecificationResult.pass();
+        }
+
+        SpecificationResult result = specification.check(context);
+        if (result.passed()) {
+            return SpecificationResult.fail(message);
+        }
+
+        return SpecificationResult.pass();
+    }
+
+}
+```
+
+## 领域对象
+
+本示例中的规格不是直接判断接口 DTO，而是判断业务上下文 `CouponReceiveContext`。这样可以避免规则对象依赖外部接口参数结构。
+
+### 用户画像对象
+
+文件位置：`src/main/java/io/github/atengk/specification/domain/model/UserProfile.java`
+
+该对象表示用户参与优惠券领取校验时需要的关键画像数据。
+
+```java
+package io.github.atengk.specification.domain.model;
+
+import java.math.BigDecimal;
+
+/**
+ * 用户画像对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public record UserProfile(
+
+        String userId,
+
+        String username,
+
+        String status,
+
+        Integer memberLevel,
+
+        Integer orderCount,
+
+        BigDecimal totalAmount
+
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/spec/CouponActiveSpecification.java`
+### 优惠券模板对象
 
-下面是优惠券有效期规格。
+文件位置：`src/main/java/io/github/atengk/specification/domain/model/CouponTemplate.java`
 
-```java
-package io.github.atengk.design.spec;
-
-import lombok.extern.slf4j.Slf4j;
-
-import java.time.LocalDateTime;
-
-/**
- * 优惠券有效期规格
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class CouponActiveSpecification implements Specification<CouponReceiveContext> {
-
-    /**
-     * 判断优惠券是否处于有效期内
-     *
-     * @param candidate 优惠券领取上下文
-     * @return true 表示有效
-     */
-    @Override
-    public boolean isSatisfiedBy(CouponReceiveContext candidate) {
-        if (candidate == null || candidate.beginTime() == null || candidate.endTime() == null) {
-            log.warn("优惠券有效期规格校验失败，上下文或时间为空");
-            return false;
-        }
-
-        LocalDateTime currentTime = candidate.currentTime() == null ? LocalDateTime.now() : candidate.currentTime();
-        boolean result = !currentTime.isBefore(candidate.beginTime()) && !currentTime.isAfter(candidate.endTime());
-
-        log.info("优惠券有效期规格校验完成，优惠券编号：{}，结果：{}", candidate.couponNo(), result);
-        return result;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/spec/CouponStockSpecification.java`
-
-下面是优惠券库存规格。
+该对象表示优惠券模板及其领取门槛。
 
 ```java
-package io.github.atengk.design.spec;
-
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 优惠券库存规格
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class CouponStockSpecification implements Specification<CouponReceiveContext> {
-
-    /**
-     * 判断优惠券库存是否充足
-     *
-     * @param candidate 优惠券领取上下文
-     * @return true 表示库存充足
-     */
-    @Override
-    public boolean isSatisfiedBy(CouponReceiveContext candidate) {
-        boolean result = candidate != null && candidate.couponStock() != null && candidate.couponStock() > 0;
-        log.info("优惠券库存规格校验完成，优惠券编号：{}，库存：{}，结果：{}",
-                candidate == null ? null : candidate.couponNo(),
-                candidate == null ? null : candidate.couponStock(),
-                result);
-        return result;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/spec/CouponUserLevelSpecification.java`
-
-下面是用户等级规格。
-
-```java
-package io.github.atengk.design.spec;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 优惠券用户等级规格
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class CouponUserLevelSpecification implements Specification<CouponReceiveContext> {
-
-    /**
-     * 判断用户等级是否符合优惠券要求
-     *
-     * @param candidate 优惠券领取上下文
-     * @return true 表示符合
-     */
-    @Override
-    public boolean isSatisfiedBy(CouponReceiveContext candidate) {
-        if (candidate == null || StrUtil.hasBlank(candidate.userLevel(), candidate.requiredUserLevel())) {
-            log.warn("优惠券用户等级规格校验失败，上下文、用户等级或要求等级为空");
-            return false;
-        }
-
-        boolean result = StrUtil.equalsIgnoreCase(candidate.userLevel(), candidate.requiredUserLevel());
-        log.info("优惠券用户等级规格校验完成，用户ID：{}，当前等级：{}，要求等级：{}，结果：{}",
-                candidate.userId(), candidate.userLevel(), candidate.requiredUserLevel(), result);
-        return result;
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/spec/CouponAmountSpecification.java`
-
-下面是订单金额门槛规格。
-
-```java
-package io.github.atengk.design.spec;
-
-import lombok.extern.slf4j.Slf4j;
+package io.github.atengk.specification.domain.model;
 
 import java.math.BigDecimal;
 
 /**
- * 优惠券金额门槛规格
+ * 优惠券模板对象
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-@Slf4j
-public class CouponAmountSpecification implements Specification<CouponReceiveContext> {
+public record CouponTemplate(
 
-    /**
-     * 判断订单金额是否达到优惠券门槛
-     *
-     * @param candidate 优惠券领取上下文
-     * @return true 表示达到门槛
-     */
-    @Override
-    public boolean isSatisfiedBy(CouponReceiveContext candidate) {
-        if (candidate == null || candidate.orderAmount() == null || candidate.thresholdAmount() == null) {
-            log.warn("优惠券金额门槛规格校验失败，上下文、订单金额或门槛金额为空");
-            return false;
-        }
+        String couponId,
 
-        boolean result = candidate.orderAmount().compareTo(candidate.thresholdAmount()) >= 0;
-        log.info("优惠券金额门槛规格校验完成，订单金额：{}，门槛金额：{}，结果：{}",
-                candidate.orderAmount(), candidate.thresholdAmount(), result);
-        return result;
-    }
+        String couponName,
+
+        Boolean available,
+
+        Integer requiredMemberLevel,
+
+        Integer minOrderCount,
+
+        BigDecimal minTotalAmount
+
+) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/spec/CouponReceiveSpecificationFactory.java`
+### 领取上下文对象
 
-下面是优惠券领取规格工厂，用于组合完整领取规则。
+文件位置：`src/main/java/io/github/atengk/specification/domain/model/CouponReceiveContext.java`
+
+该对象是规格校验的输入上下文，聚合了用户画像和优惠券模板。
 
 ```java
-package io.github.atengk.design.spec;
+package io.github.atengk.specification.domain.model;
 
-import lombok.extern.slf4j.Slf4j;
+/**
+ * 优惠券领取上下文
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public record CouponReceiveContext(
+
+        UserProfile userProfile,
+
+        CouponTemplate couponTemplate
+
+) {
+}
+```
+
+## 业务规格实现
+
+这一节给出优惠券领取资格中的具体规则。每个规格只处理一个判断条件，保持单一职责。
+
+### 优惠券可用规格
+
+文件位置：`src/main/java/io/github/atengk/specification/specification/CouponAvailableSpecification.java`
+
+该规格判断优惠券模板是否存在并且处于可用状态。
+
+```java
+package io.github.atengk.specification.specification;
+
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.specification.domain.model.CouponReceiveContext;
+import io.github.atengk.specification.domain.model.CouponTemplate;
+import io.github.atengk.specification.domain.specification.Specification;
+import io.github.atengk.specification.domain.specification.SpecificationResult;
+
+/**
+ * 优惠券可用规格
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class CouponAvailableSpecification implements Specification<CouponReceiveContext> {
+
+    @Override
+    public SpecificationResult check(CouponReceiveContext context) {
+        if (ObjectUtil.isNull(context) || ObjectUtil.isNull(context.couponTemplate())) {
+            return SpecificationResult.fail("优惠券不存在");
+        }
+
+        CouponTemplate couponTemplate = context.couponTemplate();
+        if (!Boolean.TRUE.equals(couponTemplate.available())) {
+            return SpecificationResult.fail("优惠券不可用，couponId={}", couponTemplate.couponId());
+        }
+
+        return SpecificationResult.pass();
+    }
+
+}
+```
+
+### 用户状态规格
+
+文件位置：`src/main/java/io/github/atengk/specification/specification/UserStatusSpecification.java`
+
+该规格判断用户是否存在并且处于正常状态。
+
+```java
+package io.github.atengk.specification.specification;
+
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.specification.domain.model.CouponReceiveContext;
+import io.github.atengk.specification.domain.model.UserProfile;
+import io.github.atengk.specification.domain.specification.Specification;
+import io.github.atengk.specification.domain.specification.SpecificationResult;
+
+/**
+ * 用户状态规格
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class UserStatusSpecification implements Specification<CouponReceiveContext> {
+
+    @Override
+    public SpecificationResult check(CouponReceiveContext context) {
+        if (ObjectUtil.isNull(context) || ObjectUtil.isNull(context.userProfile())) {
+            return SpecificationResult.fail("用户不存在");
+        }
+
+        UserProfile userProfile = context.userProfile();
+        if (!StrUtil.equals("NORMAL", userProfile.status())) {
+            return SpecificationResult.fail("用户状态异常，userId={}，status={}", userProfile.userId(), userProfile.status());
+        }
+
+        return SpecificationResult.pass();
+    }
+
+}
+```
+
+### 会员等级规格
+
+文件位置：`src/main/java/io/github/atengk/specification/specification/MemberLevelSpecification.java`
+
+该规格判断用户会员等级是否达到优惠券要求。
+
+```java
+package io.github.atengk.specification.specification;
+
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.specification.domain.model.CouponReceiveContext;
+import io.github.atengk.specification.domain.model.CouponTemplate;
+import io.github.atengk.specification.domain.model.UserProfile;
+import io.github.atengk.specification.domain.specification.Specification;
+import io.github.atengk.specification.domain.specification.SpecificationResult;
+
+/**
+ * 会员等级规格
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class MemberLevelSpecification implements Specification<CouponReceiveContext> {
+
+    @Override
+    public SpecificationResult check(CouponReceiveContext context) {
+        if (ObjectUtil.isNull(context) || ObjectUtil.isNull(context.userProfile()) || ObjectUtil.isNull(context.couponTemplate())) {
+            return SpecificationResult.fail("会员等级校验数据不完整");
+        }
+
+        UserProfile userProfile = context.userProfile();
+        CouponTemplate couponTemplate = context.couponTemplate();
+
+        int memberLevel = ObjectUtil.defaultIfNull(userProfile.memberLevel(), 0);
+        int requiredMemberLevel = ObjectUtil.defaultIfNull(couponTemplate.requiredMemberLevel(), 0);
+
+        if (memberLevel < requiredMemberLevel) {
+            return SpecificationResult.fail(
+                    "会员等级不足，当前等级={}，要求等级={}",
+                    memberLevel,
+                    requiredMemberLevel
+            );
+        }
+
+        return SpecificationResult.pass();
+    }
+
+}
+```
+
+### 历史订单数规格
+
+文件位置：`src/main/java/io/github/atengk/specification/specification/OrderCountSpecification.java`
+
+该规格判断用户历史订单数是否达到优惠券要求。
+
+```java
+package io.github.atengk.specification.specification;
+
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.specification.domain.model.CouponReceiveContext;
+import io.github.atengk.specification.domain.model.CouponTemplate;
+import io.github.atengk.specification.domain.model.UserProfile;
+import io.github.atengk.specification.domain.specification.Specification;
+import io.github.atengk.specification.domain.specification.SpecificationResult;
+
+/**
+ * 历史订单数规格
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class OrderCountSpecification implements Specification<CouponReceiveContext> {
+
+    @Override
+    public SpecificationResult check(CouponReceiveContext context) {
+        if (ObjectUtil.isNull(context) || ObjectUtil.isNull(context.userProfile()) || ObjectUtil.isNull(context.couponTemplate())) {
+            return SpecificationResult.fail("历史订单数校验数据不完整");
+        }
+
+        UserProfile userProfile = context.userProfile();
+        CouponTemplate couponTemplate = context.couponTemplate();
+
+        int orderCount = ObjectUtil.defaultIfNull(userProfile.orderCount(), 0);
+        int minOrderCount = ObjectUtil.defaultIfNull(couponTemplate.minOrderCount(), 0);
+
+        if (orderCount < minOrderCount) {
+            return SpecificationResult.fail(
+                    "历史订单数不足，当前订单数={}，要求订单数={}",
+                    orderCount,
+                    minOrderCount
+            );
+        }
+
+        return SpecificationResult.pass();
+    }
+
+}
+```
+
+### 历史消费金额规格
+
+文件位置：`src/main/java/io/github/atengk/specification/specification/TotalAmountSpecification.java`
+
+该规格判断用户历史消费金额是否达到优惠券要求。
+
+```java
+package io.github.atengk.specification.specification;
+
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.specification.domain.model.CouponReceiveContext;
+import io.github.atengk.specification.domain.model.CouponTemplate;
+import io.github.atengk.specification.domain.model.UserProfile;
+import io.github.atengk.specification.domain.specification.Specification;
+import io.github.atengk.specification.domain.specification.SpecificationResult;
+
+import java.math.BigDecimal;
+
+/**
+ * 历史消费金额规格
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public class TotalAmountSpecification implements Specification<CouponReceiveContext> {
+
+    @Override
+    public SpecificationResult check(CouponReceiveContext context) {
+        if (ObjectUtil.isNull(context) || ObjectUtil.isNull(context.userProfile()) || ObjectUtil.isNull(context.couponTemplate())) {
+            return SpecificationResult.fail("历史消费金额校验数据不完整");
+        }
+
+        UserProfile userProfile = context.userProfile();
+        CouponTemplate couponTemplate = context.couponTemplate();
+
+        BigDecimal totalAmount = ObjectUtil.defaultIfNull(userProfile.totalAmount(), BigDecimal.ZERO);
+        BigDecimal minTotalAmount = ObjectUtil.defaultIfNull(couponTemplate.minTotalAmount(), BigDecimal.ZERO);
+
+        if (totalAmount.compareTo(minTotalAmount) < 0) {
+            return SpecificationResult.fail(
+                    "历史消费金额不足，当前金额={}，要求金额={}",
+                    totalAmount,
+                    minTotalAmount
+            );
+        }
+
+        return SpecificationResult.pass();
+    }
+
+}
+```
+
+### 规格工厂
+
+文件位置：`src/main/java/io/github/atengk/specification/specification/CouponReceiveSpecificationFactory.java`
+
+该工厂类负责组装业务规格。Service 不直接感知具体规则列表，只调用工厂获取组合后的规格。
+
+```java
+package io.github.atengk.specification.specification;
+
+import io.github.atengk.specification.domain.model.CouponReceiveContext;
+import io.github.atengk.specification.domain.specification.Specification;
 import org.springframework.stereotype.Component;
 
 /**
  * 优惠券领取规格工厂
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
-@Slf4j
 @Component
 public class CouponReceiveSpecificationFactory {
 
-    /**
-     * 创建优惠券领取完整规格
-     *
-     * @return 优惠券领取规格
-     */
     public Specification<CouponReceiveContext> createReceiveSpecification() {
-        Specification<CouponReceiveContext> specification = new CouponActiveSpecification()
-                .and(new CouponStockSpecification())
-                .and(new CouponUserLevelSpecification())
-                .and(new CouponAmountSpecification());
-
-        log.info("创建优惠券领取组合规格完成");
-        return specification;
+        return Specification.allOf(
+                new CouponAvailableSpecification(),
+                new UserStatusSpecification(),
+                new MemberLevelSpecification(),
+                new OrderCountSpecification(),
+                new TotalAmountSpecification()
+        );
     }
+
+    public Specification<CouponReceiveContext> createBasicSpecification() {
+        return Specification.allOf(
+                new CouponAvailableSpecification(),
+                new UserStatusSpecification()
+        );
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/CouponReceiveRequest.java`
+## 接口对象
 
-下面是优惠券领取请求对象。
+这一节定义接口入参和出参。规格对象不直接依赖这些 DTO、VO，避免业务规则和接口协议强绑定。
+
+### 请求 DTO
+
+文件位置：`src/main/java/io/github/atengk/specification/dto/CouponReceiveRequest.java`
+
+该 DTO 用于接收优惠券领取请求。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.specification.dto;
 
-import java.math.BigDecimal;
+import jakarta.validation.constraints.NotBlank;
 
 /**
  * 优惠券领取请求
  *
- * @param couponNo    优惠券编号
- * @param userId      用户ID
- * @param userLevel   用户等级
- * @param orderAmount 订单金额
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 public record CouponReceiveRequest(
-        String couponNo,
-        Long userId,
-        String userLevel,
-        BigDecimal orderAmount
+
+        @NotBlank(message = "用户ID不能为空")
+        String userId,
+
+        @NotBlank(message = "优惠券ID不能为空")
+        String couponId
+
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/CouponReceiveResponse.java`
+### 响应 VO
 
-下面是优惠券领取响应对象。
+文件位置：`src/main/java/io/github/atengk/specification/vo/CouponReceiveResponse.java`
+
+该 VO 用于返回领取结果或资格校验结果。
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.specification.vo;
+
+import java.time.LocalDateTime;
 
 /**
  * 优惠券领取响应
  *
- * @param couponNo 优惠券编号
- * @param userId   用户ID
- * @param received 是否领取成功
- * @param message  响应消息
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 public record CouponReceiveResponse(
-        String couponNo,
-        Long userId,
+
         Boolean received,
-        String message
+
+        String userId,
+
+        String couponId,
+
+        String message,
+
+        LocalDateTime operateTime
+
 ) {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/CouponReceiveService.java`
+## 业务代码
 
-下面是优惠券领取服务接口。
+这一节给出 Service 和 Controller。示例中使用内存数据模拟查询，真实项目中可以替换为 Repository、Mapper、Redis 或远程服务。
+
+### Service 接口
+
+文件位置：`src/main/java/io/github/atengk/specification/service/CouponReceiveService.java`
+
+该接口定义优惠券领取和资格校验能力。
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.specification.service;
 
-import io.github.atengk.design.dto.CouponReceiveRequest;
-import io.github.atengk.design.dto.CouponReceiveResponse;
+import io.github.atengk.specification.dto.CouponReceiveRequest;
+import io.github.atengk.specification.vo.CouponReceiveResponse;
 
 /**
- * 优惠券领取服务
+ * 优惠券领取业务接口
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 public interface CouponReceiveService {
 
-    /**
-     * 领取优惠券
-     *
-     * @param request 优惠券领取请求
-     * @return 优惠券领取响应
-     */
-    CouponReceiveResponse receive(CouponReceiveRequest request);
+    CouponReceiveResponse receiveCoupon(CouponReceiveRequest request);
+
+    CouponReceiveResponse checkEligibility(String userId, String couponId);
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/CouponReceiveServiceImpl.java`
+### Service 实现
 
-下面是优惠券领取服务实现。示例中用固定数据模拟优惠券配置，实际项目中可以从数据库读取。
+文件位置：`src/main/java/io/github/atengk/specification/service/impl/CouponReceiveServiceImpl.java`
+
+该实现类负责组装业务上下文并调用规格。注意这里没有把所有规则都写成 Service 内部的 `if else`。
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.specification.service.impl;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.CouponReceiveRequest;
-import io.github.atengk.design.dto.CouponReceiveResponse;
-import io.github.atengk.design.service.CouponReceiveService;
-import io.github.atengk.design.spec.CouponReceiveContext;
-import io.github.atengk.design.spec.CouponReceiveSpecificationFactory;
-import io.github.atengk.design.spec.Specification;
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.specification.domain.model.CouponReceiveContext;
+import io.github.atengk.specification.domain.model.CouponTemplate;
+import io.github.atengk.specification.domain.model.UserProfile;
+import io.github.atengk.specification.domain.specification.Specification;
+import io.github.atengk.specification.domain.specification.SpecificationResult;
+import io.github.atengk.specification.dto.CouponReceiveRequest;
+import io.github.atengk.specification.service.CouponReceiveService;
+import io.github.atengk.specification.specification.CouponReceiveSpecificationFactory;
+import io.github.atengk.specification.vo.CouponReceiveResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * 优惠券领取服务实现
+ * 优惠券领取业务实现
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class CouponReceiveServiceImpl implements CouponReceiveService {
 
+    private static final Map<String, UserProfile> USER_PROFILE_MAP = new HashMap<>();
+
+    private static final Map<String, CouponTemplate> COUPON_TEMPLATE_MAP = new HashMap<>();
+
     private final CouponReceiveSpecificationFactory specificationFactory;
 
-    /**
-     * 领取优惠券
-     *
-     * @param request 优惠券领取请求
-     * @return 优惠券领取响应
-     */
-    @Override
-    public CouponReceiveResponse receive(CouponReceiveRequest request) {
-        validateRequest(request);
+    static {
+        USER_PROFILE_MAP.put("10001", new UserProfile(
+                "10001",
+                "张三",
+                "NORMAL",
+                3,
+                8,
+                new BigDecimal("1299.00")
+        ));
+        USER_PROFILE_MAP.put("10002", new UserProfile(
+                "10002",
+                "李四",
+                "FROZEN",
+                5,
+                20,
+                new BigDecimal("6000.00")
+        ));
+        USER_PROFILE_MAP.put("10003", new UserProfile(
+                "10003",
+                "王五",
+                "NORMAL",
+                1,
+                1,
+                new BigDecimal("99.00")
+        ));
 
-        CouponReceiveContext context = new CouponReceiveContext(
-                request.couponNo(),
-                request.userId(),
-                request.userLevel(),
-                request.orderAmount(),
+        COUPON_TEMPLATE_MAP.put("C001", new CouponTemplate(
+                "C001",
+                "满减优惠券",
+                true,
+                2,
+                3,
+                new BigDecimal("500.00")
+        ));
+        COUPON_TEMPLATE_MAP.put("C002", new CouponTemplate(
+                "C002",
+                "高等级会员专享券",
+                true,
+                5,
                 10,
-                "VIP",
-                BigDecimal.valueOf(100),
-                LocalDateTime.now().minusDays(1),
-                LocalDateTime.now().plusDays(7),
-                LocalDateTime.now()
-        );
-
-        Specification<CouponReceiveContext> specification = specificationFactory.createReceiveSpecification();
-        boolean satisfied = specification.isSatisfiedBy(context);
-
-        if (!satisfied) {
-            log.warn("领取优惠券失败，不满足领取规格，优惠券编号：{}，用户ID：{}",
-                    request.couponNo(), request.userId());
-            return new CouponReceiveResponse(request.couponNo(), request.userId(), false, "不满足优惠券领取条件");
-        }
-
-        log.info("领取优惠券成功，优惠券编号：{}，用户ID：{}", request.couponNo(), request.userId());
-        return new CouponReceiveResponse(request.couponNo(), request.userId(), true, "领取成功");
+                new BigDecimal("3000.00")
+        ));
+        COUPON_TEMPLATE_MAP.put("C003", new CouponTemplate(
+                "C003",
+                "已下架优惠券",
+                false,
+                1,
+                0,
+                BigDecimal.ZERO
+        ));
     }
 
-    /**
-     * 校验优惠券领取请求
-     *
-     * @param request 优惠券领取请求
-     */
-    private void validateRequest(CouponReceiveRequest request) {
-        if (request == null) {
-            log.warn("领取优惠券失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
+    @Override
+    public CouponReceiveResponse receiveCoupon(CouponReceiveRequest request) {
+        CouponReceiveContext context = buildContext(request.userId(), request.couponId());
+
+        Specification<CouponReceiveContext> receiveSpecification = specificationFactory.createReceiveSpecification();
+        SpecificationResult result = receiveSpecification.check(context);
+
+        if (!result.passed()) {
+            log.warn("优惠券领取失败，userId={}，couponId={}，reason={}",
+                    request.userId(), request.couponId(), result.message());
+            return new CouponReceiveResponse(false, request.userId(), request.couponId(), result.message(), LocalDateTime.now());
         }
 
-        if (StrUtil.hasBlank(request.couponNo(), request.userLevel())) {
-            log.warn("领取优惠券失败，优惠券编号或用户等级为空");
-            throw new IllegalArgumentException("优惠券编号和用户等级不能为空");
-        }
-
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("领取优惠券失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (request.orderAmount() == null || request.orderAmount().compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("领取优惠券失败，订单金额不合法，金额：{}", request.orderAmount());
-            throw new IllegalArgumentException("订单金额不能小于0");
-        }
+        log.info("优惠券领取成功，userId={}，couponId={}", request.userId(), request.couponId());
+        return new CouponReceiveResponse(true, request.userId(), request.couponId(), "领取成功", LocalDateTime.now());
     }
+
+    @Override
+    public CouponReceiveResponse checkEligibility(String userId, String couponId) {
+        CouponReceiveContext context = buildContext(userId, couponId);
+
+        Specification<CouponReceiveContext> receiveSpecification = specificationFactory.createReceiveSpecification();
+        SpecificationResult result = receiveSpecification.check(context);
+
+        String message = result.passed() ? "具备领取资格" : result.message();
+        log.info("优惠券资格校验完成，userId={}，couponId={}，passed={}，message={}",
+                userId, couponId, result.passed(), message);
+
+        return new CouponReceiveResponse(result.passed(), userId, couponId, message, LocalDateTime.now());
+    }
+
+    private CouponReceiveContext buildContext(String userId, String couponId) {
+        UserProfile userProfile = USER_PROFILE_MAP.get(userId);
+        CouponTemplate couponTemplate = COUPON_TEMPLATE_MAP.get(couponId);
+
+        if (ObjectUtil.isNull(userProfile)) {
+            log.warn("用户画像不存在，userId={}", userId);
+        }
+        if (ObjectUtil.isNull(couponTemplate)) {
+            log.warn("优惠券模板不存在，couponId={}", couponId);
+        }
+
+        return new CouponReceiveContext(userProfile, couponTemplate);
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/CouponReceiveController.java`
+### Controller 接口
 
-下面是优惠券领取接口，用于验证业务规则规格。
+文件位置：`src/main/java/io/github/atengk/specification/controller/CouponController.java`
+
+该 Controller 提供领取优惠券和校验领取资格两个接口。
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.specification.controller;
 
-import io.github.atengk.design.dto.CouponReceiveRequest;
-import io.github.atengk.design.dto.CouponReceiveResponse;
-import io.github.atengk.design.service.CouponReceiveService;
+import io.github.atengk.specification.dto.CouponReceiveRequest;
+import io.github.atengk.specification.service.CouponReceiveService;
+import io.github.atengk.specification.vo.CouponReceiveResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-
 /**
- * 优惠券领取控制器
+ * 优惠券接口
  *
  * @author Ateng
- * @since 2026-05-01
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/coupons")
 @RequiredArgsConstructor
-@RequestMapping("/specification/coupon")
-public class CouponReceiveController {
+public class CouponController {
 
     private final CouponReceiveService couponReceiveService;
 
-    /**
-     * 领取优惠券
-     *
-     * @param couponNo    优惠券编号
-     * @param userId      用户ID
-     * @param userLevel   用户等级
-     * @param orderAmount 订单金额
-     * @return 优惠券领取响应
-     */
     @PostMapping("/receive")
-    public CouponReceiveResponse receive(@RequestParam String couponNo,
-                                         @RequestParam Long userId,
-                                         @RequestParam String userLevel,
-                                         @RequestParam BigDecimal orderAmount) {
-        CouponReceiveRequest request = new CouponReceiveRequest(couponNo, userId, userLevel, orderAmount);
-        return couponReceiveService.receive(request);
-    }
-}
-```
-
-## 查询规格模式
-
-规格模式也常用于动态查询。查询规格的目标不是返回 true 或 false，而是把查询条件封装起来，统一应用到查询构造器中。
-
-整体关系如下：
-
-```text
-ProductQueryRequest
-    -> ProductQuerySpecification
-        -> apply(LambdaQueryWrapper<ProductEntity>)
-            -> ProductMapper.selectPage(...)
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
-├── dto/
-│   ├── PageResult.java
-│   ├── ProductQueryRequest.java
-│   └── ProductResponse.java
-├── entity/
-│   └── ProductEntity.java
-├── mapper/
-│   └── ProductMapper.java
-├── queryspec/
-│   ├── QuerySpecification.java
-│   └── ProductQuerySpecification.java
-├── service/
-│   ├── ProductQueryService.java
-│   └── impl/
-│       └── ProductQueryServiceImpl.java
-└── controller/
-    └── ProductQueryController.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/entity/ProductEntity.java`
-
-下面是商品持久化实体，对应 `product` 表。
-
-```java
-package io.github.atengk.design.entity;
-
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-/**
- * 商品持久化实体
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Data
-@TableName("product")
-public class ProductEntity {
-
-    /**
-     * 商品ID
-     */
-    @TableId
-    private Long id;
-
-    /**
-     * 商品编码
-     */
-    private String productCode;
-
-    /**
-     * 商品名称
-     */
-    private String productName;
-
-    /**
-     * 分类编码
-     */
-    private String categoryCode;
-
-    /**
-     * 商品价格
-     */
-    private BigDecimal price;
-
-    /**
-     * 库存数量
-     */
-    private Integer stock;
-
-    /**
-     * 商品状态
-     */
-    private String status;
-
-    /**
-     * 创建时间
-     */
-    private LocalDateTime createTime;
-
-    /**
-     * 更新时间
-     */
-    private LocalDateTime updateTime;
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/mapper/ProductMapper.java`
-
-下面是商品 Mapper。
-
-```java
-package io.github.atengk.design.mapper;
-
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import io.github.atengk.design.entity.ProductEntity;
-
-/**
- * 商品Mapper
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface ProductMapper extends BaseMapper<ProductEntity> {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/ProductQueryRequest.java`
-
-下面是商品查询请求对象。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 商品查询请求
- *
- * @param pageNum      页码
- * @param pageSize     每页大小
- * @param productName  商品名称
- * @param categoryCode 分类编码
- * @param minPrice     最低价格
- * @param maxPrice     最高价格
- * @param onlyOnShelf  是否只查询上架商品
- * @author Ateng
- * @since 2026-05-01
- */
-public record ProductQueryRequest(
-        Long pageNum,
-        Long pageSize,
-        String productName,
-        String categoryCode,
-        BigDecimal minPrice,
-        BigDecimal maxPrice,
-        Boolean onlyOnShelf
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/ProductResponse.java`
-
-下面是商品响应对象。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 商品响应
- *
- * @param id           商品ID
- * @param productCode  商品编码
- * @param productName  商品名称
- * @param categoryCode 分类编码
- * @param price        商品价格
- * @param stock        库存数量
- * @param status       商品状态
- * @author Ateng
- * @since 2026-05-01
- */
-public record ProductResponse(
-        Long id,
-        String productCode,
-        String productName,
-        String categoryCode,
-        BigDecimal price,
-        Integer stock,
-        String status
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/PageResult.java`
-
-下面是分页结果对象。
-
-```java
-package io.github.atengk.design.dto;
-
-import java.util.List;
-
-/**
- * 分页结果
- *
- * @param records  数据列表
- * @param pageNum  当前页码
- * @param pageSize 每页大小
- * @param total    总数量
- * @param <T>      数据类型
- * @author Ateng
- * @since 2026-05-01
- */
-public record PageResult<T>(
-        List<T> records,
-        Long pageNum,
-        Long pageSize,
-        Long total
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/queryspec/QuerySpecification.java`
-
-下面是查询规格接口，用于把规格应用到查询构造器。
-
-```java
-package io.github.atengk.design.queryspec;
-
-/**
- * 查询规格接口
- *
- * @param <W> 查询构造器类型
- * @author Ateng
- * @since 2026-05-01
- */
-public interface QuerySpecification<W> {
-
-    /**
-     * 应用查询规格
-     *
-     * @param wrapper 查询构造器
-     */
-    void apply(W wrapper);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/queryspec/ProductQuerySpecification.java`
-
-下面是商品查询规格。它把商品名称、分类、价格区间、状态条件封装到一个对象中。
-
-```java
-package io.github.atengk.design.queryspec;
-
-import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import io.github.atengk.design.dto.ProductQueryRequest;
-import io.github.atengk.design.entity.ProductEntity;
-import lombok.extern.slf4j.Slf4j;
-
-import java.math.BigDecimal;
-
-/**
- * 商品查询规格
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-public class ProductQuerySpecification implements QuerySpecification<LambdaQueryWrapper<ProductEntity>> {
-
-    private final ProductQueryRequest request;
-
-    /**
-     * 创建商品查询规格
-     *
-     * @param request 商品查询请求
-     */
-    public ProductQuerySpecification(ProductQueryRequest request) {
-        this.request = request;
+    public CouponReceiveResponse receiveCoupon(@Valid @RequestBody CouponReceiveRequest request) {
+        return couponReceiveService.receiveCoupon(request);
     }
 
-    /**
-     * 应用查询规格
-     *
-     * @param wrapper 查询构造器
-     */
-    @Override
-    public void apply(LambdaQueryWrapper<ProductEntity> wrapper) {
-        if (wrapper == null) {
-            throw new IllegalArgumentException("查询构造器不能为空");
-        }
-
-        if (request == null) {
-            log.info("商品查询规格为空，使用默认查询条件");
-            return;
-        }
-
-        if (StrUtil.isNotBlank(request.productName())) {
-            wrapper.like(ProductEntity::getProductName, request.productName());
-        }
-
-        if (StrUtil.isNotBlank(request.categoryCode())) {
-            wrapper.eq(ProductEntity::getCategoryCode, request.categoryCode());
-        }
-
-        if (request.minPrice() != null) {
-            validatePrice(request.minPrice(), "最低价格");
-            wrapper.ge(ProductEntity::getPrice, request.minPrice());
-        }
-
-        if (request.maxPrice() != null) {
-            validatePrice(request.maxPrice(), "最高价格");
-            wrapper.le(ProductEntity::getPrice, request.maxPrice());
-        }
-
-        if (Boolean.TRUE.equals(request.onlyOnShelf())) {
-            wrapper.eq(ProductEntity::getStatus, "ON_SHELF");
-        }
-
-        wrapper.orderByDesc(ProductEntity::getCreateTime);
-        log.info("应用商品查询规格完成，商品名称：{}，分类：{}，最低价：{}，最高价：{}，只看上架：{}",
-                request.productName(), request.categoryCode(), request.minPrice(), request.maxPrice(), request.onlyOnShelf());
+    @GetMapping("/eligibility")
+    public CouponReceiveResponse checkEligibility(@RequestParam String userId,
+                                                  @RequestParam String couponId) {
+        return couponReceiveService.checkEligibility(userId, couponId);
     }
 
-    /**
-     * 校验价格
-     *
-     * @param price 价格
-     * @param name  字段名称
-     */
-    private void validatePrice(BigDecimal price, String name) {
-        if (price.compareTo(BigDecimal.ZERO) < 0) {
-            log.warn("商品查询规格校验失败，{}不能小于0，值：{}", name, price);
-            throw new IllegalArgumentException(name + "不能小于0");
-        }
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/ProductQueryService.java`
-
-下面是商品查询服务接口。
-
-```java
-package io.github.atengk.design.service;
-
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductQueryRequest;
-import io.github.atengk.design.dto.ProductResponse;
-
-/**
- * 商品查询服务
- *
- * @author Ateng
- * @since 2026-05-01
- */
-public interface ProductQueryService {
-
-    /**
-     * 分页查询商品
-     *
-     * @param request 商品查询请求
-     * @return 商品分页结果
-     */
-    PageResult<ProductResponse> page(ProductQueryRequest request);
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/service/impl/ProductQueryServiceImpl.java`
-
-下面是商品查询服务实现。它通过查询规格构建动态 SQL 条件。
-
-```java
-package io.github.atengk.design.service.impl;
-
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductQueryRequest;
-import io.github.atengk.design.dto.ProductResponse;
-import io.github.atengk.design.entity.ProductEntity;
-import io.github.atengk.design.mapper.ProductMapper;
-import io.github.atengk.design.queryspec.ProductQuerySpecification;
-import io.github.atengk.design.service.ProductQueryService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-/**
- * 商品查询服务实现
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@Slf4j
-@Service
-@RequiredArgsConstructor
-public class ProductQueryServiceImpl implements ProductQueryService {
-
-    private final ProductMapper productMapper;
-
-    /**
-     * 分页查询商品
-     *
-     * @param request 商品查询请求
-     * @return 商品分页结果
-     */
-    @Override
-    public PageResult<ProductResponse> page(ProductQueryRequest request) {
-        long pageNum = request == null || request.pageNum() == null || request.pageNum() <= 0 ? 1L : request.pageNum();
-        long pageSize = request == null || request.pageSize() == null || request.pageSize() <= 0 ? 10L : request.pageSize();
-
-        LambdaQueryWrapper<ProductEntity> wrapper = new LambdaQueryWrapper<>();
-        new ProductQuerySpecification(request).apply(wrapper);
-
-        Page<ProductEntity> entityPage = productMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
-
-        log.info("商品规格分页查询完成，页码：{}，每页大小：{}，总数：{}",
-                entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
-
-        return new PageResult<>(
-                entityPage.getRecords().stream().map(this::toResponse).toList(),
-                entityPage.getCurrent(),
-                entityPage.getSize(),
-                entityPage.getTotal()
-        );
-    }
-
-    /**
-     * 转换为商品响应
-     *
-     * @param entity 商品实体
-     * @return 商品响应
-     */
-    private ProductResponse toResponse(ProductEntity entity) {
-        return new ProductResponse(
-                entity.getId(),
-                entity.getProductCode(),
-                entity.getProductName(),
-                entity.getCategoryCode(),
-                entity.getPrice(),
-                entity.getStock(),
-                entity.getStatus()
-        );
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/controller/ProductQueryController.java`
-
-下面是商品查询接口，用于验证查询规格模式。
-
-```java
-package io.github.atengk.design.controller;
-
-import io.github.atengk.design.dto.PageResult;
-import io.github.atengk.design.dto.ProductQueryRequest;
-import io.github.atengk.design.dto.ProductResponse;
-import io.github.atengk.design.service.ProductQueryService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-
-/**
- * 商品查询控制器
- *
- * @author Ateng
- * @since 2026-05-01
- */
-@RestController
-@RequiredArgsConstructor
-@RequestMapping("/specification/product")
-public class ProductQueryController {
-
-    private final ProductQueryService productQueryService;
-
-    /**
-     * 分页查询商品
-     *
-     * @param pageNum      页码
-     * @param pageSize     每页大小
-     * @param productName  商品名称
-     * @param categoryCode 分类编码
-     * @param minPrice     最低价格
-     * @param maxPrice     最高价格
-     * @param onlyOnShelf  是否只看上架商品
-     * @return 商品分页结果
-     */
-    @GetMapping("/page")
-    public PageResult<ProductResponse> page(@RequestParam(defaultValue = "1") Long pageNum,
-                                            @RequestParam(defaultValue = "10") Long pageSize,
-                                            @RequestParam(required = false) String productName,
-                                            @RequestParam(required = false) String categoryCode,
-                                            @RequestParam(required = false) BigDecimal minPrice,
-                                            @RequestParam(required = false) BigDecimal maxPrice,
-                                            @RequestParam(defaultValue = "false") Boolean onlyOnShelf) {
-        ProductQueryRequest request = new ProductQueryRequest(
-                pageNum,
-                pageSize,
-                productName,
-                categoryCode,
-                minPrice,
-                maxPrice,
-                onlyOnShelf
-        );
-
-        return productQueryService.page(request);
-    }
 }
 ```
 
 ## 使用方式
 
-启动项目之前，先创建数据库和商品表。
+本示例提供两个接口：领取优惠券和校验领取资格。两个接口都复用同一组规格对象。
+
+### 校验领取资格
+
+接口信息：
+
+| 项目     | 内容                           |
+| -------- | ------------------------------ |
+| 请求路径 | `/coupons/eligibility`         |
+| 请求方法 | `GET`                          |
+| 主要作用 | 判断用户是否具备优惠券领取资格 |
+
+用户 `10001` 满足 `C001` 的领取条件。
 
 ```bash
-mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS design_demo DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -uroot -proot design_demo < sql/product.sql
+curl -X GET 'http://localhost:8080/coupons/eligibility?userId=10001&couponId=C001'
 ```
 
-插入测试商品数据：
+响应示例：
 
-```sql
-INSERT INTO product (
-    id, product_code, product_name, category_code, price, stock, status, create_time, update_time
-) VALUES
-(10001, 'P10001', '机械键盘', 'digital', 199.00, 100, 'ON_SHELF', NOW(), NOW()),
-(10002, 'P10002', '无线鼠标', 'digital', 99.00, 200, 'ON_SHELF', NOW(), NOW()),
-(10003, 'P10003', '办公椅', 'office', 399.00, 50, 'DRAFT', NOW(), NOW()),
-(10004, 'P10004', '显示器', 'digital', 1299.00, 20, 'OFF_SHELF', NOW(), NOW());
+```json
+{
+  "received": true,
+  "userId": "10001",
+  "couponId": "C001",
+  "message": "具备领取资格",
+  "operateTime": "2026-05-13T10:30:00"
+}
 ```
 
-启动 Spring Boot 项目：
+用户 `10003` 不满足 `C001` 的领取条件。
+
+```bash
+curl -X GET 'http://localhost:8080/coupons/eligibility?userId=10003&couponId=C001'
+```
+
+响应示例：
+
+```json
+{
+  "received": false,
+  "userId": "10003",
+  "couponId": "C001",
+  "message": "会员等级不足，当前等级=1，要求等级=2",
+  "operateTime": "2026-05-13T10:31:00"
+}
+```
+
+### 领取优惠券
+
+接口信息：
+
+| 项目         | 内容                 |
+| ------------ | -------------------- |
+| 请求路径     | `/coupons/receive`   |
+| 请求方法     | `POST`               |
+| Content-Type | `application/json`   |
+| 主要作用     | 校验资格并领取优惠券 |
+
+请求示例：
+
+```bash
+curl -X POST 'http://localhost:8080/coupons/receive' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "10001",
+    "couponId": "C001"
+  }'
+```
+
+响应示例：
+
+```json
+{
+  "received": true,
+  "userId": "10001",
+  "couponId": "C001",
+  "message": "领取成功",
+  "operateTime": "2026-05-13T10:32:00"
+}
+```
+
+领取已下架优惠券：
+
+```bash
+curl -X POST 'http://localhost:8080/coupons/receive' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "10001",
+    "couponId": "C003"
+  }'
+```
+
+响应示例：
+
+```json
+{
+  "received": false,
+  "userId": "10001",
+  "couponId": "C003",
+  "message": "优惠券不可用，couponId=C003",
+  "operateTime": "2026-05-13T10:33:00"
+}
+```
+
+## 验证方式
+
+可以通过接口响应和日志验证规格模式是否生效。
+
+启动项目：
 
 ```bash
 mvn spring-boot:run
 ```
 
-验证优惠券业务规则规格：
+执行通过场景：
 
 ```bash
-curl -X POST "http://localhost:8080/specification/coupon/receive?couponNo=C10001&userId=10001&userLevel=VIP&orderAmount=199.00"
+curl -X GET 'http://localhost:8080/coupons/eligibility?userId=10001&couponId=C001'
 ```
 
-可能返回：
-
-```json
-{
-  "couponNo": "C10001",
-  "userId": 10001,
-  "received": true,
-  "message": "领取成功"
-}
-```
-
-验证不满足用户等级的情况：
+执行用户状态异常场景：
 
 ```bash
-curl -X POST "http://localhost:8080/specification/coupon/receive?couponNo=C10001&userId=10002&userLevel=NORMAL&orderAmount=199.00"
+curl -X GET 'http://localhost:8080/coupons/eligibility?userId=10002&couponId=C001'
 ```
 
-可能返回：
-
-```json
-{
-  "couponNo": "C10001",
-  "userId": 10002,
-  "received": false,
-  "message": "不满足优惠券领取条件"
-}
-```
-
-验证商品查询规格：
+执行会员等级不足场景：
 
 ```bash
-curl "http://localhost:8080/specification/product/page?pageNum=1&pageSize=10&productName=键盘&categoryCode=digital&minPrice=100&maxPrice=500&onlyOnShelf=true"
+curl -X GET 'http://localhost:8080/coupons/eligibility?userId=10003&couponId=C001'
 ```
 
-可能返回：
+执行优惠券不可用场景：
 
-```json
-{
-  "records": [
-    {
-      "id": 10001,
-      "productCode": "P10001",
-      "productName": "机械键盘",
-      "categoryCode": "digital",
-      "price": 199.00,
-      "stock": 100,
-      "status": "ON_SHELF"
-    }
-  ],
-  "pageNum": 1,
-  "pageSize": 10,
-  "total": 1
-}
+```bash
+curl -X GET 'http://localhost:8080/coupons/eligibility?userId=10001&couponId=C003'
 ```
 
-如果规格模式正常，可以看到类似日志：
+验证点：
 
 ```text
-创建优惠券领取组合规格完成
-优惠券有效期规格校验完成，优惠券编号：C10001，结果：true
-优惠券库存规格校验完成，优惠券编号：C10001，库存：10，结果：true
-优惠券用户等级规格校验完成，用户ID：10001，当前等级：VIP，要求等级：VIP，结果：true
-优惠券金额门槛规格校验完成，订单金额：199.00，门槛金额：100，结果：true
-领取优惠券成功，优惠券编号：C10001，用户ID：10001
-应用商品查询规格完成，商品名称：键盘，分类：digital，最低价：100，最高价：500，只看上架：true
-商品规格分页查询完成，页码：1，每页大小：10，总数：1
+1. Service 中没有堆叠大量规则 if else。
+2. 每个业务规则都有独立 Specification 类。
+3. 组合规则由 CouponReceiveSpecificationFactory 统一组装。
+4. 失败时能返回具体失败原因。
+5. 新增规则时，只需要新增规格类并调整规格组合。
 ```
 
-## 规格模式和策略模式的区别
+## 扩展示例
 
-规格模式和策略模式都可以减少 `if else`，但它们解决的问题不同。
+规格模式的优势在于组合。除了全部满足的 `AND` 组合，也可以构建更复杂的业务规则。
 
-| 对比项       | 规格模式                       | 策略模式                     |
-| ------------ | ------------------------------ | ---------------------------- |
-| 核心目的     | 判断对象是否满足某个规则       | 选择某种算法执行             |
-| 结果类型     | 通常是 boolean 或查询条件      | 任意业务结果                 |
-| 是否强调组合 | 强调 `and`、`or`、`not`        | 不强调                       |
-| 典型场景     | 优惠券条件、风控条件、查询条件 | 支付渠道、优惠计算、物流计费 |
-| 规则关系     | 多个规则可以叠加               | 多个策略通常互斥选择         |
+### 任意规则满足即可通过
+
+例如某个优惠券允许“会员等级达到 5 或历史消费金额达到 3000”即可领取，可以这样组合：
+
+```java
+Specification<CouponReceiveContext> vipOrHighAmountSpec = Specification.anyOf(
+        new MemberLevelSpecification(),
+        new TotalAmountSpecification()
+);
+```
+
+如果业务要求基础条件必须满足，同时满足会员等级或消费金额之一，可以这样组合：
+
+```java
+Specification<CouponReceiveContext> complexSpec = Specification.allOf(
+        new CouponAvailableSpecification(),
+        new UserStatusSpecification(),
+        Specification.anyOf(
+                new MemberLevelSpecification(),
+                new TotalAmountSpecification()
+        )
+);
+```
+
+### 反向规则
+
+例如存在一个 `BlacklistUserSpecification`，用于判断用户是否在黑名单中。业务上需要表达“用户不能在黑名单中”，可以这样写：
+
+```java
+Specification<CouponReceiveContext> notBlacklistSpec =
+        new BlacklistUserSpecification().not("黑名单用户不能领取优惠券");
+```
+
+这里的 `not` 不是简单的代码炫技，它能让规则表达更接近业务语言：
+
+```text
+优惠券可用
+AND 用户状态正常
+AND 用户不在黑名单
+AND 会员等级满足
+```
+
+## 适用场景
+
+规格模式适合规则较多、规则经常变化、规则需要组合复用的场景。
+
+常见适用场景：
+
+```text
+优惠券领取：
+- 用户状态校验
+- 会员等级校验
+- 历史订单数校验
+- 历史消费金额校验
+- 活动时间校验
+
+订单风控：
+- 收货地址风险校验
+- 下单频率校验
+- 支付账号校验
+- 黑名单校验
+- 大额订单校验
+
+会员权益：
+- 会员等级校验
+- 权益有效期校验
+- 使用次数校验
+- 适用场景校验
+
+商品上下架：
+- 库存校验
+- 价格校验
+- 类目状态校验
+- 商家状态校验
+- 审核状态校验
+```
+
+## 不适用场景
+
+规格模式会增加类数量。如果业务规则非常简单，直接判断更清晰。
+
+不建议使用的场景：
+
+```text
+1. 只有一两个简单条件。
+2. 规则不会复用，也不会扩展。
+3. 判断逻辑和主流程高度绑定，拆出来反而不清晰。
+4. 团队不熟悉规格模式，短期维护成本高于收益。
+5. 只是为了消灭 if else 而机械拆类。
+```
+
+例如下面这种简单判断没有必要引入规格模式：
+
+```java
+if (!Boolean.TRUE.equals(couponTemplate.available())) {
+    return "优惠券不可用";
+}
+```
+
+当规则开始变成下面这样时，再考虑规格模式更合理：
+
+```text
+优惠券可用
+AND 用户状态正常
+AND 用户等级满足
+AND 历史订单数满足
+AND 历史消费金额满足
+AND 当前时间在活动周期内
+AND 用户不在黑名单
+AND 用户未超过领取次数
+```
+
+## 和责任链模式的区别
+
+规格模式和责任链模式都可以处理多个规则，但关注点不同。当前设计模式文档中也强调，责任链模式按顺序处理请求，规格模式组合判断条件。
+
+| 对比项   | 规格模式                     | 责任链模式                       |
+| -------- | ---------------------------- | -------------------------------- |
+| 核心关注 | 条件判断是否满足             | 请求按链路逐个处理               |
+| 组合方式 | `and`、`or`、`not`           | next 节点顺序流转                |
+| 返回结果 | 通常是通过或不通过           | 可以修改请求、终止流程、继续传递 |
+| 适合场景 | 资格校验、规则组合、查询条件 | 过滤器、审批流、风控处理链       |
+| 规则关系 | 更强调逻辑组合               | 更强调处理顺序                   |
 
 简单理解：
 
 ```text
-规格模式：这个对象是否满足这些条件。
-策略模式：这个场景应该用哪种算法处理。
+规格模式关注“这个对象是否满足某组规则”。
+责任链模式关注“这个请求要经过哪些处理节点”。
 ```
 
-例如“订单金额是否达到 100、用户是否是 VIP、是否首单”适合规格模式。
-“满减、折扣、立减选择哪一种优惠算法”更适合策略模式。
+## 和解释器模式的区别
 
-## 规格模式和解释器模式的区别
+规格模式和解释器模式都可能用于规则表达，但抽象层次不同。解释器模式偏向解析表达式或 DSL，规格模式偏向用对象表达规则。
 
-规格模式和解释器模式都可以处理规则，但规则来源不同。
+| 对比项   | 规格模式           | 解释器模式                   |
+| -------- | ------------------ | ---------------------------- |
+| 表达方式 | Java 对象组合      | 表达式、脚本、DSL            |
+| 典型形式 | `specA.and(specB)` | `level >= 3 && amount > 500` |
+| 适合人群 | 开发人员维护       | 可面向运营、配置人员         |
+| 扩展方式 | 新增规格类         | 新增语法、解析器、函数       |
+| 复杂度   | 中等               | 较高                         |
 
-| 对比项       | 规格模式                        | 解释器模式                          |
-| ------------ | ------------------------------- | ----------------------------------- |
-| 规则表达方式 | Java 对象组合                   | 字符串表达式或语法树                |
-| 使用方式     | `specA.and(specB)`              | 解析 `a && b`                       |
-| 适用场景     | 规则由开发定义                  | 规则需要配置化表达                  |
-| 复杂度       | 中低                            | 中高                                |
-| 典型例子     | `AmountSpec.and(UserLevelSpec)` | `amount >= 100 && userLevel == VIP` |
+如果规则主要由开发人员维护，使用规格模式通常更简单。如果规则需要由运营后台配置，并且表达式很多，可以考虑解释器模式、规则引擎或 DSL。
+
+## 和策略模式的区别
+
+策略模式解决的是“选择哪一种算法或处理方式”，规格模式解决的是“对象是否满足某个条件”。
+
+| 对比项       | 规格模式                     | 策略模式                     |
+| ------------ | ---------------------------- | ---------------------------- |
+| 核心问题     | 判断条件是否满足             | 选择并执行某种业务算法       |
+| 典型方法     | `check(context)`             | `execute(request)`           |
+| 返回结果     | 通过、不通过、失败原因       | 业务处理结果                 |
+| 常见场景     | 优惠资格、风控条件、查询条件 | 支付方式、计价方式、通知渠道 |
+| 是否强调组合 | 强调组合                     | 不一定强调组合               |
 
 简单理解：
 
 ```text
-规格模式：用对象表达规则。
-解释器模式：用表达式字符串表达规则。
+规格模式回答：能不能做？
+策略模式回答：怎么做？
 ```
 
-如果规则由开发人员维护，规格模式更安全、更容易测试。
-如果规则需要配置到数据库或后台页面中，由业务人员编辑，就可能需要解释器模式或成熟规则引擎。
+## 项目落地建议
 
-## 规格模式和责任链模式的区别
+在 Spring Boot 项目中使用规格模式时，应优先保证规则对象小而清晰，不要把一个规格写成新的“大 Service”。
 
-规格模式和责任链模式都可以处理多个条件，但组织方式不同。
-
-| 对比项       | 规格模式               | 责任链模式                     |
-| ------------ | ---------------------- | ------------------------------ |
-| 核心目的     | 组合判断条件           | 按顺序处理请求                 |
-| 执行结构     | 规则组合树             | 处理器链                       |
-| 是否强调顺序 | 不强                   | 强                             |
-| 是否强调中断 | 不强，但可短路         | 强                             |
-| 典型场景     | 是否满足优惠券领取条件 | 参数校验、风控校验、审批流节点 |
-
-简单理解：
+建议：
 
 ```text
-规格模式：规则是否满足。
-责任链模式：请求经过哪些处理节点。
+1. 一个规格类只表达一个明确业务条件。
+2. 规格命名使用业务语义，例如 MemberLevelSpecification。
+3. 规格输入建议使用业务上下文对象，而不是直接使用 Controller DTO。
+4. 规格结果不要只返回 boolean，建议携带失败原因。
+5. 组合规则放到 Factory 或 Assembler 中，不要散落在 Controller。
+6. 规则需要复用时再抽成规格，不要为简单判断过度设计。
+7. 涉及数据库查询时，优先在 Service 或 Repository 中准备上下文数据，再交给规格判断。
+8. 规格类应尽量无状态，便于复用和单元测试。
 ```
 
-优惠券“有效期、库存、等级、金额”组合判断适合规格模式。
-订单提交前“参数校验、库存校验、金额校验、风控校验”按顺序处理，更适合责任链模式。
-
-## 注意事项
-
-规格模式适合规则复用和规则组合，但不要为了一个简单判断强行拆类。如果规则只有一两个，并且不会复用，普通 `if` 更直接。
-
-适合使用规格模式的场景：
+推荐命名：
 
 ```text
-优惠券领取条件
-订单风控条件
-商品上下架条件
-会员权益可用条件
-动态查询条件
-权限规则组合
-领域对象复杂校验
-多个规则需要 and / or / not 组合
+UserStatusSpecification
+MemberLevelSpecification
+CouponAvailableSpecification
+OrderAmountSpecification
+BlacklistUserSpecification
+ActivityTimeSpecification
 ```
 
-不太适合使用规格模式的场景：
+不推荐命名：
 
 ```text
-只有一个简单判断
-规则不会复用
-规则没有组合需求
-使用规格后类数量明显膨胀
-规则本质是算法选择而不是条件判断
+CheckSpecification
+CommonSpecification
+RuleSpecification
+CouponSpecification
+ValidateSpecification
 ```
 
-不要把规格类写成上帝规则类。
+这些名字过于宽泛，后续很容易变成规则垃圾桶。
 
-不推荐：
+## 常见问题
 
-```java
-public class CouponReceiveSpecification {
+### 规格模式能不能访问数据库
 
-    public boolean check(CouponReceiveContext context) {
-        // 校验有效期
-        // 校验库存
-        // 校验用户等级
-        // 校验金额
-        // 校验黑名单
-        // 校验地区
-        // 校验渠道
-        return true;
-    }
-}
-```
+可以，但不建议让每个规格对象随意访问数据库。更推荐在 Service 或 Repository 中提前准备好上下文数据，然后让规格对象做纯规则判断。
 
-推荐拆成多个独立规格：
+推荐方式：
 
 ```text
-CouponActiveSpecification
-CouponStockSpecification
-CouponUserLevelSpecification
-CouponAmountSpecification
-CouponChannelSpecification
-CouponBlacklistSpecification
+Service 查询用户画像、优惠券模板、订单统计
+ -> 构建 CouponReceiveContext
+ -> Specification 判断
 ```
 
-规格对象最好保持无状态或不可变。规格可以持有固定配置，例如门槛金额、要求等级，但不要保存请求级状态。
-
-错误示例：
-
-```java
-private Long currentUserId;
-private BigDecimal currentOrderAmount;
-```
-
-推荐通过候选对象传入：
-
-```java
-public boolean isSatisfiedBy(CouponReceiveContext candidate) {
-    return candidate.orderAmount().compareTo(candidate.thresholdAmount()) >= 0;
-}
-```
-
-如果规格校验失败需要返回具体原因，单纯 boolean 可能不够。可以扩展为规格结果对象：
-
-```java
-public record SpecificationResult(
-        Boolean satisfied,
-        String reason
-) {
-}
-```
-
-这样可以返回更明确的失败原因：
+不推荐方式：
 
 ```text
-优惠券库存不足
-订单金额未达到门槛
-用户等级不符合要求
-优惠券不在有效期内
+Specification 内部到处注入 Mapper、Redis、远程 Feign
+ -> 每个规则都查一次数据
+ -> 性能和依赖关系失控
 ```
 
-但如果只是简单判断，boolean 更轻量。
+如果某些规则必须访问外部数据，可以把数据访问封装到专门的领域服务或查询服务中，并明确控制调用次数和缓存策略。
 
-查询规格要注意 SQL 性能。规格只是组织查询条件，不会自动解决索引问题。常见关注点包括：
+### 规格对象是否应该交给 Spring 管理
+
+如果规格对象无状态，可以直接 `new`，也可以由工厂统一创建。如果规格对象需要依赖配置、服务或外部组件，可以交给 Spring 管理。
+
+一般建议：
 
 ```text
-like 查询是否命中索引
-范围查询是否有合适索引
-组合条件是否过多
-分页深度是否过大
-排序字段是否有索引
+无状态简单规格：可以直接 new，由 Factory 统一组装。
+有依赖规格：使用 @Component 交给 Spring 管理。
+复杂规则集合：使用 Factory、Builder 或配置驱动方式组装。
 ```
 
-业务规则规格不要访问数据库。规格最好只判断传入对象。如果规格内部频繁查库，会导致规则难测试、性能不可控。
+### 规格模式是否只能用于校验
 
-不推荐：
+不是。规格模式除了用于业务校验，也可以用于查询条件组合。
 
-```java
-public boolean isSatisfiedBy(CouponReceiveContext context) {
-    User user = userMapper.selectById(context.userId());
-    return "VIP".equals(user.getLevel());
-}
-```
+例如在 JPA 中，`Specification<T>` 常用于动态查询条件；在 MyBatis-Plus 中，也可以借鉴这种思想，把查询条件封装为独立对象，再组合成 `LambdaQueryWrapper`。
 
-推荐在 Service 中准备好上下文数据，再交给规格判断：
-
-```java
-CouponReceiveContext context = new CouponReceiveContext(...);
-boolean satisfied = specification.isSatisfiedBy(context);
-```
+不过本文示例重点是业务规则规格，不是数据库查询规格。二者思想一致，但落地代码不同。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，规格模式的实践重点是把业务规则对象化，并通过组合方式表达复杂规则，避免规则散落在大量 `if else` 中。
+规格模式适合把复杂业务规则拆成可组合、可复用、可测试的规则对象。它在 Spring Boot 项目中常用于优惠券资格、订单风控、会员权益、商品规则、审批准入等场景。
 
-普通 Java 规格模式适合理解规则封装、规则复用和 `and`、`or`、`not` 组合。Spring Boot 项目中，规格模式常用于优惠券、风控、商品状态、会员权益、权限判断等业务规则，也可以用于封装 MyBatis-Plus 动态查询条件。推荐使用“规格接口 + 具体规格 + 组合规格 + 上下文对象 + 应用服务”的结构。
+推荐落地方式：
 
-规格模式不是策略模式，也不是解释器模式。它最适合处理“对象是否满足某些可组合条件”的场景。实际落地时，需要重点控制规格粒度、失败原因表达、规则是否访问外部资源、查询性能和类数量膨胀问题。
+```text
+Controller
+ -> Service
+   -> 构建业务上下文
+   -> SpecificationFactory 创建组合规格
+   -> Specification 校验
+   -> 返回结果或继续执行业务
+```
+
+当业务规则只有一两个简单判断时，不需要引入规格模式。当规则数量增加、规则需要复用、规则组合关系复杂时，规格模式可以明显降低 Service 中的条件分支复杂度，让业务规则更加清晰、稳定和易扩展。

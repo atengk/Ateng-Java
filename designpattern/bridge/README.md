@@ -1,38 +1,69 @@
-# 设计模式：桥接模式
+# 桥接模式
 
-桥接模式用于把抽象部分和实现部分分离，使它们可以独立变化。在 JDK21 和 Spring Boot 3 项目中，桥接模式常用于多通知类型和多发送渠道、多文件导出类型和多存储方式、多支付业务和多支付渠道、多报表格式和多投递方式、多设备控制和多厂商驱动等场景。
+桥接模式属于结构型模式，核心作用是把两个独立变化的维度拆开，让它们可以分别扩展，避免因为组合关系过多导致类爆炸。在当前设计模式文档体系中，桥接模式位于结构型模式分类下，重点用于“分离两个独立变化的维度”。
 
-需要注意：桥接模式关注的是“两个维度独立扩展”。如果只是接口不兼容转换，更适合适配器模式；如果只是根据类型选择一个算法，更适合策略模式；如果需要创建一整套产品族，更适合抽象工厂模式。
+本文以 **JDK21 + Spring Boot 3** 后端项目为背景，通过“订单通知业务类型 + 通知发送渠道”的示例，说明桥接模式在真实项目中的落地方式。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例模拟一个通知模块。系统中存在两个独立变化的维度：
 
-文件位置：`pom.xml`
+```text
+通知业务类型：订单支付成功通知、订单退款通知、库存预警通知
+通知发送渠道：短信、邮件、企业微信
+```
+
+如果不用桥接模式，很容易写出下面这种类结构：
+
+```text
+OrderPaidSmsNotifier
+OrderPaidEmailNotifier
+OrderPaidWechatNotifier
+
+RefundSmsNotifier
+RefundEmailNotifier
+RefundWechatNotifier
+
+StockWarningSmsNotifier
+StockWarningEmailNotifier
+StockWarningWechatNotifier
+```
+
+业务类型有 3 个，发送渠道有 3 个，最终会出现 9 个组合类。后续如果再增加 2 个业务类型和 2 个发送渠道，类数量会继续膨胀。
+
+桥接模式的处理方式是：通知业务类型只负责组织业务通知内容，发送渠道只负责具体发送。两者通过接口桥接起来，各自独立扩展。
+
+本示例需要以下依赖。
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证桥接模式行为 -->
+    <!-- Spring Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、ID、集合等通用处理 -->
+    <!-- 参数校验：用于校验通知请求参数 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：用于字符串、集合、ID 等常用工具处理 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>${hutool.version}</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok：减少 DTO、VO、构造器等样板代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
 
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
+    <!-- 测试依赖：用于单元测试和接口测试 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
@@ -41,562 +72,116 @@
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
+示例项目配置如下。真实项目中，短信、邮件、企业微信的配置应放到配置中心、密钥系统或环境变量中。
 
-## 核心概念
+```yaml
+server:
+  port: 8080 # 示例服务端口
 
-桥接模式的核心目标是避免两个维度交叉组合导致类爆炸。例如消息业务有“普通通知、营销通知、告警通知”三个类型，发送渠道有“短信、邮件、站内信”三个渠道。如果不用桥接模式，可能需要写 9 个类。
+notice:
+  email:
+    from: notice@example.com # 模拟邮件发送方
+  sms:
+    sign-name: 示例商城 # 模拟短信签名
+  wechat:
+    robot-key: demo-robot-key # 模拟企业微信机器人 key
+```
 
-交叉继承结构如下：
+本示例的核心文件结构如下。
 
 ```text
-普通短信通知
-普通邮件通知
-普通站内信通知
-营销短信通知
-营销邮件通知
-营销站内信通知
-告警短信通知
-告警邮件通知
-告警站内信通知
+src/main/java/io/github/atengk/designpattern/bridge
+├── BridgeApplication.java
+├── config
+│   └── NoticeProperties.java
+├── controller
+│   └── NoticeController.java
+├── dto
+│   └── NoticeSendRequest.java
+├── enums
+│   ├── NoticeChannelType.java
+│   └── NoticeSceneType.java
+├── bridge
+│   ├── NoticeChannel.java
+│   ├── EmailNoticeChannel.java
+│   ├── SmsNoticeChannel.java
+│   ├── WechatNoticeChannel.java
+│   ├── AbstractNoticeSender.java
+│   ├── OrderPaidNoticeSender.java
+│   ├── RefundNoticeSender.java
+│   ├── StockWarningNoticeSender.java
+│   ├── NoticeChannelRegistry.java
+│   └── NoticeSenderRegistry.java
+├── service
+│   ├── NoticeService.java
+│   └── NoticeServiceImpl.java
+├── vo
+│   ├── ApiResult.java
+│   └── NoticeSendResultVO.java
+└── web
+    └── GlobalExceptionHandler.java
 ```
 
-桥接模式会把“通知类型”和“发送渠道”拆成两个独立维度：
+## 模式设计
 
-```text
-通知类型维度：普通通知、营销通知、告警通知
-发送渠道维度：短信渠道、邮件渠道、站内信渠道
-```
+桥接模式的关键不是“多态调用”本身，而是把两个变化维度拆成两个继承或实现体系。
 
-常见角色如下：
+在本示例中，两个维度分别是：
 
-| 角色                | 说明                           |
-| ------------------- | ------------------------------ |
-| Abstraction         | 抽象部分，定义高层业务行为     |
-| RefinedAbstraction  | 扩展抽象部分，表示不同业务类型 |
-| Implementor         | 实现部分接口，定义底层实现能力 |
-| ConcreteImplementor | 具体实现部分，表示不同底层实现 |
-| Client              | 调用方，组合抽象部分和实现部分 |
+| 维度         | 抽象                   | 实现示例                                                     | 变化原因                   |
+| ------------ | ---------------------- | ------------------------------------------------------------ | -------------------------- |
+| 通知业务类型 | `AbstractNoticeSender` | `OrderPaidNoticeSender`、`RefundNoticeSender`、`StockWarningNoticeSender` | 业务场景增加或通知内容变化 |
+| 通知发送渠道 | `NoticeChannel`        | `SmsNoticeChannel`、`EmailNoticeChannel`、`WechatNoticeChannel` | 通知渠道增加或发送协议变化 |
 
-在 Spring Boot 项目中，常见优先级通常是：
+桥接关系体现在：`AbstractNoticeSender` 不直接发送短信、邮件或企业微信，而是持有 `NoticeChannel` 接口，由具体渠道实现真正发送。
 
-```text
-Spring Bean 桥接 > 普通 Java 桥接 > 多层 if else / 类爆炸
-```
-
-桥接模式适合两个维度都可能扩展的场景。如果只有一个维度变化，策略模式或工厂方法通常更简单。
-
-## 普通 Java 桥接模式
-
-普通 Java 桥接模式适合不依赖 Spring 容器的双维度组合场景。下面以消息通知为例，通知类型和发送渠道是两个独立变化维度。
-
-整体关系如下：
-
-```text
-MessageNotification
-    -> MessageSender
-
-NormalNotification
-MarketingNotification
-AlertNotification
-
-SmsMessageSender
-EmailMessageSender
-```
-
-通知类型负责组织业务内容，发送渠道负责具体发送方式。
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/bridge/simple/
-├── MessageSender.java
-├── SmsMessageSender.java
-├── EmailMessageSender.java
-├── MessageNotification.java
-├── NormalNotification.java
-├── MarketingNotification.java
-└── AlertNotification.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/bridge/simple/MessageSender.java`
-
-下面是消息发送渠道接口，也就是桥接模式中的实现部分。
-
-```java
-package io.github.atengk.design.bridge.simple;
-
-/**
- * 消息发送器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public interface MessageSender {
-
-    /**
-     * 发送消息
-     *
-     * @param receiver 接收人
-     * @param title    标题
-     * @param content  内容
-     * @return 发送结果
-     */
-    String send(String receiver, String title, String content);
-
-    /**
-     * 获取发送渠道
-     *
-     * @return 发送渠道
-     */
-    String channel();
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/bridge/simple/SmsMessageSender.java`
-
-下面是短信发送器实现。
-
-```java
-package io.github.atengk.design.bridge.simple;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 短信消息发送器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class SmsMessageSender implements MessageSender {
-
-    /**
-     * 发送消息
-     *
-     * @param receiver 接收人
-     * @param title    标题
-     * @param content  内容
-     * @return 发送结果
-     */
-    @Override
-    public String send(String receiver, String title, String content) {
-        if (StrUtil.hasBlank(receiver, content)) {
-            log.warn("短信发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("短信接收人和内容不能为空");
-        }
-
-        String bizId = "SMS" + IdUtil.getSnowflakeNextId();
-        log.info("短信发送成功，接收人：{}，标题：{}，业务ID：{}", receiver, title, bizId);
-        return bizId;
-    }
-
-    /**
-     * 获取发送渠道
-     *
-     * @return 发送渠道
-     */
-    @Override
-    public String channel() {
-        return "sms";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/bridge/simple/EmailMessageSender.java`
-
-下面是邮件发送器实现。
-
-```java
-package io.github.atengk.design.bridge.simple;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 邮件消息发送器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class EmailMessageSender implements MessageSender {
-
-    /**
-     * 发送消息
-     *
-     * @param receiver 接收人
-     * @param title    标题
-     * @param content  内容
-     * @return 发送结果
-     */
-    @Override
-    public String send(String receiver, String title, String content) {
-        if (StrUtil.hasBlank(receiver, title, content)) {
-            log.warn("邮件发送失败，接收人、标题或内容为空");
-            throw new IllegalArgumentException("邮件接收人、标题和内容不能为空");
-        }
-
-        String messageId = "EMAIL" + IdUtil.getSnowflakeNextId();
-        log.info("邮件发送成功，接收人：{}，标题：{}，消息ID：{}", receiver, title, messageId);
-        return messageId;
-    }
-
-    /**
-     * 获取发送渠道
-     *
-     * @return 发送渠道
-     */
-    @Override
-    public String channel() {
-        return "email";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/bridge/simple/MessageNotification.java`
-
-下面是消息通知抽象类。它持有 `MessageSender`，把具体发送动作委托给发送器。
-
-```java
-package io.github.atengk.design.bridge.simple;
-
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
-
-/**
- * 消息通知抽象类
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public abstract class MessageNotification {
-
-    protected final MessageSender messageSender;
-
-    /**
-     * 创建消息通知
-     *
-     * @param messageSender 消息发送器
-     */
-    protected MessageNotification(MessageSender messageSender) {
-        if (messageSender == null) {
-            throw new IllegalArgumentException("消息发送器不能为空");
-        }
-
-        this.messageSender = messageSender;
-    }
-
-    /**
-     * 发送通知
-     *
-     * @param receiver 接收人
-     * @param content  原始内容
-     * @return 发送结果
-     */
-    public String notify(String receiver, String content) {
-        if (StrUtil.hasBlank(receiver, content)) {
-            log.warn("发送通知失败，接收人或内容为空");
-            throw new IllegalArgumentException("接收人和通知内容不能为空");
-        }
-
-        String title = buildTitle();
-        String formattedContent = buildContent(content);
-
-        log.info("准备发送通知，通知类型：{}，发送渠道：{}，接收人：{}",
-                notificationType(), messageSender.channel(), receiver);
-
-        return messageSender.send(receiver, title, formattedContent);
-    }
-
-    /**
-     * 构建通知标题
-     *
-     * @return 通知标题
-     */
-    protected abstract String buildTitle();
-
-    /**
-     * 构建通知内容
-     *
-     * @param content 原始内容
-     * @return 通知内容
-     */
-    protected abstract String buildContent(String content);
-
-    /**
-     * 获取通知类型
-     *
-     * @return 通知类型
-     */
-    protected abstract String notificationType();
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/bridge/simple/NormalNotification.java`
-
-下面是普通通知类型。
-
-```java
-package io.github.atengk.design.bridge.simple;
-
-import cn.hutool.core.util.StrUtil;
-
-/**
- * 普通通知
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public class NormalNotification extends MessageNotification {
-
-    /**
-     * 创建普通通知
-     *
-     * @param messageSender 消息发送器
-     */
-    public NormalNotification(MessageSender messageSender) {
-        super(messageSender);
-    }
-
-    /**
-     * 构建通知标题
-     *
-     * @return 通知标题
-     */
-    @Override
-    protected String buildTitle() {
-        return "普通通知";
-    }
-
-    /**
-     * 构建通知内容
-     *
-     * @param content 原始内容
-     * @return 通知内容
-     */
-    @Override
-    protected String buildContent(String content) {
-        return StrUtil.format("[普通通知] {}", content);
-    }
-
-    /**
-     * 获取通知类型
-     *
-     * @return 通知类型
-     */
-    @Override
-    protected String notificationType() {
-        return "normal";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/bridge/simple/MarketingNotification.java`
-
-下面是营销通知类型。
-
-```java
-package io.github.atengk.design.bridge.simple;
-
-import cn.hutool.core.util.StrUtil;
-
-/**
- * 营销通知
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public class MarketingNotification extends MessageNotification {
-
-    /**
-     * 创建营销通知
-     *
-     * @param messageSender 消息发送器
-     */
-    public MarketingNotification(MessageSender messageSender) {
-        super(messageSender);
-    }
-
-    /**
-     * 构建通知标题
-     *
-     * @return 通知标题
-     */
-    @Override
-    protected String buildTitle() {
-        return "营销活动通知";
-    }
-
-    /**
-     * 构建通知内容
-     *
-     * @param content 原始内容
-     * @return 通知内容
-     */
-    @Override
-    protected String buildContent(String content) {
-        return StrUtil.format("[营销活动] {}。退订请回复TD", content);
-    }
-
-    /**
-     * 获取通知类型
-     *
-     * @return 通知类型
-     */
-    @Override
-    protected String notificationType() {
-        return "marketing";
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/bridge/simple/AlertNotification.java`
-
-下面是告警通知类型。
-
-```java
-package io.github.atengk.design.bridge.simple;
-
-import cn.hutool.core.util.StrUtil;
-
-/**
- * 告警通知
- *
- * @author Ateng
- * @since 2026-04-30
- */
-public class AlertNotification extends MessageNotification {
-
-    /**
-     * 创建告警通知
-     *
-     * @param messageSender 消息发送器
-     */
-    public AlertNotification(MessageSender messageSender) {
-        super(messageSender);
-    }
-
-    /**
-     * 构建通知标题
-     *
-     * @return 通知标题
-     */
-    @Override
-    protected String buildTitle() {
-        return "系统告警通知";
-    }
-
-    /**
-     * 构建通知内容
-     *
-     * @param content 原始内容
-     * @return 通知内容
-     */
-    @Override
-    protected String buildContent(String content) {
-        return StrUtil.format("[重要告警] {}，请立即处理", content);
-    }
-
-    /**
-     * 获取通知类型
-     *
-     * @return 通知类型
-     */
-    @Override
-    protected String notificationType() {
-        return "alert";
-    }
-}
-```
-
-使用方式：
-
-```java
-MessageSender smsSender = new SmsMessageSender();
-MessageNotification alertNotification = new AlertNotification(smsSender);
-
-String result = alertNotification.notify("13800138000", "订单服务响应时间超过阈值");
-```
-
-如果想把告警通知从短信切换为邮件，只需要替换实现部分：
-
-```java
-MessageSender emailSender = new EmailMessageSender();
-MessageNotification alertNotification = new AlertNotification(emailSender);
-```
-
-通知类型和发送渠道可以独立扩展，避免为每一种组合都创建一个类。
-
-## Spring Boot 桥接模式
-
-Spring Boot 项目中更常见的桥接写法，是把两个维度都交给 Spring 管理：一个维度作为抽象业务处理器，另一个维度作为实现接口。下面以“通知类型 + 发送渠道”为例。
-
-整体流程如下：
+核心流程如下。
 
 ```text
 Controller
-    -> NotificationBridgeService
-        -> NotificationContentBuilder  通知内容维度
-        -> NotificationSender          发送渠道维度
+    ↓
+NoticeService
+    ↓
+NoticeSenderRegistry 根据 scene 获取业务通知发送器
+    ↓
+NoticeChannelRegistry 根据 channel 获取发送渠道
+    ↓
+AbstractNoticeSender 组织通知内容
+    ↓
+NoticeChannel 完成具体发送
 ```
 
-示例支持两个维度：
+这种结构的好处是：
 
 ```text
-通知类型：normal、marketing、alert
-发送渠道：sms、email、site
+新增业务通知类型：只新增一个 NoticeSender
+新增发送渠道：只新增一个 NoticeChannel
+业务通知类型和发送渠道可以自由组合
+调用方只传 scene 和 channel，不关心内部组合类
 ```
 
-这样总共可以支持 3 × 3 = 9 种组合，但代码只需要维护 3 个内容构建器和 3 个发送器。
+## 核心代码
 
-### 文件结构
+下面给出桥接模式在 Spring Boot 项目中的关键实现。示例代码重点展示结构拆分方式，不连接真实短信、邮件或企业微信平台。
 
-```text
-src/main/java/io/github/atengk/design/
-├── BridgeApplication.java
-├── builder/
-│   ├── NotificationContentBuilder.java
-│   ├── NormalContentBuilder.java
-│   ├── MarketingContentBuilder.java
-│   └── AlertContentBuilder.java
-├── controller/
-│   └── NotificationController.java
-├── dto/
-│   ├── NotificationRequest.java
-│   ├── NotificationContent.java
-│   └── NotificationResponse.java
-├── sender/
-│   ├── NotificationSender.java
-│   ├── SmsNotificationSender.java
-│   ├── EmailNotificationSender.java
-│   └── SiteNotificationSender.java
-└── service/
-    ├── NotificationBridgeService.java
-    └── impl/
-        └── NotificationBridgeServiceImpl.java
-```
+项目启动类负责启动 Spring Boot 应用。
 
-文件位置：`src/main/java/io/github/atengk/design/BridgeApplication.java`
-
-下面是 Spring Boot 启动类。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/BridgeApplication.java`
 
 ```java
-package io.github.atengk.design;
+package io.github.atengk.designpattern.bridge;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
- * 桥接模式示例启动类
+ * 桥接模式示例应用启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
+@ConfigurationPropertiesScan
 @SpringBootApplication
 public class BridgeApplication {
 
@@ -611,1071 +196,1503 @@ public class BridgeApplication {
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/NotificationRequest.java`
+通知配置类用于承接不同通知渠道的配置。
 
-下面是通知请求对象，包含通知类型和发送渠道两个维度。
-
-```java
-package io.github.atengk.design.dto;
-
-/**
- * 通知请求
- *
- * @param type     通知类型
- * @param channel  发送渠道
- * @param receiver 接收人
- * @param content  原始内容
- * @author Ateng
- * @since 2026-04-30
- */
-public record NotificationRequest(
-        String type,
-        String channel,
-        String receiver,
-        String content
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/NotificationContent.java`
-
-下面是通知内容对象，由内容构建器生成，再交给发送器发送。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/config/NoticeProperties.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.designpattern.bridge.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 通知内容
- *
- * @param title   标题
- * @param content 内容
- * @author Ateng
- * @since 2026-04-30
- */
-public record NotificationContent(String title, String content) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/dto/NotificationResponse.java`
-
-下面是通知响应对象。
-
-```java
-package io.github.atengk.design.dto;
-
-/**
- * 通知响应
- *
- * @param type     通知类型
- * @param channel  发送渠道
- * @param receiver 接收人
- * @param bizId    业务ID
- * @param message  响应消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record NotificationResponse(
-        String type,
-        String channel,
-        String receiver,
-        String bizId,
-        String message
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/builder/NotificationContentBuilder.java`
-
-下面是通知内容构建器接口，表示通知类型维度。
-
-```java
-package io.github.atengk.design.builder;
-
-import io.github.atengk.design.dto.NotificationContent;
-
-/**
- * 通知内容构建器
+ * 通知渠道配置
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface NotificationContentBuilder {
+@Data
+@ConfigurationProperties(prefix = "notice")
+public class NoticeProperties {
 
     /**
-     * 获取支持的通知类型
-     *
-     * @return 通知类型
+     * 邮件配置
      */
-    String supportType();
+    private Email email = new Email();
 
     /**
-     * 构建通知内容
-     *
-     * @param rawContent 原始内容
-     * @return 通知内容
+     * 短信配置
      */
-    NotificationContent build(String rawContent);
+    private Sms sms = new Sms();
+
+    /**
+     * 企业微信配置
+     */
+    private Wechat wechat = new Wechat();
+
+    /**
+     * 邮件配置项
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    public static class Email {
+
+        /**
+         * 邮件发送方
+         */
+        private String from;
+    }
+
+    /**
+     * 短信配置项
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    public static class Sms {
+
+        /**
+         * 短信签名
+         */
+        private String signName;
+    }
+
+    /**
+     * 企业微信配置项
+     *
+     * @author Ateng
+     * @since 2026-05-13
+     */
+    @Data
+    public static class Wechat {
+
+        /**
+         * 企业微信机器人 key
+         */
+        private String robotKey;
+    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/builder/NormalContentBuilder.java`
+通知场景枚举表示业务通知类型，也就是桥接模式中的抽象维度之一。
 
-下面是普通通知内容构建器。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/enums/NoticeSceneType.java`
 
 ```java
-package io.github.atengk.design.builder;
+package io.github.atengk.designpattern.bridge.enums;
 
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
 
 /**
- * 普通通知内容构建器
+ * 通知场景类型
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Component
-public class NormalContentBuilder implements NotificationContentBuilder {
+public enum NoticeSceneType {
 
     /**
-     * 获取支持的通知类型
-     *
-     * @return 通知类型
+     * 订单支付成功通知
      */
-    @Override
-    public String supportType() {
-        return "normal";
-    }
+    ORDER_PAID,
 
     /**
-     * 构建通知内容
-     *
-     * @param rawContent 原始内容
-     * @return 通知内容
+     * 订单退款通知
      */
-    @Override
-    public NotificationContent build(String rawContent) {
-        if (StrUtil.isBlank(rawContent)) {
-            log.warn("构建普通通知失败，内容为空");
-            throw new IllegalArgumentException("通知内容不能为空");
+    REFUND,
+
+    /**
+     * 库存预警通知
+     */
+    STOCK_WARNING;
+
+    /**
+     * 根据场景编码解析通知场景
+     *
+     * @param scene 场景编码
+     * @return 通知场景
+     */
+    public static NoticeSceneType parse(String scene) {
+        if (StrUtil.isBlank(scene)) {
+            throw new IllegalArgumentException("通知场景不能为空");
         }
 
-        return new NotificationContent("普通通知", StrUtil.format("[普通通知] {}", rawContent));
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.name(), scene))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的通知场景：{}", scene)));
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/builder/MarketingContentBuilder.java`
+通知渠道枚举表示发送渠道，也就是桥接模式中的实现维度之一。
 
-下面是营销通知内容构建器。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/enums/NoticeChannelType.java`
 
 ```java
-package io.github.atengk.design.builder;
+package io.github.atengk.designpattern.bridge.enums;
 
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
 
 /**
- * 营销通知内容构建器
+ * 通知渠道类型
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Component
-public class MarketingContentBuilder implements NotificationContentBuilder {
+public enum NoticeChannelType {
 
     /**
-     * 获取支持的通知类型
-     *
-     * @return 通知类型
+     * 短信
      */
-    @Override
-    public String supportType() {
-        return "marketing";
-    }
+    SMS,
 
     /**
-     * 构建通知内容
-     *
-     * @param rawContent 原始内容
-     * @return 通知内容
+     * 邮件
      */
-    @Override
-    public NotificationContent build(String rawContent) {
-        if (StrUtil.isBlank(rawContent)) {
-            log.warn("构建营销通知失败，内容为空");
-            throw new IllegalArgumentException("通知内容不能为空");
+    EMAIL,
+
+    /**
+     * 企业微信
+     */
+    WECHAT;
+
+    /**
+     * 根据渠道编码解析通知渠道
+     *
+     * @param channel 渠道编码
+     * @return 通知渠道
+     */
+    public static NoticeChannelType parse(String channel) {
+        if (StrUtil.isBlank(channel)) {
+            throw new IllegalArgumentException("通知渠道不能为空");
         }
 
-        return new NotificationContent("营销活动通知", StrUtil.format("[营销活动] {}。退订请回复TD", rawContent));
+        return Arrays.stream(values())
+                .filter(item -> StrUtil.equalsIgnoreCase(item.name(), channel))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(StrUtil.format("不支持的通知渠道：{}", channel)));
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/builder/AlertContentBuilder.java`
+通知请求 DTO 统一承接外部请求参数，调用方通过 `scene` 和 `channel` 指定业务场景和发送渠道。
 
-下面是告警通知内容构建器。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/dto/NoticeSendRequest.java`
 
 ```java
-package io.github.atengk.design.builder;
+package io.github.atengk.designpattern.bridge.dto;
 
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+import java.util.Map;
 
 /**
- * 告警通知内容构建器
+ * 通知发送请求
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Component
-public class AlertContentBuilder implements NotificationContentBuilder {
+@Data
+public class NoticeSendRequest {
 
     /**
-     * 获取支持的通知类型
-     *
-     * @return 通知类型
+     * 通知场景：ORDER_PAID、REFUND、STOCK_WARNING
      */
-    @Override
-    public String supportType() {
-        return "alert";
+    @NotBlank(message = "通知场景不能为空")
+    private String scene;
+
+    /**
+     * 通知渠道：SMS、EMAIL、WECHAT
+     */
+    @NotBlank(message = "通知渠道不能为空")
+    private String channel;
+
+    /**
+     * 接收人，例如手机号、邮箱、企业微信用户 ID
+     */
+    @NotBlank(message = "接收人不能为空")
+    private String receiver;
+
+    /**
+     * 业务参数，例如订单号、金额、商品名称、库存数量等
+     */
+    private Map<String, Object> params;
+}
+```
+
+通知发送结果 VO 统一封装不同渠道的发送结果。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/vo/NoticeSendResultVO.java`
+
+```java
+package io.github.atengk.designpattern.bridge.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+/**
+ * 通知发送结果
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class NoticeSendResultVO {
+
+    /**
+     * 通知场景
+     */
+    private String scene;
+
+    /**
+     * 通知渠道
+     */
+    private String channel;
+
+    /**
+     * 接收人
+     */
+    private String receiver;
+
+    /**
+     * 发送流水号
+     */
+    private String messageId;
+
+    /**
+     * 发送状态
+     */
+    private String status;
+
+    /**
+     * 返回消息
+     */
+    private String message;
+}
+```
+
+统一 API 返回对象用于包装接口结果。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/vo/ApiResult.java`
+
+```java
+package io.github.atengk.designpattern.bridge.vo;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * API 统一返回对象
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    /**
+     * 业务状态码
+     */
+    private Integer code;
+
+    /**
+     * 返回消息
+     */
+    private String message;
+
+    /**
+     * 返回数据
+     */
+    private T data;
+
+    /**
+     * 成功返回
+     *
+     * @param data 返回数据
+     * @return API 返回对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return ApiResult.<T>builder()
+                .code(200)
+                .message("操作成功")
+                .data(data)
+                .build();
     }
 
     /**
-     * 构建通知内容
+     * 失败返回
      *
-     * @param rawContent 原始内容
-     * @return 通知内容
+     * @param message 失败消息
+     * @return API 返回对象
      */
-    @Override
-    public NotificationContent build(String rawContent) {
-        if (StrUtil.isBlank(rawContent)) {
-            log.warn("构建告警通知失败，内容为空");
-            throw new IllegalArgumentException("通知内容不能为空");
-        }
-
-        return new NotificationContent("系统告警通知", StrUtil.format("[重要告警] {}，请立即处理", rawContent));
+    public static ApiResult<Void> fail(String message) {
+        return ApiResult.<Void>builder()
+                .code(500)
+                .message(message)
+                .build();
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/sender/NotificationSender.java`
+`NoticeChannel` 是发送渠道接口，表示桥接模式中的实现接口。
 
-下面是通知发送器接口，表示发送渠道维度。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/NoticeChannel.java`
 
 ```java
-package io.github.atengk.design.sender;
+package io.github.atengk.designpattern.bridge.bridge;
 
-import io.github.atengk.design.dto.NotificationContent;
+import io.github.atengk.designpattern.bridge.enums.NoticeChannelType;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
 
 /**
- * 通知发送器
+ * 通知发送渠道接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface NotificationSender {
+public interface NoticeChannel {
 
     /**
-     * 获取支持的发送渠道
+     * 获取当前渠道类型
      *
-     * @return 发送渠道
+     * @return 通知渠道类型
      */
-    String supportChannel();
+    NoticeChannelType getChannel();
 
     /**
      * 发送通知
      *
+     * @param scene    通知场景
      * @param receiver 接收人
+     * @param title    通知标题
      * @param content  通知内容
-     * @return 业务ID
+     * @return 通知发送结果
      */
-    String send(String receiver, NotificationContent content);
+    NoticeSendResultVO send(String scene, String receiver, String title, String content);
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/sender/SmsNotificationSender.java`
+短信渠道只负责短信发送，不关心业务通知内容来自订单、退款还是库存。
 
-下面是短信通知发送器。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/SmsNoticeChannel.java`
 
 ```java
-package io.github.atengk.design.sender;
+package io.github.atengk.designpattern.bridge.bridge;
 
 import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
+import io.github.atengk.designpattern.bridge.config.NoticeProperties;
+import io.github.atengk.designpattern.bridge.enums.NoticeChannelType;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 短信通知发送器
+ * 短信通知渠道
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class SmsNotificationSender implements NotificationSender {
+@RequiredArgsConstructor
+public class SmsNoticeChannel implements NoticeChannel {
+
+    private final NoticeProperties noticeProperties;
 
     /**
-     * 获取支持的发送渠道
+     * 获取当前渠道类型
      *
-     * @return 发送渠道
+     * @return 通知渠道类型
      */
     @Override
-    public String supportChannel() {
-        return "sms";
+    public NoticeChannelType getChannel() {
+        return NoticeChannelType.SMS;
     }
 
     /**
-     * 发送通知
+     * 发送短信通知
      *
+     * @param scene    通知场景
      * @param receiver 接收人
+     * @param title    通知标题
      * @param content  通知内容
-     * @return 业务ID
+     * @return 通知发送结果
      */
     @Override
-    public String send(String receiver, NotificationContent content) {
-        if (StrUtil.isBlank(receiver) || content == null || StrUtil.isBlank(content.content())) {
-            log.warn("短信通知发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("短信接收人和内容不能为空");
-        }
+    public NoticeSendResultVO send(String scene, String receiver, String title, String content) {
+        String messageId = "SMS_" + IdUtil.fastSimpleUUID();
+        log.info("发送短信通知，signName={}，receiver={}，title={}，content={}",
+                noticeProperties.getSms().getSignName(), receiver, title, content);
 
-        String bizId = "SMS" + IdUtil.getSnowflakeNextId();
-        log.info("短信通知发送成功，接收人：{}，标题：{}，业务ID：{}", receiver, content.title(), bizId);
-        return bizId;
+        return NoticeSendResultVO.builder()
+                .scene(scene)
+                .channel(getChannel().name())
+                .receiver(receiver)
+                .messageId(messageId)
+                .status("SUCCESS")
+                .message("短信通知发送成功")
+                .build();
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/sender/EmailNotificationSender.java`
+邮件渠道只负责邮件发送，不参与业务场景判断。
 
-下面是邮件通知发送器。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/EmailNoticeChannel.java`
 
 ```java
-package io.github.atengk.design.sender;
+package io.github.atengk.designpattern.bridge.bridge;
 
 import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
+import io.github.atengk.designpattern.bridge.config.NoticeProperties;
+import io.github.atengk.designpattern.bridge.enums.NoticeChannelType;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 邮件通知发送器
+ * 邮件通知渠道
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class EmailNotificationSender implements NotificationSender {
+@RequiredArgsConstructor
+public class EmailNoticeChannel implements NoticeChannel {
+
+    private final NoticeProperties noticeProperties;
 
     /**
-     * 获取支持的发送渠道
+     * 获取当前渠道类型
      *
-     * @return 发送渠道
+     * @return 通知渠道类型
      */
     @Override
-    public String supportChannel() {
-        return "email";
+    public NoticeChannelType getChannel() {
+        return NoticeChannelType.EMAIL;
     }
 
     /**
-     * 发送通知
+     * 发送邮件通知
      *
+     * @param scene    通知场景
      * @param receiver 接收人
+     * @param title    通知标题
      * @param content  通知内容
-     * @return 业务ID
+     * @return 通知发送结果
      */
     @Override
-    public String send(String receiver, NotificationContent content) {
-        if (StrUtil.isBlank(receiver) || content == null || StrUtil.hasBlank(content.title(), content.content())) {
-            log.warn("邮件通知发送失败，接收人、标题或内容为空");
-            throw new IllegalArgumentException("邮件接收人、标题和内容不能为空");
-        }
+    public NoticeSendResultVO send(String scene, String receiver, String title, String content) {
+        String messageId = "EMAIL_" + IdUtil.fastSimpleUUID();
+        log.info("发送邮件通知，from={}，receiver={}，title={}，content={}",
+                noticeProperties.getEmail().getFrom(), receiver, title, content);
 
-        String messageId = "EMAIL" + IdUtil.getSnowflakeNextId();
-        log.info("邮件通知发送成功，接收人：{}，标题：{}，消息ID：{}", receiver, content.title(), messageId);
-        return messageId;
+        return NoticeSendResultVO.builder()
+                .scene(scene)
+                .channel(getChannel().name())
+                .receiver(receiver)
+                .messageId(messageId)
+                .status("SUCCESS")
+                .message("邮件通知发送成功")
+                .build();
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/sender/SiteNotificationSender.java`
+企业微信渠道只负责企业微信消息发送。
 
-下面是站内信通知发送器。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/WechatNoticeChannel.java`
 
 ```java
-package io.github.atengk.design.sender;
+package io.github.atengk.designpattern.bridge.bridge;
 
 import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
+import io.github.atengk.designpattern.bridge.config.NoticeProperties;
+import io.github.atengk.designpattern.bridge.enums.NoticeChannelType;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 站内信通知发送器
+ * 企业微信通知渠道
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class SiteNotificationSender implements NotificationSender {
+@RequiredArgsConstructor
+public class WechatNoticeChannel implements NoticeChannel {
+
+    private final NoticeProperties noticeProperties;
 
     /**
-     * 获取支持的发送渠道
+     * 获取当前渠道类型
      *
-     * @return 发送渠道
+     * @return 通知渠道类型
      */
     @Override
-    public String supportChannel() {
-        return "site";
+    public NoticeChannelType getChannel() {
+        return NoticeChannelType.WECHAT;
     }
 
     /**
-     * 发送通知
+     * 发送企业微信通知
      *
+     * @param scene    通知场景
      * @param receiver 接收人
+     * @param title    通知标题
      * @param content  通知内容
-     * @return 业务ID
+     * @return 通知发送结果
      */
     @Override
-    public String send(String receiver, NotificationContent content) {
-        if (StrUtil.isBlank(receiver) || content == null || StrUtil.isBlank(content.content())) {
-            log.warn("站内信通知发送失败，接收人或内容为空");
-            throw new IllegalArgumentException("站内信接收人和内容不能为空");
-        }
+    public NoticeSendResultVO send(String scene, String receiver, String title, String content) {
+        String messageId = "WECHAT_" + IdUtil.fastSimpleUUID();
+        log.info("发送企业微信通知，robotKey={}，receiver={}，title={}，content={}",
+                noticeProperties.getWechat().getRobotKey(), receiver, title, content);
 
-        String noticeId = "SITE" + IdUtil.getSnowflakeNextId();
-        log.info("站内信通知发送成功，接收人：{}，标题：{}，通知ID：{}", receiver, content.title(), noticeId);
-        return noticeId;
+        return NoticeSendResultVO.builder()
+                .scene(scene)
+                .channel(getChannel().name())
+                .receiver(receiver)
+                .messageId(messageId)
+                .status("SUCCESS")
+                .message("企业微信通知发送成功")
+                .build();
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/NotificationBridgeService.java`
+`AbstractNoticeSender` 是业务通知抽象类，表示桥接模式中的抽象部分。它负责业务通知模板组织，并通过 `NoticeChannel` 完成发送。
 
-下面是通知桥接服务接口。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/AbstractNoticeSender.java`
 
 ```java
-package io.github.atengk.design.service;
+package io.github.atengk.designpattern.bridge.bridge;
 
-import io.github.atengk.design.dto.NotificationRequest;
-import io.github.atengk.design.dto.NotificationResponse;
+import cn.hutool.core.map.MapUtil;
+import io.github.atengk.designpattern.bridge.dto.NoticeSendRequest;
+import io.github.atengk.designpattern.bridge.enums.NoticeSceneType;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+
+import java.util.Map;
 
 /**
- * 通知桥接服务
+ * 通知发送抽象类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public interface NotificationBridgeService {
+public abstract class AbstractNoticeSender {
+
+    /**
+     * 获取当前通知场景
+     *
+     * @return 通知场景
+     */
+    public abstract NoticeSceneType getScene();
+
+    /**
+     * 构建通知标题
+     *
+     * @param params 业务参数
+     * @return 通知标题
+     */
+    protected abstract String buildTitle(Map<String, Object> params);
+
+    /**
+     * 构建通知内容
+     *
+     * @param params 业务参数
+     * @return 通知内容
+     */
+    protected abstract String buildContent(Map<String, Object> params);
 
     /**
      * 发送通知
      *
-     * @param request 通知请求
-     * @return 通知响应
+     * @param request 请求参数
+     * @param channel 通知渠道
+     * @return 通知发送结果
      */
-    NotificationResponse notify(NotificationRequest request);
+    public NoticeSendResultVO send(NoticeSendRequest request, NoticeChannel channel) {
+        Map<String, Object> params = MapUtil.emptyIfNull(request.getParams());
+        String title = buildTitle(params);
+        String content = buildContent(params);
+        return channel.send(getScene().name(), request.getReceiver(), title, content);
+    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/service/impl/NotificationBridgeServiceImpl.java`
+订单支付成功通知只关心“支付成功”这个业务场景下的标题和内容，不关心最终通过短信、邮件还是企业微信发送。
 
-下面是通知桥接服务实现。它将通知类型维度和发送渠道维度桥接起来。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/OrderPaidNoticeSender.java`
 
 ```java
-package io.github.atengk.design.service.impl;
+package io.github.atengk.designpattern.bridge.bridge;
+
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.bridge.enums.NoticeSceneType;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+
+/**
+ * 订单支付成功通知发送器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Component
+public class OrderPaidNoticeSender extends AbstractNoticeSender {
+
+    /**
+     * 获取当前通知场景
+     *
+     * @return 通知场景
+     */
+    @Override
+    public NoticeSceneType getScene() {
+        return NoticeSceneType.ORDER_PAID;
+    }
+
+    /**
+     * 构建订单支付成功通知标题
+     *
+     * @param params 业务参数
+     * @return 通知标题
+     */
+    @Override
+    protected String buildTitle(Map<String, Object> params) {
+        return "订单支付成功通知";
+    }
+
+    /**
+     * 构建订单支付成功通知内容
+     *
+     * @param params 业务参数
+     * @return 通知内容
+     */
+    @Override
+    protected String buildContent(Map<String, Object> params) {
+        String orderNo = Convert.toStr(params.get("orderNo"), "未知订单");
+        String amount = Convert.toStr(params.get("amount"), "0.00");
+        return StrUtil.format("您的订单 {} 已支付成功，支付金额 {} 元。", orderNo, amount);
+    }
+}
+```
+
+退款通知只处理退款业务内容，发送渠道仍然由外部桥接进来。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/RefundNoticeSender.java`
+
+```java
+package io.github.atengk.designpattern.bridge.bridge;
+
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.bridge.enums.NoticeSceneType;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+
+/**
+ * 订单退款通知发送器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Component
+public class RefundNoticeSender extends AbstractNoticeSender {
+
+    /**
+     * 获取当前通知场景
+     *
+     * @return 通知场景
+     */
+    @Override
+    public NoticeSceneType getScene() {
+        return NoticeSceneType.REFUND;
+    }
+
+    /**
+     * 构建退款通知标题
+     *
+     * @param params 业务参数
+     * @return 通知标题
+     */
+    @Override
+    protected String buildTitle(Map<String, Object> params) {
+        return "订单退款通知";
+    }
+
+    /**
+     * 构建退款通知内容
+     *
+     * @param params 业务参数
+     * @return 通知内容
+     */
+    @Override
+    protected String buildContent(Map<String, Object> params) {
+        String orderNo = Convert.toStr(params.get("orderNo"), "未知订单");
+        String refundAmount = Convert.toStr(params.get("refundAmount"), "0.00");
+        return StrUtil.format("您的订单 {} 已发起退款，退款金额 {} 元。", orderNo, refundAmount);
+    }
+}
+```
+
+库存预警通知表示另一个独立业务场景，仍然可以复用所有已有发送渠道。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/StockWarningNoticeSender.java`
+
+```java
+package io.github.atengk.designpattern.bridge.bridge;
+
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.bridge.enums.NoticeSceneType;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+
+/**
+ * 库存预警通知发送器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Component
+public class StockWarningNoticeSender extends AbstractNoticeSender {
+
+    /**
+     * 获取当前通知场景
+     *
+     * @return 通知场景
+     */
+    @Override
+    public NoticeSceneType getScene() {
+        return NoticeSceneType.STOCK_WARNING;
+    }
+
+    /**
+     * 构建库存预警通知标题
+     *
+     * @param params 业务参数
+     * @return 通知标题
+     */
+    @Override
+    protected String buildTitle(Map<String, Object> params) {
+        return "库存预警通知";
+    }
+
+    /**
+     * 构建库存预警通知内容
+     *
+     * @param params 业务参数
+     * @return 通知内容
+     */
+    @Override
+    protected String buildContent(Map<String, Object> params) {
+        String productName = Convert.toStr(params.get("productName"), "未知商品");
+        Integer stock = Convert.toInt(params.get("stock"), 0);
+        return StrUtil.format("商品 {} 当前库存为 {}，请及时补货。", productName, stock);
+    }
+}
+```
+
+通知渠道注册器负责按渠道类型获取具体发送渠道。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/NoticeChannelRegistry.java`
+
+```java
+package io.github.atengk.designpattern.bridge.bridge;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.builder.NotificationContentBuilder;
-import io.github.atengk.design.dto.NotificationContent;
-import io.github.atengk.design.dto.NotificationRequest;
-import io.github.atengk.design.dto.NotificationResponse;
-import io.github.atengk.design.sender.NotificationSender;
-import io.github.atengk.design.service.NotificationBridgeService;
+import io.github.atengk.designpattern.bridge.enums.NoticeChannelType;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 通知渠道注册器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class NoticeChannelRegistry {
+
+    private final Map<NoticeChannelType, NoticeChannel> channelMap;
+
+    /**
+     * 初始化通知渠道注册器
+     *
+     * @param channels 通知渠道列表
+     */
+    public NoticeChannelRegistry(List<NoticeChannel> channels) {
+        if (CollUtil.isEmpty(channels)) {
+            throw new IllegalStateException("未找到任何通知渠道");
+        }
+
+        Map<NoticeChannelType, NoticeChannel> tempMap = new EnumMap<>(NoticeChannelType.class);
+        for (NoticeChannel channel : channels) {
+            NoticeChannel oldChannel = tempMap.put(channel.getChannel(), channel);
+            if (oldChannel != null) {
+                throw new IllegalStateException("通知渠道重复注册：" + channel.getChannel());
+            }
+            log.info("通知渠道注册成功，channel={}，class={}", channel.getChannel(), channel.getClass().getSimpleName());
+        }
+
+        this.channelMap = Map.copyOf(tempMap);
+    }
+
+    /**
+     * 根据渠道编码获取通知渠道
+     *
+     * @param channel 渠道编码
+     * @return 通知渠道
+     */
+    public NoticeChannel getChannel(String channel) {
+        NoticeChannelType channelType = NoticeChannelType.parse(channel);
+        NoticeChannel noticeChannel = channelMap.get(channelType);
+
+        if (noticeChannel == null) {
+            throw new IllegalArgumentException("未找到通知渠道：" + channel);
+        }
+
+        return noticeChannel;
+    }
+}
+```
+
+通知发送器注册器负责按业务场景获取具体通知发送器。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/NoticeSenderRegistry.java`
+
+```java
+package io.github.atengk.designpattern.bridge.bridge;
+
+import cn.hutool.core.collection.CollUtil;
+import io.github.atengk.designpattern.bridge.enums.NoticeSceneType;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 通知发送器注册器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class NoticeSenderRegistry {
+
+    private final Map<NoticeSceneType, AbstractNoticeSender> senderMap;
+
+    /**
+     * 初始化通知发送器注册器
+     *
+     * @param senders 通知发送器列表
+     */
+    public NoticeSenderRegistry(List<AbstractNoticeSender> senders) {
+        if (CollUtil.isEmpty(senders)) {
+            throw new IllegalStateException("未找到任何通知发送器");
+        }
+
+        Map<NoticeSceneType, AbstractNoticeSender> tempMap = new EnumMap<>(NoticeSceneType.class);
+        for (AbstractNoticeSender sender : senders) {
+            AbstractNoticeSender oldSender = tempMap.put(sender.getScene(), sender);
+            if (oldSender != null) {
+                throw new IllegalStateException("通知发送器重复注册：" + sender.getScene());
+            }
+            log.info("通知发送器注册成功，scene={}，class={}", sender.getScene(), sender.getClass().getSimpleName());
+        }
+
+        this.senderMap = Map.copyOf(tempMap);
+    }
+
+    /**
+     * 根据场景编码获取通知发送器
+     *
+     * @param scene 场景编码
+     * @return 通知发送器
+     */
+    public AbstractNoticeSender getSender(String scene) {
+        NoticeSceneType sceneType = NoticeSceneType.parse(scene);
+        AbstractNoticeSender sender = senderMap.get(sceneType);
+
+        if (sender == null) {
+            throw new IllegalArgumentException("未找到通知发送器：" + scene);
+        }
+
+        return sender;
+    }
+}
+```
+
+通知服务接口定义统一业务入口。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/service/NoticeService.java`
+
+```java
+package io.github.atengk.designpattern.bridge.service;
+
+import io.github.atengk.designpattern.bridge.dto.NoticeSendRequest;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+
+/**
+ * 通知服务接口
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface NoticeService {
+
+    /**
+     * 发送通知
+     *
+     * @param request 通知发送请求
+     * @return 通知发送结果
+     */
+    NoticeSendResultVO send(NoticeSendRequest request);
+}
+```
+
+通知服务实现类把业务场景和发送渠道桥接起来，完成最终发送。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/service/NoticeServiceImpl.java`
+
+```java
+package io.github.atengk.designpattern.bridge.service;
+
+import io.github.atengk.designpattern.bridge.bridge.AbstractNoticeSender;
+import io.github.atengk.designpattern.bridge.bridge.NoticeChannel;
+import io.github.atengk.designpattern.bridge.bridge.NoticeChannelRegistry;
+import io.github.atengk.designpattern.bridge.bridge.NoticeSenderRegistry;
+import io.github.atengk.designpattern.bridge.dto.NoticeSendRequest;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
 /**
- * 通知桥接服务实现
+ * 通知服务实现类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Service
-public class NotificationBridgeServiceImpl implements NotificationBridgeService {
+@RequiredArgsConstructor
+public class NoticeServiceImpl implements NoticeService {
 
-    private final Map<String, NotificationContentBuilder> builderMap;
-    private final Map<String, NotificationSender> senderMap;
-
-    /**
-     * 创建通知桥接服务
-     *
-     * @param builders 通知内容构建器列表
-     * @param senders  通知发送器列表
-     */
-    public NotificationBridgeServiceImpl(List<NotificationContentBuilder> builders,
-                                         List<NotificationSender> senders) {
-        if (CollUtil.isEmpty(builders)) {
-            log.warn("通知内容构建器列表为空");
-            this.builderMap = Map.of();
-        } else {
-            this.builderMap = builders.stream()
-                    .collect(Collectors.toUnmodifiableMap(
-                            builder -> StrUtil.trim(builder.supportType()).toLowerCase(),
-                            Function.identity()
-                    ));
-        }
-
-        if (CollUtil.isEmpty(senders)) {
-            log.warn("通知发送器列表为空");
-            this.senderMap = Map.of();
-        } else {
-            this.senderMap = senders.stream()
-                    .collect(Collectors.toUnmodifiableMap(
-                            sender -> StrUtil.trim(sender.supportChannel()).toLowerCase(),
-                            Function.identity()
-                    ));
-        }
-
-        log.info("初始化通知桥接服务，支持类型：{}，支持渠道：{}", builderMap.keySet(), senderMap.keySet());
-    }
+    private final NoticeSenderRegistry noticeSenderRegistry;
+    private final NoticeChannelRegistry noticeChannelRegistry;
 
     /**
      * 发送通知
      *
-     * @param request 通知请求
-     * @return 通知响应
+     * @param request 通知发送请求
+     * @return 通知发送结果
      */
     @Override
-    public NotificationResponse notify(NotificationRequest request) {
-        validateRequest(request);
+    public NoticeSendResultVO send(NoticeSendRequest request) {
+        log.info("开始发送通知，scene={}，channel={}，receiver={}",
+                request.getScene(), request.getChannel(), request.getReceiver());
 
-        String type = StrUtil.trim(request.type()).toLowerCase();
-        String channel = StrUtil.trim(request.channel()).toLowerCase();
+        AbstractNoticeSender sender = noticeSenderRegistry.getSender(request.getScene());
+        NoticeChannel channel = noticeChannelRegistry.getChannel(request.getChannel());
+        NoticeSendResultVO result = sender.send(request, channel);
 
-        NotificationContentBuilder builder = builderMap.get(type);
-        if (builder == null) {
-            log.warn("发送通知失败，不支持的通知类型：{}", request.type());
-            throw new IllegalArgumentException("不支持的通知类型：" + request.type());
-        }
+        log.info("通知发送完成，scene={}，channel={}，receiver={}，messageId={}",
+                result.getScene(), result.getChannel(), result.getReceiver(), result.getMessageId());
 
-        NotificationSender sender = senderMap.get(channel);
-        if (sender == null) {
-            log.warn("发送通知失败，不支持的发送渠道：{}", request.channel());
-            throw new IllegalArgumentException("不支持的发送渠道：" + request.channel());
-        }
-
-        NotificationContent notificationContent = builder.build(request.content());
-        String bizId = sender.send(request.receiver(), notificationContent);
-
-        log.info("通知发送完成，通知类型：{}，发送渠道：{}，接收人：{}，业务ID：{}",
-                type, channel, request.receiver(), bizId);
-
-        return new NotificationResponse(
-                type,
-                channel,
-                request.receiver(),
-                bizId,
-                "发送成功"
-        );
-    }
-
-    /**
-     * 校验通知请求
-     *
-     * @param request 通知请求
-     */
-    private void validateRequest(NotificationRequest request) {
-        if (request == null) {
-            log.warn("发送通知失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.hasBlank(request.type(), request.channel(), request.receiver(), request.content())) {
-            log.warn("发送通知失败，通知类型、发送渠道、接收人或内容为空");
-            throw new IllegalArgumentException("通知类型、发送渠道、接收人和内容不能为空");
-        }
+        return result;
     }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/NotificationController.java`
+Controller 对外提供统一通知发送接口。
 
-下面是通知接口，用于验证桥接模式效果。
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/controller/NoticeController.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.designpattern.bridge.controller;
 
-import io.github.atengk.design.dto.NotificationRequest;
-import io.github.atengk.design.dto.NotificationResponse;
-import io.github.atengk.design.service.NotificationBridgeService;
+import io.github.atengk.designpattern.bridge.dto.NoticeSendRequest;
+import io.github.atengk.designpattern.bridge.service.NoticeService;
+import io.github.atengk.designpattern.bridge.vo.ApiResult;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 通知控制器
+ * 通知接口控制器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/bridge/notification")
-public class NotificationController {
+@RequestMapping("/api/notices")
+public class NoticeController {
 
-    private final NotificationBridgeService notificationBridgeService;
+    private final NoticeService noticeService;
 
     /**
      * 发送通知
      *
-     * @param type     通知类型
-     * @param channel  发送渠道
-     * @param receiver 接收人
-     * @param content  原始内容
-     * @return 通知响应
+     * @param request 通知发送请求
+     * @return 通知发送结果
      */
     @PostMapping("/send")
-    public NotificationResponse send(@RequestParam String type,
-                                     @RequestParam String channel,
-                                     @RequestParam String receiver,
-                                     @RequestParam String content) {
-        NotificationRequest request = new NotificationRequest(
-                type,
-                channel,
-                receiver,
-                content
-        );
-
-        return notificationBridgeService.notify(request);
+    public ApiResult<NoticeSendResultVO> send(@Valid @RequestBody NoticeSendRequest request) {
+        return ApiResult.success(noticeService.send(request));
     }
 }
 ```
 
-接口调用示例：
+全局异常处理器用于统一处理参数校验异常和业务异常。
 
-```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=alert&channel=sms&receiver=13800138000&content=订单服务响应时间超过阈值"
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/web/GlobalExceptionHandler.java`
 
-curl -X POST "http://localhost:8080/bridge/notification/send?type=marketing&channel=email&receiver=ateng@example.com&content=限时优惠活动开始"
+```java
+package io.github.atengk.designpattern.bridge.web;
 
-curl -X POST "http://localhost:8080/bridge/notification/send?type=normal&channel=site&receiver=10001&content=你的订单已创建"
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.bridge.vo.ApiResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/**
+ * 全局异常处理器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /**
+     * 处理参数校验异常
+     *
+     * @param exception 参数校验异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ApiResult<Void> handleValidException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .findFirst()
+                .map(error -> StrUtil.format("{} {}", error.getField(), error.getDefaultMessage()))
+                .orElse("请求参数不合法");
+
+        log.warn("请求参数校验失败，message={}", message);
+        return ApiResult.fail(message);
+    }
+
+    /**
+     * 处理非法参数异常
+     *
+     * @param exception 非法参数异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ApiResult<Void> handleIllegalArgumentException(IllegalArgumentException exception) {
+        log.warn("请求参数错误，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+
+    /**
+     * 处理业务状态异常
+     *
+     * @param exception 业务状态异常
+     * @return API 返回对象
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ApiResult<Void> handleIllegalStateException(IllegalStateException exception) {
+        log.warn("业务处理失败，message={}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
+    }
+}
 ```
 
-告警短信可能返回：
+## 使用方式
+
+启动项目后，通过统一接口发送通知。调用方通过 `scene` 指定业务场景，通过 `channel` 指定发送渠道。
+
+订单支付成功后，通过短信通知用户。
+
+```bash
+curl -X POST 'http://localhost:8080/api/notices/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "scene": "ORDER_PAID",
+    "channel": "SMS",
+    "receiver": "13800000000",
+    "params": {
+      "orderNo": "ORDER202605130001",
+      "amount": "99.90"
+    }
+  }'
+```
+
+返回示例：
 
 ```json
 {
-  "type": "alert",
-  "channel": "sms",
-  "receiver": "13800138000",
-  "bizId": "SMS2019776866538487808",
-  "message": "发送成功"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "scene": "ORDER_PAID",
+    "channel": "SMS",
+    "receiver": "13800000000",
+    "messageId": "SMS_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "status": "SUCCESS",
+    "message": "短信通知发送成功"
+  }
 }
 ```
 
-这种方式的优点是通知类型和发送渠道可以独立扩展。新增一种通知类型，不需要修改发送渠道；新增一种发送渠道，也不需要修改通知类型。
-
-## 扩展一个新通知类型
-
-在桥接模式中，扩展抽象维度通常只需要新增一个实现类。下面以“审批通知”为例，新增通知类型 `approval`。
-
-文件位置：`src/main/java/io/github/atengk/design/builder/ApprovalContentBuilder.java`
-
-下面是审批通知内容构建器。新增后会自动加入桥接服务的内容构建器映射中。
-
-```java
-package io.github.atengk.design.builder;
-
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 审批通知内容构建器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class ApprovalContentBuilder implements NotificationContentBuilder {
-
-    /**
-     * 获取支持的通知类型
-     *
-     * @return 通知类型
-     */
-    @Override
-    public String supportType() {
-        return "approval";
-    }
-
-    /**
-     * 构建通知内容
-     *
-     * @param rawContent 原始内容
-     * @return 通知内容
-     */
-    @Override
-    public NotificationContent build(String rawContent) {
-        if (StrUtil.isBlank(rawContent)) {
-            log.warn("构建审批通知失败，内容为空");
-            throw new IllegalArgumentException("通知内容不能为空");
-        }
-
-        return new NotificationContent("审批待处理通知", StrUtil.format("[审批待处理] {}", rawContent));
-    }
-}
-```
-
-调用示例：
+订单退款后，通过邮件通知用户。
 
 ```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=approval&channel=site&receiver=10001&content=你有一条请假审批待处理"
+curl -X POST 'http://localhost:8080/api/notices/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "scene": "REFUND",
+    "channel": "EMAIL",
+    "receiver": "user@example.com",
+    "params": {
+      "orderNo": "ORDER202605130002",
+      "refundAmount": "66.60"
+    }
+  }'
 ```
 
-新增审批通知后，短信、邮件、站内信三个发送渠道都可以直接复用。
+返回示例：
 
-## 扩展一个新发送渠道
-
-扩展实现维度也只需要新增一个实现类。下面以企业微信通知渠道为例，新增发送渠道 `wecom`。
-
-文件位置：`src/main/java/io/github/atengk/design/sender/WecomNotificationSender.java`
-
-下面是企业微信通知发送器。新增后会自动加入桥接服务的发送器映射中。
-
-```java
-package io.github.atengk.design.sender;
-
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.NotificationContent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-/**
- * 企业微信通知发送器
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class WecomNotificationSender implements NotificationSender {
-
-    /**
-     * 获取支持的发送渠道
-     *
-     * @return 发送渠道
-     */
-    @Override
-    public String supportChannel() {
-        return "wecom";
-    }
-
-    /**
-     * 发送通知
-     *
-     * @param receiver 接收人
-     * @param content  通知内容
-     * @return 业务ID
-     */
-    @Override
-    public String send(String receiver, NotificationContent content) {
-        if (StrUtil.isBlank(receiver) || content == null || StrUtil.hasBlank(content.title(), content.content())) {
-            log.warn("企业微信通知发送失败，接收人、标题或内容为空");
-            throw new IllegalArgumentException("企业微信接收人、标题和内容不能为空");
-        }
-
-        String msgId = "WECOM" + IdUtil.getSnowflakeNextId();
-        log.info("企业微信通知发送成功，接收人：{}，标题：{}，消息ID：{}", receiver, content.title(), msgId);
-        return msgId;
-    }
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "scene": "REFUND",
+    "channel": "EMAIL",
+    "receiver": "user@example.com",
+    "messageId": "EMAIL_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "status": "SUCCESS",
+    "message": "邮件通知发送成功"
+  }
 }
 ```
 
-调用示例：
+库存预警时，通过企业微信通知运营人员。
 
 ```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=alert&channel=wecom&receiver=ateng&content=支付服务异常"
+curl -X POST 'http://localhost:8080/api/notices/send' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "scene": "STOCK_WARNING",
+    "channel": "WECHAT",
+    "receiver": "operation-user",
+    "params": {
+      "productName": "JDK21 实战课程",
+      "stock": 3
+    }
+  }'
 ```
 
-新增企业微信渠道后，普通通知、营销通知、告警通知、审批通知都可以直接使用该渠道。
+返回示例：
 
-## 桥接模式和策略模式的区别
-
-桥接模式和策略模式都可能表现为“接口 + 多个实现 + 上下文选择”，但二者关注点不同。
-
-| 对比项   | 桥接模式             | 策略模式                 |
-| -------- | -------------------- | ------------------------ |
-| 核心目的 | 拆分两个独立变化维度 | 从多个算法中选择一种执行 |
-| 维度数量 | 通常至少两个维度     | 通常一个变化维度         |
-| 组合关系 | 抽象部分持有实现部分 | 上下文选择一个策略       |
-| 典型场景 | 通知类型 × 发送渠道  | 优惠算法、计费算法       |
-| 扩展收益 | 避免组合类爆炸       | 避免算法分支判断         |
-
-简单理解：
-
-```text
-桥接模式：两个维度都在变，需要拆开组合。
-策略模式：一个维度在变，需要选择一个算法。
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "scene": "STOCK_WARNING",
+    "channel": "WECHAT",
+    "receiver": "operation-user",
+    "messageId": "WECHAT_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "status": "SUCCESS",
+    "message": "企业微信通知发送成功"
+  }
+}
 ```
-
-通知类型和发送渠道都可能扩展，适合桥接模式。订单优惠从满减、折扣、新人优惠中选择一种，适合策略模式。
-
-## 桥接模式和适配器模式的区别
-
-桥接模式和适配器模式都通过接口隔离具体实现，但意图不同。
-
-| 对比项           | 桥接模式               | 适配器模式                |
-| ---------------- | ---------------------- | ------------------------- |
-| 核心目的         | 拆分抽象和实现两个维度 | 转换不兼容接口            |
-| 使用时机         | 设计初期主动拆分维度   | 接入已有接口时被动适配    |
-| 关注点           | 独立扩展               | 接口兼容                  |
-| 典型场景         | 通知类型 × 发送渠道    | 旧短信 SDK 转统一短信接口 |
-| 是否强调产品组合 | 强调组合关系           | 不强调                    |
-
-简单理解：
-
-```text
-桥接模式：原本就设计成两个维度独立变化。
-适配器模式：已有接口不合适，包一层转换成目标接口。
-```
-
-如果系统一开始就知道通知类型和发送渠道会分别扩展，适合桥接模式。如果已经有一个旧短信 SDK，但接口和系统不兼容，适合适配器模式。
-
-## 桥接模式和抽象工厂模式的关系
-
-桥接模式和抽象工厂模式不是互斥关系。桥接模式解决结构解耦问题，抽象工厂模式解决对象族创建问题。
-
-例如多云文件处理场景中：
-
-```text
-桥接模式：文件业务类型 × 存储实现方式
-抽象工厂模式：根据云厂商创建对象存储、短信、MQ 一整套客户端
-```
-
-二者可以组合使用：
-
-```text
-ReportExporter
-    -> StorageClient
-
-StorageClient 可以由 CloudResourceFactory 创建
-```
-
-简单理解：
-
-```text
-桥接模式：怎么把两个维度组合起来。
-抽象工厂模式：怎么创建一整套相关对象。
-```
-
-如果重点是避免“通知类型 × 发送渠道”的组合类爆炸，使用桥接模式。如果重点是保证“阿里云存储 + 阿里云短信 + 阿里云MQ”来自同一产品族，使用抽象工厂模式。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
+可以从下面几个角度验证桥接模式是否落地成功。
 
-```bash
-mvn spring-boot:run
-```
+第一，通知业务类型和通知渠道没有互相继承。`OrderPaidNoticeSender` 不继承 `SmsNoticeChannel`，`SmsNoticeChannel` 也不依赖订单业务。两者通过 `NoticeChannel` 接口组合。
 
-执行告警短信通知：
-
-```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=alert&channel=sms&receiver=13800138000&content=订单服务响应时间超过阈值"
-```
-
-执行营销邮件通知：
-
-```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=marketing&channel=email&receiver=ateng@example.com&content=限时优惠活动开始"
-```
-
-执行普通站内信通知：
-
-```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=normal&channel=site&receiver=10001&content=你的订单已创建"
-```
-
-如果桥接模式正常，可以看到类似日志：
+第二，新增业务场景不需要新增所有渠道组合类。例如新增“优惠券到账通知”，只需要新增：
 
 ```text
-初始化通知桥接服务，支持类型：[normal, marketing, alert]，支持渠道：[sms, email, site]
-短信通知发送成功，接收人：13800138000，标题：系统告警通知，业务ID：SMS2019776866538487808
-通知发送完成，通知类型：alert，发送渠道：sms，接收人：13800138000，业务ID：SMS2019776866538487808
+CouponReceivedNoticeSender
 ```
 
-执行不支持的通知类型：
+它可以自动复用已有的短信、邮件和企业微信渠道。
 
-```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=unknown&channel=sms&receiver=13800138000&content=测试内容"
-```
-
-异常日志示例：
+第三，新增发送渠道不需要修改已有业务场景。例如新增“钉钉通知渠道”，只需要新增：
 
 ```text
-发送通知失败，不支持的通知类型：unknown
+DingTalkNoticeChannel
 ```
 
-执行不支持的发送渠道：
+已有的订单支付通知、退款通知、库存预警通知都可以直接使用钉钉渠道。
 
-```bash
-curl -X POST "http://localhost:8080/bridge/notification/send?type=alert&channel=unknown&receiver=13800138000&content=测试内容"
-```
-
-异常日志示例：
+第四，启动日志中应该能看到两个维度分别注册成功。
 
 ```text
-发送通知失败，不支持的发送渠道：unknown
+通知发送器注册成功，scene=ORDER_PAID，class=OrderPaidNoticeSender
+通知发送器注册成功，scene=REFUND，class=RefundNoticeSender
+通知发送器注册成功，scene=STOCK_WARNING，class=StockWarningNoticeSender
+
+通知渠道注册成功，channel=SMS，class=SmsNoticeChannel
+通知渠道注册成功，channel=EMAIL，class=EmailNoticeChannel
+通知渠道注册成功，channel=WECHAT，class=WechatNoticeChannel
 ```
 
-实际项目中建议结合全局异常处理器，将业务异常转换成统一响应结构。
+## 扩展新业务场景
+
+如果要新增“优惠券到账通知”，只需要增加一个通知场景发送器。
+
+先在 `NoticeSceneType` 中新增枚举：
+
+```java
+COUPON_RECEIVED
+```
+
+然后新增业务通知发送器。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/CouponReceivedNoticeSender.java`
+
+```java
+package io.github.atengk.designpattern.bridge.bridge;
+
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.designpattern.bridge.enums.NoticeSceneType;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+
+/**
+ * 优惠券到账通知发送器
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Component
+public class CouponReceivedNoticeSender extends AbstractNoticeSender {
+
+    /**
+     * 获取当前通知场景
+     *
+     * @return 通知场景
+     */
+    @Override
+    public NoticeSceneType getScene() {
+        return NoticeSceneType.COUPON_RECEIVED;
+    }
+
+    /**
+     * 构建优惠券到账通知标题
+     *
+     * @param params 业务参数
+     * @return 通知标题
+     */
+    @Override
+    protected String buildTitle(Map<String, Object> params) {
+        return "优惠券到账通知";
+    }
+
+    /**
+     * 构建优惠券到账通知内容
+     *
+     * @param params 业务参数
+     * @return 通知内容
+     */
+    @Override
+    protected String buildContent(Map<String, Object> params) {
+        String couponName = Convert.toStr(params.get("couponName"), "优惠券");
+        String expireTime = Convert.toStr(params.get("expireTime"), "未设置过期时间");
+        return StrUtil.format("您收到一张 {}，有效期至 {}，请及时使用。", couponName, expireTime);
+    }
+}
+```
+
+新增后，不需要修改短信、邮件、企业微信渠道，也不需要修改 `NoticeServiceImpl`。新业务场景可以直接与已有渠道组合。
+
+## 扩展新发送渠道
+
+如果要新增钉钉通知渠道，只需要增加一个渠道实现。
+
+先在 `NoticeChannelType` 中新增枚举：
+
+```java
+DING_TALK
+```
+
+然后新增钉钉通知渠道。
+
+文件位置：`src/main/java/io/github/atengk/designpattern/bridge/bridge/DingTalkNoticeChannel.java`
+
+```java
+package io.github.atengk.designpattern.bridge.bridge;
+
+import cn.hutool.core.util.IdUtil;
+import io.github.atengk.designpattern.bridge.enums.NoticeChannelType;
+import io.github.atengk.designpattern.bridge.vo.NoticeSendResultVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+/**
+ * 钉钉通知渠道
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+public class DingTalkNoticeChannel implements NoticeChannel {
+
+    /**
+     * 获取当前渠道类型
+     *
+     * @return 通知渠道类型
+     */
+    @Override
+    public NoticeChannelType getChannel() {
+        return NoticeChannelType.DING_TALK;
+    }
+
+    /**
+     * 发送钉钉通知
+     *
+     * @param scene    通知场景
+     * @param receiver 接收人
+     * @param title    通知标题
+     * @param content  通知内容
+     * @return 通知发送结果
+     */
+    @Override
+    public NoticeSendResultVO send(String scene, String receiver, String title, String content) {
+        String messageId = "DING_" + IdUtil.fastSimpleUUID();
+        log.info("发送钉钉通知，receiver={}，title={}，content={}", receiver, title, content);
+
+        return NoticeSendResultVO.builder()
+                .scene(scene)
+                .channel(getChannel().name())
+                .receiver(receiver)
+                .messageId(messageId)
+                .status("SUCCESS")
+                .message("钉钉通知发送成功")
+                .build();
+    }
+}
+```
+
+新增后，订单支付成功通知、退款通知、库存预警通知都可以通过 `channel=DING_TALK` 发送。已有业务通知发送器不需要修改。
+
+## 适用场景
+
+桥接模式适合存在两个或多个独立变化维度的场景。判断是否适合使用桥接模式，可以看是否出现了“组合类爆炸”的趋势。
+
+常见 Spring Boot 项目场景如下。
+
+| 场景     | 抽象维度     | 实现维度                            |
+| -------- | ------------ | ----------------------------------- |
+| 通知系统 | 业务通知类型 | 短信、邮件、站内信、企业微信、钉钉  |
+| 报表导出 | 报表类型     | Excel、CSV、PDF、对象存储、本地文件 |
+| 文件处理 | 业务文件类型 | MinIO、OSS、COS、S3                 |
+| 支付能力 | 支付业务动作 | 支付宝、微信、银联、Stripe          |
+| 消息推送 | 推送场景     | Kafka、RabbitMQ、RocketMQ           |
+| 数据同步 | 同步任务类型 | HTTP、MQ、数据库、文件              |
+
+桥接模式尤其适合“业务能力”和“技术实现”都经常变化的模块。它能让业务维度和技术维度分别演进，不互相污染。
+
+## 和其他模式的区别
+
+桥接模式容易和适配器模式、策略模式、装饰器模式混淆。区分时重点看模式解决的问题。
+
+| 模式       | 关注点                 | 和桥接模式的区别                           |
+| ---------- | ---------------------- | ------------------------------------------ |
+| 桥接模式   | 拆分独立变化维度       | 一开始就为了避免多个维度组合膨胀           |
+| 适配器模式 | 兼容已有不一致接口     | 通常是让旧接口或第三方接口符合当前系统接口 |
+| 策略模式   | 替换一组算法或业务处理 | 通常只有一个变化维度，重点是选择不同策略   |
+| 装饰器模式 | 动态增强对象能力       | 重点是功能叠加，不是拆分两个独立维度       |
+| 外观模式   | 简化复杂子系统调用     | 重点是给外部提供统一入口，不是维度拆分     |
+
+本示例中，通知业务类型和通知渠道是两个独立变化维度，所以更适合归类为桥接模式。如果只有“不同渠道发送通知”一个变化点，则更像策略模式。
 
 ## 注意事项
 
-桥接模式适合两个维度都需要独立扩展的场景，不适合只有一个维度变化的简单分发逻辑。过度使用桥接模式会让类数量变多，反而降低可读性。
+桥接模式不适合简单场景。如果系统只有一个业务类型和两个渠道，直接写两个实现类可能更清晰。只有当多个维度都可能持续扩展时，桥接模式才有明显收益。
 
-适合使用桥接模式的场景：
+桥接模式的抽象接口要稳定。比如 `NoticeChannel.send()` 应该表达“发送通知”这个稳定能力，不应该把某个具体渠道的字段直接暴露出来，例如 `templateCode`、`robotKey`、`emailCc` 等。渠道专属参数应封装在渠道内部配置或上下文对象中。
 
-```text
-通知类型 × 发送渠道
-报表类型 × 导出格式
-文件类型 × 存储方式
-支付业务 × 支付渠道
-设备操作 × 厂商驱动
-消息内容 × 投递通道
-```
+不要把业务规则放到渠道实现中。短信、邮件、企业微信只负责发送，不应该判断订单状态、退款状态或库存阈值。业务规则应该放在业务服务、领域服务或具体通知发送器中。
 
-不太适合使用桥接模式的场景：
+注册器要做好重复注册检查。如果两个类都声明支持同一个 `NoticeSceneType` 或 `NoticeChannelType`，启动阶段应直接失败，避免运行时出现不可预测行为。
 
-```text
-只有一个变化维度
-只有一两个固定实现
-对象组合关系不稳定
-用普通策略模式即可解决
-为了模式强行拆分接口
-```
-
-不要把两个维度继续写死在一个类名中。
-
-不推荐写法：
-
-```java
-public class AlertSmsNotification {
-}
-
-public class AlertEmailNotification {
-}
-
-public class MarketingSmsNotification {
-}
-```
-
-推荐拆成两个维度：
-
-```java
-public class AlertContentBuilder implements NotificationContentBuilder {
-}
-
-public class SmsNotificationSender implements NotificationSender {
-}
-```
-
-桥接模式中的两个维度要职责清晰。通知内容构建器只负责构建内容，发送器只负责发送，不要互相侵入职责。
-
-不推荐在发送器中写通知类型判断：
-
-```java
-public String send(String receiver, NotificationContent content) {
-    if ("alert".equals(type)) {
-        // 构建告警内容
-    }
-    return doSend(receiver, content);
-}
-```
-
-推荐让内容构建器负责内容，让发送器负责发送：
-
-```java
-NotificationContent notificationContent = builder.build(request.content());
-String bizId = sender.send(request.receiver(), notificationContent);
-```
-
-Spring Bean 默认是单例，桥接实现类中不要保存请求级状态。
-
-错误示例：
-
-```java
-private String currentReceiver;
-private String currentContent;
-private String currentBizId;
-```
-
-推荐使用方法参数和局部变量：
-
-```java
-public String send(String receiver, NotificationContent content) {
-    String bizId = "SMS" + IdUtil.getSnowflakeNextId();
-    return bizId;
-}
-```
-
-如果发送渠道是真实外部服务，例如短信、邮件、企业微信、钉钉、站内信，需要额外考虑超时、重试、限流、幂等、模板审核、内容脱敏和失败补偿。桥接模式只解决结构解耦问题，不自动保证外部调用可靠性。
-
-生产环境中，通知发送通常还需要：
-
-```text
-发送记录表
-通知模板表
-失败重试任务
-渠道降级策略
-频率限制
-敏感信息脱敏
-发送结果回调
-消息队列异步发送
-```
-
-如果桥接后的组合结果需要权限控制，例如某些通知类型不能走某些渠道，可以在桥接服务中增加组合规则校验。
-
-示例规则：
-
-```text
-营销通知不允许走站内信
-告警通知必须支持短信或企业微信
-验证码通知不允许走邮件
-```
-
-规则复杂时，可以单独抽出 `NotificationBridgeRuleService`，不要把所有规则塞进 Controller。
+如果通知内容模板越来越复杂，可以把 `buildTitle()` 和 `buildContent()` 进一步拆成模板服务、模板引擎或数据库模板配置。桥接模式不要求所有内容都写在 Java 类中。
 
 ## 总结
 
-在 JDK21 和 Spring Boot 3 项目中，桥接模式的实践重点是把两个独立变化维度拆开，通过组合方式建立连接，避免类数量随着组合数量爆炸式增长。
+桥接模式的关键价值是把两个独立变化的维度拆开，让它们通过接口组合，而不是通过大量继承类硬编码组合关系。
 
-普通 Java 桥接模式适合理解抽象部分和实现部分的分离。Spring Boot 项目中更推荐使用“业务维度接口 + 实现维度接口 + 桥接服务组合”的结构。对于通知类型和发送渠道、报表类型和导出格式、文件类型和存储方式等场景，桥接模式可以让两个维度独立扩展，减少重复类和复杂分支。
+在本示例中：
 
-桥接模式不是为了替代所有接口分发，而是为了处理“两个维度都在变化，并且需要自由组合”的场景。实际落地时，需要控制两个维度的职责边界，并结合规则校验、外部调用可靠性和异常补偿机制，才能让结构解耦真正服务于业务扩展。
+```text
+通知业务类型是一条变化轴
+通知发送渠道是另一条变化轴
+AbstractNoticeSender 负责业务内容组织
+NoticeChannel 负责具体渠道发送
+NoticeServiceImpl 负责把两条变化轴桥接起来
+```
+
+最终效果是：
+
+```text
+新增业务场景不影响已有发送渠道
+新增发送渠道不影响已有业务场景
+避免 OrderSms、OrderEmail、RefundSms、RefundEmail 这类组合类膨胀
+业务维度和技术实现维度边界更清晰
+代码更容易扩展、测试和维护
+```

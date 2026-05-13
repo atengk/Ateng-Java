@@ -1,387 +1,283 @@
-# 设计模式：模板方法模式
+# 模板方法模式
 
-模板方法模式用于在父类中定义一套固定执行流程，把流程中可变的步骤延迟到子类实现。在 JDK21 和 Spring Boot 3 项目中，模板方法模式常用于订单处理、文件导入、数据同步、支付回调、审批流、定时任务、接口调用封装、消息消费等场景。
+模板方法模式用于在父类中定义一个算法流程骨架，把流程中固定不变的步骤写在父类，把可变步骤延迟到子类实现。
+在 Spring Boot 项目中，模板方法模式常用于批量导入、文件解析、订单处理流程、支付处理流程、任务执行流程、报表生成、数据同步、消息发送等场景。
 
-需要注意：模板方法模式适合“流程固定、步骤可变”的业务。如果只是简单的单个算法切换，策略模式会更轻；如果既有固定流程，又有部分步骤需要差异化实现，模板方法模式更合适。
+本文以“订单批量导入处理”为例。普通订单导入和退款订单导入都有固定流程：校验请求、解析行数据、逐行校验、逐行处理、统计结果、输出日志。不同导入类型只需要实现自己的业务校验和保存逻辑。
+
+## 适用场景
+
+模板方法模式适合处理“流程固定，但部分步骤有差异”的场景。
+
+订单批量导入中，普通订单和退款订单都有类似处理流程：
+
+| 步骤       | 普通订单导入                 | 退款订单导入                   |
+| ---------- | ---------------------------- | ------------------------------ |
+| 校验请求   | 校验导入类型、操作人、数据行 | 校验导入类型、操作人、数据行   |
+| 解析行数据 | 解析用户、商品、数量、金额   | 解析订单号、退款金额、退款原因 |
+| 业务校验   | 校验用户、商品、金额         | 校验订单号、退款金额、原因     |
+| 处理数据   | 保存订单记录                 | 保存退款记录                   |
+| 统计结果   | 统计成功和失败行             | 统计成功和失败行               |
+
+如果每种导入类型都完整写一遍流程，会产生大量重复代码。模板方法模式可以把通用流程放在抽象类中，子类只实现差异化步骤。
 
 ## 基础配置
 
-本示例基于 JDK21、Spring Boot 3、Maven 项目。示例包路径统一使用 `io.github.atengk`。
+本示例基于 Spring Boot 3，使用 Hutool、Lombok 和 Validation。Hutool 用于集合判断、字符串判断、类型转换、金额判断和 ID 生成，Validation 用于接口参数基础校验。
 
 文件位置：`pom.xml`
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Web，用于提供接口验证模板方法模式行为 -->
+    <!-- Spring Boot Web：提供 REST API 能力 -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Hutool 工具类，用于字符串、集合、金额、ID 等通用处理 -->
+    <!-- Spring Boot Validation：用于接口参数基础校验 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- Hutool：提供集合、字符串、类型转换、金额判断、ID生成等工具能力 -->
     <dependency>
         <groupId>cn.hutool</groupId>
         <artifactId>hutool-all</artifactId>
-        <version>5.8.27</version>
+        <version>5.8.29</version>
     </dependency>
 
-    <!-- Lombok，简化日志对象、构造方法等样板代码 -->
+    <!-- Lombok：简化 Getter、Setter、构造器、日志对象等代码 -->
     <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <optional>true</optional>
     </dependency>
-
-    <!-- Spring Boot 测试依赖，用于单元测试验证 -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
-如果项目使用 Spring Boot 3，建议使用 JDK17 及以上版本。当前文档以 JDK21 为基准，示例代码可以直接用于 Spring Boot 3 项目。
-
-## 核心概念
-
-模板方法模式的核心目标是让父类控制流程，让子类负责变化点。
-
-常见角色如下：
-
-| 角色       | 说明                                                  |
-| ---------- | ----------------------------------------------------- |
-| 抽象模板类 | 定义固定流程，提供模板方法                            |
-| 模板方法   | 串联多个步骤，通常使用 `final` 修饰，避免子类破坏流程 |
-| 抽象步骤   | 父类只定义方法，具体实现交给子类                      |
-| 默认步骤   | 父类提供默认实现，子类可选择覆盖                      |
-| 钩子方法   | 父类提供空实现或默认判断，用于控制流程分支            |
-| 具体模板类 | 实现差异化步骤                                        |
-
-模板方法模式的典型结构如下：
+建议目录结构如下：
 
 ```text
-固定流程：
-参数校验 -> 前置处理 -> 核心处理 -> 后置处理 -> 返回结果
-
-变化点：
-不同业务类型的参数校验、核心处理、后置处理可以不同。
+src/main/java/io/github/atengk/pattern/template
+├── TemplateApplication.java
+├── common
+│   ├── ApiResult.java
+│   ├── BizException.java
+│   └── GlobalExceptionHandler.java
+└── order
+    ├── controller
+    │   └── OrderImportController.java
+    ├── dto
+    │   └── OrderImportRequest.java
+    ├── model
+    │   └── OrderImportRow.java
+    ├── repository
+    │   └── MockOrderImportRepository.java
+    ├── service
+    │   ├── OrderImportService.java
+    │   └── impl
+    │       └── OrderImportServiceImpl.java
+    ├── template
+    │   ├── AbstractOrderImportTemplate.java
+    │   ├── OrderImportTemplateExecutor.java
+    │   ├── OrderImportTypes.java
+    │   └── impl
+    │       ├── NormalOrderImportTemplate.java
+    │       └── RefundOrderImportTemplate.java
+    └── vo
+        └── OrderImportResultVO.java
 ```
 
-在 Spring Boot 项目中，常见优先级通常是：
+## 核心设计
+
+本示例把模板方法模式拆成三个核心角色：
+
+| 角色              | 项目中的类                                               | 说明                         |
+| ----------------- | -------------------------------------------------------- | ---------------------------- |
+| AbstractClass     | `AbstractOrderImportTemplate`                            | 定义订单导入流程骨架         |
+| ConcreteClass     | `NormalOrderImportTemplate`、`RefundOrderImportTemplate` | 实现不同导入类型的差异步骤   |
+| Client / Executor | `OrderImportTemplateExecutor`                            | 根据导入类型选择具体模板执行 |
+
+执行流程如下：
 
 ```text
-Spring Bean 模板方法 > 普通 Java 模板方法 > 大量重复流程代码
+Controller
+  -> OrderImportService
+    -> OrderImportTemplateExecutor
+      -> 根据 importType 获取具体导入模板
+        -> AbstractOrderImportTemplate.importData()
+          -> checkRequest()
+          -> parseRows()
+          -> beforeImport()
+          -> validateRow()
+          -> processRow()
+          -> afterImport()
+          -> buildResult()
 ```
 
-模板方法模式和策略模式的区别是：策略模式强调“替换算法”，模板方法模式强调“复用流程”。
+模板方法模式的重点是：父类控制完整流程，子类只负责可变部分。这样既能复用通用流程，又能保留不同导入业务的扩展能力。
 
-## 普通 Java 模板方法
+## 公共代码
 
-普通 Java 模板方法适合不依赖 Spring 容器的流程封装。下面以文件导入为例，不同文件类型的解析逻辑不同，但整体导入流程相同。
+公共响应对象、业务异常和全局异常处理用于统一接口返回。实际项目中可以复用已有基础包。
 
-整体流程如下：
-
-```text
-校验文件内容 -> 解析文件 -> 校验数据 -> 保存数据 -> 返回导入结果
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/template/simple/
-├── ImportRequest.java
-├── ImportResult.java
-├── AbstractFileImportTemplate.java
-├── CsvFileImportTemplate.java
-└── JsonFileImportTemplate.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/template/simple/ImportRequest.java`
-
-下面是文件导入请求参数对象。
+文件位置：`src/main/java/io/github/atengk/pattern/template/common/ApiResult.java`
 
 ```java
-package io.github.atengk.design.template.simple;
+package io.github.atengk.pattern.template.common;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * 文件导入请求
+ * 统一接口响应对象
  *
- * @param fileName 文件名
- * @param content  文件内容
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record ImportRequest(String fileName, String content) {
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ApiResult<T> {
+
+    private Integer code;
+
+    private String message;
+
+    private T data;
+
+    /**
+     * 返回成功结果
+     *
+     * @param data 响应数据
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> success(T data) {
+        return new ApiResult<>(200, "操作成功", data);
+    }
+
+    /**
+     * 返回失败结果
+     *
+     * @param message 错误信息
+     * @return 统一响应对象
+     */
+    public static <T> ApiResult<T> fail(String message) {
+        return new ApiResult<>(500, message, null);
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/template/simple/ImportResult.java`
-
-下面是文件导入结果对象。
+文件位置：`src/main/java/io/github/atengk/pattern/template/common/BizException.java`
 
 ```java
-package io.github.atengk.design.template.simple;
+package io.github.atengk.pattern.template.common;
 
 /**
- * 文件导入结果
+ * 业务异常
  *
- * @param fileName    文件名
- * @param success     是否成功
- * @param totalCount  总数量
- * @param message     结果消息
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record ImportResult(String fileName, Boolean success, Integer totalCount, String message) {
+public class BizException extends RuntimeException {
+
+    /**
+     * 创建业务异常
+     *
+     * @param message 异常信息
+     */
+    public BizException(String message) {
+        super(message);
+    }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/template/simple/AbstractFileImportTemplate.java`
-
-下面是文件导入抽象模板类。`importFile` 是模板方法，用于固定整体执行流程。
+文件位置：`src/main/java/io/github/atengk/pattern/template/common/GlobalExceptionHandler.java`
 
 ```java
-package io.github.atengk.design.template.simple;
+package io.github.atengk.pattern.template.common;
 
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Map;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * 文件导入抽象模板
+ * 全局异常处理器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
-public abstract class AbstractFileImportTemplate {
+@RestControllerAdvice
+public class GlobalExceptionHandler {
 
     /**
-     * 导入文件
+     * 处理业务异常
      *
-     * @param request 文件导入请求
-     * @return 文件导入结果
+     * @param exception 业务异常
+     * @return 统一响应对象
      */
-    public final ImportResult importFile(ImportRequest request) {
-        validateRequest(request);
-
-        log.info("开始导入文件，文件名：{}", request.fileName());
-
-        List<Map<String, Object>> rows = parseContent(request.content());
-        validateRows(rows);
-        saveRows(rows);
-
-        ImportResult result = new ImportResult(request.fileName(), true, rows.size(), "导入成功");
-        log.info("文件导入完成，文件名：{}，数据量：{}", request.fileName(), rows.size());
-        return result;
+    @ExceptionHandler(BizException.class)
+    public ApiResult<Void> handleBizException(BizException exception) {
+        log.warn("业务处理失败：{}", exception.getMessage());
+        return ApiResult.fail(exception.getMessage());
     }
 
     /**
-     * 校验导入请求
+     * 处理参数校验异常
      *
-     * @param request 文件导入请求
+     * @param exception 参数校验异常
+     * @return 统一响应对象
      */
-    protected void validateRequest(ImportRequest request) {
-        if (request == null) {
-            log.warn("文件导入失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.fileName())) {
-            log.warn("文件导入失败，文件名为空");
-            throw new IllegalArgumentException("文件名不能为空");
-        }
-
-        if (StrUtil.isBlank(request.content())) {
-            log.warn("文件导入失败，文件内容为空，文件名：{}", request.fileName());
-            throw new IllegalArgumentException("文件内容不能为空");
-        }
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ApiResult<Void> handleValidException(Exception exception) {
+        log.warn("接口参数校验失败：{}", exception.getMessage());
+        return ApiResult.fail("请求参数不合法");
     }
 
     /**
-     * 解析文件内容
+     * 处理请求体解析异常
      *
-     * @param content 文件内容
-     * @return 解析后的数据行
+     * @param exception 请求体解析异常
+     * @return 统一响应对象
      */
-    protected abstract List<Map<String, Object>> parseContent(String content);
-
-    /**
-     * 校验数据行
-     *
-     * @param rows 数据行
-     */
-    protected void validateRows(List<Map<String, Object>> rows) {
-        if (CollUtil.isEmpty(rows)) {
-            log.warn("文件导入失败，解析结果为空");
-            throw new IllegalArgumentException("解析结果不能为空");
-        }
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResult<Void> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("请求体解析失败：{}", exception.getMessage());
+        return ApiResult.fail("请求体格式不正确");
     }
 
     /**
-     * 保存数据行
+     * 处理系统异常
      *
-     * @param rows 数据行
+     * @param exception 系统异常
+     * @return 统一响应对象
      */
-    protected void saveRows(List<Map<String, Object>> rows) {
-        log.info("保存导入数据，数据量：{}", rows.size());
+    @ExceptionHandler(Exception.class)
+    public ApiResult<Void> handleException(Exception exception) {
+        log.error("系统异常", exception);
+        return ApiResult.fail("系统繁忙，请稍后重试");
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/template/simple/CsvFileImportTemplate.java`
+## 完整代码
 
-下面是 CSV 文件导入模板，只实现 CSV 解析这一变化点。
+下面给出模板方法模式的核心代码。示例使用接口请求中的 `rows` 模拟批量导入数据，实际项目中可以把 `rows` 替换为 Excel、CSV、对象存储文件或消息数据。
 
-```java
-package io.github.atengk.design.template.simple;
-
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.core.text.csv.CsvData;
-import cn.hutool.core.text.csv.CsvReader;
-import cn.hutool.core.text.csv.CsvUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.io.StringReader;
-import java.util.List;
-import java.util.Map;
-
-/**
- * CSV文件导入模板
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class CsvFileImportTemplate extends AbstractFileImportTemplate {
-
-    /**
-     * 解析文件内容
-     *
-     * @param content 文件内容
-     * @return 解析后的数据行
-     */
-    @Override
-    protected List<Map<String, Object>> parseContent(String content) {
-        CsvReader reader = CsvUtil.getReader();
-        CsvData csvData = reader.read(new StringReader(content));
-
-        log.info("解析CSV文件完成，行数：{}", csvData.getRowCount());
-
-        return List.of(MapUtil.<String, Object>builder()
-                .put("fileType", "csv")
-                .put("rowCount", csvData.getRowCount())
-                .build());
-    }
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/template/simple/JsonFileImportTemplate.java`
-
-下面是 JSON 文件导入模板，只实现 JSON 解析这一变化点。
+文件位置：`src/main/java/io/github/atengk/pattern/template/TemplateApplication.java`
 
 ```java
-package io.github.atengk.design.template.simple;
-
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.json.JSONUtil;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
-import java.util.Map;
-
-/**
- * JSON文件导入模板
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-public class JsonFileImportTemplate extends AbstractFileImportTemplate {
-
-    /**
-     * 解析文件内容
-     *
-     * @param content 文件内容
-     * @return 解析后的数据行
-     */
-    @Override
-    protected List<Map<String, Object>> parseContent(String content) {
-        Object json = JSONUtil.parse(content);
-
-        log.info("解析JSON文件完成，JSON类型：{}", json.getClass().getSimpleName());
-
-        return List.of(MapUtil.<String, Object>builder()
-                .put("fileType", "json")
-                .put("content", json)
-                .build());
-    }
-}
-```
-
-使用方式：
-
-```java
-AbstractFileImportTemplate csvTemplate = new CsvFileImportTemplate();
-ImportResult csvResult = csvTemplate.importFile(new ImportRequest(
-        "user.csv",
-        "id,name\n1,Ateng"
-));
-
-AbstractFileImportTemplate jsonTemplate = new JsonFileImportTemplate();
-ImportResult jsonResult = jsonTemplate.importFile(new ImportRequest(
-        "user.json",
-        "{\"id\":1,\"name\":\"Ateng\"}"
-));
-```
-
-普通 Java 模板方法的优点是结构清晰，不依赖 Spring。缺点是模板对象需要手动创建，不适合需要注入数据库、Redis、第三方客户端等 Spring Bean 的业务场景。
-
-## Spring Boot 模板方法
-
-Spring Boot 项目中更常见的写法，是把抽象模板类和具体模板类都交给 Spring 管理。下面以订单提交为例，不同订单类型的处理细节不同，但整体提交流程相同。
-
-整体流程如下：
-
-```text
-校验请求 -> 创建订单号 -> 计算金额 -> 扣减库存 -> 保存订单 -> 发送通知 -> 返回结果
-```
-
-示例支持两种订单类型：
-
-```text
-normal      普通订单
-flash_sale  秒杀订单
-```
-
-### 文件结构
-
-```text
-src/main/java/io/github/atengk/design/
-├── TemplateMethodApplication.java
-├── controller/
-│   └── OrderSubmitController.java
-├── dto/
-│   ├── OrderSubmitRequest.java
-│   └── OrderSubmitResponse.java
-├── template/
-│   ├── AbstractOrderSubmitTemplate.java
-│   ├── NormalOrderSubmitTemplate.java
-│   └── FlashSaleOrderSubmitTemplate.java
-└── context/
-    └── OrderSubmitContext.java
-```
-
-文件位置：`src/main/java/io/github/atengk/design/TemplateMethodApplication.java`
-
-下面是 Spring Boot 启动类。
-
-```java
-package io.github.atengk.design;
+package io.github.atengk.pattern.template;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -390,864 +286,1151 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 模板方法模式示例启动类
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @SpringBootApplication
-public class TemplateMethodApplication {
+public class TemplateApplication {
 
-    /**
-     * 应用启动入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
-        SpringApplication.run(TemplateMethodApplication.class, args);
+        SpringApplication.run(TemplateApplication.class, args);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderSubmitRequest.java`
+## 请求对象和响应对象
 
-下面是订单提交请求参数对象。
+请求对象用于承载导入类型、操作人和导入行数据。为了简化示例，行数据使用 `Map<String, Object>` 表示。实际项目中可以来自 Excel 行、CSV 行或中间 DTO。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/dto/OrderImportRequest.java`
 
 ```java
-package io.github.atengk.design.dto;
+package io.github.atengk.pattern.template.order.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 订单导入请求参数
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+public class OrderImportRequest {
+
+    @NotBlank(message = "导入类型不能为空")
+    private String importType;
+
+    @NotNull(message = "操作人ID不能为空")
+    private Long operatorId;
+
+    @NotEmpty(message = "导入数据不能为空")
+    private List<Map<String, Object>> rows;
+
+}
+```
+
+响应对象用于返回导入统计结果。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/vo/OrderImportResultVO.java`
+
+```java
+package io.github.atengk.pattern.template.order.vo;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.util.List;
+
+/**
+ * 订单导入结果
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Data
+@Builder
+public class OrderImportResultVO {
+
+    private String importType;
+
+    private String importName;
+
+    private Integer totalCount;
+
+    private Integer successCount;
+
+    private Integer failCount;
+
+    private List<String> errorMessages;
+
+}
+```
+
+## 导入行模型
+
+导入行模型是模板流程内部使用的统一数据结构。普通订单导入和退款订单导入都可以从中取自己需要的字段。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/model/OrderImportRow.java`
+
+```java
+package io.github.atengk.pattern.template.order.model;
+
+import lombok.Builder;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
 /**
- * 订单提交请求
+ * 订单导入行数据
  *
- * @param orderType   订单类型
- * @param userId      用户ID
- * @param productId   商品ID
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param unitPrice   商品单价
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-public record OrderSubmitRequest(
-        String orderType,
-        Long userId,
-        Long productId,
-        String productName,
-        Integer quantity,
-        BigDecimal unitPrice
-) {
+@Data
+@Builder
+public class OrderImportRow {
+
+    private Integer rowNo;
+
+    private Long userId;
+
+    private Long productId;
+
+    private Integer quantity;
+
+    private BigDecimal amount;
+
+    private String orderNo;
+
+    private BigDecimal refundAmount;
+
+    private String refundReason;
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/dto/OrderSubmitResponse.java`
+## 模拟仓储
 
-下面是订单提交响应结果。
+仓储类用于模拟订单导入后的持久化操作。实际项目中可以替换为 MyBatis-Plus Mapper、JPA Repository 或批量写入服务。
 
-```java
-package io.github.atengk.design.dto;
-
-import java.math.BigDecimal;
-
-/**
- * 订单提交响应
- *
- * @param orderNo     订单号
- * @param orderType   订单类型
- * @param productName 商品名称
- * @param quantity    购买数量
- * @param payAmount   应付金额
- * @param message     结果消息
- * @author Ateng
- * @since 2026-04-30
- */
-public record OrderSubmitResponse(
-        String orderNo,
-        String orderType,
-        String productName,
-        Integer quantity,
-        BigDecimal payAmount,
-        String message
-) {
-}
-```
-
-文件位置：`src/main/java/io/github/atengk/design/template/AbstractOrderSubmitTemplate.java`
-
-下面是订单提交抽象模板类。`submit` 是模板方法，使用 `final` 固定订单提交流程，子类只能扩展具体步骤。
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/repository/MockOrderImportRepository.java`
 
 ```java
-package io.github.atengk.design.template;
+package io.github.atengk.pattern.template.order.repository;
 
 import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.NumberUtil;
-import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderSubmitRequest;
-import io.github.atengk.design.dto.OrderSubmitResponse;
+import io.github.atengk.pattern.template.order.model.OrderImportRow;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 订单提交抽象模板
+ * 模拟订单导入仓储
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
-public abstract class AbstractOrderSubmitTemplate {
+@Repository
+public class MockOrderImportRepository {
+
+    private final List<String> normalOrderStorage = new CopyOnWriteArrayList<>();
+
+    private final List<String> refundOrderStorage = new CopyOnWriteArrayList<>();
 
     /**
-     * 提交订单
+     * 保存普通订单导入记录
      *
-     * @param request 订单提交请求
-     * @return 订单提交响应
+     * @param row 导入行数据
+     * @return 订单编号
      */
-    public final OrderSubmitResponse submit(OrderSubmitRequest request) {
-        validateRequest(request);
+    public String saveNormalOrder(OrderImportRow row) {
+        String orderNo = "OD" + IdUtil.getSnowflakeNextIdStr();
+        normalOrderStorage.add(orderNo);
 
-        String orderNo = createOrderNo(request);
-        beforeCalculateAmount(request, orderNo);
+        log.info("普通订单导入保存成功，rowNo：{}，orderNo：{}，userId：{}，productId：{}",
+                row.getRowNo(), orderNo, row.getUserId(), row.getProductId());
 
-        BigDecimal payAmount = calculateAmount(request);
-        deductStock(request, orderNo);
-        saveOrder(request, orderNo, payAmount);
-
-        if (needSendNotice()) {
-            sendNotice(request, orderNo);
-        }
-
-        log.info("订单提交完成，订单号：{}，订单类型：{}，应付金额：{}", orderNo, supportType(), payAmount);
-
-        return new OrderSubmitResponse(
-                orderNo,
-                supportType(),
-                request.productName(),
-                request.quantity(),
-                payAmount,
-                "提交成功"
-        );
-    }
-
-    /**
-     * 获取支持的订单类型
-     *
-     * @return 订单类型
-     */
-    public abstract String supportType();
-
-    /**
-     * 校验订单提交请求
-     *
-     * @param request 订单提交请求
-     */
-    protected void validateRequest(OrderSubmitRequest request) {
-        if (request == null) {
-            log.warn("订单提交失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.orderType())) {
-            log.warn("订单提交失败，订单类型为空");
-            throw new IllegalArgumentException("订单类型不能为空");
-        }
-
-        if (request.userId() == null || request.userId() <= 0) {
-            log.warn("订单提交失败，用户ID不合法，用户ID：{}", request.userId());
-            throw new IllegalArgumentException("用户ID必须大于0");
-        }
-
-        if (request.productId() == null || request.productId() <= 0) {
-            log.warn("订单提交失败，商品ID不合法，商品ID：{}", request.productId());
-            throw new IllegalArgumentException("商品ID必须大于0");
-        }
-
-        if (StrUtil.isBlank(request.productName())) {
-            log.warn("订单提交失败，商品名称为空");
-            throw new IllegalArgumentException("商品名称不能为空");
-        }
-
-        if (request.quantity() == null || request.quantity() <= 0) {
-            log.warn("订单提交失败，购买数量不合法，购买数量：{}", request.quantity());
-            throw new IllegalArgumentException("购买数量必须大于0");
-        }
-
-        if (request.unitPrice() == null || request.unitPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("订单提交失败，商品单价不合法，商品单价：{}", request.unitPrice());
-            throw new IllegalArgumentException("商品单价必须大于0");
-        }
-    }
-
-    /**
-     * 创建订单号
-     *
-     * @param request 订单提交请求
-     * @return 订单号
-     */
-    protected String createOrderNo(OrderSubmitRequest request) {
-        String orderNo = StrUtil.format("{}{}", supportType().toUpperCase().replace("-", "_"), IdUtil.getSnowflakeNextId());
-        log.info("创建订单号，订单类型：{}，订单号：{}", supportType(), orderNo);
         return orderNo;
     }
 
     /**
-     * 计算金额前置处理
+     * 保存退款订单导入记录
      *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
+     * @param row 导入行数据
+     * @return 退款单号
      */
-    protected void beforeCalculateAmount(OrderSubmitRequest request, String orderNo) {
-        log.debug("执行金额计算前置处理，订单号：{}", orderNo);
+    public String saveRefundOrder(OrderImportRow row) {
+        String refundNo = "RF" + IdUtil.getSnowflakeNextIdStr();
+        refundOrderStorage.add(refundNo);
+
+        log.info("退款订单导入保存成功，rowNo：{}，refundNo：{}，orderNo：{}，refundAmount：{}",
+                row.getRowNo(), refundNo, row.getOrderNo(), row.getRefundAmount());
+
+        return refundNo;
     }
 
-    /**
-     * 计算应付金额
-     *
-     * @param request 订单提交请求
-     * @return 应付金额
-     */
-    protected BigDecimal calculateAmount(OrderSubmitRequest request) {
-        BigDecimal amount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()));
-        return amount.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    /**
-     * 扣减库存
-     *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
-     */
-    protected abstract void deductStock(OrderSubmitRequest request, String orderNo);
-
-    /**
-     * 保存订单
-     *
-     * @param request   订单提交请求
-     * @param orderNo   订单号
-     * @param payAmount 应付金额
-     */
-    protected void saveOrder(OrderSubmitRequest request, String orderNo, BigDecimal payAmount) {
-        log.info("保存订单，订单号：{}，用户ID：{}，商品ID：{}，金额：{}",
-                orderNo, request.userId(), request.productId(), payAmount);
-    }
-
-    /**
-     * 是否需要发送通知
-     *
-     * @return true 表示发送通知，false 表示不发送
-     */
-    protected boolean needSendNotice() {
-        return true;
-    }
-
-    /**
-     * 发送通知
-     *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
-     */
-    protected void sendNotice(OrderSubmitRequest request, String orderNo) {
-        log.info("发送订单通知，订单号：{}，用户ID：{}", orderNo, request.userId());
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/template/NormalOrderSubmitTemplate.java`
+## 导入类型常量
 
-下面是普通订单提交模板。普通订单使用默认金额计算逻辑，只实现普通库存扣减逻辑。
+导入类型用于选择具体模板类。导入类型可能被前端、运营配置或任务调度依赖，应保持稳定。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/template/OrderImportTypes.java`
 
 ```java
-package io.github.atengk.design.template;
-
-import io.github.atengk.design.dto.OrderSubmitRequest;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+package io.github.atengk.pattern.template.order.template;
 
 /**
- * 普通订单提交模板
+ * 订单导入类型常量
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
-@Slf4j
-@Component
-public class NormalOrderSubmitTemplate extends AbstractOrderSubmitTemplate {
+public final class OrderImportTypes {
 
-    /**
-     * 获取支持的订单类型
-     *
-     * @return 订单类型
-     */
-    @Override
-    public String supportType() {
-        return "normal";
+    public static final String NORMAL_ORDER = "NORMAL_ORDER";
+
+    public static final String REFUND_ORDER = "REFUND_ORDER";
+
+    private OrderImportTypes() {
     }
 
-    /**
-     * 扣减库存
-     *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
-     */
-    @Override
-    protected void deductStock(OrderSubmitRequest request, String orderNo) {
-        log.info("扣减普通商品库存，订单号：{}，商品ID：{}，数量：{}",
-                orderNo, request.productId(), request.quantity());
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/template/FlashSaleOrderSubmitTemplate.java`
+## 抽象模板类
 
-下面是秒杀订单提交模板。秒杀订单覆盖了前置处理、金额计算、库存扣减和通知控制逻辑。
+抽象模板类是模板方法模式的核心。`importData` 方法定义完整导入流程，并使用 `final` 修饰，避免子类破坏流程顺序。
+子类只能实现 `validateRow` 和 `processRow` 等可变步骤。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/template/AbstractOrderImportTemplate.java`
 
 ```java
-package io.github.atengk.design.template;
+package io.github.atengk.pattern.template.order.template;
+
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.map.MapUtil;
+import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.template.common.BizException;
+import io.github.atengk.pattern.template.order.dto.OrderImportRequest;
+import io.github.atengk.pattern.template.order.model.OrderImportRow;
+import io.github.atengk.pattern.template.order.vo.OrderImportResultVO;
+import lombok.extern.slf4j.Slf4j;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 订单导入抽象模板
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+public abstract class AbstractOrderImportTemplate {
+
+    /**
+     * 返回导入类型
+     *
+     * @return 导入类型
+     */
+    public abstract String importType();
+
+    /**
+     * 返回导入名称
+     *
+     * @return 导入名称
+     */
+    public abstract String importName();
+
+    /**
+     * 导入数据模板方法
+     *
+     * @param request 导入请求
+     * @return 导入结果
+     */
+    public final OrderImportResultVO importData(OrderImportRequest request) {
+        checkRequest(request);
+
+        log.info("开始执行订单导入任务，importType：{}，importName：{}，operatorId：{}",
+                importType(), importName(), request.getOperatorId());
+
+        List<OrderImportRow> rows = parseRows(request);
+        beforeImport(request, rows);
+
+        int successCount = 0;
+        List<String> errorMessages = new ArrayList<>();
+
+        for (OrderImportRow row : rows) {
+            try {
+                validateRow(row);
+                processRow(row);
+                successCount++;
+            } catch (Exception exception) {
+                String errorMessage = StrUtil.format("第{}行导入失败：{}", row.getRowNo(), exception.getMessage());
+                errorMessages.add(errorMessage);
+                log.warn(errorMessage);
+            }
+        }
+
+        afterImport(request, rows, successCount, errorMessages);
+
+        OrderImportResultVO result = OrderImportResultVO.builder()
+                .importType(importType())
+                .importName(importName())
+                .totalCount(rows.size())
+                .successCount(successCount)
+                .failCount(errorMessages.size())
+                .errorMessages(errorMessages)
+                .build();
+
+        log.info("订单导入任务执行完成，importType：{}，totalCount：{}，successCount：{}，failCount：{}",
+                importType(), result.getTotalCount(), result.getSuccessCount(), result.getFailCount());
+
+        return result;
+    }
+
+    /**
+     * 校验导入请求
+     *
+     * @param request 导入请求
+     */
+    protected void checkRequest(OrderImportRequest request) {
+        if (request == null) {
+            throw new BizException("导入请求不能为空");
+        }
+
+        if (StrUtil.isBlank(request.getImportType())) {
+            throw new BizException("导入类型不能为空");
+        }
+
+        if (request.getOperatorId() == null || request.getOperatorId() <= 0) {
+            throw new BizException("操作人ID不合法");
+        }
+
+        if (CollUtil.isEmpty(request.getRows())) {
+            throw new BizException("导入数据不能为空");
+        }
+    }
+
+    /**
+     * 解析导入行数据
+     *
+     * @param request 导入请求
+     * @return 导入行数据集合
+     */
+    protected List<OrderImportRow> parseRows(OrderImportRequest request) {
+        List<OrderImportRow> result = new ArrayList<>();
+
+        for (int index = 0; index < request.getRows().size(); index++) {
+            Map<String, Object> rowMap = request.getRows().get(index);
+
+            OrderImportRow row = OrderImportRow.builder()
+                    .rowNo(index + 1)
+                    .userId(Convert.toLong(MapUtil.get(rowMap, "userId", Object.class), null))
+                    .productId(Convert.toLong(MapUtil.get(rowMap, "productId", Object.class), null))
+                    .quantity(Convert.toInt(MapUtil.get(rowMap, "quantity", Object.class), null))
+                    .amount(toBigDecimal(MapUtil.get(rowMap, "amount", Object.class)))
+                    .orderNo(Convert.toStr(MapUtil.get(rowMap, "orderNo", Object.class), null))
+                    .refundAmount(toBigDecimal(MapUtil.get(rowMap, "refundAmount", Object.class)))
+                    .refundReason(Convert.toStr(MapUtil.get(rowMap, "refundReason", Object.class), null))
+                    .build();
+
+            result.add(row);
+        }
+
+        log.info("导入行数据解析完成，importType：{}，rowCount：{}", importType(), result.size());
+        return result;
+    }
+
+    /**
+     * 导入前置钩子
+     *
+     * @param request 导入请求
+     * @param rows 导入行数据集合
+     */
+    protected void beforeImport(OrderImportRequest request, List<OrderImportRow> rows) {
+        log.info("执行导入前置处理，importType：{}，rowCount：{}", importType(), rows.size());
+    }
+
+    /**
+     * 校验单行导入数据
+     *
+     * @param row 导入行数据
+     */
+    protected abstract void validateRow(OrderImportRow row);
+
+    /**
+     * 处理单行导入数据
+     *
+     * @param row 导入行数据
+     */
+    protected abstract void processRow(OrderImportRow row);
+
+    /**
+     * 导入后置钩子
+     *
+     * @param request 导入请求
+     * @param rows 导入行数据集合
+     * @param successCount 成功数量
+     * @param errorMessages 错误信息集合
+     */
+    protected void afterImport(OrderImportRequest request,
+                               List<OrderImportRow> rows,
+                               Integer successCount,
+                               List<String> errorMessages) {
+        log.info("执行导入后置处理，importType：{}，successCount：{}，failCount：{}",
+                importType(), successCount, errorMessages.size());
+    }
+
+    /**
+     * 转换金额
+     *
+     * @param value 原始值
+     * @return 金额
+     */
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        BigDecimal amount = Convert.toBigDecimal(value, null);
+        if (amount == null || NumberUtil.isLess(amount, BigDecimal.ZERO)) {
+            return amount;
+        }
+
+        return amount;
+    }
+
+}
+```
+
+## 具体模板类
+
+普通订单导入模板只实现普通订单的校验和保存逻辑，不需要重复编写导入流程。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/template/impl/NormalOrderImportTemplate.java`
+
+```java
+package io.github.atengk.pattern.template.order.template.impl;
 
 import cn.hutool.core.util.NumberUtil;
-import io.github.atengk.design.dto.OrderSubmitRequest;
+import cn.hutool.core.util.ObjectUtil;
+import io.github.atengk.pattern.template.common.BizException;
+import io.github.atengk.pattern.template.order.model.OrderImportRow;
+import io.github.atengk.pattern.template.order.repository.MockOrderImportRepository;
+import io.github.atengk.pattern.template.order.template.AbstractOrderImportTemplate;
+import io.github.atengk.pattern.template.order.template.OrderImportTypes;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 /**
- * 秒杀订单提交模板
+ * 普通订单导入模板
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class FlashSaleOrderSubmitTemplate extends AbstractOrderSubmitTemplate {
+@RequiredArgsConstructor
+public class NormalOrderImportTemplate extends AbstractOrderImportTemplate {
 
-    private static final BigDecimal FLASH_SALE_DISCOUNT_RATE = BigDecimal.valueOf(0.8);
+    private final MockOrderImportRepository orderImportRepository;
 
     /**
-     * 获取支持的订单类型
+     * 返回导入类型
      *
-     * @return 订单类型
+     * @return 导入类型
      */
     @Override
-    public String supportType() {
-        return "flash_sale";
+    public String importType() {
+        return OrderImportTypes.NORMAL_ORDER;
     }
 
     /**
-     * 计算金额前置处理
+     * 返回导入名称
      *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
+     * @return 导入名称
      */
     @Override
-    protected void beforeCalculateAmount(OrderSubmitRequest request, String orderNo) {
-        log.info("校验秒杀活动资格，订单号：{}，用户ID：{}，商品ID：{}",
-                orderNo, request.userId(), request.productId());
+    public String importName() {
+        return "普通订单导入";
     }
 
     /**
-     * 计算应付金额
+     * 校验普通订单导入行
      *
-     * @param request 订单提交请求
-     * @return 应付金额
+     * @param row 导入行数据
      */
     @Override
-    protected BigDecimal calculateAmount(OrderSubmitRequest request) {
-        BigDecimal originalAmount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()));
-        BigDecimal payAmount = NumberUtil.mul(originalAmount, FLASH_SALE_DISCOUNT_RATE).setScale(2, RoundingMode.HALF_UP);
+    protected void validateRow(OrderImportRow row) {
+        if (ObjectUtil.isNull(row.getUserId()) || row.getUserId() <= 0) {
+            throw new BizException("用户ID不合法");
+        }
 
-        log.info("计算秒杀订单金额，原始金额：{}，折扣后金额：{}", originalAmount, payAmount);
-        return payAmount;
+        if (ObjectUtil.isNull(row.getProductId()) || row.getProductId() <= 0) {
+            throw new BizException("商品ID不合法");
+        }
+
+        if (ObjectUtil.isNull(row.getQuantity()) || row.getQuantity() <= 0) {
+            throw new BizException("购买数量必须大于0");
+        }
+
+        if (ObjectUtil.isNull(row.getAmount()) || NumberUtil.isLessOrEqual(row.getAmount(), BigDecimal.ZERO)) {
+            throw new BizException("订单金额必须大于0");
+        }
     }
 
     /**
-     * 扣减库存
+     * 处理普通订单导入行
      *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
+     * @param row 导入行数据
      */
     @Override
-    protected void deductStock(OrderSubmitRequest request, String orderNo) {
-        log.info("扣减秒杀库存，订单号：{}，商品ID：{}，数量：{}",
-                orderNo, request.productId(), request.quantity());
+    protected void processRow(OrderImportRow row) {
+        String orderNo = orderImportRepository.saveNormalOrder(row);
+        log.info("普通订单导入行处理完成，rowNo：{}，orderNo：{}", row.getRowNo(), orderNo);
     }
 
-    /**
-     * 是否需要发送通知
-     *
-     * @return true 表示发送通知，false 表示不发送
-     */
-    @Override
-    protected boolean needSendNotice() {
-        return false;
-    }
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/context/OrderSubmitContext.java`
+退款订单导入模板只实现退款订单的校验和保存逻辑。
 
-下面是订单提交上下文。它负责根据订单类型选择对应模板，然后执行固定提交流程。
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/template/impl/RefundOrderImportTemplate.java`
 
 ```java
-package io.github.atengk.design.context;
+package io.github.atengk.pattern.template.order.template.impl;
+
+import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.template.common.BizException;
+import io.github.atengk.pattern.template.order.model.OrderImportRow;
+import io.github.atengk.pattern.template.order.repository.MockOrderImportRepository;
+import io.github.atengk.pattern.template.order.template.AbstractOrderImportTemplate;
+import io.github.atengk.pattern.template.order.template.OrderImportTypes;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+
+/**
+ * 退款订单导入模板
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class RefundOrderImportTemplate extends AbstractOrderImportTemplate {
+
+    private final MockOrderImportRepository orderImportRepository;
+
+    /**
+     * 返回导入类型
+     *
+     * @return 导入类型
+     */
+    @Override
+    public String importType() {
+        return OrderImportTypes.REFUND_ORDER;
+    }
+
+    /**
+     * 返回导入名称
+     *
+     * @return 导入名称
+     */
+    @Override
+    public String importName() {
+        return "退款订单导入";
+    }
+
+    /**
+     * 校验退款订单导入行
+     *
+     * @param row 导入行数据
+     */
+    @Override
+    protected void validateRow(OrderImportRow row) {
+        if (StrUtil.isBlank(row.getOrderNo())) {
+            throw new BizException("订单编号不能为空");
+        }
+
+        if (ObjectUtil.isNull(row.getRefundAmount())
+                || NumberUtil.isLessOrEqual(row.getRefundAmount(), BigDecimal.ZERO)) {
+            throw new BizException("退款金额必须大于0");
+        }
+
+        if (StrUtil.isBlank(row.getRefundReason())) {
+            throw new BizException("退款原因不能为空");
+        }
+    }
+
+    /**
+     * 处理退款订单导入行
+     *
+     * @param row 导入行数据
+     */
+    @Override
+    protected void processRow(OrderImportRow row) {
+        String refundNo = orderImportRepository.saveRefundOrder(row);
+        log.info("退款订单导入行处理完成，rowNo：{}，refundNo：{}", row.getRowNo(), refundNo);
+    }
+
+}
+```
+
+## 模板执行器
+
+模板执行器负责从 Spring 容器中收集所有导入模板，并根据 `importType` 选择具体模板。
+这部分不是模板方法模式本身的核心，但在 Spring Boot 项目中很常用。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/template/OrderImportTemplateExecutor.java`
+
+```java
+package io.github.atengk.pattern.template.order.template;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
-import io.github.atengk.design.dto.OrderSubmitRequest;
-import io.github.atengk.design.dto.OrderSubmitResponse;
-import io.github.atengk.design.template.AbstractOrderSubmitTemplate;
+import io.github.atengk.pattern.template.common.BizException;
+import io.github.atengk.pattern.template.order.dto.OrderImportRequest;
+import io.github.atengk.pattern.template.order.vo.OrderImportResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * 订单提交上下文
+ * 订单导入模板执行器
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @Slf4j
 @Component
-public class OrderSubmitContext {
+public class OrderImportTemplateExecutor {
 
-    private final Map<String, AbstractOrderSubmitTemplate> templateMap;
+    private final Map<String, AbstractOrderImportTemplate> templateMap;
 
     /**
-     * 创建订单提交上下文
+     * 初始化订单导入模板执行器
      *
-     * @param templates 订单提交模板列表
+     * @param templates Spring 容器中的订单导入模板集合
      */
-    public OrderSubmitContext(List<AbstractOrderSubmitTemplate> templates) {
+    public OrderImportTemplateExecutor(List<AbstractOrderImportTemplate> templates) {
         if (CollUtil.isEmpty(templates)) {
-            log.warn("订单提交模板列表为空");
-            this.templateMap = Map.of();
+            this.templateMap = Collections.emptyMap();
+            log.warn("订单导入模板执行器未加载到任何模板");
             return;
         }
 
-        this.templateMap = templates.stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        template -> StrUtil.trim(template.supportType()).toLowerCase(),
-                        Function.identity()
-                ));
+        Map<String, AbstractOrderImportTemplate> registerMap = new HashMap<>(templates.size());
+        for (AbstractOrderImportTemplate template : templates) {
+            String importType = StrUtil.upperCase(template.importType());
+            if (registerMap.containsKey(importType)) {
+                throw new IllegalStateException("订单导入类型重复注册：" + importType);
+            }
 
-        log.info("初始化订单提交上下文，支持订单类型：{}", templateMap.keySet());
+            registerMap.put(importType, template);
+            log.info("注册订单导入模板，importType：{}，importName：{}", importType, template.importName());
+        }
+
+        this.templateMap = Collections.unmodifiableMap(registerMap);
     }
 
     /**
-     * 提交订单
+     * 执行订单导入
      *
-     * @param request 订单提交请求
-     * @return 订单提交响应
+     * @param request 导入请求
+     * @return 导入结果
      */
-    public OrderSubmitResponse submit(OrderSubmitRequest request) {
-        if (request == null) {
-            log.warn("提交订单失败，请求参数为空");
-            throw new IllegalArgumentException("请求参数不能为空");
-        }
-
-        if (StrUtil.isBlank(request.orderType())) {
-            log.warn("提交订单失败，订单类型为空");
-            throw new IllegalArgumentException("订单类型不能为空");
-        }
-
-        String orderType = StrUtil.trim(request.orderType()).toLowerCase();
-        AbstractOrderSubmitTemplate template = templateMap.get(orderType);
+    public OrderImportResultVO execute(OrderImportRequest request) {
+        String importType = StrUtil.upperCase(request.getImportType());
+        AbstractOrderImportTemplate template = templateMap.get(importType);
 
         if (template == null) {
-            log.warn("提交订单失败，不支持的订单类型：{}", request.orderType());
-            throw new IllegalArgumentException("不支持的订单类型：" + request.orderType());
+            throw new BizException(StrUtil.format("不支持的订单导入类型：{}", request.getImportType()));
         }
 
-        log.debug("匹配订单提交模板成功，订单类型：{}", orderType);
-        return template.submit(request);
+        return template.importData(request);
     }
+
 }
 ```
 
-文件位置：`src/main/java/io/github/atengk/design/controller/OrderSubmitController.java`
+## 业务服务
 
-下面是订单提交接口，用于验证模板方法模式效果。
+业务服务负责接收导入请求并调用模板执行器。业务服务不直接关心每种导入类型的具体流程。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/service/OrderImportService.java`
 
 ```java
-package io.github.atengk.design.controller;
+package io.github.atengk.pattern.template.order.service;
 
-import io.github.atengk.design.context.OrderSubmitContext;
-import io.github.atengk.design.dto.OrderSubmitRequest;
-import io.github.atengk.design.dto.OrderSubmitResponse;
+import io.github.atengk.pattern.template.order.dto.OrderImportRequest;
+import io.github.atengk.pattern.template.order.vo.OrderImportResultVO;
+
+/**
+ * 订单导入服务
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+public interface OrderImportService {
+
+    /**
+     * 导入订单数据
+     *
+     * @param request 导入请求
+     * @return 导入结果
+     */
+    OrderImportResultVO importOrders(OrderImportRequest request);
+
+}
+```
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/service/impl/OrderImportServiceImpl.java`
+
+```java
+package io.github.atengk.pattern.template.order.service.impl;
+
+import io.github.atengk.pattern.template.order.dto.OrderImportRequest;
+import io.github.atengk.pattern.template.order.service.OrderImportService;
+import io.github.atengk.pattern.template.order.template.OrderImportTemplateExecutor;
+import io.github.atengk.pattern.template.order.vo.OrderImportResultVO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+/**
+ * 订单导入服务实现类
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class OrderImportServiceImpl implements OrderImportService {
+
+    private final OrderImportTemplateExecutor orderImportTemplateExecutor;
+
+    /**
+     * 导入订单数据
+     *
+     * @param request 导入请求
+     * @return 导入结果
+     */
+    @Override
+    public OrderImportResultVO importOrders(OrderImportRequest request) {
+        log.info("开始订单导入服务，importType：{}，operatorId：{}",
+                request.getImportType(), request.getOperatorId());
+
+        OrderImportResultVO result = orderImportTemplateExecutor.execute(request);
+
+        log.info("订单导入服务完成，importType：{}，successCount：{}，failCount：{}",
+                result.getImportType(), result.getSuccessCount(), result.getFailCount());
+
+        return result;
+    }
+
+}
+```
+
+## 控制器接口
+
+控制器提供统一导入入口。调用方通过 `importType` 指定导入类型，系统自动选择对应模板。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/controller/OrderImportController.java`
+
+```java
+package io.github.atengk.pattern.template.order.controller;
+
+import io.github.atengk.pattern.template.common.ApiResult;
+import io.github.atengk.pattern.template.order.dto.OrderImportRequest;
+import io.github.atengk.pattern.template.order.service.OrderImportService;
+import io.github.atengk.pattern.template.order.vo.OrderImportResultVO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-
 /**
- * 订单提交控制器
+ * 订单导入接口
  *
  * @author Ateng
- * @since 2026-04-30
+ * @since 2026-05-13
  */
 @RestController
+@RequestMapping("/order-imports")
 @RequiredArgsConstructor
-@RequestMapping("/template/order")
-public class OrderSubmitController {
+public class OrderImportController {
 
-    private final OrderSubmitContext orderSubmitContext;
+    private final OrderImportService orderImportService;
 
     /**
-     * 提交订单
+     * 导入订单数据
      *
-     * @param orderType   订单类型
-     * @param userId      用户ID
-     * @param productId   商品ID
-     * @param productName 商品名称
-     * @param quantity    购买数量
-     * @param unitPrice   商品单价
-     * @return 订单提交响应
+     * @param request 导入请求
+     * @return 导入结果
      */
-    @PostMapping("/submit")
-    public OrderSubmitResponse submit(@RequestParam String orderType,
-                                      @RequestParam Long userId,
-                                      @RequestParam Long productId,
-                                      @RequestParam String productName,
-                                      @RequestParam Integer quantity,
-                                      @RequestParam BigDecimal unitPrice) {
-        OrderSubmitRequest request = new OrderSubmitRequest(
-                orderType,
-                userId,
-                productId,
-                productName,
-                quantity,
-                unitPrice
-        );
-        return orderSubmitContext.submit(request);
+    @PostMapping
+    public ApiResult<OrderImportResultVO> importOrders(@Valid @RequestBody OrderImportRequest request) {
+        return ApiResult.success(orderImportService.importOrders(request));
     }
+
 }
 ```
 
-接口调用示例：
+## 使用方式
+
+启动项目后，调用统一导入接口即可触发模板方法模式。
+
+接口信息：
+
+| 项目         | 内容                 |
+| ------------ | -------------------- |
+| 请求路径     | `/order-imports`     |
+| 请求方法     | `POST`               |
+| Content-Type | `application/json`   |
+| 核心字段     | `importType`、`rows` |
+
+普通订单导入请求：
 
 ```bash
-curl -X POST "http://localhost:8080/template/order/submit?orderType=normal&userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00"
-
-curl -X POST "http://localhost:8080/template/order/submit?orderType=flash_sale&userId=10002&productId=20002&productName=鼠标&quantity=1&unitPrice=99.00"
+curl -X POST "http://localhost:8080/order-imports" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "importType": "NORMAL_ORDER",
+    "operatorId": 10001,
+    "rows": [
+      {
+        "userId": 10001,
+        "productId": 20001,
+        "quantity": 2,
+        "amount": 199.90
+      },
+      {
+        "userId": 10002,
+        "productId": 20002,
+        "quantity": 1,
+        "amount": 59.90
+      },
+      {
+        "userId": null,
+        "productId": 20003,
+        "quantity": 1,
+        "amount": 89.90
+      }
+    ]
+  }'
 ```
 
-普通订单可能返回：
+返回示例：
 
 ```json
 {
-  "orderNo": "NORMAL2019776866538487808",
-  "orderType": "normal",
-  "productName": "键盘",
-  "quantity": 2,
-  "payAmount": 398.00,
-  "message": "提交成功"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "importType": "NORMAL_ORDER",
+    "importName": "普通订单导入",
+    "totalCount": 3,
+    "successCount": 2,
+    "failCount": 1,
+    "errorMessages": [
+      "第3行导入失败：用户ID不合法"
+    ]
+  }
 }
 ```
 
-秒杀订单可能返回：
-
-```json
-{
-  "orderNo": "FLASH_SALE2019776866538487809",
-  "orderType": "flash_sale",
-  "productName": "鼠标",
-  "quantity": 1,
-  "payAmount": 79.20,
-  "message": "提交成功"
-}
-```
-
-这种方式的优点是主流程稳定，子类只负责差异化步骤。后续新增预售订单、拼团订单、积分订单时，只需要新增一个模板子类。
-
-## 扩展一个新模板
-
-在 Spring Boot 模板方法模式中，新增业务类型通常只需要新增一个模板子类。下面以预售订单为例，预售订单只收取 20% 定金，并使用预售库存扣减逻辑。
-
-文件位置：`src/main/java/io/github/atengk/design/template/PresaleOrderSubmitTemplate.java`
-
-下面的实现类会被 Spring 自动扫描，并自动加入 `OrderSubmitContext` 的模板列表。
-
-```java
-package io.github.atengk.design.template;
-
-import cn.hutool.core.util.NumberUtil;
-import io.github.atengk.design.dto.OrderSubmitRequest;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
-/**
- * 预售订单提交模板
- *
- * @author Ateng
- * @since 2026-04-30
- */
-@Slf4j
-@Component
-public class PresaleOrderSubmitTemplate extends AbstractOrderSubmitTemplate {
-
-    private static final BigDecimal DEPOSIT_RATE = BigDecimal.valueOf(0.2);
-
-    /**
-     * 获取支持的订单类型
-     *
-     * @return 订单类型
-     */
-    @Override
-    public String supportType() {
-        return "presale";
-    }
-
-    /**
-     * 计算金额前置处理
-     *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
-     */
-    @Override
-    protected void beforeCalculateAmount(OrderSubmitRequest request, String orderNo) {
-        log.info("校验预售活动状态，订单号：{}，商品ID：{}", orderNo, request.productId());
-    }
-
-    /**
-     * 计算应付金额
-     *
-     * @param request 订单提交请求
-     * @return 应付金额
-     */
-    @Override
-    protected BigDecimal calculateAmount(OrderSubmitRequest request) {
-        BigDecimal originalAmount = NumberUtil.mul(request.unitPrice(), BigDecimal.valueOf(request.quantity()));
-        BigDecimal depositAmount = NumberUtil.mul(originalAmount, DEPOSIT_RATE).setScale(2, RoundingMode.HALF_UP);
-
-        log.info("计算预售订单定金，原始金额：{}，定金金额：{}", originalAmount, depositAmount);
-        return depositAmount;
-    }
-
-    /**
-     * 扣减库存
-     *
-     * @param request 订单提交请求
-     * @param orderNo 订单号
-     */
-    @Override
-    protected void deductStock(OrderSubmitRequest request, String orderNo) {
-        log.info("锁定预售库存，订单号：{}，商品ID：{}，数量：{}",
-                orderNo, request.productId(), request.quantity());
-    }
-}
-```
-
-调用示例：
+退款订单导入请求：
 
 ```bash
-curl -X POST "http://localhost:8080/template/order/submit?orderType=presale&userId=10003&productId=20003&productName=显示器&quantity=1&unitPrice=1299.00"
+curl -X POST "http://localhost:8080/order-imports" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "importType": "REFUND_ORDER",
+    "operatorId": 10001,
+    "rows": [
+      {
+        "orderNo": "OD1998948715737427968",
+        "refundAmount": 99.90,
+        "refundReason": "商品质量问题"
+      },
+      {
+        "orderNo": "OD1998948715737427969",
+        "refundAmount": 59.90,
+        "refundReason": "用户申请退款"
+      },
+      {
+        "orderNo": "OD1998948715737427970",
+        "refundAmount": 0,
+        "refundReason": "金额错误示例"
+      }
+    ]
+  }'
 ```
 
-可能返回：
+返回示例：
 
 ```json
 {
-  "orderNo": "PRESALE2019776866538487810",
-  "orderType": "presale",
-  "productName": "显示器",
-  "quantity": 1,
-  "payAmount": 259.80,
-  "message": "提交成功"
+  "code": 200,
+  "message": "操作成功",
+  "data": {
+    "importType": "REFUND_ORDER",
+    "importName": "退款订单导入",
+    "totalCount": 3,
+    "successCount": 2,
+    "failCount": 1,
+    "errorMessages": [
+      "第3行导入失败：退款金额必须大于0"
+    ]
+  }
 }
 ```
 
-新增预售订单模板后，原有的 `OrderSubmitController`、`OrderSubmitContext`、普通订单模板和秒杀订单模板都不需要修改。
+不支持的导入类型：
 
-## 钩子方法
+```bash
+curl -X POST "http://localhost:8080/order-imports" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "importType": "UNKNOWN_ORDER",
+    "operatorId": 10001,
+    "rows": [
+      {
+        "userId": 10001
+      }
+    ]
+  }'
+```
 
-钩子方法是模板方法模式中非常常见的扩展点。它允许父类在固定流程中预留可选分支，让子类决定是否执行某个步骤。
+返回示例：
 
-在上面的订单提交模板中，`needSendNotice` 就是钩子方法：
-
-```java
-protected boolean needSendNotice() {
-    return true;
+```json
+{
+  "code": 500,
+  "message": "不支持的订单导入类型：UNKNOWN_ORDER",
+  "data": null
 }
 ```
-
-父类在模板方法中根据钩子方法决定是否发送通知：
-
-```java
-if (needSendNotice()) {
-    sendNotice(request, orderNo);
-}
-```
-
-普通订单不覆盖该方法，因此默认发送通知。秒杀订单覆盖该方法并返回 `false`，因此不发送通知。
-
-```java
-@Override
-protected boolean needSendNotice() {
-    return false;
-}
-```
-
-钩子方法适合处理“流程整体固定，但某些步骤是否执行由子类决定”的场景。例如是否发送通知、是否记录审计日志、是否异步处理、是否执行补偿逻辑等。
-
-## 模板方法模式和策略模式的区别
-
-模板方法模式和策略模式都能减少重复代码，但二者关注点不同。
-
-| 对比项     | 模板方法模式           | 策略模式               |
-| ---------- | ---------------------- | ---------------------- |
-| 关注点     | 固定流程，变化步骤     | 替换算法，选择行为     |
-| 实现方式   | 继承抽象类             | 实现接口               |
-| 主流程位置 | 父类中                 | 调用方或上下文中       |
-| 变化点     | 子类覆盖步骤方法       | 不同策略类实现接口     |
-| 适合场景   | 流程稳定、局部变化     | 算法可替换、流程不固定 |
-| 常见组合   | 模板方法 + Spring Bean | 策略 + 工厂            |
-
-简单理解：
-
-```text
-模板方法模式：先做 A，再做 B，再做 C，其中 B 的细节不同。
-策略模式：我要做某件事，但具体用哪种算法不确定。
-```
-
-订单提交、文件导入、支付回调这类“流程固定”的场景更适合模板方法模式。优惠计算、物流计费、规则判断这类“算法可替换”的场景更适合策略模式。
 
 ## 验证方式
 
-启动 Spring Boot 项目：
-
-```bash
-mvn spring-boot:run
-```
-
-执行普通订单提交：
-
-```bash
-curl -X POST "http://localhost:8080/template/order/submit?orderType=normal&userId=10001&productId=20001&productName=键盘&quantity=2&unitPrice=199.00"
-```
-
-执行秒杀订单提交：
-
-```bash
-curl -X POST "http://localhost:8080/template/order/submit?orderType=flash_sale&userId=10002&productId=20002&productName=鼠标&quantity=1&unitPrice=99.00"
-```
-
-执行预售订单提交：
-
-```bash
-curl -X POST "http://localhost:8080/template/order/submit?orderType=presale&userId=10003&productId=20003&productName=显示器&quantity=1&unitPrice=1299.00"
-```
-
-如果模板分发正常，可以看到类似日志：
+项目启动后，可以看到模板注册日志：
 
 ```text
-初始化订单提交上下文，支持订单类型：[normal, flash_sale, presale]
-创建订单号，订单类型：normal，订单号：NORMAL2019776866538487808
-扣减普通商品库存，订单号：NORMAL2019776866538487808，商品ID：20001，数量：2
-保存订单，订单号：NORMAL2019776866538487808，用户ID：10001，商品ID：20001，金额：398.00
-发送订单通知，订单号：NORMAL2019776866538487808，用户ID：10001
-订单提交完成，订单号：NORMAL2019776866538487808，订单类型：normal，应付金额：398.00
+注册订单导入模板，importType：NORMAL_ORDER，importName：普通订单导入
+注册订单导入模板，importType：REFUND_ORDER，importName：退款订单导入
 ```
 
-如果传入不支持的订单类型：
-
-```bash
-curl -X POST "http://localhost:8080/template/order/submit?orderType=group_buy&userId=10004&productId=20004&productName=耳机&quantity=1&unitPrice=299.00"
-```
-
-会抛出异常：
+执行普通订单导入后，可以看到模板流程日志：
 
 ```text
-不支持的订单类型：group_buy
+开始订单导入服务，importType：NORMAL_ORDER，operatorId：10001
+开始执行订单导入任务，importType：NORMAL_ORDER，importName：普通订单导入，operatorId：10001
+导入行数据解析完成，importType：NORMAL_ORDER，rowCount：3
+执行导入前置处理，importType：NORMAL_ORDER，rowCount：3
+普通订单导入保存成功，rowNo：1，orderNo：OD1998948715737427968，userId：10001，productId：20001
+普通订单导入行处理完成，rowNo：1，orderNo：OD1998948715737427968
+普通订单导入保存成功，rowNo：2，orderNo：OD1998948715737427969，userId：10002，productId：20002
+普通订单导入行处理完成，rowNo：2，orderNo：OD1998948715737427969
+第3行导入失败：用户ID不合法
+执行导入后置处理，importType：NORMAL_ORDER，successCount：2，failCount：1
+订单导入任务执行完成，importType：NORMAL_ORDER，totalCount：3，successCount：2，failCount：1
+订单导入服务完成，importType：NORMAL_ORDER，successCount：2，failCount：1
 ```
 
-实际项目中建议结合全局异常处理器，将该异常转换成统一响应结构。
+从日志可以看出，完整流程由 `AbstractOrderImportTemplate#importData` 控制，普通订单模板只负责自己的行校验和行处理。
 
-## 注意事项
+## 扩展方式
 
-模板方法模式依赖继承，因此不适合层级过深的复杂继承结构。一个抽象模板类最好只表达一类稳定流程，不要把多个不相关流程强行塞进同一个父类。
+如果后续新增“售后订单导入”，只需要新增导入类型和模板类。
 
-模板方法建议使用 `final` 修饰，避免子类覆盖主流程导致执行顺序被破坏。
-
-推荐写法：
+第一，新增导入类型：
 
 ```java
-public final OrderSubmitResponse submit(OrderSubmitRequest request) {
-    validateRequest(request);
-    String orderNo = createOrderNo(request);
-    BigDecimal payAmount = calculateAmount(request);
-    deductStock(request, orderNo);
-    saveOrder(request, orderNo, payAmount);
-    return buildResponse(request, orderNo, payAmount);
-}
+public static final String AFTER_SALE_ORDER = "AFTER_SALE_ORDER";
 ```
 
-不推荐让子类直接覆盖主流程：
+第二，新增具体模板类。
+
+文件位置：`src/main/java/io/github/atengk/pattern/template/order/template/impl/AfterSaleOrderImportTemplate.java`
 
 ```java
-public OrderSubmitResponse submit(OrderSubmitRequest request) {
-    // 子类随意覆盖后，流程顺序不可控
-    return null;
-}
-```
+package io.github.atengk.pattern.template.order.template.impl;
 
-Spring Bean 默认是单例，模板类中不要保存请求级状态。
+import cn.hutool.core.util.StrUtil;
+import io.github.atengk.pattern.template.common.BizException;
+import io.github.atengk.pattern.template.order.model.OrderImportRow;
+import io.github.atengk.pattern.template.order.template.AbstractOrderImportTemplate;
+import io.github.atengk.pattern.template.order.template.OrderImportTypes;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
-错误示例：
-
-```java
-private String currentOrderNo;
-private Long currentUserId;
-private BigDecimal currentPayAmount;
-```
-
-这些字段在并发请求下会互相污染，导致线程安全问题。
-
-推荐将请求数据放在方法参数、局部变量、DTO 或上下文对象中。
-
-```java
-public final OrderSubmitResponse submit(OrderSubmitRequest request) {
-    String orderNo = createOrderNo(request);
-    BigDecimal payAmount = calculateAmount(request);
-    return new OrderSubmitResponse(orderNo, supportType(), request.productName(), request.quantity(), payAmount, "提交成功");
-}
-```
-
-如果模板步骤需要依赖数据库、Redis、MQ、第三方客户端，可以直接在具体模板类中注入对应的 Spring Bean。
-
-示例：
-
-```java
-@RequiredArgsConstructor
+/**
+ * 售后订单导入模板
+ *
+ * @author Ateng
+ * @since 2026-05-13
+ */
+@Slf4j
 @Component
-public class NormalOrderSubmitTemplate extends AbstractOrderSubmitTemplate {
+public class AfterSaleOrderImportTemplate extends AbstractOrderImportTemplate {
 
-    private final StockService stockService;
-
+    /**
+     * 返回导入类型
+     *
+     * @return 导入类型
+     */
     @Override
-    public String supportType() {
-        return "normal";
+    public String importType() {
+        return OrderImportTypes.AFTER_SALE_ORDER;
     }
 
+    /**
+     * 返回导入名称
+     *
+     * @return 导入名称
+     */
     @Override
-    protected void deductStock(OrderSubmitRequest request, String orderNo) {
-        stockService.deduct(request.productId(), request.quantity());
+    public String importName() {
+        return "售后订单导入";
     }
+
+    /**
+     * 校验售后订单导入行
+     *
+     * @param row 导入行数据
+     */
+    @Override
+    protected void validateRow(OrderImportRow row) {
+        if (StrUtil.isBlank(row.getOrderNo())) {
+            throw new BizException("订单编号不能为空");
+        }
+
+        if (StrUtil.isBlank(row.getRefundReason())) {
+            throw new BizException("售后原因不能为空");
+        }
+    }
+
+    /**
+     * 处理售后订单导入行
+     *
+     * @param row 导入行数据
+     */
+    @Override
+    protected void processRow(OrderImportRow row) {
+        log.info("售后订单导入行处理完成，rowNo：{}，orderNo：{}，reason：{}",
+                row.getRowNo(), row.getOrderNo(), row.getRefundReason());
+    }
+
 }
 ```
 
-实际项目中需要结合事务控制、幂等校验、库存一致性、异常补偿等机制，不能只依赖本地模板流程保证业务完整性。
+新增模板类后，Spring 会自动注入到 `List<AbstractOrderImportTemplate>` 中，执行器会自动完成注册，不需要修改原有导入流程。
 
-## 总结
+## 结合 Excel 文件导入
 
-在 JDK21 和 Spring Boot 3 项目中，模板方法模式的实践重点是复用稳定流程，把变化步骤交给子类实现。
+实际项目中，导入数据通常来自 Excel 文件。此时可以保留模板方法结构，只调整 `parseRows` 的数据来源。
 
-普通 Java 模板方法适合无依赖的流程封装。Spring Boot 模板方法适合订单提交、文件导入、支付回调、数据同步、消息消费等业务流程。对于这些场景，推荐使用“抽象模板类 + 多个具体模板类 + Spring 上下文分发”的结构。
+常见做法是：
 
-模板方法模式不是为了替代所有分支判断，而是为了让固定业务流程有统一入口、统一顺序和统一校验，同时允许局部步骤按业务类型灵活扩展。
+| 层级             | 职责                           |
+| ---------------- | ------------------------------ |
+| Controller       | 接收 `MultipartFile`           |
+| Service          | 保存文件、创建导入任务         |
+| Template         | 定义导入流程                   |
+| Parser           | 解析 Excel 为 `OrderImportRow` |
+| ConcreteTemplate | 校验并处理具体业务行           |
+
+如果使用 EasyExcel，可以把抽象模板中的 `parseRows` 改成调用独立解析器：
+
+```java
+protected List<OrderImportRow> parseRows(OrderImportRequest request) {
+    return orderImportExcelParser.parse(request.getFileUrl());
+}
+```
+
+模板方法模式关注的是“流程骨架”。数据来源可以是接口 JSON、Excel、CSV、MQ 消息或数据库临时表，不影响模式结构。
+
+## 优点和注意事项
+
+模板方法模式的核心价值是复用固定流程，并把差异步骤交给子类实现。
+
+| 注意事项                 | 说明                                             |
+| ------------------------ | ------------------------------------------------ |
+| 模板方法建议使用 `final` | 防止子类重写主流程，破坏流程顺序                 |
+| 抽象类不要过重           | 父类只放通用流程和通用逻辑，不要塞入所有业务细节 |
+| 钩子方法要谨慎设计       | `beforeImport`、`afterImport` 适合扩展非核心步骤 |
+| 子类只实现差异点         | 不要在子类中重复模板类已有流程                   |
+| 流程变化大时不适合       | 如果不同业务流程差异很大，模板方法会变得牵强     |
+| 可以结合策略或工厂       | 多模板选择时，常结合注册器、工厂或策略执行器使用 |
+
+## 和策略模式的区别
+
+模板方法模式和策略模式都能减少重复代码，但关注点不同。
+
+| 模式         | 关注点                             | 典型场景                                       |
+| ------------ | ---------------------------------- | ---------------------------------------------- |
+| 模板方法模式 | 固定流程骨架，子类实现部分步骤     | 导入流程、导出流程、任务执行流程、支付处理流程 |
+| 策略模式     | 多种算法可替换，运行时选择一种执行 | 优惠计算、支付渠道、运费计算、导出格式         |
+
+模板方法模式强调“流程固定，步骤可变”。
+策略模式强调“算法可替换，流程通常由调用方控制”。
+
+## 和责任链模式的区别
+
+模板方法模式和责任链模式都可能包含多个步骤，但组织方式不同。
+
+| 模式         | 关注点                       | 典型场景                               |
+| ------------ | ---------------------------- | -------------------------------------- |
+| 模板方法模式 | 父类定义固定步骤顺序         | 导入、导出、任务执行、流程处理         |
+| 责任链模式   | 多个处理器按链路顺序处理请求 | 参数校验、风控过滤、审批链、业务规则链 |
+
+模板方法的步骤通常写在一个抽象类中，顺序固定。
+责任链的节点通常是多个独立处理器，可以动态增减和排序。
+
+## 和命令模式的区别
+
+模板方法模式和命令模式也经常一起出现，但意图不同。
+
+| 模式         | 关注点                   | 典型场景                              |
+| ------------ | ------------------------ | ------------------------------------- |
+| 模板方法模式 | 复用一套固定处理流程     | 批处理、导入、导出、任务执行          |
+| 命令模式     | 把一次业务动作封装成对象 | 操作中心、任务调度、MQ 消费、撤销重做 |
+
+如果核心问题是“多个业务动作有相同流程”，优先考虑模板方法模式。
+如果核心问题是“把一个动作封装起来执行、排队、记录”，优先考虑命令模式。
+
+## 小结
+
+模板方法模式在 Spring Boot 项目中的常见落地方式是：使用抽象类定义固定业务流程，通过抽象方法和钩子方法开放差异步骤，再由具体子类实现不同业务逻辑。
+在批量导入、文件导出、支付处理、任务执行、数据同步、报表生成等流程稳定但步骤有差异的场景中，模板方法模式可以减少重复代码，使流程结构更清晰、更容易扩展。
