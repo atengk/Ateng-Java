@@ -27,5 +27,6 @@
         <module>beetl</module>
         <module>milvus</module>
         <module>milvus-plus</module>
+        <module>elasticsearch</module>
     </modules>
 </project>

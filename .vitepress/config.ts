@@ -167,8 +167,8 @@ export default defineConfig({
                             {text: '应用启动（AI生成）', link: '/springboot3/startup/README_AI'},
                             {text: '虚拟线程', link: '/springboot3/virtual/README'},
                             {text: '虚拟线程（AI生成）', link: '/springboot3/virtual/README_AI'},
-                            {text: '事件机制（AI生成）', link: '/springboot3/event/README_AI'},
                             {text: '事件机制', link: '/springboot3/event/README'},
+                            {text: '事件机制（AI生成）', link: '/springboot3/event/README_AI'},
                         ]
                     },
                     {
@@ -466,13 +466,16 @@ export default defineConfig({
                                 text: 'MongoDB',
                                 items: [
                                     {text: 'MongoTemplate', link: '/database/mongo-template/README'},
+                                    {text: 'MongoTemplate（AI生成）', link: '/database/mongo-template/README_AI'},
                                     {text: 'MongoPlus', link: '/database/mongo-plus/README'}
                                 ]
                             },
                             {
                                 text: 'Elasticsearch',
                                 items: [
-                                    {text: 'Easy-Es', link: '/database/easy-es/README'}
+                                    {text: 'Spring Data Elasticsearch', link: '/database/elasticsearch/README'},
+                                    {text: 'Spring Data Elasticsearch（AI生成）', link: '/database/elasticsearch/README_AI'},
+                                    {text: 'Easy-Es', link: '/database/easy-es/README'},
                                 ]
                             }
                         ]
@@ -501,7 +504,29 @@ export default defineConfig({
                                 items: [
                                     {text: '使用文档', link: '/database/mysql/README'},
                                     {text: '使用文档（AI生成）', link: '/database/mysql/README_AI'},
-                                    {text: '常用业务建模模型', link: '/database/mysql/modeling'},
+                                    {
+                                        text: '常用业务建模模型',
+                                        collapsed: true,
+                                        items: [
+                                            {text: '概览', link: '/database/mysql/modeling/README'},
+                                            {text: '建模基础规范', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '基础关系模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '通用字典与配置模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '层级、分类与资源模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '用户、权限与组织模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '商品、交易与支付模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '账户、库存与流水模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '并发控制与防重模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '扩展字段与读模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '多租户与数据隔离模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '历史版本与数据变更模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '日志与审计模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '消息与事件模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '统计、搜索与查询优化模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '数据生命周期模型', link: '/database/mysql/modeling/basic-standards'},
+                                            {text: '大数据量架构模型', link: '/database/mysql/modeling/basic-standards'},
+                                        ]
+                                    },
                                 ]
                             },
                             {
