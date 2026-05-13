@@ -120,7 +120,8 @@ export default defineConfig({
                             {text: 'Functional Interface', link: '/basic/functional-interface/README'},
                             {text: 'Java 新语法', link: '/basic/java-new-syntax/README'},
                             {text: 'ThreadLocal', link: '/basic/thread-local/README'},
-                            {text: 'Scoped Value', link: '/basic/scoped-value/README'}
+                            {text: 'Scoped Value', link: '/basic/scoped-value/README'},
+                            {text: '文件处理', link: '/basic/file/README'},
                         ]
                     }
                 ]
@@ -166,6 +167,8 @@ export default defineConfig({
                     { text: '应用启动（AI生成）', link: '/springboot3/startup/README_AI' },
                     { text: '虚拟线程', link: '/springboot3/virtual/README' },
                     { text: '虚拟线程（AI生成）', link: '/springboot3/virtual/README_AI' },
+                    { text: '事件机制（AI生成）', link: '/springboot3/event/README_AI' },
+                    { text: '事件机制', link: '/springboot3/event/README' },
                   ]
                 },
                 {
