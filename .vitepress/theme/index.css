@@ -148,7 +148,7 @@
 
 /* 限制代码块最大高度，超出部分滚动 */
 .vp-doc div[class*="language-"] {
-    max-height: 500px; /* 你可以根据需要调整高度 */
+    max-height: 800px; /* 你可以根据需要调整高度 */
     overflow-y: auto;
 }
 
