@@ -26,7 +26,7 @@ export default defineConfig({
                 text: 'SpringBoot',
                 items: [
                     {text: 'SpringBoot2', link: '/springboot2/'},
-                    {text: 'SpringBoot3', link: '/springboot3/'},
+                    {text: 'SpringBoot3 🔥', link: '/springboot3/'},
                     {text: 'SpringBoot4', link: '/springboot4/'}
                 ]
             },
