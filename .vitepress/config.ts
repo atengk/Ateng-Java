@@ -115,14 +115,50 @@ export default defineConfig({
                 collapsed: false,
                 items: [
                     {
-                        text: 'Java 基础',
+                        text: '基础语法与面向对象',
                         items: [
-                            {text: 'Optional', link: '/basic/optional/README'},
-                            {text: 'Functional Interface', link: '/basic/functional-interface/README'},
-                            {text: 'Java 新语法', link: '/basic/java-new-syntax/README'},
-                            {text: 'ThreadLocal', link: '/basic/thread-local/README'},
-                            {text: 'Scoped Value', link: '/basic/scoped-value/README'},
-                            {text: '文件处理', link: '/basic/file/README'},
+                            { text: 'Java 类型基础', link: '/basic/java-type-basic/README' },
+                            { text: '面向对象基础', link: '/basic/oop-basic/README' },
+                            { text: '泛型', link: '/basic/generics/README' },
+                            { text: '异常处理', link: '/basic/exception-handling/README' },
+                            { text: 'Java 新语法', link: '/basic/java-new-syntax/README' },
+                        ]
+                    },
+                    {
+                        text: '函数式编程',
+                        items: [
+                            { text: 'Optional', link: '/basic/optional/README' },
+                            { text: 'Functional Interface', link: '/basic/functional-interface/README' },
+                            { text: 'Lambda 表达式', link: '/basic/lambda/README' },
+                            { text: 'Stream API', link: '/basic/stream-api/README' },
+                        ]
+                    },
+                    {
+                        text: '集合与常用 API',
+                        items: [
+                            { text: '集合框架', link: '/basic/collections/README' },
+                            { text: '日期时间 API', link: '/basic/datetime-api/README' },
+                            { text: '文件处理', link: '/basic/file/README' },
+                        ]
+                    },
+                    {
+                        text: '注解与反射',
+                        items: [
+                            { text: '注解与反射', link: '/basic/annotation-reflection/README' },
+                        ]
+                    },
+                    {
+                        text: '并发编程',
+                        items: [
+                            { text: '并发基础', link: '/basic/concurrency-basic/README' },
+                            { text: 'ThreadLocal', link: '/basic/thread-local/README' },
+                            { text: 'Scoped Value', link: '/basic/scoped-value/README' },
+                        ]
+                    },
+                    {
+                        text: 'JVM',
+                        items: [
+                            { text: 'JVM 基础', link: '/basic/jvm-basic/README' },
                         ]
                     }
                 ]

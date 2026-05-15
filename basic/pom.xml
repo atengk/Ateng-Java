@@ -20,5 +20,16 @@
         <module>thread-local</module>
         <module>scoped-value</module>
         <module>file</module>
+        <module>annotation-reflection</module>
+        <module>collections</module>
+        <module>concurrency-basic</module>
+        <module>datetime-api</module>
+        <module>exception-handling</module>
+        <module>generics</module>
+        <module>java-type-basic</module>
+        <module>jvm-basic</module>
+        <module>lambda</module>
+        <module>oop-basic</module>
+        <module>stream-api</module>
     </modules>
 </project>
