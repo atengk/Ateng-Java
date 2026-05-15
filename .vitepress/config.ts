@@ -18,8 +18,8 @@ export default defineConfig({
                 items: [
                     {text: 'Java 基础', link: '/basic/'},
                     {text: '工具相关', link: '/tools/'},
-                    {text: '设计模式', link: '/doc/designpattern/'},
-                    {text: '业务场景功能案例', link: '/business-scenarios/'},
+                    {text: '设计模式', link: '/designpattern/'},
+                    {text: '业务场景功能案例', link: '/doc/business-scenarios/'},
                 ]
             },
 
