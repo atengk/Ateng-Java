@@ -396,3 +396,33 @@ JDK 原生注解工具类，提供注解判断、查找、属性读取、元注�
 
 
 
+## DingTalkRobotUtil
+
+钉钉自定义机器人消息发送工具类
+
+使用方法（Test包）：io.github.atengk.oa
+
+
+
+## WeComRobotUtil
+
+企业微信群机器人消息发送工具类
+
+使用方法（Test包）：io.github.atengk.oa
+
+
+
+## FeishuRobotUtil
+
+飞书自定义机器人消息发送工具类
+
+使用方法（Test包）：io.github.atengk.oa
+
+
+
+## HttpUtil
+
+基于 JDK 21 HttpClient 的 HTTP 请求、下载、上传综合工具类
+
+使用方法（Test包）：io.github.atengk.http
+
