@@ -18,7 +18,8 @@ export default defineConfig({
                 items: [
                     {text: 'Java 基础', link: '/basic/'},
                     {text: '工具相关', link: '/tools/'},
-                    {text: '设计模式', link: '/designpattern/'}
+                    {text: '设计模式', link: '/doc/designpattern/'},
+                    {text: '业务场景功能案例', link: '/business-scenarios/'},
                 ]
             },
 
@@ -146,6 +147,137 @@ export default defineConfig({
                         items: [
                             {text: '发布Maven仓库', link: '/springboot2/boot2-deploy/README'}
                         ]
+                    }
+                ]
+            },
+
+            '/doc/business-scenarios/': {
+                text: '业务场景功能案例',
+                collapsed: false,
+                items: [
+                    {
+                        text: '业务场景功能案例总览',
+                        link: '/doc/business-scenarios/'
+                    },
+                    {
+                        text: '订单交易履约链路',
+                        link: '/doc/business-scenarios/01-order-fulfillment-chain'
+                    },
+                    {
+                        text: '支付回调与对账补偿',
+                        link: '/doc/business-scenarios/02-payment-callback-reconciliation'
+                    },
+                    {
+                        text: '账户余额 / 钱包 / 积分账户',
+                        link: '/doc/business-scenarios/03-account-wallet-points-ledger'
+                    },
+                    {
+                        text: '库存 / 资源锁定与释放',
+                        link: '/doc/business-scenarios/04-inventory-resource-lock-release'
+                    },
+                    {
+                        text: '秒杀 / 抢购 / 抢号',
+                        link: '/doc/business-scenarios/05-seckill-flash-sale-grab'
+                    },
+                    {
+                        text: '审批流 / 流程流转',
+                        link: '/doc/business-scenarios/06-approval-workflow'
+                    },
+                    {
+                        text: '工单流转与 SLA 超时处理',
+                        link: '/doc/business-scenarios/07-ticket-workflow-sla'
+                    },
+                    {
+                        text: '预约排班与时间冲突检测',
+                        link: '/doc/business-scenarios/08-reservation-schedule-conflict'
+                    },
+                    {
+                        text: '优惠券 / 权益发放与核销',
+                        link: '/doc/business-scenarios/09-coupon-benefit-issue-writeoff'
+                    },
+                    {
+                        text: '会员订阅与权益生命周期',
+                        link: '/doc/business-scenarios/10-membership-subscription-lifecycle'
+                    },
+                    {
+                        text: '接口幂等与防重复业务处理',
+                        link: '/doc/business-scenarios/11-api-idempotency'
+                    },
+                    {
+                        text: 'MQ 可靠消息与最终一致性',
+                        link: '/doc/business-scenarios/12-mq-reliable-message-consistency'
+                    },
+                    {
+                        text: '数据权限与组织隔离',
+                        link: '/doc/business-scenarios/13-data-permission-organization-isolation'
+                    },
+                    {
+                        text: 'Excel 批量导入、校验、错误回执',
+                        link: '/doc/business-scenarios/14-excel-import-validation-receipt'
+                    },
+                    {
+                        text: '报表统计与数据口径治理',
+                        link: '/doc/business-scenarios/15-report-statistics-metric-governance'
+                    },
+                    {
+                        text: '文件上传、分片上传、秒传、权限访问',
+                        link: '/doc/business-scenarios/16-file-upload-chunk-instant-resume'
+                    },
+                    {
+                        text: '业务编号生成器',
+                        link: '/doc/business-scenarios/17-business-number-generator'
+                    },
+                    {
+                        text: '风控规则与黑白名单',
+                        link: '/doc/business-scenarios/18-risk-control-black-white-list'
+                    },
+                    {
+                        text: '操作审计与关键数据变更留痕',
+                        link: '/doc/business-scenarios/19-operation-audit-change-log'
+                    },
+                    {
+                        text: '多租户业务隔离',
+                        link: '/doc/business-scenarios/20-multi-tenant-isolation'
+                    },
+                    {
+                        text: '统一认证授权与 Token 会话管理',
+                        link: '/doc/business-scenarios/21-auth-token-session-management'
+                    },
+                    {
+                        text: '动态配置 / 业务规则配置',
+                        link: '/doc/business-scenarios/22-dynamic-business-configuration'
+                    },
+                    {
+                        text: '字典数据与枚举治理',
+                        link: '/doc/business-scenarios/23-dictionary-enum-governance'
+                    },
+                    {
+                        text: '站内信 / 消息通知中心',
+                        link: '/doc/business-scenarios/24-message-notification-center'
+                    },
+                    {
+                        text: '实时推送与 WebSocket 在线状态',
+                        link: '/doc/business-scenarios/25-websocket-realtime-push'
+                    },
+                    {
+                        text: '第三方平台接口对接与签名验签',
+                        link: '/doc/business-scenarios/26-third-party-api-signature'
+                    },
+                    {
+                        text: '物流轨迹 / 状态同步',
+                        link: '/doc/business-scenarios/27-logistics-tracking-sync'
+                    },
+                    {
+                        text: '内容审核与发布流程',
+                        link: '/doc/business-scenarios/28-content-review-publish-flow'
+                    },
+                    {
+                        text: '合同 / 单据模板生成与电子签章',
+                        link: '/doc/business-scenarios/29-contract-template-electronic-signature'
+                    },
+                    {
+                        text: '排队叫号与窗口分配',
+                        link: '/doc/business-scenarios/30-queue-calling-window-dispatch'
                     }
                 ]
             },
