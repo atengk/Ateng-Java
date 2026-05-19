@@ -40,6 +40,14 @@ class ValidateUtilBeanValidationTest {
     }
 
     @Test
+    void validateFirstOrThrowShouldThrowWhenBeanIsInvalid() {
+        ValidateException exception = assertThrows(ValidateException.class, () -> ValidateUtil.validateFirstOrThrow(UserForm.invalid()));
+
+        assertFalse(exception.getErrors().isEmpty());
+        assertTrue(exception.getMessage().contains("不能为空") || exception.getMessage().contains("不正确") || exception.getMessage().contains("不能小于"));
+    }
+
+    @Test
     void validateShouldRejectNullBeanAndNullGroup() {
         assertThrows(IllegalArgumentException.class, () -> ValidateUtil.validate(null));
         assertThrows(IllegalArgumentException.class, () -> ValidateUtil.validate(UserForm.valid(), (Class<?>) null));

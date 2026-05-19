@@ -33,8 +33,33 @@ public final class ValidateUtil {
 
     private static volatile Validator customValidator;
 
+    private static final ValidateExceptionFactory DEFAULT_EXCEPTION_FACTORY =
+            (message, errors) -> new ValidateException(message, errors);
+
+    private static volatile ValidateExceptionFactory exceptionFactory = DEFAULT_EXCEPTION_FACTORY;
+
     private ValidateUtil() {
         throw new UnsupportedOperationException("ValidateUtil 不允许实例化");
+    }
+
+    /**
+     * 校验异常工厂，用于将校验错误转换为项目自定义运行时异常。
+     *
+     * @author Ateng
+     * @since 2026-05-19
+     */
+    @FunctionalInterface
+    public interface ValidateExceptionFactory {
+
+        /**
+         * 创建校验异常。
+         *
+         * @param message 错误消息
+         * @param errors 字段错误列表
+         * @return 运行时异常
+         */
+        RuntimeException create(String message, List<ValidateError> errors);
+
     }
 
     /**
@@ -79,6 +104,31 @@ public final class ValidateUtil {
      */
     public static void resetValidator() {
         customValidator = null;
+    }
+
+    /**
+     * 获取当前使用的校验异常工厂。
+     *
+     * @return 校验异常工厂
+     */
+    public static ValidateExceptionFactory getExceptionFactory() {
+        return exceptionFactory;
+    }
+
+    /**
+     * 设置全局校验异常工厂。
+     *
+     * @param factory 校验异常工厂
+     */
+    public static void setExceptionFactory(ValidateExceptionFactory factory) {
+        exceptionFactory = Objects.requireNonNull(factory, "异常工厂不能为空");
+    }
+
+    /**
+     * 重置为默认校验异常工厂。
+     */
+    public static void resetExceptionFactory() {
+        exceptionFactory = DEFAULT_EXCEPTION_FACTORY;
     }
 
     /**
@@ -143,7 +193,7 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验对象，失败时抛出 ValidateException。
+     * 校验对象，失败时抛出校验异常。
      *
      * @param bean 待校验对象
      * @param groups 校验分组
@@ -154,7 +204,19 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验对象，失败时抛出 ValidateException。
+     * 使用指定异常工厂校验对象，失败时抛出校验异常。
+     *
+     * @param bean 待校验对象
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateOrThrow(T bean, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwIfHasErrors(validate(bean, groups), factory);
+    }
+
+    /**
+     * 校验对象，失败时抛出校验异常。
      *
      * @param bean 待校验对象
      * @param groups 校验分组
@@ -162,6 +224,303 @@ public final class ValidateUtil {
      */
     public static <T> void throwIfInvalid(T bean, Class<?>... groups) {
         validateOrThrow(bean, groups);
+    }
+
+    /**
+     * 使用指定异常工厂校验对象，失败时抛出校验异常。
+     *
+     * @param bean 待校验对象
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void throwIfInvalid(T bean, ValidateExceptionFactory factory, Class<?>... groups) {
+        validateOrThrow(bean, factory, groups);
+    }
+
+    /**
+     * 校验对象，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param <T> 对象类型
+     */
+    public static <T> void validateFirstOrThrow(T bean) {
+        validateFirstOrThrow(bean, getExceptionFactory());
+    }
+
+    /**
+     * 按分组校验对象，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateFirstOrThrow(T bean, Class<?>... groups) {
+        validateFirstOrThrow(bean, getExceptionFactory(), groups);
+    }
+
+    /**
+     * 使用指定异常工厂校验对象，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param factory 校验异常工厂
+     * @param <T> 对象类型
+     */
+    public static <T> void validateFirstOrThrow(T bean, ValidateExceptionFactory factory) {
+        validateFirstOrThrow(bean, factory, new Class<?>[0]);
+    }
+
+    /**
+     * 使用指定异常工厂按分组校验对象，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateFirstOrThrow(T bean, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwFirstIfHasErrors(validate(bean, groups), factory);
+    }
+
+    /**
+     * 校验对象属性，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param propertyName 属性名
+     * @param <T> 对象类型
+     */
+    public static <T> void validatePropertyFirstOrThrow(T bean, String propertyName) {
+        validatePropertyFirstOrThrow(bean, propertyName, getExceptionFactory());
+    }
+
+    /**
+     * 按分组校验对象属性，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param propertyName 属性名
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validatePropertyFirstOrThrow(T bean, String propertyName, Class<?>... groups) {
+        validatePropertyFirstOrThrow(bean, propertyName, getExceptionFactory(), groups);
+    }
+
+    /**
+     * 使用指定异常工厂校验对象属性，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param propertyName 属性名
+     * @param factory 校验异常工厂
+     * @param <T> 对象类型
+     */
+    public static <T> void validatePropertyFirstOrThrow(T bean, String propertyName, ValidateExceptionFactory factory) {
+        validatePropertyFirstOrThrow(bean, propertyName, factory, new Class<?>[0]);
+    }
+
+    /**
+     * 使用指定异常工厂按分组校验对象属性，失败时只抛出第一条错误。
+     *
+     * @param bean 待校验对象
+     * @param propertyName 属性名
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validatePropertyFirstOrThrow(T bean, String propertyName, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwFirstIfHasErrors(validateProperty(bean, propertyName, groups), factory);
+    }
+
+    /**
+     * 校验字段值，失败时只抛出第一条错误。
+     *
+     * @param beanType Bean 类型
+     * @param propertyName 属性名
+     * @param value 字段值
+     * @param <T> Bean 类型
+     */
+    public static <T> void validateValueFirstOrThrow(Class<T> beanType, String propertyName, Object value) {
+        validateValueFirstOrThrow(beanType, propertyName, value, getExceptionFactory());
+    }
+
+    /**
+     * 按分组校验字段值，失败时只抛出第一条错误。
+     *
+     * @param beanType Bean 类型
+     * @param propertyName 属性名
+     * @param value 字段值
+     * @param groups 校验分组
+     * @param <T> Bean 类型
+     */
+    public static <T> void validateValueFirstOrThrow(Class<T> beanType, String propertyName, Object value, Class<?>... groups) {
+        validateValueFirstOrThrow(beanType, propertyName, value, getExceptionFactory(), groups);
+    }
+
+    /**
+     * 使用指定异常工厂校验字段值，失败时只抛出第一条错误。
+     *
+     * @param beanType Bean 类型
+     * @param propertyName 属性名
+     * @param value 字段值
+     * @param factory 校验异常工厂
+     * @param <T> Bean 类型
+     */
+    public static <T> void validateValueFirstOrThrow(Class<T> beanType, String propertyName, Object value, ValidateExceptionFactory factory) {
+        validateValueFirstOrThrow(beanType, propertyName, value, factory, new Class<?>[0]);
+    }
+
+    /**
+     * 使用指定异常工厂按分组校验字段值，失败时只抛出第一条错误。
+     *
+     * @param beanType Bean 类型
+     * @param propertyName 属性名
+     * @param value 字段值
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> Bean 类型
+     */
+    public static <T> void validateValueFirstOrThrow(Class<T> beanType, String propertyName, Object value, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwFirstIfHasErrors(validateValue(beanType, propertyName, value, groups), factory);
+    }
+
+    /**
+     * 批量校验对象集合，失败时只抛出第一条错误。
+     *
+     * @param beans 待校验对象集合
+     * @param <T> 对象类型
+     */
+    public static <T> void validateEachFirstOrThrow(Collection<T> beans) {
+        validateEachFirstOrThrow(beans, getExceptionFactory());
+    }
+
+    /**
+     * 按分组批量校验对象集合，失败时只抛出第一条错误。
+     *
+     * @param beans 待校验对象集合
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateEachFirstOrThrow(Collection<T> beans, Class<?>... groups) {
+        validateEachFirstOrThrow(beans, getExceptionFactory(), groups);
+    }
+
+    /**
+     * 使用指定异常工厂批量校验对象集合，失败时只抛出第一条错误。
+     *
+     * @param beans 待校验对象集合
+     * @param factory 校验异常工厂
+     * @param <T> 对象类型
+     */
+    public static <T> void validateEachFirstOrThrow(Collection<T> beans, ValidateExceptionFactory factory) {
+        validateEachFirstOrThrow(beans, factory, new Class<?>[0]);
+    }
+
+    /**
+     * 使用指定异常工厂按分组批量校验对象集合，失败时只抛出第一条错误。
+     *
+     * @param beans 待校验对象集合
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateEachFirstOrThrow(Collection<T> beans, ValidateExceptionFactory factory, Class<?>... groups) {
+        BatchValidateResult result = validateAll(beans, groups);
+        if (result == null || !result.hasErrors()) {
+            return;
+        }
+
+        List<BatchValidateError> batchErrors = result.getErrors();
+        if (batchErrors == null || batchErrors.isEmpty()) {
+            return;
+        }
+
+        BatchValidateError firstBatchError = batchErrors.getFirst();
+        if (firstBatchError == null || firstBatchError.getError() == null) {
+            return;
+        }
+
+        ValidateError firstError = firstBatchError.getError();
+        String message = firstBatchError.toString();
+        if (message == null || message.isBlank()) {
+            message = firstError.getMessage();
+        }
+        if (message == null || message.isBlank()) {
+            message = "参数校验失败";
+        }
+
+        throw buildConfiguredException(message, List.of(firstError), factory);
+    }
+
+    /**
+     * 存在约束错误时只抛出第一条错误。
+     *
+     * @param violations 约束违反集合
+     * @param <T> 对象类型
+     */
+    public static <T> void throwFirstIfHasErrors(Set<ConstraintViolation<T>> violations) {
+        throwFirstIfHasErrors(violations, getExceptionFactory());
+    }
+
+    /**
+     * 存在约束错误时使用指定异常工厂只抛出第一条错误。
+     *
+     * @param violations 约束违反集合
+     * @param factory 校验异常工厂
+     * @param <T> 对象类型
+     */
+    public static <T> void throwFirstIfHasErrors(Set<ConstraintViolation<T>> violations, ValidateExceptionFactory factory) {
+        Objects.requireNonNull(factory, "异常工厂不能为空");
+
+        if (violations == null || violations.isEmpty()) {
+            return;
+        }
+
+        ConstraintViolation<T> firstViolation = violations.stream().findFirst().orElse(null);
+        if (firstViolation == null) {
+            return;
+        }
+
+        ValidateError firstError = toValidateError(firstViolation);
+        String message = firstError.getMessage();
+        if (message == null || message.isBlank()) {
+            message = "参数校验失败";
+        }
+
+        throw buildConfiguredException(message, List.of(firstError), factory);
+    }
+
+    /**
+     * 存在字段错误时只抛出第一条错误。
+     *
+     * @param errors 字段错误列表
+     */
+    public static void throwFirstIfHasErrors(List<ValidateError> errors) {
+        throwFirstIfHasErrors(errors, getExceptionFactory());
+    }
+
+    /**
+     * 存在字段错误时使用指定异常工厂只抛出第一条错误。
+     *
+     * @param errors 字段错误列表
+     * @param factory 校验异常工厂
+     */
+    public static void throwFirstIfHasErrors(List<ValidateError> errors, ValidateExceptionFactory factory) {
+        Objects.requireNonNull(factory, "异常工厂不能为空");
+
+        if (errors == null || errors.isEmpty()) {
+            return;
+        }
+
+        ValidateError firstError = errors.getFirst();
+        if (firstError == null) {
+            return;
+        }
+
+        String message = firstError.getMessage();
+        if (message == null || message.isBlank()) {
+            message = "参数校验失败";
+        }
+
+        throw buildConfiguredException(message, List.of(firstError), factory);
     }
 
     /**
@@ -217,7 +576,7 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验对象中的指定属性，失败时抛出 ValidateException。
+     * 校验对象中的指定属性，失败时抛出校验异常。
      *
      * @param bean 待校验对象
      * @param propertyName 属性名
@@ -226,6 +585,19 @@ public final class ValidateUtil {
      */
     public static <T> void validatePropertyOrThrow(T bean, String propertyName, Class<?>... groups) {
         throwIfHasErrors(validateProperty(bean, propertyName, groups));
+    }
+
+    /**
+     * 使用指定异常工厂校验对象中的指定属性，失败时抛出校验异常。
+     *
+     * @param bean 待校验对象
+     * @param propertyName 属性名
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validatePropertyOrThrow(T bean, String propertyName, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwIfHasErrors(validateProperty(bean, propertyName, groups), factory);
     }
 
     /**
@@ -285,7 +657,7 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验指定 Bean 类型中某个属性值，失败时抛出 ValidateException。
+     * 校验指定 Bean 类型中某个属性值，失败时抛出校验异常。
      *
      * @param beanType Bean 类型
      * @param propertyName 属性名
@@ -295,6 +667,20 @@ public final class ValidateUtil {
      */
     public static <T> void validateValueOrThrow(Class<T> beanType, String propertyName, Object value, Class<?>... groups) {
         throwIfHasErrors(validateValue(beanType, propertyName, value, groups));
+    }
+
+    /**
+     * 使用指定异常工厂校验指定 Bean 类型中某个属性值，失败时抛出校验异常。
+     *
+     * @param beanType Bean 类型
+     * @param propertyName 属性名
+     * @param value 属性值
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> Bean 类型
+     */
+    public static <T> void validateValueOrThrow(Class<T> beanType, String propertyName, Object value, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwIfHasErrors(validateValue(beanType, propertyName, value, groups), factory);
     }
 
     /**
@@ -354,16 +740,29 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验集合中的全部对象，存在错误时抛出 ValidateException。
+     * 校验集合中的全部对象，存在错误时抛出校验异常。
      *
      * @param beans 对象集合
      * @param groups 校验分组
      * @param <T> 对象类型
      */
     public static <T> void validateAllOrThrow(Collection<T> beans, Class<?>... groups) {
+        validateAllOrThrow(beans, getExceptionFactory(), groups);
+    }
+
+    /**
+     * 使用指定异常工厂校验集合中的全部对象，存在错误时抛出校验异常。
+     *
+     * @param beans 对象集合
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateAllOrThrow(Collection<T> beans, ValidateExceptionFactory factory, Class<?>... groups) {
         BatchValidateResult result = validateAll(beans, groups);
         if (result.hasErrors()) {
-            throw new ValidateException(result.getFirstMessage().orElse("批量校验失败"), result.getErrors().stream().map(BatchValidateError::getError).toList());
+            List<ValidateError> errors = result.getErrors().stream().map(BatchValidateError::getError).toList();
+            throw buildConfiguredException(result.getFirstMessage().orElse("批量校验失败"), errors, factory);
         }
     }
 
@@ -481,19 +880,32 @@ public final class ValidateUtil {
     }
 
     /**
-     * 存在错误时抛出 ValidateException。
+     * 存在错误时抛出校验异常。
      *
      * @param violations 约束违反集合
      * @param <T> 对象类型
      */
     public static <T> void throwIfHasErrors(Set<ConstraintViolation<T>> violations) {
         if (violations != null && !violations.isEmpty()) {
-            throw buildValidateException(violations);
+            throw buildException(violations);
         }
     }
 
     /**
-     * 存在错误时抛出带消息前缀的 ValidateException。
+     * 使用指定异常工厂在存在错误时抛出校验异常。
+     *
+     * @param violations 约束违反集合
+     * @param factory 校验异常工厂
+     * @param <T> 对象类型
+     */
+    public static <T> void throwIfHasErrors(Set<ConstraintViolation<T>> violations, ValidateExceptionFactory factory) {
+        if (violations != null && !violations.isEmpty()) {
+            throw buildException(null, violations, factory);
+        }
+    }
+
+    /**
+     * 存在错误时抛出带消息前缀的校验异常。
      *
      * @param violations 约束违反集合
      * @param messagePrefix 消息前缀
@@ -501,12 +913,67 @@ public final class ValidateUtil {
      */
     public static <T> void throwIfHasErrors(Set<ConstraintViolation<T>> violations, String messagePrefix) {
         if (violations != null && !violations.isEmpty()) {
-            throw buildValidateException(messagePrefix, violations);
+            throw buildException(messagePrefix, violations);
         }
     }
 
     /**
-     * 构建 ValidateException。
+     * 使用指定异常工厂在存在错误时抛出带消息前缀的校验异常。
+     *
+     * @param violations 约束违反集合
+     * @param messagePrefix 消息前缀
+     * @param factory 校验异常工厂
+     * @param <T> 对象类型
+     */
+    public static <T> void throwIfHasErrors(Set<ConstraintViolation<T>> violations, String messagePrefix, ValidateExceptionFactory factory) {
+        if (violations != null && !violations.isEmpty()) {
+            throw buildException(messagePrefix, violations, factory);
+        }
+    }
+
+    /**
+     * 使用当前异常工厂构建校验异常。
+     *
+     * @param violations 约束违反集合
+     * @param <T> 对象类型
+     * @return 运行时异常
+     */
+    public static <T> RuntimeException buildException(Set<ConstraintViolation<T>> violations) {
+        return buildException(null, violations);
+    }
+
+    /**
+     * 使用当前异常工厂构建带消息前缀的校验异常。
+     *
+     * @param messagePrefix 消息前缀
+     * @param violations 约束违反集合
+     * @param <T> 对象类型
+     * @return 运行时异常
+     */
+    public static <T> RuntimeException buildException(String messagePrefix, Set<ConstraintViolation<T>> violations) {
+        return buildException(messagePrefix, violations, getExceptionFactory());
+    }
+
+    /**
+     * 使用指定异常工厂构建带消息前缀的校验异常。
+     *
+     * @param messagePrefix 消息前缀
+     * @param violations 约束违反集合
+     * @param factory 校验异常工厂
+     * @param <T> 对象类型
+     * @return 运行时异常
+     */
+    public static <T> RuntimeException buildException(String messagePrefix, Set<ConstraintViolation<T>> violations, ValidateExceptionFactory factory) {
+        List<ValidateError> errors = toFieldErrors(violations);
+        String message = buildMessage(violations);
+        if (messagePrefix != null && !messagePrefix.isBlank()) {
+            message = message.isBlank() ? messagePrefix.trim() : messagePrefix.trim() + ": " + message;
+        }
+        return buildConfiguredException(message.isBlank() ? "校验失败" : message, errors, factory);
+    }
+
+    /**
+     * 构建默认 ValidateException，不受自定义异常工厂影响。
      *
      * @param violations 约束违反集合
      * @param <T> 对象类型
@@ -557,7 +1024,7 @@ public final class ValidateUtil {
     }
 
     /**
-     * 级联校验对象，失败时抛出 ValidateException。
+     * 级联校验对象，失败时抛出校验异常。
      *
      * @param bean 待校验对象
      * @param groups 校验分组
@@ -565,6 +1032,18 @@ public final class ValidateUtil {
      */
     public static <T> void validateCascadeOrThrow(T bean, Class<?>... groups) {
         validateOrThrow(bean, groups);
+    }
+
+    /**
+     * 使用指定异常工厂级联校验对象，失败时抛出校验异常。
+     *
+     * @param bean 待校验对象
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateCascadeOrThrow(T bean, ValidateExceptionFactory factory, Class<?>... groups) {
+        validateOrThrow(bean, factory, groups);
     }
 
     /**
@@ -580,7 +1059,7 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验嵌套对象，失败时抛出 ValidateException。
+     * 校验嵌套对象，失败时抛出校验异常。
      *
      * @param bean 待校验对象
      * @param groups 校验分组
@@ -588,6 +1067,18 @@ public final class ValidateUtil {
      */
     public static <T> void validateNestedOrThrow(T bean, Class<?>... groups) {
         validateOrThrow(bean, groups);
+    }
+
+    /**
+     * 使用指定异常工厂校验嵌套对象，失败时抛出校验异常。
+     *
+     * @param bean 待校验对象
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 对象类型
+     */
+    public static <T> void validateNestedOrThrow(T bean, ValidateExceptionFactory factory, Class<?>... groups) {
+        validateOrThrow(bean, factory, groups);
     }
 
     /**
@@ -633,7 +1124,7 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验方法参数，失败时抛出 ValidateException。
+     * 校验方法参数，失败时抛出校验异常。
      *
      * @param target 目标对象
      * @param method 方法对象
@@ -643,6 +1134,20 @@ public final class ValidateUtil {
      */
     public static <T> void validateParametersOrThrow(T target, Method method, Object[] args, Class<?>... groups) {
         throwIfHasErrors(validateParameters(target, method, args, groups));
+    }
+
+    /**
+     * 使用指定异常工厂校验方法参数，失败时抛出校验异常。
+     *
+     * @param target 目标对象
+     * @param method 方法对象
+     * @param args 方法实参数组
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 目标对象类型
+     */
+    public static <T> void validateParametersOrThrow(T target, Method method, Object[] args, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwIfHasErrors(validateParameters(target, method, args, groups), factory);
     }
 
     /**
@@ -674,7 +1179,7 @@ public final class ValidateUtil {
     }
 
     /**
-     * 校验方法返回值，失败时抛出 ValidateException。
+     * 校验方法返回值，失败时抛出校验异常。
      *
      * @param target 目标对象
      * @param method 方法对象
@@ -684,6 +1189,20 @@ public final class ValidateUtil {
      */
     public static <T> void validateReturnValueOrThrow(T target, Method method, Object returnValue, Class<?>... groups) {
         throwIfHasErrors(validateReturnValue(target, method, returnValue, groups));
+    }
+
+    /**
+     * 使用指定异常工厂校验方法返回值，失败时抛出校验异常。
+     *
+     * @param target 目标对象
+     * @param method 方法对象
+     * @param returnValue 方法返回值
+     * @param factory 校验异常工厂
+     * @param groups 校验分组
+     * @param <T> 目标对象类型
+     */
+    public static <T> void validateReturnValueOrThrow(T target, Method method, Object returnValue, ValidateExceptionFactory factory, Class<?>... groups) {
+        throwIfHasErrors(validateReturnValue(target, method, returnValue, groups), factory);
     }
 
     /**
@@ -899,7 +1418,7 @@ public final class ValidateUtil {
      */
     public static <T> T notNull(T value, String message) {
         if (value == null) {
-            throw new ValidateException(defaultMessage(message, "对象不能为空"));
+            throw buildConfiguredException(defaultMessage(message, "对象不能为空"), List.of());
         }
         return value;
     }
@@ -913,7 +1432,7 @@ public final class ValidateUtil {
      */
     public static String notBlank(String value, String message) {
         if (value == null || value.isBlank()) {
-            throw new ValidateException(defaultMessage(message, "字符串不能为空"));
+            throw buildConfiguredException(defaultMessage(message, "字符串不能为空"), List.of());
         }
         return value;
     }
@@ -928,7 +1447,7 @@ public final class ValidateUtil {
      */
     public static <T extends Collection<?>> T notEmpty(T value, String message) {
         if (value == null || value.isEmpty()) {
-            throw new ValidateException(defaultMessage(message, "集合不能为空"));
+            throw buildConfiguredException(defaultMessage(message, "集合不能为空"), List.of());
         }
         return value;
     }
@@ -943,7 +1462,7 @@ public final class ValidateUtil {
      */
     public static <T extends Map<?, ?>> T notEmpty(T value, String message) {
         if (value == null || value.isEmpty()) {
-            throw new ValidateException(defaultMessage(message, "Map 不能为空"));
+            throw buildConfiguredException(defaultMessage(message, "Map 不能为空"), List.of());
         }
         return value;
     }
@@ -956,7 +1475,7 @@ public final class ValidateUtil {
      */
     public static void isTrue(boolean expression, String message) {
         if (!expression) {
-            throw new ValidateException(defaultMessage(message, "表达式必须为 true"));
+            throw buildConfiguredException(defaultMessage(message, "表达式必须为 true"), List.of());
         }
     }
 
@@ -968,7 +1487,7 @@ public final class ValidateUtil {
      */
     public static void isFalse(boolean expression, String message) {
         if (expression) {
-            throw new ValidateException(defaultMessage(message, "表达式必须为 false"));
+            throw buildConfiguredException(defaultMessage(message, "表达式必须为 false"), List.of());
         }
     }
 
@@ -981,7 +1500,7 @@ public final class ValidateUtil {
      */
     public static void equals(Object expected, Object actual, String message) {
         if (!Objects.equals(expected, actual)) {
-            throw new ValidateException(defaultMessage(message, "两个对象必须相等"));
+            throw buildConfiguredException(defaultMessage(message, "两个对象必须相等"), List.of());
         }
     }
 
@@ -994,7 +1513,7 @@ public final class ValidateUtil {
      */
     public static void notEquals(Object expected, Object actual, String message) {
         if (Objects.equals(expected, actual)) {
-            throw new ValidateException(defaultMessage(message, "两个对象必须不相等"));
+            throw buildConfiguredException(defaultMessage(message, "两个对象必须不相等"), List.of());
         }
     }
 
@@ -1009,7 +1528,7 @@ public final class ValidateUtil {
      */
     public static <T> T in(T value, Collection<? extends T> candidates, String message) {
         if (candidates == null || !candidates.contains(value)) {
-            throw new ValidateException(defaultMessage(message, "值不在允许范围内"));
+            throw buildConfiguredException(defaultMessage(message, "值不在允许范围内"), List.of());
         }
         return value;
     }
@@ -1025,9 +1544,24 @@ public final class ValidateUtil {
      */
     public static <T> T notIn(T value, Collection<? extends T> candidates, String message) {
         if (candidates != null && candidates.contains(value)) {
-            throw new ValidateException(defaultMessage(message, "值不能在禁止范围内"));
+            throw buildConfiguredException(defaultMessage(message, "值不能在禁止范围内"), List.of());
         }
         return value;
+    }
+
+    private static RuntimeException buildConfiguredException(String message, List<ValidateError> errors) {
+        return buildConfiguredException(message, errors, getExceptionFactory());
+    }
+
+    private static RuntimeException buildConfiguredException(String message, List<ValidateError> errors, ValidateExceptionFactory factory) {
+        ValidateExceptionFactory safeFactory = Objects.requireNonNull(factory, "异常工厂不能为空");
+        String safeMessage = message == null || message.isBlank() ? "校验失败" : message.trim();
+        List<ValidateError> safeErrors = errors == null || errors.isEmpty() ? List.of() : List.copyOf(errors);
+        RuntimeException exception = safeFactory.create(safeMessage, safeErrors);
+        if (exception == null) {
+            throw new IllegalStateException("异常工厂不能返回 null");
+        }
+        return exception;
     }
 
     private static Validator requireValidator(Validator validator) {
