@@ -3,6 +3,7 @@ package local.ateng.java.mybatis.handler;
 import com.baomidou.mybatisplus.extension.handlers.AbstractJsonTypeHandler;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import local.ateng.java.mybatis.config.JacksonObjectMapperFactory;
 import local.ateng.java.mybatis.entity.MyData;
 import local.ateng.java.mybatis.entity.MyDataList;
@@ -46,6 +47,7 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
      * Jackson 的全局 ObjectMapper 实例
      */
     private static volatile ObjectMapper OBJECT_MAPPER = buildDefaultObjectMapper();
+    private static volatile ObjectMapper SIMPLE_OBJECT_MAPPER = buildSimpleObjectMapper();
 
     /**
      * 标准构造方法（MyBatis 使用）
@@ -83,13 +85,24 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
             return null;
         }
 
+        Type fieldType = getFieldType();
+        JavaType javaType = OBJECT_MAPPER.getTypeFactory().constructType(fieldType);
+
         try {
-            Type fieldType = getFieldType();
-            JavaType javaType = OBJECT_MAPPER.getTypeFactory().constructType(fieldType);
             return OBJECT_MAPPER.readValue(json, javaType);
+        } catch (InvalidTypeIdException e) {
+
+            log.warn("Jackson多态反序列化失败，降级为普通反序列化：{}", e.getMessage());
+
+            try {
+                return SIMPLE_OBJECT_MAPPER.readValue(json, javaType);
+            } catch (Exception ex) {
+                log.error("Jackson反序列化失败，json={}", json, ex);
+                return null;
+            }
 
         } catch (Exception e) {
-            log.error("Jackson 反序列化失败，json={}", json, e);
+            log.error("Jackson反序列化失败，json={}", json, e);
             return null;
         }
     }
@@ -117,12 +130,21 @@ public class JacksonTypeHandler<T> extends AbstractJsonTypeHandler<T> {
     }
 
     /**
-     * 构建默认 ObjectMapper。
+     * 构建用于 Redis / 数据库存储的 ObjectMapper。
      *
-     * @return 默认 ObjectMapper
+     * @return ObjectMapper
      */
     private static ObjectMapper buildDefaultObjectMapper() {
         return JacksonObjectMapperFactory.buildStorageObjectMapper();
+    }
+
+    /**
+     * 构建普通 ObjectMapper
+     *
+     * @return ObjectMapper
+     */
+    private static ObjectMapper buildSimpleObjectMapper() {
+        return JacksonObjectMapperFactory.buildDefaultObjectMapper();
     }
 
 }
