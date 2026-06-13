@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -127,8 +128,45 @@ class CommonUtilTest {
         System.out.println("reverse: " + CommonUtil.reverse(List.of("a", "b", "c")));
         System.out.println("groupBy: " + CommonUtil.groupBy(users, UserSource::getName));
         System.out.println("groupCountBy: " + CommonUtil.groupCountBy(users, UserSource::getName));
+
+        System.out.println("groupByMapping: " +
+                CommonUtil.groupByMapping(users, UserSource::getName, UserSource::getEmail));
+
+        System.out.println("groupByFilter: " +
+                CommonUtil.groupByFilter(users, UserSource::getName, u -> u.getAge() >= 20));
+
+        System.out.println("groupBySum: " +
+                CommonUtil.groupBySum(users, UserSource::getName, u -> (double) u.getAge()));
+
+        System.out.println("groupByMax: " +
+                CommonUtil.groupByMax(users, UserSource::getName,
+                        Comparator.comparing(UserSource::getAge)));
+
+        System.out.println("groupBy2Level: " +
+                CommonUtil.groupBy2Level(users, UserSource::getName, UserSource::getAge));
         System.out.println("toMap: " + CommonUtil.toMap(users, UserSource::getId, UserSource::getName));
+
         System.out.println("toMapOverwrite: " + CommonUtil.toMapOverwrite(users, UserSource::getName, UserSource::getAge));
+
+        System.out.println("toMapList: " + CommonUtil.toMapList(users, UserSource::getName));
+
+        System.out.println("toMap merge: " +
+                CommonUtil.toMap(users,
+                        UserSource::getName,
+                        UserSource::getAge,
+                        (a, b) -> Math.max(a, b)));
+
+        System.out.println("toMap filter: " +
+                CommonUtil.toMap(users,
+                        UserSource::getName,
+                        UserSource::getEmail,
+                        u -> u.getAge() >= 20));
+
+        System.out.println("toMapFast: " +
+                CommonUtil.toMapFast(users, UserSource::getName, UserSource::getEmail));
+
+        System.out.println("toMapUnique: " +
+                CommonUtil.toMapUnique(users, UserSource::getName));
         System.out.println("subList: " + CommonUtil.subList(new ArrayList<>(users), 0, 2));
         System.out.println("page: " + CommonUtil.page(users, 1, 2));
         System.out.println("splitList: " + CommonUtil.splitList(users, 2));

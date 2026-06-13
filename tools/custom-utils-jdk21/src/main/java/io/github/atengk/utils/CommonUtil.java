@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.codec.Base64;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.collection.ListUtil;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.date.DateTime;
 import cn.hutool.core.date.DateUnit;
@@ -12,6 +13,7 @@ import cn.hutool.core.exceptions.ExceptionUtil;
 import cn.hutool.core.io.FileTypeUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.lang.Snowflake;
 import cn.hutool.core.lang.TypeReference;
 import cn.hutool.core.lang.Validator;
 import cn.hutool.core.map.MapUtil;
@@ -51,6 +53,7 @@ import java.text.DecimalFormat;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -99,6 +102,11 @@ public final class CommonUtil {
     private static final long BYTES_PER_KB = 1024L;
     private static final long BYTES_PER_MB = BYTES_PER_KB * 1024L;
     private static final long BYTES_PER_GB = BYTES_PER_MB * 1024L;
+
+    /**
+     * 复用 Snowflake 实例，避免频繁创建带来的性能开销。
+     */
+    private static final Snowflake SNOWFLAKE = IdUtil.getSnowflake();
 
     /**
      * 私有构造方法，禁止实例化工具类。
@@ -1150,6 +1158,84 @@ public final class CommonUtil {
      */
     public static String desensitizedBankCard(String bankCard) {
         return StrUtil.isBlank(bankCard) ? EMPTY : DesensitizedUtil.bankCard(bankCard);
+    }
+
+    // ============================== 雪花ID ==============================
+
+    /**
+     * 高性能雪花 ID（long 类型）。
+     *
+     * @return 全局唯一 ID
+     */
+    public static long snowflakeIdFast() {
+        return SNOWFLAKE.nextId();
+    }
+
+    /**
+     * 高性能雪花 ID（String 类型）。
+     *
+     * @return 全局唯一 ID（字符串）
+     */
+    public static String snowflakeIdStrFast() {
+        return SNOWFLAKE.nextIdStr();
+    }
+
+    /**
+     * 高性能雪花 ID（Mac版本 long 类型）。
+     *
+     * 基于本机 Mac 信息自动生成 workerId，适用于本地开发和单机服务。
+     *
+     * @return 全局唯一 ID
+     * @author Ateng
+     * @since 2026-06-13
+     */
+    public static long snowflakeIdFastMac() {
+        return macSnowflake().nextId();
+    }
+
+    /**
+     * 高性能雪花 ID（Mac版本 String 类型）。
+     *
+     * 基于本机 Mac 信息自动生成 workerId，适用于本地开发和单机服务。
+     *
+     * @return 全局唯一 ID（字符串）
+     * @author Ateng
+     * @since 2026-06-13
+     */
+    public static String snowflakeIdStrFastMac() {
+        return macSnowflake().nextIdStr();
+    }
+
+    /**
+     * 基于 Mac 信息生成 Snowflake 实例（自动推导 workerId）
+     * <p>
+     * 适用于本地开发、测试环境、小规模单机部署场景。
+     * workerId 通过 MAC 地址 / 主机名 / IP hash 生成，并限制在 0~31。
+     *
+     * @return Snowflake 实例
+     */
+    public static Snowflake macSnowflake() {
+
+        StringBuilder sb = new StringBuilder();
+
+        String mac = NetUtil.getLocalMacAddress();
+        if (ObjectUtil.isNotEmpty(mac)) {
+            sb.append(mac);
+        }
+
+        String hostName = NetUtil.getLocalHostName();
+        if (ObjectUtil.isNotEmpty(hostName)) {
+            sb.append(hostName);
+        }
+
+        String ip = NetUtil.getLocalhostStr();
+        if (ObjectUtil.isNotEmpty(ip)) {
+            sb.append(ip);
+        }
+
+        int workerId = Math.abs(sb.toString().hashCode()) % 32;
+
+        return IdUtil.getSnowflake(workerId, 1L);
     }
 
     // ============================== 随机字符串 ==============================
@@ -2258,6 +2344,156 @@ public final class CommonUtil {
     }
 
     /**
+     * 合并多个 List
+     *
+     * @param lists 多个集合
+     * @param <T> 元素类型
+     * @return 合并后的 List
+     */
+    @SafeVarargs
+    public static <T> List<T> mergeList(List<T>... lists) {
+
+        List<T> result = new ArrayList<>();
+        if (lists == null || lists.length == 0) {
+            return result;
+        }
+
+        for (List<T> list : lists) {
+            if (CollUtil.isEmpty(list)) {
+                continue;
+            }
+            result.addAll(list);
+        }
+
+        return result;
+    }
+
+    /**
+     * 合并 List 并去重（保持插入顺序）
+     *
+     * @param lists 多个集合
+     * @param <T> 元素类型
+     * @return 去重后的 List
+     */
+    @SafeVarargs
+    public static <T> List<T> mergeListDistinct(List<T>... lists) {
+
+        if (lists == null || lists.length == 0) {
+            return new ArrayList<>();
+        }
+
+        Set<T> set = new LinkedHashSet<>();
+
+        for (List<T> list : lists) {
+            if (CollUtil.isEmpty(list)) {
+                continue;
+            }
+            set.addAll(list);
+        }
+
+        return new ArrayList<>(set);
+    }
+
+    /**
+     * 合并多个 Set
+     *
+     * @param sets 多个集合
+     * @param <T> 元素类型
+     * @return 合并后的 Set
+     */
+    @SafeVarargs
+    public static <T> Set<T> mergeSet(Set<T>... sets) {
+
+        Set<T> result = new LinkedHashSet<>();
+        if (sets == null || sets.length == 0) {
+            return result;
+        }
+
+        for (Set<T> set : sets) {
+            if (CollUtil.isEmpty(set)) {
+                continue;
+            }
+            result.addAll(set);
+        }
+
+        return result;
+    }
+
+    /**
+     * 安全合并两个 List
+     *
+     * @param list1 集合1
+     * @param list2 集合2
+     * @param <T> 元素类型
+     * @return 合并后的 List
+     */
+    public static <T> List<T> mergeSafe(List<T> list1, List<T> list2) {
+
+        List<T> result = new ArrayList<>();
+
+        if (CollUtil.isNotEmpty(list1)) {
+            result.addAll(list1);
+        }
+
+        if (CollUtil.isNotEmpty(list2)) {
+            result.addAll(list2);
+        }
+
+        return result;
+    }
+
+    /**
+     * 合并 List 并排序
+     *
+     * @param comparator 排序规则
+     * @param lists 多个集合
+     * @param <T> 元素类型
+     * @return 排序后的 List
+     */
+    @SafeVarargs
+    public static <T> List<T> mergeListSorted(Comparator<T> comparator, List<T>... lists) {
+
+        List<T> result = mergeList(lists);
+
+        if (comparator != null) {
+            result.sort(comparator);
+        }
+
+        return result;
+    }
+
+    /**
+     * 按 key 合并集合（后者覆盖前者）
+     *
+     * @param lists 多个集合
+     * @param keyMapper key映射函数
+     * @param <T> 元素类型
+     * @param <K> key类型
+     * @return Map结构（合并结果）
+     */
+    @SafeVarargs
+    public static <T, K> Map<K, T> mergeByKey(Function<T, K> keyMapper, List<T>... lists) {
+
+        Map<K, T> result = new LinkedHashMap<>();
+
+        if (lists == null || keyMapper == null) {
+            return result;
+        }
+
+        for (List<T> list : lists) {
+            if (CollUtil.isEmpty(list)) {
+                continue;
+            }
+
+            for (T value : list) {
+                result.put(keyMapper.apply(value), value);
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * 将集合转换为 List 集合。
      *
      * @param values 集合
@@ -2311,6 +2547,138 @@ public final class CommonUtil {
             return Set.of();
         }
         return Set.copyOf(values);
+    }
+
+    /**
+     * 集合交集（基于 Hutool）
+     *
+     * @param list1 集合1
+     * @param list2 集合2
+     * @param <T> 元素类型
+     * @return 交集结果
+     */
+    public static <T> Collection<T> intersection(Collection<T> list1, Collection<T> list2) {
+
+        if (CollUtil.isEmpty(list1) || CollUtil.isEmpty(list2)) {
+            return new ArrayList<>();
+        }
+
+        return CollUtil.intersection(list1, list2);
+    }
+
+    /**
+     * 集合差集（list1 - list2）
+     *
+     * @param list1 集合1
+     * @param list2 集合2
+     * @param <T> 元素类型
+     * @return 差集结果
+     */
+    public static <T> Collection<T> diff(Collection<T> list1, Collection<T> list2) {
+
+        if (CollUtil.isEmpty(list1)) {
+            return new ArrayList<>();
+        }
+
+        if (CollUtil.isEmpty(list2)) {
+            return new ArrayList<>(list1);
+        }
+
+        return CollUtil.subtract(list1, list2);
+    }
+
+    /**
+     * 集合并集（自动去重）
+     *
+     * @param list1 集合1
+     * @param list2 集合2
+     * @param <T> 元素类型
+     * @return 并集结果
+     */
+    public static <T> List<T> union(Collection<T> list1, Collection<T> list2) {
+
+        if (CollUtil.isEmpty(list1) && CollUtil.isEmpty(list2)) {
+            return new ArrayList<>();
+        }
+
+        List<T> result = new ArrayList<>();
+
+        if (CollUtil.isNotEmpty(list1)) {
+            result.addAll(list1);
+        }
+
+        if (CollUtil.isNotEmpty(list2)) {
+            result.addAll(list2);
+        }
+
+        return CollUtil.distinct(result);
+    }
+
+    /**
+     * 集合分片（按指定大小切分）
+     *
+     * @param list 原集合
+     * @param size 每片大小
+     * @param <T> 元素类型
+     * @return 分片后的 List
+     */
+    public static <T> List<List<T>> chunk(Collection<T> list, int size) {
+
+        if (CollUtil.isEmpty(list) || size <= 0) {
+            return new ArrayList<>();
+        }
+
+        return ListUtil.partition(new ArrayList<>(list), size);
+    }
+
+    /**
+     * 嵌套集合扁平化
+     *
+     * @param nested 嵌套集合
+     * @param <T> 元素类型
+     * @return 扁平化结果
+     */
+    public static <T> List<T> flatten(Collection<? extends Collection<T>> nested) {
+
+        List<T> result = new ArrayList<>();
+
+        if (CollUtil.isEmpty(nested)) {
+            return result;
+        }
+
+        for (Collection<T> collection : nested) {
+            if (CollUtil.isEmpty(collection)) {
+                continue;
+            }
+            result.addAll(collection);
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取排序后的 TopN
+     *
+     * @param list 原集合
+     * @param comparator 排序规则
+     * @param n 数量
+     * @param <T> 元素类型
+     * @return TopN结果
+     */
+    public static <T> List<T> topN(Collection<T> list, Comparator<T> comparator, int n) {
+
+        if (CollUtil.isEmpty(list) || comparator == null || n <= 0) {
+            return new ArrayList<>();
+        }
+
+        List<T> result = new ArrayList<>(list);
+        result.sort(comparator);
+
+        if (result.size() <= n) {
+            return result;
+        }
+
+        return CollUtil.sub(result, 0, n);
     }
 
     // ============================== 集合过滤与映射 ==============================
@@ -2709,6 +3077,166 @@ public final class CommonUtil {
     }
 
     /**
+     * 根据 key 分组，并对 value 进行字段映射转换。
+     *
+     * @param values    原集合
+     * @param keyMapper 分组 key
+     * @param valueMapper 值转换函数
+     * @param <T> 原类型
+     * @param <K> key类型
+     * @param <R> value类型
+     * @return 分组后的 Map
+     */
+    public static <T, K, R> Map<K, List<R>> groupByMapping(
+            Collection<T> values,
+            Function<T, K> keyMapper,
+            Function<T, R> valueMapper) {
+
+        Map<K, List<R>> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null || valueMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            K key = keyMapper.apply(value);
+            R mapped = valueMapper.apply(value);
+
+            result.computeIfAbsent(key, k -> new ArrayList<>()).add(mapped);
+        }
+
+        return result;
+    }
+
+    /**
+     * 根据 key 分组，并过滤元素。
+     *
+     * @param values 原集合
+     * @param keyMapper 分组key
+     * @param filter 过滤条件
+     * @param <T> 类型
+     * @param <K> key类型
+     * @return 分组结果
+     */
+    public static <T, K> Map<K, List<T>> groupByFilter(
+            Collection<T> values,
+            Function<T, K> keyMapper,
+            Predicate<T> filter) {
+
+        Map<K, List<T>> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            if (filter != null && !filter.test(value)) {
+                continue;
+            }
+
+            K key = keyMapper.apply(value);
+            result.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+        }
+
+        return result;
+    }
+
+    /**
+     * 分组并做数值聚合（sum）
+     *
+     * @param values 原集合
+     * @param keyMapper 分组key
+     * @param valueMapper 数值映射
+     * @param <T> 类型
+     * @param <K> key类型
+     * @return 聚合结果
+     */
+    public static <T, K> Map<K, Double> groupBySum(
+            Collection<T> values,
+            Function<T, K> keyMapper,
+            Function<T, Double> valueMapper) {
+
+        Map<K, Double> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null || valueMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            K key = keyMapper.apply(value);
+            Double v = valueMapper.apply(value);
+            if (v == null) {
+                v = 0D;
+            }
+
+            result.put(key, result.getOrDefault(key, 0D) + v);
+        }
+
+        return result;
+    }
+
+    /**
+     * 分组并获取最大值元素
+     *
+     * @param values 原集合
+     * @param keyMapper key
+     * @param comparator 比较器
+     * @param <T> 类型
+     * @param <K> key类型
+     * @return 每组最大值元素
+     */
+    public static <T, K> Map<K, T> groupByMax(
+            Collection<T> values,
+            Function<T, K> keyMapper,
+            Comparator<T> comparator) {
+
+        Map<K, T> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null || comparator == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            K key = keyMapper.apply(value);
+
+            result.merge(key, value, (oldVal, newVal) ->
+                    comparator.compare(oldVal, newVal) >= 0 ? oldVal : newVal);
+        }
+
+        return result;
+    }
+
+    /**
+     * 二级分组（key1 -> key2 -> list）
+     *
+     * @param values 原集合
+     * @param key1 一级key
+     * @param key2 二级key
+     * @param <T> 类型
+     * @param <K1> 一级key
+     * @param <K2> 二级key
+     * @return 嵌套分组结果
+     */
+    public static <T, K1, K2> Map<K1, Map<K2, List<T>>> groupBy2Level(
+            Collection<T> values,
+            Function<T, K1> key1,
+            Function<T, K2> key2) {
+
+        Map<K1, Map<K2, List<T>>> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values)) {
+            return result;
+        }
+
+        for (T value : values) {
+            K1 k1 = key1.apply(value);
+            K2 k2 = key2.apply(value);
+
+            result
+                    .computeIfAbsent(k1, k -> new LinkedHashMap<>())
+                    .computeIfAbsent(k2, k -> new ArrayList<>())
+                    .add(value);
+        }
+
+        return result;
+    }
+
+    /**
      * 将集合转换为 Map，value 为集合元素本身，重复 key 保留第一条。
      *
      * @param values    原集合
@@ -2756,6 +3284,91 @@ public final class CommonUtil {
     }
 
     /**
+     * 将集合转换为 Map（支持过滤 + 转换）。
+     *
+     * @param values      原集合
+     * @param keyMapper   key 映射函数
+     * @param valueMapper value 映射函数
+     * @param filter      过滤条件
+     * @param <T>         元素类型
+     * @param <K>         key 类型
+     * @param <V>         value 类型
+     * @return Map
+     */
+    public static <T, K, V> Map<K, V> toMap(
+            Collection<T> values,
+            Function<T, K> keyMapper,
+            Function<T, V> valueMapper,
+            Predicate<T> filter) {
+
+        Map<K, V> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null || valueMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            if (filter != null && !filter.test(value)) {
+                continue;
+            }
+
+            result.putIfAbsent(keyMapper.apply(value), valueMapper.apply(value));
+        }
+
+        return result;
+    }
+
+    /**
+     * 高性能 toMap（直接覆盖，无判断）
+     *
+     * @param values    原集合
+     * @param keyMapper key
+     * @param valueMapper value
+     * @param <T> 类型
+     * @param <K> key类型
+     * @param <V> value类型
+     * @return Map
+     */
+    public static <T, K, V> Map<K, V> toMapFast(
+            Collection<T> values,
+            Function<T, K> keyMapper,
+            Function<T, V> valueMapper) {
+
+        Map<K, V> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null || valueMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            result.put(keyMapper.apply(value), valueMapper.apply(value));
+        }
+
+        return result;
+    }
+
+    /**
+     * 转换为 Map（value 自动去重）
+     *
+     * @param values 原集合
+     * @param keyMapper key
+     * @param <T> 类型
+     * @param <K> key类型
+     * @return Map
+     */
+    public static <T, K> Map<K, T> toMapUnique(Collection<T> values, Function<T, K> keyMapper) {
+
+        Map<K, T> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            result.put(keyMapper.apply(value), value);
+        }
+
+        return result;
+    }
+
+    /**
      * 将集合转换为 Map，重复 key 使用后一条覆盖前一条。
      *
      * @param values      原集合
@@ -2775,6 +3388,67 @@ public final class CommonUtil {
         for (T value : values) {
             result.put(keyMapper.apply(value), valueMapper.apply(value));
         }
+        return result;
+    }
+
+    /**
+     * 将集合转换为 Map，value 为 List（相同 key 自动归集）。
+     *
+     * @param values    原集合
+     * @param keyMapper key 映射函数
+     * @param <T>       元素类型
+     * @param <K>       key 类型
+     * @return 分组 Map
+     */
+    public static <T, K> Map<K, List<T>> toMapList(Collection<T> values, Function<T, K> keyMapper) {
+
+        Map<K, List<T>> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            K key = keyMapper.apply(value);
+            result.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+        }
+
+        return result;
+    }
+
+    /**
+     * 将集合转换为 Map，支持自定义冲突处理策略。
+     *
+     * @param values       原集合
+     * @param keyMapper    key 映射函数
+     * @param valueMapper  value 映射函数
+     * @param mergeFunction 冲突合并策略（旧值、新值）
+     * @param <T>          元素类型
+     * @param <K>          key 类型
+     * @param <V>          value 类型
+     * @return 转换后的 Map
+     */
+    public static <T, K, V> Map<K, V> toMap(
+            Collection<T> values,
+            Function<T, K> keyMapper,
+            Function<T, V> valueMapper,
+            BinaryOperator<V> mergeFunction) {
+
+        Map<K, V> result = new LinkedHashMap<>();
+        if (CollUtil.isEmpty(values) || keyMapper == null || valueMapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            K key = keyMapper.apply(value);
+            V val = valueMapper.apply(value);
+
+            if (mergeFunction == null) {
+                result.putIfAbsent(key, val);
+            } else {
+                result.merge(key, val, mergeFunction);
+            }
+        }
+
         return result;
     }
 
