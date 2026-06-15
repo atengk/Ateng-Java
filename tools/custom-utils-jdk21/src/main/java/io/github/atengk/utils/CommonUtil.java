@@ -1714,6 +1714,40 @@ public final class CommonUtil {
     }
 
     /**
+     * 将源对象复制为指定类型的新对象，并使用复制配置。
+     *
+     * @param source      源对象
+     * @param targetClass 目标类型
+     * @param copyOptions 复制配置
+     * @param <T>         目标类型
+     * @return 复制后的目标对象
+     */
+    public static <T> T copyBean(Object source, Class<T> targetClass, CopyOptions copyOptions) {
+        if (source == null || targetClass == null) {
+            return null;
+        }
+
+        T target = ReflectUtil.newInstanceIfPossible(targetClass);
+        BeanUtil.copyProperties(source, target, copyOptions);
+
+        return target;
+    }
+
+    /**
+     * 将源对象复制到目标对象，并使用复制配置。
+     *
+     * @param source      源对象
+     * @param target      目标对象
+     * @param copyOptions 复制配置
+     */
+    public static void copyBean(Object source, Object target, CopyOptions copyOptions) {
+        if (source == null || target == null) {
+            return;
+        }
+        BeanUtil.copyProperties(source, target, copyOptions);
+    }
+
+    /**
      * 将源对象复制为指定类型的新对象，并忽略 null 属性。
      *
      * @param source      源对象
@@ -1786,21 +1820,48 @@ public final class CommonUtil {
      * @return 复制后的目标对象集合
      */
     public static <T> List<T> copyBeanList(Collection<?> sources, Class<T> targetClass) {
-        List<T> result = new ArrayList<>();
         if (sources == null || sources.isEmpty() || targetClass == null) {
-            return result;
+            return new ArrayList<T>(0);
         }
-
-        for (Object source : sources) {
-            if (source != null) {
-                result.add(copyBean(source, targetClass));
-            }
-        }
-        return result;
+        return BeanUtil.copyToList(sources, targetClass);
     }
 
     /**
-     * 将源对象集合复制为指定类型的新集合，并忽略 null 属性。
+     * 将源对象集合复制为指定类型的新集合，并忽略指定属性。
+     *
+     * @param sources          源对象集合
+     * @param targetClass      目标类型
+     * @param ignoreProperties 忽略属性数组
+     * @param <T>              目标类型
+     * @return 复制后的目标对象集合
+     */
+    public static <T> List<T> copyBeanList(Collection<?> sources, Class<T> targetClass, String... ignoreProperties) {
+        if (sources == null || sources.isEmpty() || targetClass == null) {
+            return new ArrayList<T>(0);
+        }
+
+        CopyOptions copyOptions = CopyOptions.create().setIgnoreProperties(ignoreProperties);
+        return BeanUtil.copyToList(sources, targetClass, copyOptions);
+    }
+
+    /**
+     * 将源对象集合复制为指定类型的新集合，并使用复制配置。
+     *
+     * @param sources     源对象集合
+     * @param targetClass 目标类型
+     * @param copyOptions 复制配置
+     * @param <T>         目标类型
+     * @return 复制后的目标对象集合
+     */
+    public static <T> List<T> copyBeanList(Collection<?> sources, Class<T> targetClass, CopyOptions copyOptions) {
+        if (sources == null || sources.isEmpty() || targetClass == null) {
+            return new ArrayList<T>(0);
+        }
+        return BeanUtil.copyToList(sources, targetClass, copyOptions);
+    }
+
+    /**
+     * 将源对象集合复制为指定类型的新集合，并忽略源对象中的 null 值。
      *
      * @param sources     源对象集合
      * @param targetClass 目标类型
@@ -1808,17 +1869,10 @@ public final class CommonUtil {
      * @return 复制后的目标对象集合
      */
     public static <T> List<T> copyBeanListIgnoreNull(Collection<?> sources, Class<T> targetClass) {
-        List<T> result = new ArrayList<>();
         if (sources == null || sources.isEmpty() || targetClass == null) {
-            return result;
+            return new ArrayList<T>(0);
         }
-
-        for (Object source : sources) {
-            if (source != null) {
-                result.add(copyBeanIgnoreNull(source, targetClass));
-            }
-        }
-        return result;
+        return BeanUtil.copyToList(sources, targetClass, CopyOptions.create().setIgnoreNullValue(true));
     }
 
     // ============================== Bean 与 Map 转换 ==============================

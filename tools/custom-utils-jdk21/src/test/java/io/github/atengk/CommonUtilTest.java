@@ -1,5 +1,7 @@
 package io.github.atengk;
 
+import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.convert.Convert;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import io.github.atengk.utils.CommonUtil;
@@ -17,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +67,37 @@ class CommonUtilTest {
         System.out.println("randomLettersNumbers: " + CommonUtil.randomLettersNumbers(8));
     }
 
+    /**
+     * 演示 CopyOptions 的完整常用用法。
+     */
+    private CopyOptions buildCopyOptions() {
+        Map<String, String> fieldMapping = new HashMap<String, String>();
+        fieldMapping.put("email", "mail"); // 目标字段 email <- 源字段 mail
+
+        return CopyOptions.create()
+                .setEditable(UserTarget.class) // 限制可拷贝范围：只拷贝到该类或其父类/接口可见的字段
+                .setIgnoreNullValue(true) // 源对象字段为 null 时忽略，不覆盖目标值
+                .setIgnoreProperties("id") // 忽略指定属性，不参与拷贝
+                .setPropertiesFilter((field, value) -> true) // 属性过滤器：返回 true 才允许复制
+                .setFieldMapping(fieldMapping) // 字段映射：源字段与目标字段不同名时使用
+                .setFieldNameEditor(fieldName -> fieldName) // 字段名编辑器：可用于驼峰转下划线等
+                .setFieldValueEditor((fieldName, fieldValue) -> fieldValue == null ? "" : fieldValue) // 字段值编辑器：可用于 null -> ""
+                .setFormatIfDate("yyyy-MM-dd HH:mm:ss") // 日期转字符串时的格式
+                .setIgnoreCase(true) // 忽略字段名大小写
+                .setIgnoreError(true) // 忽略字段注入错误，避免类型不兼容时直接失败
+                .setTransientSupport(true) // 支持忽略 transient / @Transient 标记的字段
+                .setOverride(false) // 是否覆盖目标已有值：false 表示目标已有非 null 值时不覆盖
+                .setAutoTransCamelCase(true) // 非驼峰字段自动尝试按驼峰匹配，主要用于 map->bean / bean->bean
+                .setConverter((targetType, value) -> {
+                    // 最简自定义转换：目标是 String 时统一转字符串，其余交给 Hutool 默认转换
+                    if (targetType == String.class) {
+                        return value == null ? null : value.toString();
+                    }
+                    return Convert.convert(targetType, value);
+                });
+
+    }
+
     @Test
     @DisplayName("Batch 02 - Object and Bean tools")
     void testBatch02ObjectAndBeanTools() {
@@ -85,6 +119,12 @@ class CommonUtilTest {
         System.out.println("safeCast: " + CommonUtil.safeCast(source, UserSource.class));
         UserTarget target = CommonUtil.copyBean(source, UserTarget.class);
         System.out.println("copyBean: " + target);
+
+        CopyOptions copyOptions = buildCopyOptions();
+
+        CommonUtil.copyBean(source, target, copyOptions);
+        System.out.println("copyBean: " + target);
+
         UserTarget targetIgnoreNull = CommonUtil.copyBeanIgnoreNull(source, UserTarget.class);
         System.out.println("copyBeanIgnoreNull: " + targetIgnoreNull);
         System.out.println("copyBeanList: " + CommonUtil.copyBeanList(List.of(source), UserTarget.class));
