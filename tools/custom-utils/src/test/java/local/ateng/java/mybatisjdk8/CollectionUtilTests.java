@@ -1014,5 +1014,66 @@ public class CollectionUtilTests {
         // {"add":[],"update":[{"changes":{"new":null,"old":"阿腾"}}],"delete":[]}
     }
 
+    /**
+     * 验证集合无序相等方法（核心用例）
+     */
+    @Test
+    void compareListEqualIgnoreOrderTest() {
+
+        List<String> list1 = Arrays.asList("a", "b", "c");
+        List<String> list2 = Arrays.asList("c", "b", "a");
+
+        boolean result1 = CollectionUtil.compareListEqualIgnoreOrder(list1, list2);
+        System.out.println("case1 result: " + result1);
+
+        List<String> list3 = Arrays.asList("a", "a", "b");
+        List<String> list4 = Arrays.asList("a", "b", "b");
+
+        boolean result2 = CollectionUtil.compareListEqualIgnoreOrder(list3, list4);
+        System.out.println("case2 result: " + result2);
+
+        List<String> list5 = Arrays.asList("x", "y");
+        List<String> list6 = Arrays.asList("x", "y", "z");
+
+        boolean result3 = CollectionUtil.compareListEqualIgnoreOrder(list5, list6);
+        System.out.println("case3 result: " + result3);
+
+        List<String> list7 = null;
+        List<String> list8 = null;
+
+        boolean result4 = CollectionUtil.compareListEqualIgnoreOrder(list7, list8);
+        System.out.println("case4 result: " + result4);
+    }
+
+    /**
+     * 验证集合内容是否相同（忽略顺序，不考虑重复次数）
+     */
+    @Test
+    void isEqualIgnoreOrderTest() {
+
+        List<String> list1 = Arrays.asList("a", "b", "c");
+        List<String> list2 = Arrays.asList("c", "b", "a");
+
+        boolean result1 = CollectionUtil.isEqualIgnoreOrder(list1, list2);
+        System.out.println("case1 result: " + result1);
+
+        List<String> list3 = Arrays.asList("a", "a", "b");
+        List<String> list4 = Arrays.asList("a", "b", "b");
+
+        boolean result2 = CollectionUtil.isEqualIgnoreOrder(list3, list4);
+        System.out.println("case2 result: " + result2);
+
+        List<String> list5 = Arrays.asList("x", "y");
+        List<String> list6 = Arrays.asList("x", "y", "z");
+
+        boolean result3 = CollectionUtil.isEqualIgnoreOrder(list5, list6);
+        System.out.println("case3 result: " + result3);
+
+        List<String> list7 = null;
+        List<String> list8 = null;
+
+        boolean result4 = CollectionUtil.isEqualIgnoreOrder(list7, list8);
+        System.out.println("case4 result: " + result4);
+    }
 
 }
