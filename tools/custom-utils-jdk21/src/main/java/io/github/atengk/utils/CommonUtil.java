@@ -9,6 +9,7 @@ import cn.hutool.core.convert.Convert;
 import cn.hutool.core.date.DateTime;
 import cn.hutool.core.date.DateUnit;
 import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.date.LocalDateTimeUtil;
 import cn.hutool.core.exceptions.ExceptionUtil;
 import cn.hutool.core.io.FileTypeUtil;
 import cn.hutool.core.io.FileUtil;
@@ -4271,7 +4272,7 @@ public final class CommonUtil {
     }
 
     /**
-     * 将 yyyy-MM-dd HH:mm:ss 字符串解析为 LocalDateTime。
+     * 将字符串解析为 LocalDateTime。
      *
      * @param value 日期时间字符串
      * @return LocalDateTime 对象
@@ -4280,7 +4281,7 @@ public final class CommonUtil {
         if (StrUtil.isBlank(value)) {
             return null;
         }
-        return LocalDateTime.parse(value, DATE_TIME_FORMATTER);
+        return toLocalDateTime(parseDateTime(value));
     }
 
     /**
@@ -4338,7 +4339,7 @@ public final class CommonUtil {
     }
 
     /**
-     * 将 yyyy-MM-dd HH:mm:ss 字符串解析为 Date。
+     * 将字符串解析为 Date。
      *
      * @param value 日期时间字符串
      * @return Date 对象
@@ -4347,7 +4348,7 @@ public final class CommonUtil {
         if (StrUtil.isBlank(value)) {
             return null;
         }
-        return DateUtil.parse(value, DATE_TIME_PATTERN);
+        return DateUtil.parse(value);
     }
 
     // ============================== Date 与 java.time 转换 ==============================

@@ -1,5 +1,7 @@
 package local.ateng.java.customutils.utils;
 
+import cn.hutool.core.collection.CollUtil;
+
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.*;
@@ -1264,6 +1266,24 @@ public final class CollectionUtil {
             return false;
         }
         return new HashSet<>(a).equals(new HashSet<>(b));
+    }
+
+    /**
+     * 判断两个集合内容是否相同（按 Set 比较，忽略顺序、忽略重复元素）
+     *
+     * @param a 集合 A
+     * @param b 集合 B
+     * @param <T> 元素类型
+     * @return 若内容相同返回 true，否则 false
+     */
+    public static <T> boolean isEqualAsSet(Collection<T> a, Collection<T> b) {
+        if (a == null && b == null) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return CollUtil.newHashSet(a).equals(CollUtil.newHashSet(b));
     }
 
     /**
