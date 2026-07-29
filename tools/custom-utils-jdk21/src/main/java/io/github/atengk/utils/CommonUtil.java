@@ -2824,6 +2824,27 @@ public final class CommonUtil {
     }
 
     /**
+     * 将集合元素映射为另一种类型。
+     *
+     * @param values 原集合
+     * @param mapper 映射函数
+     * @param <T>    原元素类型
+     * @param <R>    目标元素类型
+     * @return 映射后的 Set 集合（保持遍历顺序）
+     */
+    public static <T, R> Set<R> mapSet(Collection<T> values, Function<T, R> mapper) {
+        Set<R> result = new LinkedHashSet<>();
+        if (CollUtil.isEmpty(values) || mapper == null) {
+            return result;
+        }
+
+        for (T value : values) {
+            result.add(mapper.apply(value));
+        }
+        return result;
+    }
+
+    /**
      * 将集合元素映射为另一种类型，并忽略映射后的 null 值。
      *
      * @param values 原集合
