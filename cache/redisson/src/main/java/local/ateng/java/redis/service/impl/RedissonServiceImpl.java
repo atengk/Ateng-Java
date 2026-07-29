@@ -1096,6 +1096,170 @@ public class RedissonServiceImpl implements RedissonService {
     }
 
     // -------------------------------------------------------------------------
+    // 编码生成
+    // -------------------------------------------------------------------------
+
+    /**
+     * 编码序号 Redis Key 前缀
+     */
+    private static final String CODE_SEQUENCE_PREFIX = "code:sequence:";
+
+
+    /**
+     * 生成企业编码。
+     *
+     * 示例：
+     * USER000001
+     *
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @return 编码
+     */
+    @Override
+    public String generateCode(String prefix, int length) {
+        String key = buildCodeKey(prefix);
+        return generateCode(key, prefix, length);
+    }
+
+
+    /**
+     * 批量生成企业编码。
+     *
+     * 示例：
+     * USER000001
+     * USER000002
+     *
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @param size   数量
+     * @return 编码集合
+     */
+    @Override
+    public List<String> generateCodes(String prefix, int length, int size) {
+        validate(prefix, length);
+
+        if (size <= 0) {
+            throw new IllegalArgumentException("生成数量必须大于0");
+        }
+
+        String key = buildCodeKey(prefix);
+
+        /*
+         * 一次申请号段
+         */
+        long end = increment(key, size);
+
+        long start = end - size + 1;
+
+        List<String> codes = new ArrayList<>(size);
+
+        for (long i = start; i <= end; i++) {
+            codes.add(prefix + formatNumber(i, length));
+        }
+
+        return codes;
+    }
+
+
+    /**
+     * 生成带日期企业编码。
+     *
+     * 示例：
+     * USER20260729000001
+     *
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @return 编码
+     */
+    @Override
+    public String generateDateCode(String prefix, int length) {
+        validate(prefix, length);
+
+        String date = LocalDate.now()
+                .format(DateTimeFormatter.BASIC_ISO_DATE);
+
+        String key = CODE_SEQUENCE_PREFIX
+                + prefix
+                + ":"
+                + date;
+
+        long number = increment(key, 1);
+
+        return prefix
+                + date
+                + formatNumber(number, length);
+    }
+
+
+    /**
+     * 根据指定 Redis Key 生成编码。
+     *
+     * @param key    Redis序号Key
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @return 编码
+     */
+    @Override
+    public String generateCode(String key, String prefix, int length) {
+        validate(prefix, length);
+
+        long number = increment(key, 1);
+
+        return prefix + formatNumber(number, length);
+    }
+
+
+    /**
+     * 重置编码序号。
+     *
+     * @param key Redis序号Key
+     */
+    @Override
+    public void resetCodeSequence(String key) {
+        deleteKey(key);
+    }
+
+
+    /**
+     * 构建编码 Redis Key。
+     *
+     * @param prefix 前缀
+     * @return Redis Key
+     */
+    private String buildCodeKey(String prefix) {
+        return CODE_SEQUENCE_PREFIX + prefix;
+    }
+
+
+    /**
+     * 数字补零。
+     *
+     * @param number 数字
+     * @param length 长度
+     * @return 补零字符串
+     */
+    private String formatNumber(long number, int length) {
+        return String.format("%0" + length + "d", number);
+    }
+
+
+    /**
+     * 参数校验。
+     *
+     * @param prefix 前缀
+     * @param length 长度
+     */
+    private void validate(String prefix, int length) {
+        if (StrUtil.isBlank(prefix)) {
+            throw new IllegalArgumentException("编码前缀不能为空");
+        }
+
+        if (length <= 0) {
+            throw new IllegalArgumentException("编码长度必须大于0");
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Hash / MapCache 操作
     // -------------------------------------------------------------------------
 

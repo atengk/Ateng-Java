@@ -619,6 +619,68 @@ public interface RedissonService {
     long nextId(String key);
 
     // -------------------------------------------------------------------------
+    // 编码生成
+    // -------------------------------------------------------------------------
+
+    /**
+     * 生成企业业务编码。
+     * <p>
+     * 示例：
+     * USER000001
+     *
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @return 编码
+     */
+    String generateCode(String prefix, int length);
+
+    /**
+     * 批量获取编码。
+     *
+     * 适用于批量导入、批量新增场景。
+     *
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @param size   获取数量
+     * @return 编码集合
+     */
+    List<String> generateCodes(String prefix, int length, int size);
+
+    /**
+     * 生成带日期企业业务编码。
+     * <p>
+     * 示例：
+     * USER20260729000001
+     *
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @return 编码
+     */
+    String generateDateCode(String prefix, int length);
+
+    /**
+     * 根据指定业务 Key 生成企业业务编码。
+     * <p>
+     * 用于同一个前缀下不同业务隔离序号。
+     * <p>
+     * 示例：
+     * PLAN000001
+     *
+     * @param key    Redis序号Key
+     * @param prefix 编码前缀
+     * @param length 序号长度
+     * @return 编码
+     */
+    String generateCode(String key, String prefix, int length);
+
+    /**
+     * 重置编码序号。
+     *
+     * @param key Redis序号Key
+     */
+    void resetCodeSequence(String key);
+
+    // -------------------------------------------------------------------------
     // Hash / Map 操作
     // -------------------------------------------------------------------------
 
