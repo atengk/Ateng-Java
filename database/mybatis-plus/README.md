@@ -209,6 +209,20 @@ spring:
       connection-timeout: 30000  # 获取连接的最大等待时间，单位毫秒
 ```
 
+其他配置参考
+
+- 压缩 SQL 中连续的空白字符
+
+压缩 SQL 中连续的空白字符，将 SQL 中多余的空格、换行、制表符等合并成一个空格。
+
+```yaml
+mybatis-plus:
+  configuration:
+    shrink-whitespaces-in-sql: true
+```
+
+开启后，MyBatis 在执行 SQL 前会对 SQL 进行空白压缩处理。
+
 
 
 ### 编辑 `Configuration` 文件
