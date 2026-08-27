@@ -61,4 +61,9 @@ public class EnumUtilTests {
         System.out.println(enums);
     }
 
+    @Test
+    void test_toMap() {
+        System.out.println(BaseEnum.toMap(TypeEnum.class));
+    }
+
 }

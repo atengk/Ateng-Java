@@ -1,5 +1,8 @@
 package local.ateng.java.customutils.enums;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 基础枚举接口（支持泛型）
  *
@@ -101,4 +104,26 @@ public interface BaseEnum<C, N> {
         }
         return null;
     }
+
+    /**
+     * 将枚举转换为 Map，key 为 code，value 为 name。
+     *
+     * @param enumClass 枚举类
+     * @param <E>       枚举类型
+     * @param <C>       code 类型
+     * @param <N>       name 类型
+     * @return 枚举对应的 Map
+     */
+    static <E extends Enum<E> & BaseEnum<C, N>, C, N> Map<C, N> toMap(Class<E> enumClass) {
+        Map<C, N> map = new LinkedHashMap<>();
+        if (enumClass == null) {
+            return map;
+        }
+
+        for (E e : enumClass.getEnumConstants()) {
+            map.put(e.getCode(), e.getName());
+        }
+        return map;
+    }
+
 }

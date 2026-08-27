@@ -68,6 +68,30 @@ public final class JsonUtil {
     }
 
     /**
+     * 对象转 JSON 字符串，并根据字段映射转换字段值。
+     *
+     * @param obj           源对象
+     * @param fieldMappings 字段值映射
+     * @return 转换后的 JSON 字符串，失败时返回 null
+     */
+    public static String toJsonString(
+            Object obj,
+            Map<String, ? extends Map<?, ?>> fieldMappings) {
+
+        JsonNode jsonNode = toJsonNode(obj, fieldMappings);
+        if (jsonNode == null) {
+            return null;
+        }
+
+        try {
+            return OBJECT_MAPPER.writeValueAsString(jsonNode);
+        } catch (JsonProcessingException e) {
+            log.warn("JsonNode 转 JSON 失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * 对象转 JSON 字符串，并支持指定写入器。
      *
      * @param obj          待序列化的对象
@@ -79,12 +103,35 @@ public final class JsonUtil {
             return null;
         }
         try {
-            ObjectWriter writer = objectWriter == null ? OBJECT_MAPPER.writer() : objectWriter;
+            ObjectWriter writer = objectWriter == null
+                    ? OBJECT_MAPPER.writer()
+                    : objectWriter;
             return writer.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
             log.warn("对象转 JSON 失败: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 对象转 JSON 字符串，并根据字段映射转换字段值，同时支持指定写入器。
+     *
+     * @param obj           源对象
+     * @param fieldMappings 字段值映射
+     * @param objectWriter  JSON 写入器
+     * @return JSON 字符串，失败时返回 null
+     */
+    public static String toJsonString(
+            Object obj,
+            Map<String, ? extends Map<?, ?>> fieldMappings,
+            ObjectWriter objectWriter) {
+
+        JsonNode jsonNode = toJsonNode(obj, fieldMappings);
+        if (jsonNode == null) {
+            return null;
+        }
+
+        return toJsonString(jsonNode, objectWriter);
     }
 
     /**
@@ -97,6 +144,24 @@ public final class JsonUtil {
      */
     public static String toJsonStringWithSafeNumber(Object obj) {
         return toJsonString(obj, buildSafeNumberObjectWriter());
+    }
+
+    /**
+     * 对象转 JSON 字符串，并根据字段映射转换字段值，同时使用安全数字序列化规则。
+     *
+     * @param obj           源对象
+     * @param fieldMappings 字段值映射
+     * @return JSON 字符串，失败时返回 null
+     */
+    public static String toJsonStringWithSafeNumber(
+            Object obj,
+            Map<String, ? extends Map<?, ?>> fieldMappings) {
+
+        return toJsonString(
+                obj,
+                fieldMappings,
+                buildSafeNumberObjectWriter()
+        );
     }
 
     /**
@@ -162,6 +227,25 @@ public final class JsonUtil {
             log.warn("对象转 JSON 字节数组失败: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 对象转 JSON 字节数组，并根据字段映射转换字段值。
+     *
+     * @param obj           源对象
+     * @param fieldMappings 字段值映射
+     * @return JSON 字节数组，失败时返回 null
+     */
+    public static byte[] toJsonBytes(
+            Object obj,
+            Map<String, ? extends Map<?, ?>> fieldMappings) {
+
+        JsonNode jsonNode = toJsonNode(obj, fieldMappings);
+        if (jsonNode == null) {
+            return null;
+        }
+
+        return toJsonBytes(jsonNode);
     }
 
     /**
@@ -513,6 +597,115 @@ public final class JsonUtil {
             log.warn("对象转 JsonNode 失败: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 将对象转换为 JsonNode，并根据字段映射转换字段值。
+     * <p>
+     * fieldMappings 的格式为：
+     * 字段名 -> 原值与目标值的映射。
+     * 例如：status -> {0=禁用, 1=正常}。
+     *
+     * @param obj           源对象
+     * @param fieldMappings 字段值映射
+     * @return 转换后的 JsonNode，失败时返回 null
+     */
+    public static JsonNode toJsonNode(
+            Object obj,
+            Map<String, ? extends Map<?, ?>> fieldMappings) {
+
+        JsonNode jsonNode = toJsonNode(obj);
+        if (jsonNode == null || MapUtil.isEmpty(fieldMappings)) {
+            return jsonNode;
+        }
+
+        convertFieldValue(jsonNode, fieldMappings);
+        return jsonNode;
+    }
+
+    /**
+     * 根据字段映射递归转换 JsonNode 中的字段值。
+     *
+     * @param node          JsonNode
+     * @param fieldMappings 字段值映射
+     */
+    private static void convertFieldValue(
+            JsonNode node,
+            Map<String, ? extends Map<?, ?>> fieldMappings) {
+
+        if (node == null) {
+            return;
+        }
+
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                convertFieldValue(item, fieldMappings);
+            }
+            return;
+        }
+
+        if (!node.isObject()) {
+            return;
+        }
+
+        ObjectNode objectNode = (ObjectNode) node;
+
+        fieldMappings.forEach((fieldName, valueMapping) -> {
+            JsonNode fieldNode = objectNode.get(fieldName);
+            if (fieldNode == null || fieldNode.isNull() || MapUtil.isEmpty(valueMapping)) {
+                return;
+            }
+
+            Object mappedValue = findMappedValue(fieldNode, valueMapping);
+            if (mappedValue != null) {
+                objectNode.put(fieldName, String.valueOf(mappedValue));
+            }
+        });
+
+        objectNode.fields().forEachRemaining(entry ->
+                convertFieldValue(entry.getValue(), fieldMappings)
+        );
+    }
+
+    /**
+     * 根据 JsonNode 的值查找字段对应的映射值。
+     *
+     * @param fieldNode    字段值
+     * @param valueMapping 字段值映射
+     * @return 映射后的值，不存在时返回 null
+     */
+    private static Object findMappedValue(
+            JsonNode fieldNode,
+            Map<?, ?> valueMapping) {
+
+        // 优先按照字符串形式匹配，例如 JSON 中的 "1"
+        String textValue = fieldNode.asText();
+        if (valueMapping.containsKey(textValue)) {
+            return valueMapping.get(textValue);
+        }
+
+        // 再按照数字类型匹配，例如 JSON 中的 1
+        if (fieldNode.isIntegralNumber()) {
+            long longValue = fieldNode.asLong();
+
+            if (valueMapping.containsKey(longValue)) {
+                return valueMapping.get(longValue);
+            }
+
+            int intValue = fieldNode.asInt();
+            if (valueMapping.containsKey(intValue)) {
+                return valueMapping.get(intValue);
+            }
+        }
+
+        // 最后遍历一次，兼容 Integer、Long 等不同数字类型
+        for (Map.Entry<?, ?> entry : valueMapping.entrySet()) {
+            if (Objects.equals(String.valueOf(entry.getKey()), textValue)) {
+                return entry.getValue();
+            }
+        }
+
+        return null;
     }
 
     /**

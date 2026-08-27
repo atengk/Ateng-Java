@@ -906,4 +906,50 @@ public final class MapUtil {
         return copy;
     }
 
+    /**
+     * 将 Map 按指定批次大小拆分成多个 Map。
+     *
+     * <p>按照源 Map 的遍历顺序依次拆分，每个 Map 最多包含 {@code batchSize} 条数据。
+     * 最后一批数据不足 {@code batchSize} 时，仍会作为一个独立的 Map 返回。
+     *
+     * <p>当源 Map 为空或为 {@code null} 时，返回空集合。
+     *
+     * @param source    待拆分的源 Map
+     * @param batchSize 每批数据的最大数量，必须大于 0
+     * @param <K>       Map 的 Key 类型
+     * @param <V>       Map 的 Value 类型
+     * @return 拆分后的 Map 集合；源 Map 为空时返回空集合
+     * @throws IllegalArgumentException 当 {@code batchSize} 小于等于 0 时抛出
+     */
+    public static <K, V> List<Map<K, V>> splitMap(Map<K, V> source, int batchSize) {
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("batchSize 必须大于 0");
+        }
+
+        if (cn.hutool.core.map.MapUtil.isEmpty(source)) {
+            return Collections.emptyList();
+        }
+
+        List<Map<K, V>> result = new ArrayList<>(
+                (source.size() + batchSize - 1) / batchSize
+        );
+
+        Map<K, V> batch = new LinkedHashMap<>(batchSize);
+
+        for (Map.Entry<K, V> entry : source.entrySet()) {
+            batch.put(entry.getKey(), entry.getValue());
+
+            if (batch.size() >= batchSize) {
+                result.add(batch);
+                batch = new LinkedHashMap<>(batchSize);
+            }
+        }
+
+        if (cn.hutool.core.map.MapUtil.isNotEmpty(batch)) {
+            result.add(batch);
+        }
+
+        return result;
+    }
+
 }

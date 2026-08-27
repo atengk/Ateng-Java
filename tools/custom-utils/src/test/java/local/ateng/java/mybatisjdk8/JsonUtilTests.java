@@ -1,6 +1,8 @@
 package local.ateng.java.mybatisjdk8;
 
+import cn.hutool.core.collection.CollUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import local.ateng.java.customutils.entity.MyUser;
 import local.ateng.java.customutils.init.InitData;
 import local.ateng.java.customutils.utils.JsonUtil;
@@ -123,6 +125,68 @@ public class JsonUtilTests {
         Map<String, Object> map = JsonUtil.convert(user, new TypeReference<HashMap<String, Object>>() {});
         System.out.println(map);
         // {birthday=null, dateTime=null, set=null, city=null, num=0, abbccdd=null, list=null, instantTime=null, score=null, phoneNumber=1762306666, province=null, zonedDateTime=null, createTime=null, name=ateng, offsetDateTime=null, id=1, createTime2=null, map=null, age=null, email=kongyu2385569970@gmail.com, createTime3=null, ratio=null}
+    }
+
+    /**
+     * 测试：对象 -> JsonNode，并根据字段映射转换字段值
+     */
+    @Test
+    public void testConvert_ObjectToJsonNodeWithFieldMapping() {
+        MyUser user = MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(18)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .build();
+
+        Map<String, Map<?, ?>> fieldMappings = new HashMap<>();
+
+        Map<Integer, String> ageMapping = new HashMap<>();
+        ageMapping.put(18, "成年");
+        ageMapping.put(17, "未成年");
+
+        fieldMappings.put("age", ageMapping);
+
+        JsonNode jsonNode = JsonUtil.toJsonNode(user, fieldMappings);
+
+        System.out.println(jsonNode);
+    }
+
+    /**
+     * 测试：对象列表 -> JsonNode，并根据字段映射批量转换字段值
+     */
+    @Test
+    public void testConvert_ListToJsonNodeWithFieldMapping() {
+        MyUser user1 = MyUser.builder()
+                .id(1L)
+                .name("ateng")
+                .age(18)
+                .phoneNumber("1762306666")
+                .email("kongyu2385569970@gmail.com")
+                .build();
+
+        MyUser user2 = MyUser.builder()
+                .id(2L)
+                .name("test")
+                .age(17)
+                .phoneNumber("13800138000")
+                .email("test@gmail.com")
+                .build();
+
+        List<MyUser> userList = CollUtil.newArrayList(user1, user2);
+
+        Map<String, Map<?, ?>> fieldMappings = new HashMap<>();
+
+        Map<Integer, String> ageMapping = new HashMap<>();
+        ageMapping.put(18, "成年");
+        ageMapping.put(17, "未成年");
+
+        fieldMappings.put("age", ageMapping);
+
+        JsonNode jsonNode = JsonUtil.toJsonNode(userList, fieldMappings);
+
+        System.out.println(jsonNode);
     }
 
 }
