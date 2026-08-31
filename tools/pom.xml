@@ -42,5 +42,6 @@
         <module>apache-mina-sshd</module>
         <module>lite-flow</module>
         <module>flowable</module>
+        <module>apache-fory</module>
     </modules>
 </project>

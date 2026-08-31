@@ -506,6 +506,8 @@ export default defineConfig({
                             {text: 'FastJson（AI生成）', link: '/tools/fastjson1/README_AI'},
                             {text: 'FastJson2', link: '/tools/fastjson2/README'},
                             {text: 'FastJson2（AI生成）', link: '/tools/fastjson2/README_AI'},
+                            {text: 'Apache Fory JSON', link: '/tools/apache-fory/README'},
+                            {text: 'Apache Fory JSON（AI生成）', link: '/tools/apache-fory/README_AI'},
                         ]
                     },
                     {
